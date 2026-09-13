@@ -77,9 +77,8 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_WAITING_WITH_ETA;
-        showSpinnerMode();
-        String formatted = mContext.getString(R.string.vot_progress_waiting_eta, timeRemainingFormatted);
-        setText(formatted);
+        showTimerMode();
+        setText(timeRemainingFormatted);
         fadeIn();
     }
 
@@ -87,9 +86,8 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_ETA_EXPIRED_STILL_WAITING;
-        showSpinnerMode();
-        String formatted = mContext.getString(R.string.vot_progress_still_waiting, timeElapsedFormatted);
-        setText(formatted);
+        showTimerMode();
+        setText("+" + timeElapsedFormatted);
         fadeIn();
     }
 
@@ -174,6 +172,11 @@ public class VotProgressOverlay {
         }
     }
 
+    private void showTimerMode() {
+        if (mSpinner != null) mSpinner.setVisibility(View.GONE);
+        if (mIcon != null) mIcon.setVisibility(View.GONE);
+    }
+
     private void setText(String text) {
         if (mText != null) {
             mText.setText(text);
@@ -219,9 +222,9 @@ public class VotProgressOverlay {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
             );
-            lp.gravity = Gravity.BOTTOM | Gravity.END;
+            lp.gravity = Gravity.TOP | Gravity.END;
             lp.rightMargin = dpToPx(36);
-            lp.bottomMargin = dpToPx(80);
+            lp.topMargin = dpToPx(36);
 
             mOverlayView.setLayoutParams(lp);
             mOverlayView.setVisibility(View.GONE);

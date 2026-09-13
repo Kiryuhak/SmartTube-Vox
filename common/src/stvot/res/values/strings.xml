@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="title_audio_formats">Audio tracks</string>
     <string translatable="false" name="app_name"><![CDATA[SmartTube VOX]]></string>
     <string name="about_vot_title">About SmartTube VOX</string>
     <string name="about_vot_desc">SmartTube VOX is an unofficial SmartTube build for Android TV with integrated VOT translation, Yandex ID and Lively Voice support. Based on SmartTube.</string>
