@@ -324,11 +324,13 @@ public class ExoPlayerController implements Player.EventListener {
 
     @Override
     public void onPlayerError(ExoPlaybackException error) {
-        Log.e(TAG, "onPlayerError: " + error);
+        Throwable nested = error.getCause() != null ? error.getCause() : error;
+        // Data-source exception messages contain complete signed media URLs.
+        // Keep diagnostics useful without leaking query tokens into logcat.
+        Log.e(TAG, "onPlayerError: type=%s, renderer=%s, cause=%s",
+                error.type, error.rendererIndex, nested.getClass().getSimpleName());
 
         // NOTE: Player is released at this point. So, there is no sense to restore the playback here.
-
-        Throwable nested = error.getCause() != null ? error.getCause() : error;
 
         mEventListener.onEngineError(error.type, error.rendererIndex, nested);
     }

@@ -12,6 +12,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.listener.Player
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector;
 import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector.OnLongBuffering;
+import com.liskovsoft.smartyoutubetv2.common.misc.NetworkEngineRecoveryPolicy;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
@@ -23,6 +24,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private static final String TAG = ErrorFixerController.class.getSimpleName();
     private static final long STREAM_END_THRESHOLD_MS = 180_000;
     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
+    private final NetworkEngineRecoveryPolicy mNetworkRecoveryPolicy = new NetworkEngineRecoveryPolicy();
     private VideoLoaderController mVideoLoaderController;
 
     @Override
@@ -42,6 +44,11 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         if (getPlayer() == null) {
             return;
         }
+
+        Log.w(TAG, "Stall recovery: reason=continuous_player_buffering, live=%s, engine=%s, positionMs=%s",
+                getVideo() != null && getVideo().isLive,
+                getPlayerTweaksData().getPlayerDataSource(),
+                getPlayer().getPositionMs());
 
         if (isStreamEnded()) {
             getMainController().onPlayEnd();
@@ -90,6 +97,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
 
     @Override
     public void onPlay() {
+        mNetworkRecoveryPolicy.onPlaybackProgress();
         mBufferingDetector.onStopBuffering();
     }
 
@@ -100,6 +108,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
 
     @Override
     public void onNewVideo(Video item) {
+        mNetworkRecoveryPolicy.reset();
         mBufferingDetector.start();
     }
 
@@ -351,15 +360,23 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     }
 
     private void switchNextEngine() {
-        getPlayerTweaksData().setPlayerDataSource(getNextEngine());
-    }
-
-    private int getNextEngine() {
         int currentEngine = getPlayerTweaksData().getPlayerDataSource();
-        Integer[] engineList = Utils.skipCronet() ?
-                new Integer[] { PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP } :
-                new Integer[] { PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET, PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP };
-        return Helpers.getNextValue(engineList, currentEngine);
+        int[] engineList = Utils.skipCronet() ?
+                new int[] { PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP } :
+                new int[] { PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET, PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP };
+        long nowMs = System.currentTimeMillis();
+        int nextEngine = mNetworkRecoveryPolicy.selectNextEngine(currentEngine, engineList, nowMs);
+
+        if (nextEngine == currentEngine) {
+            Log.w(TAG, "Network recovery: reconnect same engine=%s, switches=%s, elapsedSinceSwitchMs=%s",
+                    currentEngine, mNetworkRecoveryPolicy.getSwitchCount(nowMs),
+                    mNetworkRecoveryPolicy.elapsedSinceLastSwitch(nowMs));
+            return;
+        }
+
+        Log.w(TAG, "Network recovery: switch engine %s -> %s, switches=%s",
+                currentEngine, nextEngine, mNetworkRecoveryPolicy.getSwitchCount(nowMs));
+        getPlayerTweaksData().setPlayerDataSource(nextEngine);
     }
 
     private boolean isSubtitlesEnabled() {

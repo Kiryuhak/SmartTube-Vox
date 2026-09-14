@@ -343,6 +343,7 @@ public class VideoLoaderController extends BasePlayerController {
 
         if (getPlayer().isEngineInitialized()) {
             Log.d(TAG, "Reloading the video...");
+            Utils.removeCallbacks(mReloadVideo);
             Utils.postDelayed(mReloadVideo, delayMs);
         }
     }
@@ -361,6 +362,9 @@ public class VideoLoaderController extends BasePlayerController {
     private void restartEngine(int delayMs) {
         if (getPlayer() != null) {
             Log.d(TAG, "Restarting the engine...");
+            // Coalesce watchdog and source-error recovery requests. Otherwise two
+            // delayed callbacks can release a freshly created player generation.
+            Utils.removeCallbacks(mRestartEngine);
             Utils.postDelayed(mRestartEngine, delayMs);
         }
     }

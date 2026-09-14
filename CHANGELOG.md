@@ -7,6 +7,7 @@ SmartTube VOX — новое название проекта SmartTube VOT.
 ## [Unreleased]
 
 ### Изменено
+- Исправлен ложный watchdog live-потоков: отдельные восстановившиеся буферизации больше не суммируются в один stall, а автоматическая смена сетевого движка получила reconnect-first, cooldown и ограниченный retry budget.
 - База SmartTube обновлена до версии 32.47.
 - Перенесены актуальные исправления воспроизведения и SABR из upstream SmartTube.
 - Публичные релизы переведены на единое имя SmartTube VOX (прекращена публикация устаревших compatibility-ассетов SmartTube VOT).
