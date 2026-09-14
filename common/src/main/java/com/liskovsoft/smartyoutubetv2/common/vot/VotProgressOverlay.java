@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat;
 
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
+import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 public class VotProgressOverlay {
@@ -38,6 +39,7 @@ public class VotProgressOverlay {
     private ProgressBar mSpinner;
     private ImageView mIcon;
     private TextView mText;
+    private View mGlobalEndingTime;
     private int mCurrentState = STATE_IDLE;
     private ViewGroup mParentView;
 
@@ -77,9 +79,8 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_WAITING_WITH_ETA;
-        showSpinnerMode();
-        String formatted = mContext.getString(R.string.vot_progress_waiting_eta, timeRemainingFormatted);
-        setText(formatted);
+        showTimerMode();
+        setText(timeRemainingFormatted);
         fadeIn();
     }
 
@@ -87,9 +88,8 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_ETA_EXPIRED_STILL_WAITING;
-        showSpinnerMode();
-        String formatted = mContext.getString(R.string.vot_progress_still_waiting, timeElapsedFormatted);
-        setText(formatted);
+        showTimerMode();
+        setText("+" + timeElapsedFormatted);
         fadeIn();
     }
 
@@ -127,6 +127,7 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_IDLE;
         if (mOverlayView != null) {
+            mOverlayView.animate().cancel();
             mOverlayView.animate()
                     .alpha(0f)
                     .setDuration(200)
@@ -134,8 +135,11 @@ public class VotProgressOverlay {
                         if (mOverlayView != null) {
                             mOverlayView.setVisibility(View.GONE);
                         }
+                        restoreGlobalEndingTime();
                     })
                     .start();
+        } else {
+            restoreGlobalEndingTime();
         }
     }
 
@@ -147,6 +151,7 @@ public class VotProgressOverlay {
             mOverlayView.setVisibility(View.GONE);
             mOverlayView.setAlpha(0f);
         }
+        restoreGlobalEndingTime();
     }
 
     public void destroy() {
@@ -159,6 +164,7 @@ public class VotProgressOverlay {
         mSpinner = null;
         mIcon = null;
         mText = null;
+        mGlobalEndingTime = null;
     }
 
     private void showSpinnerMode() {
@@ -174,6 +180,11 @@ public class VotProgressOverlay {
         }
     }
 
+    private void showTimerMode() {
+        if (mSpinner != null) mSpinner.setVisibility(View.GONE);
+        if (mIcon != null) mIcon.setVisibility(View.GONE);
+    }
+
     private void setText(String text) {
         if (mText != null) {
             mText.setText(text);
@@ -182,6 +193,7 @@ public class VotProgressOverlay {
 
     private void fadeIn() {
         if (mOverlayView != null) {
+            mOverlayView.animate().cancel();
             if (mOverlayView.getVisibility() != View.VISIBLE) {
                 mOverlayView.setAlpha(0f);
                 mOverlayView.setVisibility(View.VISIBLE);
@@ -192,6 +204,7 @@ public class VotProgressOverlay {
 
     private boolean ensureAttached(@Nullable Activity activity) {
         if (mOverlayView != null && mOverlayView.getParent() != null) {
+            suppressGlobalEndingTime(activity);
             return true;
         }
         if (activity == null || activity.isFinishing()) {
@@ -219,9 +232,9 @@ public class VotProgressOverlay {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
             );
-            lp.gravity = Gravity.BOTTOM | Gravity.END;
+            lp.gravity = Gravity.TOP | Gravity.END;
             lp.rightMargin = dpToPx(36);
-            lp.bottomMargin = dpToPx(80);
+            lp.topMargin = dpToPx(36);
 
             mOverlayView.setLayoutParams(lp);
             mOverlayView.setVisibility(View.GONE);
@@ -229,6 +242,7 @@ public class VotProgressOverlay {
 
             targetContainer.addView(mOverlayView);
             mParentView = targetContainer;
+            suppressGlobalEndingTime(activity);
             return true;
         } catch (Exception e) {
             Log.e(TAG, "Failed to inflate VOT progress overlay: %s", e.getMessage());
@@ -253,6 +267,27 @@ public class VotProgressOverlay {
             return (ViewGroup) decor;
         }
         return null;
+    }
+
+    private void suppressGlobalEndingTime(@Nullable Activity activity) {
+        if (activity == null) {
+            return;
+        }
+        if (mGlobalEndingTime == null || mGlobalEndingTime.getWindowToken() == null) {
+            int endingTimeId = activity.getResources().getIdentifier(
+                    "global_ending_time", "id", activity.getPackageName());
+            mGlobalEndingTime = endingTimeId != 0 ? activity.findViewById(endingTimeId) : null;
+        }
+        if (mGlobalEndingTime != null) {
+            mGlobalEndingTime.setVisibility(View.GONE);
+        }
+    }
+
+    private void restoreGlobalEndingTime() {
+        if (mGlobalEndingTime != null) {
+            boolean enabled = PlayerData.instance(mContext).isGlobalEndingTimeEnabled();
+            mGlobalEndingTime.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        }
     }
 
     private int dpToPx(float dp) {
