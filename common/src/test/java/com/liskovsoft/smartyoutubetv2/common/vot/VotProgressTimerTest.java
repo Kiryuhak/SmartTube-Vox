@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.vot;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class VotProgressTimerTest {
     @Test
@@ -30,6 +31,18 @@ public class VotProgressTimerTest {
     }
 
     @Test
+    public void smallBackendDriftKeepsCountdownSmooth() {
+        VotProgressTimer timer = new VotProgressTimer();
+        timer.start(1_000L);
+        timer.reconcileEta(30, 1_000L);
+
+        timer.reconcileEta(27, 5_000L);
+
+        assertEquals(26, timer.getRemainingTimeSec(5_000L));
+        assertEquals(25, timer.getRemainingTimeSec(6_000L));
+    }
+
+    @Test
     public void elapsedStartsWhenEtaExpires() {
         VotProgressTimer timer = new VotProgressTimer();
         timer.start(10_000L);
@@ -49,5 +62,15 @@ public class VotProgressTimerTest {
         assertEquals(0, timer.getRemainingTimeSec(50_000L));
         assertEquals("00:00", VotProgressTimer.formatMmSs(-1));
         assertEquals("01:24", VotProgressTimer.formatMmSs(84));
+    }
+
+    @Test
+    public void uiTimerTextContainsOnlyMinutesAndSeconds() {
+        String displayText = VotProgressTimer.formatMmSs(1_377);
+
+        assertEquals("22:57", displayText);
+        assertFalse(displayText.contains("⌛"));
+        assertFalse(displayText.contains("⏳"));
+        assertFalse(displayText.contains("?"));
     }
 }

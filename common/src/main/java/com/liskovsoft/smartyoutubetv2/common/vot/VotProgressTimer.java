@@ -8,6 +8,8 @@ import java.util.Locale;
  * polling cannot restart and freeze the countdown.
  */
 public final class VotProgressTimer {
+    private static final int SMOOTH_RECONCILIATION_THRESHOLD_SEC = 2;
+
     private long mRequestStartedAtMs;
     private long mExpectedReadyAtMs;
     private int mLastBackendEtaSec = -1;
@@ -27,6 +29,12 @@ public final class VotProgressTimer {
     public void reconcileEta(int backendRemainingSec, long nowMs) {
         int safeRemainingSec = Math.max(0, backendRemainingSec);
         if (mExpectedReadyAtMs > 0 && safeRemainingSec == mLastBackendEtaSec) {
+            return;
+        }
+        if (mExpectedReadyAtMs > 0
+                && Math.abs(safeRemainingSec - getRemainingTimeSec(nowMs))
+                <= SMOOTH_RECONCILIATION_THRESHOLD_SEC) {
+            mLastBackendEtaSec = safeRemainingSec;
             return;
         }
         mLastBackendEtaSec = safeRemainingSec;
