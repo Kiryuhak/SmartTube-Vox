@@ -45,8 +45,17 @@
 - Повторный `STATE_BUFFERING` внутри того же эпизода не создаёт второй watchdog callback.
 - При сетевой ошибке сначала выполняется reconnect того же транспорта. Смена транспорта разрешается только при следующем отказе без промежуточного playback progress.
 - После switch действует grace period 60 секунд, возврат к предыдущему транспорту запрещён 120 секунд, а rolling budget ограничен двумя switch за пять минут. При запрете выполняется reconnect текущего транспорта.
-- Дублирующиеся отложенные restart/reload объединяются, поэтому старый callback не может освободить только что созданный player.
+- Дублирующиеся отложенные restart и дублирующиеся reload независимо объединяются; при release все callbacks обоих типов снимаются.
+- Cronet использует один process-scoped callback executor. Раньше каждый player generation создавал новый `newSingleThreadExecutor()`, который фабрика ExoPlayer не завершала, поэтому повторные restart могли накапливать живые потоки.
 - Диагностика recovery содержит тип причины, live-флаг, номер транспорта и playback position, но не URL. Полный текст data-source exception больше не выводится в logcat.
+
+## Ограничения
+
+- Recovery policy применяется к автоматическому fallback при ошибке `Unable to connect to`; специализированные ветки ошибок renderer, клиента YouTube и стартовой custom DNS-защиты сохраняют прежнее поведение.
+- Reconnect означает пересоздание ExoPlayer с тем же выбранным транспортом, а не повторное использование аварийного data-source объекта.
+- Grace period, cooldown и switch budget хранятся в рамках одной playback-сессии и сбрасываются при выборе нового видео.
+- Process-scoped Cronet executor намеренно живёт до завершения процесса приложения; число его потоков больше не растёт при restart.
+- Реальный runtime подтверждает исправление исследованного DASH live-сценария. HLS, искусственные 4xx/5xx и принудительный разрыв сети отдельным device runtime не воспроизводились; unit-тесты покрывают watchdog и абстрактную policy переключения, но не полную интеграцию каждого транспорта.
 
 ## Проверки
 
@@ -66,6 +75,8 @@ Quality gate:
 - `:common:testStvotDebugUnitTest` — 21 тест, ошибок и пропусков нет;
 - `:smarttubetv:assembleStvotDebug` — успешно;
 - `git diff --check` и проверка staged diff — успешно;
+- upstream `:exoplayer-extension-cronet:testStvotDebugUnitTest` не исполняет тестовую логику на используемой JDK 17: все 40 тестов останавливаются при инициализации старого Robolectric/ASM с `Unsupported class file major version 61`;
+- targeted upstream `ExoPlayerTest` также не доходит до assertions: 76 тестов останавливаются в том же старом Robolectric/ASM test environment (сначала конфликт looper mode, после выбора `LEGACY` — та же неподдерживаемая major version 61);
 - `:smarttubetv:lintStvotDebug` блокируется до анализа приложения старым test dependency Espresso 3.2.0: в его merged androidTest manifest отсутствует обязательный `android:exported`;
 - отдельный `:common:lintStvotDebug` доходит до lint и обнаруживает семь ранее существовавших `NewApi` для `StandardCharsets.UTF_8` при `minSdk 17`, не связанных с данным исправлением.
 
