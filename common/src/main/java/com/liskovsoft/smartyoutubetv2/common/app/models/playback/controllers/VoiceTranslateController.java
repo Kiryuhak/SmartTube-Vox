@@ -1,5 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers;
 
+import android.os.SystemClock;
+
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
@@ -17,10 +19,10 @@ import com.liskovsoft.smartyoutubetv2.common.vot.VotAudioTrackHelper.TrackInfo;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotClient;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgress;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressTimer;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Locale;
 
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
@@ -71,6 +73,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private TranslationAudioPlayer mTranslationPlayer;
     private Disposable mTranslationDisposable;
     private VotProgressOverlay mProgressOverlay;
+    private final VotProgressTimer mProgressTimer = new VotProgressTimer();
     private float mSavedMainVolume = 1f;
     private boolean mIsAudioDucked;
     private FormatItem mSavedAudioFormat;
@@ -95,7 +98,6 @@ public class VoiceTranslateController extends BasePlayerController {
     };
 
     private long mRequestStartTimestamp;
-    private long mExpectedReadyTimestamp;
     private long mLastBackendPendingTimestamp;
 
     private final Runnable mSyncRunnable = new Runnable() {
@@ -127,9 +129,7 @@ public class VoiceTranslateController extends BasePlayerController {
             if (mState != STATE_PENDING) {
                 return;
             }
-            long now = System.currentTimeMillis();
-            long elapsedSec = Math.max(0, (now - mRequestStartTimestamp) / 1000);
-
+            long now = SystemClock.elapsedRealtime();
             if (mRequestStartTimestamp > 0 && (now - mRequestStartTimestamp > MAX_TOTAL_WAIT_MS)) {
                 Log.w(TAG, "VOT timeout: exceeded absolute maximum wait (%d ms) for video=%s", MAX_TOTAL_WAIT_MS, mCurrentVideoId);
                 onTranslationTimeout();
@@ -142,17 +142,15 @@ public class VoiceTranslateController extends BasePlayerController {
                 return;
             }
 
-            long remainingSec = 0;
-            if (mExpectedReadyTimestamp > now) {
-                remainingSec = (mExpectedReadyTimestamp - now + 999) / 1000;
-            }
+            long remainingSec = mProgressTimer.getRemainingTimeSec(now);
 
             if (mUserArmed && progressOverlay() != null) {
                 if (remainingSec > 0) {
-                    progressOverlay().showWaitingWithEta(getActivity(), formatMmSs(remainingSec));
+                    progressOverlay().showWaitingWithEta(getActivity(), VotProgressTimer.formatMmSs(remainingSec));
                 } else {
-                    Log.d(TAG, "VOT ETA expired, polling continues: elapsed=%ds, video=%s", elapsedSec, mCurrentVideoId);
-                    progressOverlay().showStillWaiting(getActivity(), formatMmSs(elapsedSec));
+                    long elapsedAfterEtaSec = mProgressTimer.getElapsedAfterEtaSec(now);
+                    Log.d(TAG, "VOT ETA expired, polling continues: elapsed=%ds, video=%s", elapsedAfterEtaSec, mCurrentVideoId);
+                    progressOverlay().showStillWaiting(getActivity(), VotProgressTimer.formatMmSs(elapsedAfterEtaSec));
                 }
             }
 
@@ -169,12 +167,6 @@ public class VoiceTranslateController extends BasePlayerController {
             mProgressOverlay = new VotProgressOverlay(getContext());
         }
         return mProgressOverlay;
-    }
-
-    private static String formatMmSs(long totalSec) {
-        long minutes = totalSec / 60;
-        long seconds = totalSec % 60;
-        return String.format(Locale.US, "%02d:%02d", minutes, seconds);
     }
 
     public VoiceTranslateController() {
@@ -202,6 +194,7 @@ public class VoiceTranslateController extends BasePlayerController {
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
         Utils.removeCallbacks(mSyncRunnable);
+        mProgressTimer.clear();
         mAutoTranslateRetryCount = 0;
         cancelTranslationJob();
         releaseTranslationPlayer();
@@ -311,7 +304,17 @@ public class VoiceTranslateController extends BasePlayerController {
     public void onViewDestroyed() {
         Log.d(TAG, "VOT reset reason: view destroyed");
         mTranslationSessionId++;
+        Utils.removeCallbacks(mAutoTranslateRetryRunnable);
+        Utils.removeCallbacks(mProgressTickRunnable);
         Utils.removeCallbacks(mSyncRunnable);
+        cancelTranslationJob();
+        releaseTranslationPlayer();
+        restoreMainVolume();
+        mProgressTimer.clear();
+        mUserArmed = false;
+        mArmed = false;
+        mPendingVideoUrl = null;
+        setState(STATE_OFF);
         resetTrackSwitch();
         mSavedAudioFormat = null;
         if (mProgressOverlay != null) {
@@ -343,10 +346,6 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void armAndStart() {
         Log.i(TAG, "Trigger: manual start (Yandex authorized=" + votData().hasOAuthToken() + ")");
-        if (votData().isPreferYoutubeAutoDub()) {
-            MessageHelpers.showMessage(getContext(), R.string.vot_disable_google_for_yandex);
-            return;
-        }
         TrackInfo info = resolveAudioInfo();
         Log.i(TAG, "VOT manual: selected audio=" + (info != null ? info.rawLabel : "null"));
         if (info != null && VotAudioTrackHelper.isRussianLang(info.langCode)) {
@@ -463,7 +462,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         if (votData().isPreferYoutubeAutoDub()) {
-            if (tryApplyYoutubeAutoDub(autoEnabled)) {
+            if (tryApplyYoutubeAutoDub(false)) {
                 return;
             }
         }
@@ -567,9 +566,9 @@ public class VoiceTranslateController extends BasePlayerController {
         cancelTranslationJob();
         mPendingToastShown = false;
         mPendingVideoUrl = videoUrl;
-        mRequestStartTimestamp = System.currentTimeMillis();
-        mLastBackendPendingTimestamp = System.currentTimeMillis();
-        mExpectedReadyTimestamp = 0;
+        mRequestStartTimestamp = SystemClock.elapsedRealtime();
+        mLastBackendPendingTimestamp = mRequestStartTimestamp;
+        mProgressTimer.start(mRequestStartTimestamp);
         setState(STATE_PENDING);
 
         Utils.removeCallbacks(mProgressTickRunnable);
@@ -655,13 +654,13 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
-        mLastBackendPendingTimestamp = System.currentTimeMillis();
+        mLastBackendPendingTimestamp = SystemClock.elapsedRealtime();
 
         switch (progress.type) {
             case VotProgress.TYPE_WAITING:
                 mPendingEtaSec = progress.remainingTimeSec;
+                mProgressTimer.reconcileEta(progress.remainingTimeSec, mLastBackendPendingTimestamp);
                 if (progress.remainingTimeSec > 0) {
-                    mExpectedReadyTimestamp = System.currentTimeMillis() + (progress.remainingTimeSec * 1000L);
                     Log.d(TAG, "VOT ETA received: %ds, expected ready at +%ds", progress.remainingTimeSec, progress.remainingTimeSec);
                 } else {
                     Log.d(TAG, "VOT pending (status=%d, remainingTime=%d)", progress.status, progress.remainingTimeSec);
@@ -670,7 +669,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 mProgressTickRunnable.run();
                 break;
             case VotProgress.TYPE_READY:
-                Log.d(TAG, "VOT translation ready (audioUrl=%s)", progress.audioUrl);
+                Log.d(TAG, "VOT translation ready (audio URL received=%b)", progress.audioUrl != null);
                 Utils.removeCallbacks(mProgressTickRunnable);
                 if (progress.audioUrl != null) {
                     prepareAndStartTranslationAudio(progress.audioUrl);
@@ -788,6 +787,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
         mLastSyncSeekTimestamp = System.currentTimeMillis();
         Utils.removeCallbacks(mSyncRunnable);
+        mProgressTimer.clear();
         Utils.postDelayed(mSyncRunnable, INITIAL_SYNC_GRACE_PERIOD_MS);
     }
 
@@ -845,6 +845,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void cancelTranslationJob() {
         Utils.removeCallbacks(mProgressTickRunnable);
+        mProgressTimer.clear();
         if (mTranslationDisposable != null && !mTranslationDisposable.isDisposed()) {
             mTranslationDisposable.dispose();
         }

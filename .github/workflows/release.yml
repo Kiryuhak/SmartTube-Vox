@@ -279,8 +279,7 @@ jobs:
 
           # Подготовка основных ассетов для release и updater (только SmartTube VOX)
           cp "$UNIVERSAL_APK" smarttube_vox.apk
-          cp "$UNIVERSAL_APK" smarttube_vox-universal.apk
-          echo "Созданы основные ассеты для release: smarttube_vox.apk, smarttube_vox-universal.apk"
+          echo "Создан основной ассет для release: smarttube_vox.apk"
 
           ARM64_APK=$(find "$OUTPUT_DIR" -name "*arm64-v8a*.apk" | head -n 1)
           if [ -n "$ARM64_APK" ] && [ -f "$ARM64_APK" ]; then
@@ -294,10 +293,16 @@ jobs:
             echo "Создан ассет: smarttube_vox-armeabi-v7a.apk"
           fi
 
-          X86_APK=$(find "$OUTPUT_DIR" -name "*x86*.apk" | head -n 1)
+          X86_APK=$(find "$OUTPUT_DIR" -name "*_x86.apk" | head -n 1)
           if [ -n "$X86_APK" ] && [ -f "$X86_APK" ]; then
             cp "$X86_APK" smarttube_vox-x86.apk
             echo "Создан ассет: smarttube_vox-x86.apk"
+          fi
+
+          X86_64_APK=$(find "$OUTPUT_DIR" -name "*_x86_64.apk" | head -n 1)
+          if [ -n "$X86_64_APK" ] && [ -f "$X86_64_APK" ]; then
+            cp "$X86_64_APK" smarttube_vox-x86_64.apk
+            echo "Создан ассет: smarttube_vox-x86_64.apk"
           fi
 
       - name: Extract Release Notes and Generate Update JSON

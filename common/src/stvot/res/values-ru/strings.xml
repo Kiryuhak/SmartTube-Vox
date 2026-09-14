@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="title_audio_formats">Аудиодорожки</string>
     <string translatable="false" name="app_name"><![CDATA[SmartTube VOX]]></string>
     <string name="about_vot_title">О проекте SmartTube VOX</string>
     <string name="about_vot_desc">SmartTube VOX — неофициальная сборка SmartTube для Android TV с интегрированным VOT-переводом, Яндекс ID и поддержкой «Живого голоса». Основано на SmartTube.</string>
