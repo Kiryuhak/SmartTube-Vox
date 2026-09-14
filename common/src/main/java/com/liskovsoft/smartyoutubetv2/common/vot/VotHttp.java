@@ -17,11 +17,19 @@ public class VotHttp {
     private static final MediaType PROTOBUF = MediaType.parse("application/x-protobuf");
     private static final MediaType JSON = MediaType.parse("application/json");
 
-    private final OkHttpClient mClient = new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(120, TimeUnit.SECONDS)
-            .build();
+    private final OkHttpClient mClient;
+
+    public VotHttp() {
+        this(new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(120, TimeUnit.SECONDS)
+                .build());
+    }
+
+    VotHttp(OkHttpClient client) {
+        mClient = client;
+    }
 
     public byte[] postProtobuf(String path, byte[] body, Map<String, String> headers) throws IOException {
         return execute(path, "POST", RequestBody.create(PROTOBUF, body), headers);
@@ -55,6 +63,9 @@ public class VotHttp {
         }
 
         try (Response response = mClient.newCall(builder.build()).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("VOT HTTP error: " + response.code());
+            }
             if (response.body() == null) {
                 return null;
             }

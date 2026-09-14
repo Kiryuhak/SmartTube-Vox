@@ -77,9 +77,10 @@ public final class VotProtobuf {
     private static Map<Integer, Object> parseFields(byte[] data) {
         Map<Integer, Object> result = new HashMap<>();
         int pos = 0;
+        parseLoop:
         while (pos < data.length) {
             int[] tag = readVarint(data, pos);
-            if (tag[0] < 0) {
+            if (tag[0] <= 0) {
                 break;
             }
             pos = tag[1];
@@ -89,18 +90,30 @@ public final class VotProtobuf {
             switch (wireType) {
                 case 0: {
                     int[] val = readVarint(data, pos);
+                    if (val[0] < 0) {
+                        break parseLoop;
+                    }
                     pos = val[1];
                     result.put(fieldNumber, val[0]);
                     break;
                 }
                 case 1: {
+                    if (data.length - pos < 8) {
+                        break parseLoop;
+                    }
                     pos += 8;
                     break;
                 }
                 case 2: {
                     int[] len = readVarint(data, pos);
+                    if (len[0] < 0) {
+                        break parseLoop;
+                    }
                     pos = len[1];
                     int length = len[0];
+                    if (length > data.length - pos) {
+                        break parseLoop;
+                    }
                     byte[] chunk = new byte[length];
                     System.arraycopy(data, pos, chunk, 0, length);
                     pos += length;
@@ -110,6 +123,9 @@ public final class VotProtobuf {
                     break;
                 }
                 case 5: {
+                    if (data.length - pos < 4) {
+                        break parseLoop;
+                    }
                     pos += 4;
                     break;
                 }
