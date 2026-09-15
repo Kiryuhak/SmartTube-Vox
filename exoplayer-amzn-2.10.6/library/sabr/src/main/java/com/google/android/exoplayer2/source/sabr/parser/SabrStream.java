@@ -337,7 +337,7 @@ public class SabrStream {
             throw new IllegalStateException(e);
         }
 
-        Log.d(TAG, "Process SabrRedirect: %s", sabrRedirect);
+        Log.d(TAG, "Process SabrRedirect");
 
         if (!sabrRedirect.hasRedirectUrl()) {
             Log.d(TAG, "Server requested to redirect to an invalid URL");
@@ -521,7 +521,7 @@ public class SabrStream {
     }
 
     private void setUrl(String url) {
-        Log.d(TAG, "New URL: %s", url);
+        Log.d(TAG, "SABR media endpoint updated");
         UrlQueryString newQueryString = UrlQueryStringFactory.parse(url);
         UrlQueryString oldQueryString = UrlQueryStringFactory.parse(this.url);
         String bn = newQueryString.get("id");
