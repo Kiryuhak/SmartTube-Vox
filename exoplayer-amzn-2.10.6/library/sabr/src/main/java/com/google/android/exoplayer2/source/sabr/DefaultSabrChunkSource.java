@@ -433,7 +433,8 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
 
     @Override
     public boolean onChunkLoadError(Chunk chunk, boolean cancelable, Exception e, long blacklistDurationMs) {
-        Log.e(TAG, "Chunk load failed: " + e.getMessage());
+        Uri uri = chunk != null && chunk.dataSpec != null ? chunk.dataSpec.uri : null;
+        Log.e(TAG, SabrLogUtil.buildChunkLoadErrorMessage(uri != null ? uri.getHost() : null, e));
         if (!cancelable) {
             return false;
         }
