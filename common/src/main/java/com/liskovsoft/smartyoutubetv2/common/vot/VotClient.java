@@ -15,6 +15,7 @@ import io.reactivex.schedulers.Schedulers;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -46,7 +47,7 @@ public class VotClient {
     }
 
     public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec) {
-        return Observable.<VotProgress>create(emitter -> pollTranslation(emitter, youtubeUrl, durationSec, true))
+        return Observable.<VotProgress>create(emitter -> pollTranslation(emitter, youtubeUrl, durationSec, true, true))
                 .subscribeOn(Schedulers.io());
     }
 
@@ -75,13 +76,14 @@ public class VotClient {
     }
 
     private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
-                                 boolean allowAudioFallback) {
+                                 boolean allowAudioFallback, boolean allowLivelyFallback) {
         try {
-            Log.d(TAG, "VOT request started: %s (duration=%ds)", youtubeUrl, durationSec);
-            VotTranslationResponse response = requestTranslation(youtubeUrl, durationSec, false);
+            boolean useLively = allowLivelyFallback && mVotData.isLivelyVoiceEnabled();
+            Log.d(TAG, "VOT request started: %s (duration=%ds, useLively=%b)", youtubeUrl, durationSec, useLively);
+            VotTranslationResponse response = requestTranslation(youtubeUrl, durationSec, false, useLively);
             Log.d(TAG, "Initial translation response: status=%d, remainingTime=%ds, message=%s",
                     response.status, response.remainingTimeSec, response.message);
-            if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, response)) {
+            if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, useLively, response)) {
                 return;
             }
 
@@ -98,7 +100,7 @@ public class VotClient {
                 }
 
                 try {
-                    response = requestTranslation(youtubeUrl, durationSec, true);
+                    response = requestTranslation(youtubeUrl, durationSec, true, useLively);
                     consecutiveNetworkErrors = 0;
                 } catch (IOException e) {
                     consecutiveNetworkErrors++;
@@ -114,7 +116,7 @@ public class VotClient {
                 Log.d(TAG, "VOT poll response: attempt=%d, status=%d, remainingTime=%ds",
                         i + 1, response.status, response.remainingTimeSec);
 
-                if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, response)) {
+                if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, useLively, response)) {
                     return;
                 }
                 waitSec = calculateWaitSec(response.remainingTimeSec, i + 1);
@@ -140,7 +142,8 @@ public class VotClient {
 
     /** @return false if polling should stop (ready, failed, or disposed) */
     private boolean processResponse(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
-                                    boolean allowAudioFallback, VotTranslationResponse response)
+                                    boolean allowAudioFallback, boolean allowLivelyFallback, boolean useLively,
+                                    VotTranslationResponse response)
             throws IOException, VotException {
         if (emitter.isDisposed()) {
             return false;
@@ -153,8 +156,8 @@ public class VotClient {
         }
 
         if (response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED && allowAudioFallback) {
-            handleAudioRequested(youtubeUrl, durationSec, response.translationId);
-            pollTranslation(emitter, youtubeUrl, durationSec, false);
+            handleAudioRequested(youtubeUrl, durationSec, response.translationId, useLively);
+            pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback);
             return false;
         }
 
@@ -165,6 +168,11 @@ public class VotClient {
         }
 
         if (response.status == VotTranslationResponse.STATUS_FAILED) {
+            if (allowLivelyFallback && useLively && isLivelyUnavailableError(response.message)) {
+                Log.d(TAG, "Lively voice unavailable, retrying with Standard voice");
+                pollTranslation(emitter, youtubeUrl, durationSec, allowAudioFallback, false);
+                return false;
+            }
             String msg = response.message != null ? response.message : "Translation failed";
             emitter.onNext(VotProgress.failed(msg));
             emitter.onComplete();
@@ -181,9 +189,8 @@ public class VotClient {
         return false;
     }
 
-    private VotTranslationResponse requestTranslation(String youtubeUrl, double durationSec, boolean subsequent)
+    private VotTranslationResponse requestTranslation(String youtubeUrl, double durationSec, boolean subsequent, boolean useLively)
             throws IOException {
-        boolean useLively = mVotData.isLivelyVoiceEnabled();
         byte[] body = VotProtobuf.encodeTranslationRequest(
                 youtubeUrl,
                 durationSec,
@@ -193,7 +200,7 @@ public class VotClient {
                 useLively
         );
 
-        Map<String, String> headers = buildTranslateHeaders(body);
+        Map<String, String> headers = buildTranslateHeaders(body, useLively);
         byte[] raw = mHttp.postProtobuf("/video-translation/translate", body, headers);
 
         if (raw == null || raw.length == 0) {
@@ -202,23 +209,23 @@ public class VotClient {
         return VotProtobuf.decodeTranslationResponse(raw);
     }
 
-    private Map<String, String> buildTranslateHeaders(byte[] body) {
+    private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively) {
         Map<String, String> headers;
         if (mSession != null) {
             headers = VotHeaders.sessionTranslate(mSession, body, "/video-translation/translate");
         } else {
             headers = VotHeaders.simpleTranslate(body);
         }
-        if (mVotData.isLivelyVoiceEnabled()) {
+        if (useLively) {
             headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(mVotData.getOAuthToken()));
         }
         return headers;
     }
 
-    private void handleAudioRequested(String youtubeUrl, long durationSec, @Nullable String translationId)
+    private void handleAudioRequested(String youtubeUrl, long durationSec, @Nullable String translationId, boolean useLively)
             throws IOException, VotException {
         if (translationId == null || translationId.isEmpty()) {
-            VotTranslationResponse r = requestTranslation(youtubeUrl, durationSec, false);
+            VotTranslationResponse r = requestTranslation(youtubeUrl, durationSec, false, useLively);
             translationId = r.translationId;
         }
         if (translationId == null || translationId.isEmpty()) {
@@ -274,16 +281,27 @@ public class VotClient {
     }
 
     /**
-     * Architecture hook for potential future Lively Voice -> standard voice fallback.
+     * Checks if a backend failure message indicates that Lively Voice is unavailable
+     * for this video/language, so standard voice translation should be attempted as a fallback.
+     * Strict policy: Only return true if backend explicitly indicates that Lively Voice
+     * is unavailable (e.g. "обычная озвучка" / "standard voice"), not on auth, network,
+     * or generic failure.
+     */
+    public static boolean isLivelyUnavailableError(@Nullable String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("обычная озвучка") || lower.contains("standard voice");
+    }
+
+    /**
+     * Architecture hook for Lively Voice -> standard voice fallback.
      * Strict policy: Only return true if backend explicitly indicates that Lively Voice
      * generation specifically failed, not on auth, network, or generic failure.
      */
     public static boolean isLivelyVoiceSpecificFailure(@Nullable VotTranslationResponse response) {
-        if (response == null || response.message == null) {
-            return false;
-        }
-        String msg = response.message.toLowerCase();
-        return msg.contains("lively") || msg.contains("neural voice unavailable");
+        return response != null && isLivelyUnavailableError(response.message);
     }
 
     private void sleep(int sec) throws VotException {
