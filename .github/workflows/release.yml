@@ -397,12 +397,23 @@ jobs:
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
         run: |
           echo "Публикация GitHub Release для тега $TAG..."
-          gh release create "$TAG" \
-            --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
-            --notes-file release_notes.md \
-            smarttube_vox.apk \
-            smarttube_vox-*.apk \
-            smarttube_vox.json
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Релиз с тегом $TAG уже существует. Обновление описания и загрузка ассетов..."
+            gh release edit "$TAG" \
+              --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
+              --notes-file release_notes.md
+            gh release upload "$TAG" --clobber \
+              smarttube_vox.apk \
+              smarttube_vox-*.apk \
+              smarttube_vox.json
+          else
+            gh release create "$TAG" \
+              --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
+              --notes-file release_notes.md \
+              smarttube_vox.apk \
+              smarttube_vox-*.apk \
+              smarttube_vox.json
+          fi
 
           echo "Релиз успешно опубликован со всеми VOX ассетами и метаданными обновления."
 

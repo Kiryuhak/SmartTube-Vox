@@ -122,12 +122,14 @@ jobs:
           Требуется ручное разрешение конфликтов.
           EOF
 
-                  gh issue create \
+                  if ! gh issue create \
                     --title "Конфликт слияния upstream SmartTube [${SHORT_SHA}]" \
-                    --body-file /tmp/issue_body.md
-
+                    --body-file /tmp/issue_body.md; then
+                    echo "::warning::Не удалось создать Issue через GitHub API. Проверьте настройки прав GITHUB_TOKEN для Issues."
+                  else
+                    echo "Создан Issue с описанием конфликта слияния."
+                  fi
                   rm -f /tmp/issue_body.md
-                  echo "Создан Issue с описанием конфликта слияния."
                 fi
               fi
             fi
@@ -223,12 +225,14 @@ jobs:
           Автоматическое слияние отклонено без изменений в ветке \`main\`.
           EOF
 
-                  gh issue create \
+                  if ! gh issue create \
                     --title "Конфликт слияния upstream VOT [${SHORT_SHA}]" \
-                    --body-file /tmp/issue_vot_body.md
-
+                    --body-file /tmp/issue_vot_body.md; then
+                    echo "::warning::Не удалось создать Issue через GitHub API. Проверьте настройки прав GITHUB_TOKEN для Issues."
+                  else
+                    echo "Создан Issue с описанием конфликта слияния VOT."
+                  fi
                   rm -f /tmp/issue_vot_body.md
-                  echo "Создан Issue с описанием конфликта слияния VOT."
                 fi
               fi
             fi

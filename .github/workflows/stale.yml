@@ -1,8 +1,6 @@
 name: "Close stale issues"
 on:
   workflow_dispatch:
-    branches:
-    - master
      
 jobs:
   stale:
