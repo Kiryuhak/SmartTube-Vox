@@ -354,6 +354,7 @@
     <string name="vot_pending_long">Waiting…</string>
     <string name="vot_skip_russian">Russian audio — translation not needed</string>
     <string name="vot_already_russian">Video is already in Russian</string>
+    <string name="vot_lively_fallback_standard">Lively voice unavailable, using standard voice</string>
     <string name="vot_speed_blocked">Turn off voice translation before changing speed</string>
     <string name="vot_prefer_youtube_dub">Use YouTube auto-dub (Russian)</string>
     <string name="vot_prefer_youtube_dub_desc">When available, switch to YouTube\'s Russian audio track instead of Yandex voice-over.</string>

@@ -657,6 +657,10 @@ public class VoiceTranslateController extends BasePlayerController {
         mLastBackendPendingTimestamp = SystemClock.elapsedRealtime();
 
         switch (progress.type) {
+            case VotProgress.TYPE_LIVELY_FALLBACK:
+                Log.i(TAG, "VOT: lively voice unavailable, falling back to standard voice");
+                MessageHelpers.showMessage(getContext(), R.string.vot_lively_fallback_standard);
+                break;
             case VotProgress.TYPE_WAITING:
                 mPendingEtaSec = progress.remainingTimeSec;
                 mProgressTimer.reconcileEta(progress.remainingTimeSec, mLastBackendPendingTimestamp);

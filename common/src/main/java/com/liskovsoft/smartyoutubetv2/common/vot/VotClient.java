@@ -170,6 +170,7 @@ public class VotClient {
         if (response.status == VotTranslationResponse.STATUS_FAILED) {
             if (allowLivelyFallback && useLively && isLivelyUnavailableError(response.message)) {
                 Log.d(TAG, "Lively voice unavailable, retrying with Standard voice");
+                emitter.onNext(VotProgress.livelyFallback());
                 pollTranslation(emitter, youtubeUrl, durationSec, allowAudioFallback, false);
                 return false;
             }

@@ -4,6 +4,7 @@ public final class VotProgress {
     public static final int TYPE_WAITING = 0;
     public static final int TYPE_READY = 1;
     public static final int TYPE_FAILED = 2;
+    public static final int TYPE_LIVELY_FALLBACK = 3;
 
     public final int type;
     public final String audioUrl;
@@ -29,5 +30,9 @@ public final class VotProgress {
 
     public static VotProgress failed(String message) {
         return new VotProgress(TYPE_FAILED, null, 0, VotTranslationResponse.STATUS_FAILED, message);
+    }
+
+    public static VotProgress livelyFallback() {
+        return new VotProgress(TYPE_LIVELY_FALLBACK, null, 0, 0, null);
     }
 }
