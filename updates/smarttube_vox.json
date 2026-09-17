@@ -1,0 +1,22 @@
+﻿{
+  "package": {
+    "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk"
+  },
+  "32.45-vot.9": {
+    "versionCode": 2435009,
+    "changelog": [
+      "Improved Lively Voice fallback handling",
+      "Added VOT state checks",
+      "Improved audio track stability",
+      "Fixed translation timers",
+      "Improved Yandex VOT error checks"
+    ],
+    "changelog_ru": [
+      "Улучшена обработка Lively Voice fallback",
+      "Добавлены проверки состояния VOT",
+      "Улучшена стабильность аудиодорожек",
+      "Исправлены таймеры перевода",
+      "Улучшены проверки ошибок Yandex VOT"
+    ]
+  }
+}
