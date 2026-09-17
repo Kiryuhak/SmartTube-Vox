@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Neural sparkle star -->
+    <path
+        android:fillColor="#7B2CBF"
+        android:pathData="M12,2 L14.5,9.5 L22,12 L14.5,14.5 L12,22 L9.5,14.5 L2,12 L9.5,9.5 Z" />
+    <!-- Inner bright center -->
+    <path
+        android:fillColor="#D0A2FF"
+        android:pathData="M12,7 L13.2,10.8 L17,12 L13.2,13.2 L12,17 L10.8,13.2 L7,12 L10.8,10.8 Z" />
+</vector>
