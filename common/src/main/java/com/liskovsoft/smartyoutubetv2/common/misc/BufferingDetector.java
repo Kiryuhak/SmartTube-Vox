@@ -5,41 +5,58 @@ import androidx.annotation.NonNull;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 public class BufferingDetector {
-    private static final long BUFFERING_WINDOW_MS = 60_000;
     private static final long BUFFERING_DURATION_MS = 20_000;
-    
-    private long mBeginTimeMs;
-    private long mStartTimeMs;
-    private long mTotalDurationMs;
+
     private final Runnable mOnLongBuffering = this::onLongBuffering;
     private final OnLongBuffering mCallback;
+    private final Scheduler mScheduler;
+    private boolean mIsBuffering;
     private boolean mIsPlayable;
 
     public interface OnLongBuffering {
         void onLongBuffering();
     }
 
+    interface Scheduler {
+        void postDelayed(Runnable callback, long delayMs);
+        void removeCallbacks(Runnable callback);
+    }
+
     public BufferingDetector(@NonNull OnLongBuffering callback) {
+        this(callback, new Scheduler() {
+            @Override
+            public void postDelayed(Runnable callback, long delayMs) {
+                Utils.postDelayed(callback, delayMs);
+            }
+
+            @Override
+            public void removeCallbacks(Runnable callback) {
+                Utils.removeCallbacks(callback);
+            }
+        });
+    }
+
+    BufferingDetector(@NonNull OnLongBuffering callback, @NonNull Scheduler scheduler) {
         mCallback = callback;
+        mScheduler = scheduler;
     }
 
     public void onStartBuffering() {
-        long currentTimeMs = System.currentTimeMillis();
-        if (currentTimeMs - mBeginTimeMs > BUFFERING_WINDOW_MS) {
-            mBeginTimeMs = currentTimeMs;
-            mTotalDurationMs = 0;
+        // Player.STATE_BUFFERING may be delivered more than once for the same episode.
+        // A recovered READY interval is real playback progress and must start a fresh
+        // stall window. Accumulating unrelated episodes caused healthy live streams
+        // with intermittent jitter to be restarted in a loop.
+        if (mIsBuffering) {
+            return;
         }
-        mStartTimeMs = currentTimeMs;
-        Utils.postDelayed(mOnLongBuffering, Math.max(0, BUFFERING_DURATION_MS - mTotalDurationMs));
+
+        mIsBuffering = true;
+        mScheduler.postDelayed(mOnLongBuffering, BUFFERING_DURATION_MS);
     }
 
     public void onStopBuffering() {
-        Utils.removeCallbacks(mOnLongBuffering);
-        if (mStartTimeMs > 0) {
-            long stopTimeMs = System.currentTimeMillis();
-            mTotalDurationMs += (stopTimeMs - mStartTimeMs);
-            mStartTimeMs = 0;
-        }
+        mScheduler.removeCallbacks(mOnLongBuffering);
+        mIsBuffering = false;
         mIsPlayable = true;
     }
 
@@ -52,8 +69,8 @@ public class BufferingDetector {
      * Reset buffering stats
      */
     public void reset() {
-        mBeginTimeMs = mStartTimeMs = mTotalDurationMs = 0;
-        Utils.removeCallbacks(mOnLongBuffering);
+        mIsBuffering = false;
+        mScheduler.removeCallbacks(mOnLongBuffering);
     }
 
     public boolean isPlayable() {

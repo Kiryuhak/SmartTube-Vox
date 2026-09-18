@@ -50,7 +50,7 @@ import com.liskovsoft.googlecommon.common.helpers.DefaultHeaders;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Executor;
 
 public class ExoMediaSourceFactory {
     private static final String TAG = ExoMediaSourceFactory.class.getSimpleName();
@@ -65,6 +65,9 @@ public class ExoMediaSourceFactory {
     private static final String DASH_MANIFEST_EXTENSION = "mpd";
     private static final String HLS_PLAYLIST_EXTENSION = "m3u8";
     private static final boolean USE_BANDWIDTH_METER = false;
+    // CronetDataSourceFactory doesn't own or shut down the supplied executor.
+    // Keep one process-scoped callback thread instead of leaking one per player restart.
+    private static final Executor CRONET_EXECUTOR = Util.newSingleThreadExecutor("ExoPlayer:Cronet");
     private TrackErrorFixer mTrackErrorFixer;
     private DataSource.Factory mMediaDataSourceFactory;
 
@@ -285,7 +288,7 @@ public class ExoMediaSourceFactory {
         CronetDataSourceFactory dataSourceFactory =
                 new CronetDataSourceFactory(
                         new CronetEngineWrapper(CronetManager.getEngine(mContext)),
-                        Executors.newSingleThreadExecutor(),
+                        CRONET_EXECUTOR,
                         null,
                         bandwidthMeter,
                         (int) OkHttpManager.getConnectTimeoutMs(),

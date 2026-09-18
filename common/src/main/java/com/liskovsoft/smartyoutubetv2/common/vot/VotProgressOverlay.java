@@ -8,6 +8,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -17,7 +18,6 @@ import androidx.core.content.ContextCompat;
 
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
-import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
 public class VotProgressOverlay {
@@ -39,7 +39,6 @@ public class VotProgressOverlay {
     private ProgressBar mSpinner;
     private ImageView mIcon;
     private TextView mText;
-    private View mGlobalEndingTime;
     private int mCurrentState = STATE_IDLE;
     private ViewGroup mParentView;
 
@@ -135,11 +134,8 @@ public class VotProgressOverlay {
                         if (mOverlayView != null) {
                             mOverlayView.setVisibility(View.GONE);
                         }
-                        restoreGlobalEndingTime();
                     })
                     .start();
-        } else {
-            restoreGlobalEndingTime();
         }
     }
 
@@ -151,7 +147,6 @@ public class VotProgressOverlay {
             mOverlayView.setVisibility(View.GONE);
             mOverlayView.setAlpha(0f);
         }
-        restoreGlobalEndingTime();
     }
 
     public void destroy() {
@@ -164,7 +159,6 @@ public class VotProgressOverlay {
         mSpinner = null;
         mIcon = null;
         mText = null;
-        mGlobalEndingTime = null;
     }
 
     private void showSpinnerMode() {
@@ -204,7 +198,6 @@ public class VotProgressOverlay {
 
     private boolean ensureAttached(@Nullable Activity activity) {
         if (mOverlayView != null && mOverlayView.getParent() != null) {
-            suppressGlobalEndingTime(activity);
             return true;
         }
         if (activity == null || activity.isFinishing()) {
@@ -218,6 +211,16 @@ public class VotProgressOverlay {
         }
 
         try {
+            View existing = targetContainer.findViewById(R.id.vot_progress_root);
+            if (existing != null) {
+                mOverlayView = existing;
+                mSpinner = mOverlayView.findViewById(R.id.vot_progress_spinner);
+                mIcon = mOverlayView.findViewById(R.id.vot_progress_icon);
+                mText = mOverlayView.findViewById(R.id.vot_progress_text);
+                mParentView = targetContainer;
+                return true;
+            }
+
             LayoutInflater inflater = LayoutInflater.from(mContext);
             mOverlayView = inflater.inflate(R.layout.vot_progress_overlay, targetContainer, false);
             mSpinner = mOverlayView.findViewById(R.id.vot_progress_spinner);
@@ -228,21 +231,30 @@ public class VotProgressOverlay {
             mOverlayView.setFocusableInTouchMode(false);
             mOverlayView.setClickable(false);
 
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            lp.gravity = Gravity.TOP | Gravity.END;
-            lp.rightMargin = dpToPx(36);
-            lp.topMargin = dpToPx(36);
+            if (targetContainer instanceof LinearLayout) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+                lp.gravity = Gravity.END;
+                lp.topMargin = dpToPx(6);
+                mOverlayView.setLayoutParams(lp);
+            } else {
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+                lp.gravity = Gravity.TOP | Gravity.END;
+                lp.rightMargin = dpToPx(14);
+                lp.topMargin = dpToPx(68);
+                mOverlayView.setLayoutParams(lp);
+            }
 
-            mOverlayView.setLayoutParams(lp);
             mOverlayView.setVisibility(View.GONE);
             mOverlayView.setAlpha(0f);
 
             targetContainer.addView(mOverlayView);
             mParentView = targetContainer;
-            suppressGlobalEndingTime(activity);
             return true;
         } catch (Exception e) {
             Log.e(TAG, "Failed to inflate VOT progress overlay: %s", e.getMessage());
@@ -250,7 +262,17 @@ public class VotProgressOverlay {
         }
     }
 
-    private ViewGroup findTargetContainer(Activity activity) {
+    private ViewGroup findTargetContainer(@Nullable Activity activity) {
+        if (activity == null) {
+            return null;
+        }
+        int wrapperId = activity.getResources().getIdentifier("player_overlay_wrapper", "id", activity.getPackageName());
+        if (wrapperId != 0) {
+            View wrapper = activity.findViewById(wrapperId);
+            if (wrapper instanceof ViewGroup) {
+                return (ViewGroup) wrapper;
+            }
+        }
         int rootId = activity.getResources().getIdentifier("playback_fragment_root", "id", activity.getPackageName());
         if (rootId != 0) {
             View root = activity.findViewById(rootId);
@@ -267,27 +289,6 @@ public class VotProgressOverlay {
             return (ViewGroup) decor;
         }
         return null;
-    }
-
-    private void suppressGlobalEndingTime(@Nullable Activity activity) {
-        if (activity == null) {
-            return;
-        }
-        if (mGlobalEndingTime == null || mGlobalEndingTime.getWindowToken() == null) {
-            int endingTimeId = activity.getResources().getIdentifier(
-                    "global_ending_time", "id", activity.getPackageName());
-            mGlobalEndingTime = endingTimeId != 0 ? activity.findViewById(endingTimeId) : null;
-        }
-        if (mGlobalEndingTime != null) {
-            mGlobalEndingTime.setVisibility(View.GONE);
-        }
-    }
-
-    private void restoreGlobalEndingTime() {
-        if (mGlobalEndingTime != null) {
-            boolean enabled = PlayerData.instance(mContext).isGlobalEndingTimeEnabled();
-            mGlobalEndingTime.setVisibility(enabled ? View.VISIBLE : View.GONE);
-        }
     }
 
     private int dpToPx(float dp) {

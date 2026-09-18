@@ -58,6 +58,16 @@ public final class VotProgressTimer {
         return Math.max(0, (nowMs - mRequestStartedAtMs) / 1000L);
     }
 
+    /**
+     * The backend ETA is informational and must not become a client deadline.
+     * Only the absolute request timeout is allowed to terminate polling.
+     */
+    public boolean isHardTimeoutReached(long nowMs, long hardTimeoutMs) {
+        return mRequestStartedAtMs > 0
+                && hardTimeoutMs > 0
+                && nowMs - mRequestStartedAtMs >= hardTimeoutMs;
+    }
+
     public static String formatMmSs(long totalSec) {
         long safeTotalSec = Math.max(0, totalSec);
         long minutes = safeTotalSec / 60;

@@ -4,6 +4,7 @@ import android.content.Context;
 
 import androidx.annotation.Nullable;
 
+import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
 
@@ -26,6 +27,11 @@ public class VotClient {
     private final VotData mVotData;
     @Nullable
     private VotSession mSession;
+    private String mLastOAuthToken;
+
+    public synchronized void resetSession() {
+        mSession = null;
+    }
 
     public VotClient(Context context) {
         mVotData = VotData.instance(context);
@@ -129,6 +135,15 @@ public class VotClient {
         } catch (IOException e) {
             Log.e(TAG, "VOT IO error: %s", e.getMessage());
             if (!emitter.isDisposed()) {
+                if (e instanceof VotHttpException) {
+                    int code = ((VotHttpException) e).getStatusCode();
+                    if (code == 401 || code == 403) {
+                        resetSession();
+                        emitter.onNext(VotProgress.failed("auth required"));
+                        emitter.onComplete();
+                        return;
+                    }
+                }
                 emitter.onError(e);
             }
         } catch (VotException e) {
@@ -150,15 +165,23 @@ public class VotClient {
         }
 
         if (response.status == VotTranslationResponse.STATUS_SESSION_REQUIRED) {
+            resetSession();
             emitter.onNext(VotProgress.failed("auth required"));
             emitter.onComplete();
             return false;
         }
 
-        if (response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED && allowAudioFallback) {
-            handleAudioRequested(youtubeUrl, durationSec, response.translationId, useLively);
-            pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback);
-            return false;
+        if (response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED) {
+            if (allowAudioFallback) {
+                handleAudioRequested(youtubeUrl, durationSec, response.translationId, useLively);
+                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback);
+                return false;
+            } else {
+                Log.w(TAG, "Audio upload already attempted or disabled, stopping polling");
+                emitter.onNext(VotProgress.failed("Audio translation unavailable"));
+                emitter.onComplete();
+                return false;
+            }
         }
 
         if (response.isReady() && response.url != null && !response.url.isEmpty()) {
@@ -180,7 +203,7 @@ public class VotClient {
             return false;
         }
 
-        if (response.isWaiting() || response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED) {
+        if (response.isWaiting()) {
             emitter.onNext(VotProgress.waiting(response.remainingTimeSec, response.status));
             return true;
         }
@@ -211,14 +234,20 @@ public class VotClient {
     }
 
     private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively) {
+        String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
+        if (!Helpers.equals(currentToken, mLastOAuthToken)) {
+            mLastOAuthToken = currentToken;
+            resetSession();
+        }
+
         Map<String, String> headers;
         if (mSession != null) {
             headers = VotHeaders.sessionTranslate(mSession, body, "/video-translation/translate");
         } else {
             headers = VotHeaders.simpleTranslate(body);
         }
-        if (useLively) {
-            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(mVotData.getOAuthToken()));
+        if (useLively && currentToken != null && !currentToken.isEmpty()) {
+            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(currentToken));
         }
         return headers;
     }

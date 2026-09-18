@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class VotProgressTimerTest {
     @Test
@@ -72,5 +73,42 @@ public class VotProgressTimerTest {
         assertFalse(displayText.contains("⌛"));
         assertFalse(displayText.contains("⏳"));
         assertFalse(displayText.contains("?"));
+    }
+
+    @Test
+    public void pendingMayContinueAfterEtaExpiresAndBecomeReady() {
+        VotProgressTimer timer = new VotProgressTimer();
+        timer.start(1_000L);
+        timer.reconcileEta(99, 1_000L);
+
+        long firstPostEtaPoll = 101_000L;
+        assertEquals(0, timer.getRemainingTimeSec(firstPostEtaPoll));
+        assertFalse(timer.isHardTimeoutReached(firstPostEtaPoll, 25 * 60 * 1_000L));
+    }
+
+    @Test
+    public void pendingForeverStopsAtAbsoluteHardTimeout() {
+        VotProgressTimer timer = new VotProgressTimer();
+        timer.start(1_000L);
+        timer.reconcileEta(99, 1_000L);
+
+        assertFalse(timer.isHardTimeoutReached(1_500_999L, 25 * 60 * 1_000L));
+        assertTrue(timer.isHardTimeoutReached(1_501_000L, 25 * 60 * 1_000L));
+    }
+
+    @Test
+    public void manualRetryStartsWithFreshDeadlineAndEta() {
+        VotProgressTimer timer = new VotProgressTimer();
+        timer.start(1_000L);
+        timer.reconcileEta(99, 1_000L);
+        assertTrue(timer.isHardTimeoutReached(1_501_000L, 25 * 60 * 1_000L));
+
+        timer.clear();
+        timer.start(2_000_000L);
+
+        assertEquals(0, timer.getRemainingTimeSec(2_000_000L));
+        assertFalse(timer.isHardTimeoutReached(2_000_000L, 25 * 60 * 1_000L));
+        timer.reconcileEta(5, 2_000_000L);
+        assertEquals(5, timer.getRemainingTimeSec(2_000_000L));
     }
 }

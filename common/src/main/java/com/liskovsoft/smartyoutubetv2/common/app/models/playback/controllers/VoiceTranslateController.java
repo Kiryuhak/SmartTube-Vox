@@ -23,6 +23,8 @@ import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressTimer;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotHttpException;
 
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
@@ -130,7 +132,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 return;
             }
             long now = SystemClock.elapsedRealtime();
-            if (mRequestStartTimestamp > 0 && (now - mRequestStartTimestamp > MAX_TOTAL_WAIT_MS)) {
+            if (mProgressTimer.isHardTimeoutReached(now, MAX_TOTAL_WAIT_MS)) {
                 Log.w(TAG, "VOT timeout: exceeded absolute maximum wait (%d ms) for video=%s", MAX_TOTAL_WAIT_MS, mCurrentVideoId);
                 onTranslationTimeout();
                 return;
@@ -696,6 +698,14 @@ public class VoiceTranslateController extends BasePlayerController {
         if (mUserArmed && progressOverlay() != null) {
             progressOverlay().showError(getActivity());
         }
+        if (e instanceof VotHttpException) {
+            int code = ((VotHttpException) e).getStatusCode();
+            if (code == 401 || code == 403) {
+                votClient().resetSession();
+                handleTranslationError("auth required", false);
+                return;
+            }
+        }
         String msg = e != null ? e.getMessage() : null;
         boolean isNetwork = e instanceof IOException;
         handleTranslationError(msg, isNetwork);
@@ -885,6 +895,10 @@ public class VoiceTranslateController extends BasePlayerController {
             mProgressOverlay.dismissImmediately();
         }
         setState(STATE_OFF);
+        mRequestStartTimestamp = 0;
+        mLastBackendPendingTimestamp = 0;
+        mPendingEtaSec = 0;
+        mPendingToastShown = false;
         mPendingVideoUrl = null;
     }
 
@@ -930,12 +944,13 @@ public class VoiceTranslateController extends BasePlayerController {
         Log.e(TAG, "Translation error: %s (network=%b)", message, isNetworkError);
         Utils.removeCallbacks(mProgressTickRunnable);
         boolean wasUserArmed = mUserArmed;
-        boolean isAuthRequired = message != null && message.contains("auth required");
+        boolean isAuthRequired = isAuthError(message);
 
         if (isAuthRequired) {
             Log.w(TAG, "Yandex session required/invalid, clearing token and disabling lively voice");
             votData().clearOAuthToken();
             votData().setLivelyVoiceEnabled(false);
+            votClient().resetSession();
             if (wasUserArmed) {
                 MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
             }
@@ -950,6 +965,18 @@ public class VoiceTranslateController extends BasePlayerController {
         if (wasUserArmed) {
             showBriefErrorButtonState();
         }
+    }
+
+    private static boolean isAuthError(String message) {
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("auth required")
+                || lower.contains("unauthorized")
+                || lower.contains("401")
+                || lower.contains("403")
+                || lower.contains("forbidden");
     }
 
     private void setState(int state) {
