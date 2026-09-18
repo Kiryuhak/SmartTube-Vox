@@ -2,7 +2,7 @@
   <img src="smarttubetv/src/stvot/res/mipmap-nodpi/ic_stvot.png" width="150" alt="SmartTube VOX Icon">
   <h1>SmartTube VOX</h1>
   <h3>SmartTube для Android TV с VOT-переводом и Живым голосом</h3>
-  <p>SmartTube VOX — форк SmartTube для Android TV / Google TV со встроенным закадровым переводом через Яндекс VOT.<br><em>(Ранее проект назывался SmartTube VOT)</em><br><b>Текущая версия:</b> 32.45-vot.8 (база SmartTube 32.45)</p>
+  <p>SmartTube VOX — форк SmartTube для Android TV / Google TV со встроенным закадровым переводом через Яндекс VOT.<br><em>(Ранее проект назывался SmartTube VOT)</em><br><b>Текущая версия:</b> 32.45-vot.9 (база SmartTube 32.45)</p>
 </div>
 
 <p align="center">

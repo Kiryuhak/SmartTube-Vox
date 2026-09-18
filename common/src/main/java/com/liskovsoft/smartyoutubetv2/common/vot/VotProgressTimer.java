@@ -49,6 +49,9 @@ public final class VotProgressTimer {
     }
 
     public long getElapsedAfterEtaSec(long nowMs) {
+        if (mRequestStartedAtMs <= 0) {
+            return 0;
+        }
         if (mExpectedReadyAtMs > 0) {
             return Math.max(0, (nowMs - mExpectedReadyAtMs + 999L) / 1000L);
         }

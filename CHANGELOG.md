@@ -25,6 +25,15 @@ SmartTube VOX — новое название проекта SmartTube VOT.
 - Усилен cleanup таймера и translation audio при выходе из плеера.
 - Signed URL готовой VOT-аудиодорожки больше не выводится в лог.
 
+## [32.45-vot.9] — Security & Reliability Update
+
+### Добавлено
+- Улучшена обработка Lively Voice fallback.
+- Добавлены проверки состояния VOT.
+- Улучшена стабильность аудиодорожек.
+- Исправлены таймеры перевода.
+- Улучшены проверки ошибок Yandex VOT.
+
 ## [32.45-vot.8] — Pulse Update
 
 ### Добавлено

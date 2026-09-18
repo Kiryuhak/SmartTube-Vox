@@ -350,6 +350,7 @@
     <string name="vot_pending_long">Ожидание…</string>
     <string name="vot_skip_russian">Русская дорожка — перевод не нужен</string>
     <string name="vot_already_russian">Ролик уже на русском</string>
+    <string name="vot_lively_fallback_standard">Живой голос недоступен, используется обычная озвучка</string>
     <string name="vot_speed_blocked">Сначала выключите перевод</string>
     <string name="vot_prefer_youtube_dub">Дорожка YouTube (автодубляж на русский)</string>
     <string name="vot_prefer_youtube_dub_desc">Если есть, переключать на русскую дорожку YouTube вместо закадрового перевода Яндекса.</string>
