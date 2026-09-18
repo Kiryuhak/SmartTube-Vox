@@ -19,6 +19,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.SignInView;
 import com.liskovsoft.smartyoutubetv2.common.app.views.SplashView;
 import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
 import com.liskovsoft.smartyoutubetv2.common.app.views.WebBrowserView;
+import com.liskovsoft.smartyoutubetv2.common.misc.YouTubePlayerCacheManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.NetworkData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
@@ -83,6 +84,7 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
 
         setupGlobalExceptionHandler();
         setupViewManager();
+        YouTubePlayerCacheManager.onAppUpgradeIfNeeded(this);
     }
 
     private void setupViewManager() {
