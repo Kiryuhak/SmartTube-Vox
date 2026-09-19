@@ -96,6 +96,9 @@ public class VoiceTranslateController extends BasePlayerController {
             MessageHelpers.showMessage(getContext(), R.string.vot_unable_to_switch_original);
             restorePreviousDubTrack();
             resetTrackSwitch();
+            if (mProgressOverlay != null) {
+                mProgressOverlay.dismissImmediately();
+            }
         }
     };
 
@@ -231,7 +234,12 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onTrackChanged(FormatItem track) {
         if (track != null && track.getType() == FormatItem.TYPE_AUDIO) {
-            if (mTrackSwitchState == TrackSwitchState.SWITCHING_TO_ORIGINAL) {
+            if (mTrackSwitchState == TrackSwitchState.WAITING_CONFIRMATION) {
+                // User changed track while replacement dialog is open — abort dialog flow.
+                Log.i(TAG, "VOT manual: track changed during WAITING_CONFIRMATION, aborting");
+                resetTrackSwitch();
+                return;
+            } else if (mTrackSwitchState == TrackSwitchState.SWITCHING_TO_ORIGINAL) {
                 String curVideoId = getPlayer() != null && getPlayer().getVideo() != null ? getPlayer().getVideo().videoId : null;
                 if (!Helpers.equals(mTrackSwitchVideoId, curVideoId)) {
                     resetTrackSwitch();
@@ -242,6 +250,7 @@ public class VoiceTranslateController extends BasePlayerController {
                     onOriginalTrackActivated(track);
                     return;
                 }
+                return;
             } else if (mTrackSwitchState == TrackSwitchState.VOT_ACTIVE
                     || mTrackSwitchState == TrackSwitchState.STARTING_VOT) {
                 if (mPendingOriginalFormat != null && !VotAudioTrackHelper.isSameFormat(track, mPendingOriginalFormat)) {
@@ -249,9 +258,16 @@ public class VoiceTranslateController extends BasePlayerController {
                     mUserManuallyChangedTrack = true;
                     mRestorableDubFormat = null;
                     mSavedAudioFormat = null;
+                    if (VotAudioTrackHelper.isRussianLang(VotAudioTrackHelper.from(track).langCode)) {
+                        disarmQuiet();
+                        return;
+                    }
+                } else {
+                    return;
                 }
             } else if (mTrackSwitchState == TrackSwitchState.RESTORING_PREVIOUS_TRACK) {
                 mTrackSwitchState = TrackSwitchState.IDLE;
+                return;
             }
             tryApplyAutoTranslate(true);
         }
@@ -392,6 +408,9 @@ public class VoiceTranslateController extends BasePlayerController {
                     mUserManuallyChangedTrack = false;
                     mTrackSwitchState = TrackSwitchState.SWITCHING_TO_ORIGINAL;
                     Log.i(TAG, "VOT manual: switching to original track");
+                    if (progressOverlay() != null) {
+                        progressOverlay().showPreparing(getActivity());
+                    }
                     saveCurrentAudioFormatBeforeSwitch(original);
                     getPlayer().setFormat(original);
                     FormatItem active = getPlayer().getAudioFormat();
@@ -405,6 +424,9 @@ public class VoiceTranslateController extends BasePlayerController {
                 () -> {
                     Log.i(TAG, "VOT manual: replace dubbing cancelled by user");
                     resetTrackSwitch();
+                    if (mProgressOverlay != null) {
+                        mProgressOverlay.dismissImmediately();
+                    }
                 }
         );
     }
@@ -459,7 +481,11 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
-        if (mState == STATE_ACTIVE) {
+        if (mState == STATE_ACTIVE || mState == STATE_PENDING) {
+            return;
+        }
+
+        if (mTrackSwitchState != TrackSwitchState.IDLE) {
             return;
         }
 
@@ -520,6 +546,9 @@ public class VoiceTranslateController extends BasePlayerController {
 
     /** @return true if YouTube dub was applied and Yandex should not run */
     private boolean tryApplyYoutubeAutoDub(boolean showToast) {
+        if (mUserArmed || mTrackSwitchState != TrackSwitchState.IDLE) {
+            return false;
+        }
         FormatItem dub = VotAudioTrackHelper.findYoutubeRussianAutoDub(getAudioFormats());
         if (dub == null) {
             return false;
@@ -532,6 +561,9 @@ public class VoiceTranslateController extends BasePlayerController {
         releaseTranslationPlayer();
         restoreMainVolume();
         setState(STATE_OFF);
+        if (mProgressOverlay != null) {
+            mProgressOverlay.dismissImmediately();
+        }
         if (showToast) {
             MessageHelpers.showMessage(getContext(), R.string.vot_using_youtube_dub);
         }
@@ -566,6 +598,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         cancelTranslationJob();
+        mTranslationSessionId++;
         mPendingToastShown = false;
         mPendingVideoUrl = videoUrl;
         mRequestStartTimestamp = SystemClock.elapsedRealtime();

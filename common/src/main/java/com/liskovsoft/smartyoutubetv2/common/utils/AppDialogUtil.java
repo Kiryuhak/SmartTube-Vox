@@ -576,11 +576,13 @@ public class AppDialogUtil {
     public static void showVotReplaceDubDialog(Context context, Runnable onConfirm, Runnable onCancel) {
         AppDialogPresenter presenter = AppDialogPresenter.instance(context);
 
+        final boolean[] isConfirmed = new boolean[]{false};
         List<OptionItem> options = new ArrayList<>();
 
         options.add(UiOptionItem.from(
                 context.getString(R.string.vot_replace_dub_confirm),
                 option -> {
+                    isConfirmed[0] = true;
                     presenter.goBack();
                     if (onConfirm != null) {
                         onConfirm.run();
@@ -591,16 +593,17 @@ public class AppDialogUtil {
                 context.getString(R.string.vot_replace_dub_cancel),
                 option -> {
                     presenter.goBack();
-                    if (onCancel != null) {
-                        onCancel.run();
-                    }
                 }));
 
         String title = context.getString(R.string.vot_replace_dub_title);
         String desc = context.getString(R.string.vot_replace_dub_desc);
 
         presenter.appendStringsCategory(desc, options);
-        presenter.showDialog(title, onCancel);
+        presenter.showDialog(title, () -> {
+            if (!isConfirmed[0] && onCancel != null) {
+                onCancel.run();
+            }
+        });
     }
 
     public static OptionCategory createPitchEffectCategory(Context context) {
