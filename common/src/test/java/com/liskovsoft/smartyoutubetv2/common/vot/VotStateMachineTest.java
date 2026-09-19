@@ -79,16 +79,61 @@ public class VotStateMachineTest {
             }
         }
 
+        private boolean isPaused = false;
+        private boolean userManuallyChangedTrack = false;
+        private String restorableDubFormat = null;
+
+        public void onFinish() {
+            sessionId++;
+            state = VotLifecycleState.STOPPED;
+            cleanup();
+            restorableDubFormat = null;
+            userManuallyChangedTrack = false;
+        }
+
+        public void onPause() {
+            if (state == VotLifecycleState.ACTIVE) {
+                isPaused = true;
+            }
+        }
+
+        public void onPlay() {
+            if (state == VotLifecycleState.ACTIVE) {
+                isPaused = false;
+                isAudioDucked = true;
+            }
+        }
+
+        public void setRestorableDub(String dub) {
+            this.restorableDubFormat = dub;
+            this.userManuallyChangedTrack = false;
+        }
+
+        public void onUserManualTrackChange() {
+            this.userManuallyChangedTrack = true;
+            this.restorableDubFormat = null;
+        }
+
+        public String getEffectiveRestoreTrack() {
+            if (userManuallyChangedTrack || restorableDubFormat == null) {
+                return null;
+            }
+            return restorableDubFormat;
+        }
+
         public void onNewVideo() {
             sessionId++;
             state = VotLifecycleState.IDLE;
             cleanup();
+            restorableDubFormat = null;
+            userManuallyChangedTrack = false;
         }
 
         private void cleanup() {
             isAudioDucked = false;
             isPlayerActive = false;
             isTimerActive = false;
+            isPaused = false;
         }
     }
 
@@ -239,5 +284,66 @@ public class VotStateMachineTest {
             assertFalse(formatted.contains("?"));
             assertTrue(formatted.matches("\\d{2}:\\d{2}"));
         }
+    }
+
+    // ── Batch #3: Lifecycle & Audio Track Management ─────────────────────────
+
+    @Test
+    public void testFinishLifecycleCleanup() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.startRequest();
+        int initialSessionId = sm.sessionId;
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+        assertTrue(sm.isPlayerActive);
+        assertTrue(sm.isAudioDucked);
+
+        // onFinish called upon exiting player
+        sm.onFinish();
+        assertEquals(VotLifecycleState.STOPPED, sm.state);
+        assertFalse(sm.isPlayerActive);
+        assertFalse(sm.isAudioDucked);
+        assertFalse(sm.isTimerActive);
+        assertTrue("Session ID must increment on finish to reject stale callbacks",
+                sm.sessionId > initialSessionId);
+    }
+
+    @Test
+    public void testPauseResumePreservesTranslationAndDucking() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.startRequest();
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+
+        sm.onPause();
+        assertTrue(sm.isPaused);
+
+        sm.onPlay();
+        assertFalse(sm.isPaused);
+        assertTrue(sm.isAudioDucked);
+    }
+
+    @Test
+    public void testManualTrackChangePreventsDubRestore() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.setRestorableDub("ru_youtube_dub");
+        assertEquals("ru_youtube_dub", sm.getEffectiveRestoreTrack());
+
+        // User manually chooses another track
+        sm.onUserManualTrackChange();
+        assertNull("Manual user track selection must not be overridden by previous dub",
+                sm.getEffectiveRestoreTrack());
+    }
+
+    @Test
+    public void testNewVideoClearsPreviousTrackRestore() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.setRestorableDub("ru_youtube_dub");
+        assertEquals("ru_youtube_dub", sm.getEffectiveRestoreTrack());
+
+        // New video starts
+        sm.onNewVideo();
+        assertNull("Previous dub track must not carry over to new video",
+                sm.getEffectiveRestoreTrack());
     }
 }

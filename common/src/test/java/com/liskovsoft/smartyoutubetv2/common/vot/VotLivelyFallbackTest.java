@@ -89,4 +89,17 @@ public class VotLivelyFallbackTest {
 
         assertFalse(VotClient.isLivelyVoiceSpecificFailure(null));
     }
+
+    @Test
+    public void testUnsupportedVideoErrorDetection() {
+        assertTrue(VotClient.isUnsupportedVideoError("This video is unsupported"));
+        assertTrue(VotClient.isUnsupportedVideoError("Language not supported"));
+        assertTrue(VotClient.isUnsupportedVideoError("Invalid video format"));
+        assertTrue(VotClient.isUnsupportedVideoError("UNSUPPORTED"));
+
+        assertFalse(VotClient.isUnsupportedVideoError("Internal server error"));
+        assertFalse(VotClient.isUnsupportedVideoError("Rate limit exceeded"));
+        assertFalse(VotClient.isUnsupportedVideoError(""));
+        assertFalse(VotClient.isUnsupportedVideoError(null));
+    }
 }

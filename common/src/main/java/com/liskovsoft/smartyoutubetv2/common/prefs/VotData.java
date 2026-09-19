@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.text.TextUtils;
 
+import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.prefs.SharedPreferencesBase;
 
 public class VotData extends SharedPreferencesBase {
@@ -15,8 +16,37 @@ public class VotData extends SharedPreferencesBase {
     private static final String TRANSLATION_VOLUME_PERCENT = "translation_volume_percent";
     private static final String AUTO_TRANSLATE = "auto_translate_enabled";
     private static final String PREFER_YOUTUBE_AUTO_DUB = "prefer_youtube_auto_dub";
+    private static final String AUTH_STATE = "yandex_auth_state";
     private static final int DEFAULT_ORIGINAL_VOLUME_PERCENT = 5;
     private static final int DEFAULT_TRANSLATION_VOLUME_PERCENT = 100;
+
+    /**
+     * Состояние OAuth-авторизации Яндекс ID.
+     *
+     * Различает «токен есть» от «токен проверен» — два принципиально разных случая.
+     * Переходы:
+     *   Установка токена → UNVERIFIED
+     *   Успешный перевод (Lively) → CONFIRMED
+     *   HTTP 401 бэкенда → REJECTED (токен остаётся в SharedPreferences!)
+     *   Явный logout пользователя → сброс токена + ABSENT
+     */
+    public enum AuthState {
+        /** Токен не задан — пользователь не авторизован. */
+        ABSENT,
+        /**
+         * Токен задан, но ещё не проверялся реальным запросом к бэкенду.
+         * Устанавливается при setOAuthToken() и сохраняется до первого запроса Lively.
+         */
+        UNVERIFIED,
+        /** Токен успешно использован — бэкенд принял его в текущей сессии. */
+        CONFIRMED,
+        /**
+         * Бэкенд вернул HTTP 401 при запросе с данным токеном.
+         * Токен остаётся в SharedPreferences — пользователь может его исправить.
+         * Lively Voice выключается до повторного подтверждения.
+         */
+        REJECTED
+    }
 
     @SuppressLint("StaticFieldLeak")
     private static VotData sInstance;
@@ -40,14 +70,18 @@ public class VotData extends SharedPreferencesBase {
         String normalized = normalizeToken(token);
         putString(OAUTH_TOKEN, normalized);
         if (!TextUtils.isEmpty(normalized)) {
+            // Новый токен — сбрасываем в UNVERIFIED: он ещё не проверен бэкендом
+            setAuthState(AuthState.UNVERIFIED);
             setLivelyVoiceEnabled(true);
         } else {
+            setAuthState(AuthState.ABSENT);
             setLivelyVoiceEnabled(false);
         }
     }
 
     public void clearOAuthToken() {
         putString(OAUTH_TOKEN, "");
+        setAuthState(AuthState.ABSENT);
         setLivelyVoiceEnabled(false);
     }
 
@@ -55,8 +89,65 @@ public class VotData extends SharedPreferencesBase {
         clearOAuthToken();
     }
 
+    /**
+     * Помечает OAuth-токен как отклонённый бэкендом (HTTP 401).
+     *
+     * ВАЖНО: токен НЕ удаляется из SharedPreferences — пользователь может
+     * исправить его или пройти повторную авторизацию через Яндекс ID.
+     * Lively Voice выключается до нового подтверждения.
+     *
+     * @param rejectedToken токен, с которым был выполнен запрос. Если указан,
+     *                      проверяется совпадение с текущим токеном, что защищает
+     *                      от отклонения нового токена старым откликом.
+     */
+    public void markOAuthRejected(String rejectedToken) {
+        if (hasOAuthToken() && (rejectedToken == null || Helpers.equals(getOAuthToken(), rejectedToken))) {
+            setAuthState(AuthState.REJECTED);
+            setLivelyVoiceEnabled(false);
+        }
+    }
+
+    public void markOAuthRejected() {
+        markOAuthRejected(null);
+    }
+
+    /**
+     * Помечает OAuth-токен как подтверждённый (бэкенд принял его).
+     * Вызывается при успешном получении Lively-перевода.
+     *
+     * @param confirmedToken токен, с которым был выполнен успешный запрос.
+     *                       Если указан, проверяется совпадение с текущим токеном,
+     *                       что защищает от подтверждения старым ответом уже заменённого токена.
+     */
+    public void markOAuthConfirmed(String confirmedToken) {
+        if (hasOAuthToken() && (confirmedToken == null || Helpers.equals(getOAuthToken(), confirmedToken))) {
+            setAuthState(AuthState.CONFIRMED);
+        }
+    }
+
+    public void markOAuthConfirmed() {
+        markOAuthConfirmed(null);
+    }
+
     public boolean hasOAuthToken() {
         return !TextUtils.isEmpty(getOAuthToken());
+    }
+
+    /** @return текущее состояние авторизации OAuth */
+    public AuthState getAuthState() {
+        if (!hasOAuthToken()) {
+            return AuthState.ABSENT;
+        }
+        String stored = getString(AUTH_STATE, AuthState.UNVERIFIED.name());
+        try {
+            return AuthState.valueOf(stored);
+        } catch (IllegalArgumentException e) {
+            return AuthState.UNVERIFIED;
+        }
+    }
+
+    private void setAuthState(AuthState state) {
+        putString(AUTH_STATE, state.name());
     }
 
     public boolean isLivelyVoiceEnabled() {
