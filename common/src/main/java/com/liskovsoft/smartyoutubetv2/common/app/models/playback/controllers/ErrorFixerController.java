@@ -13,6 +13,8 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector;
 import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector.OnLongBuffering;
 import com.liskovsoft.smartyoutubetv2.common.misc.NetworkEngineRecoveryPolicy;
+import com.liskovsoft.smartyoutubetv2.common.misc.PlayerCacheRecoveryPolicy;
+import com.liskovsoft.smartyoutubetv2.common.misc.YouTubePlayerCacheManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
@@ -25,6 +27,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private static final long STREAM_END_THRESHOLD_MS = 180_000;
     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
     private final NetworkEngineRecoveryPolicy mNetworkRecoveryPolicy = new NetworkEngineRecoveryPolicy();
+    private final PlayerCacheRecoveryPolicy mPlayerCacheRecoveryPolicy = new PlayerCacheRecoveryPolicy();
     private VideoLoaderController mVideoLoaderController;
 
     @Override
@@ -98,6 +101,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onPlay() {
         mNetworkRecoveryPolicy.onPlaybackProgress();
+        mPlayerCacheRecoveryPolicy.onPlaybackStarted();
         mBufferingDetector.onStopBuffering();
     }
 
@@ -109,17 +113,20 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onNewVideo(Video item) {
         mNetworkRecoveryPolicy.reset();
+        mPlayerCacheRecoveryPolicy.reset();
         mBufferingDetector.start();
     }
 
     @Override
     public void onFinish() {
         mBufferingDetector.reset();
+        mPlayerCacheRecoveryPolicy.reset();
     }
 
     @Override
     public void onEngineReleased() {
         mBufferingDetector.reset();
+        mPlayerCacheRecoveryPolicy.reset();
     }
 
     private void runEngineErrorAction(int type, int rendererIndex, Throwable error) {
@@ -199,15 +206,24 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             showMessage = false;
 
             boolean isGeneralError = Helpers.startsWithAny(errorContent, "Response code: 429", "Response code: 500");
+            boolean is403Error = Helpers.containsAny(errorContent, "403") || Helpers.startsWithAny(errorContent, "Response code: 403");
             if (isGeneralError && isSubtitlesEnabled()) {
                 disableSubtitles(); // Response code: 429
             } else if (isGeneralError && getPlayerTweaksData().isHighBitrateFormatsEnabled()) {
                 getPlayerTweaksData().setHighBitrateFormatsEnabled(false); // Response code: 429
             } else if (!mBufferingDetector.isPlayable()) { // Response code: 403
-                // The stream fails instantly if nParam isn't correct.
-                // Note, nParam generation strictly tied to the client but some reported that OkHttp could help.
-                YouTubeServiceManager.instance().switchNextClientNow();
-                showMessage = true;
+                if (is403Error && mPlayerCacheRecoveryPolicy.shouldRecoverOnSource403(false)) {
+                    Log.w(TAG, "Repeated 403 error before playback start (count=%d). Invalidate stale player cache and switch client.",
+                            mPlayerCacheRecoveryPolicy.getSource403Count());
+                    YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
+                    YouTubeServiceManager.instance().switchNextClientNow();
+                    showMessage = false;
+                } else {
+                    // The stream fails instantly if nParam isn't correct.
+                    // Note, nParam generation strictly tied to the client but some reported that OkHttp could help.
+                    YouTubeServiceManager.instance().switchNextClientNow();
+                    showMessage = true;
+                }
             } else {
                 YouTubeServiceManager.instance().switchNextClient(); // Response code: 403
             }
