@@ -2,21 +2,19 @@
   "package": {
     "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk"
   },
-  "32.45-vot.9": {
-    "versionCode": 2435009,
+  "32.47-vot.1": {
+    "versionCode": 2437001,
     "changelog": [
-      "Improved Lively Voice fallback handling",
-      "Added VOT state checks",
-      "Improved audio track stability",
-      "Fixed translation timers",
-      "Improved Yandex VOT error checks"
+      "Updated SmartTube base to 32.47",
+      "Fixed video freezing caused by stale YouTube playback cache (HTTP 403)",
+      "Fixed infinite preparation when switching from Russian YouTube dub to Yandex VOT",
+      "Moved VOT status below ending time and removed hourglass icon"
     ],
     "changelog_ru": [
-      "Улучшена обработка Lively Voice fallback",
-      "Добавлены проверки состояния VOT",
-      "Улучшена стабильность аудиодорожек",
-      "Исправлены таймеры перевода",
-      "Улучшены проверки ошибок Yandex VOT"
+      "Обновление базы SmartTube до 32.47",
+      "Исправлено зависание видео из-за устаревшего кэша воспроизведения YouTube (HTTP 403)",
+      "Исправлено бесконечное ожидание подготовки при переходе с русского дубляжа YouTube на закадровый перевод",
+      "Статус перевода перенесён под время окончания, убран символ песочных часов"
     ]
   }
 }
