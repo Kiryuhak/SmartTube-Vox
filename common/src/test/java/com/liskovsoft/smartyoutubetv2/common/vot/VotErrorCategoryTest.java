@@ -42,9 +42,9 @@ public class VotErrorCategoryTest {
     }
 
     @Test
-    public void http500IsGeneric() {
-        // 500 не входит в явный список — классифицируется как generic
-        assertEquals(VotErrorCategory.GENERIC_ERROR, VotErrorCategory.fromHttpCode(500));
+    public void http500IsServerUnavailable() {
+        // 500 Internal Server Error классифицируется как SERVER_UNAVAILABLE
+        assertEquals(VotErrorCategory.SERVER_UNAVAILABLE, VotErrorCategory.fromHttpCode(500));
     }
 
     @Test

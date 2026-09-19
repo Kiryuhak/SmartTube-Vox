@@ -159,7 +159,8 @@ public class VotClient {
                     int code = ((VotHttpException) e).getStatusCode();
                     if (code == 401) {
                         // Бэкенд отклонил OAuth-токен — маркируем как REJECTED, не удаляем
-                        mVotData.markOAuthRejected();
+                        String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
+                        mVotData.markOAuthRejected(currentToken);
                         Log.w(TAG, "VOT: HTTP 401 — OAuth token rejected by backend (authState→REJECTED)");
                         emitter.onNext(VotProgress.failed(ERROR_MARKER_AUTH_REJECTED));
                         emitter.onComplete();
@@ -171,7 +172,7 @@ public class VotClient {
                         emitter.onComplete();
                         return;
                     }
-                    if (code == 502 || code == 503 || code == 504) {
+                    if (code == 500 || code == 502 || code == 503 || code == 504) {
                         Log.w(TAG, "VOT: HTTP %d — server unavailable", code);
                         emitter.onNext(VotProgress.failed(ERROR_MARKER_SERVER_UNAVAILABLE));
                         emitter.onComplete();
@@ -244,7 +245,8 @@ public class VotClient {
         if (response.isReady() && response.url != null && !response.url.isEmpty()) {
             // Успешный ответ — если использовался Lively, подтверждаем токен
             if (useLively) {
-                mVotData.markOAuthConfirmed();
+                String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
+                mVotData.markOAuthConfirmed(currentToken);
                 Log.d(TAG, "VOT: Lively translation ready — OAuth marked CONFIRMED");
             }
             emitter.onNext(VotProgress.ready(response.url));

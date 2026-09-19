@@ -321,19 +321,7 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onFinish() {
         Log.d(TAG, "VOT reset reason: player finished");
-        mTranslationSessionId++;
-        Utils.removeCallbacks(mAutoTranslateRetryRunnable);
-        Utils.removeCallbacks(mProgressTickRunnable);
-        Utils.removeCallbacks(mSyncRunnable);
-        cancelTranslationJob();
-        releaseTranslationPlayer();
-        restoreMainVolume();
-        restoreSavedAudioFormat();
-        mProgressTimer.clear();
-        mUserArmed = false;
-        mArmed = false;
-        mPendingVideoUrl = null;
-        setState(STATE_OFF);
+        disarmQuiet();
         resetTrackSwitch();
         if (mProgressOverlay != null) {
             mProgressOverlay.destroy();
@@ -344,20 +332,8 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onViewDestroyed() {
         Log.d(TAG, "VOT reset reason: view destroyed");
-        mTranslationSessionId++;
-        Utils.removeCallbacks(mAutoTranslateRetryRunnable);
-        Utils.removeCallbacks(mProgressTickRunnable);
-        Utils.removeCallbacks(mSyncRunnable);
-        cancelTranslationJob();
-        releaseTranslationPlayer();
-        restoreMainVolume();
-        mProgressTimer.clear();
-        mUserArmed = false;
-        mArmed = false;
-        mPendingVideoUrl = null;
-        setState(STATE_OFF);
+        disarmQuiet();
         resetTrackSwitch();
-        mSavedAudioFormat = null;
         if (mProgressOverlay != null) {
             mProgressOverlay.destroy();
             mProgressOverlay = null;

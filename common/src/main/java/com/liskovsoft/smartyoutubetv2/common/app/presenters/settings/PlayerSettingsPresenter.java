@@ -236,10 +236,17 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 getContext().getString(R.string.vot_lively_voice),
                 getContext().getString(R.string.vot_lively_voice_desc),
                 optionItem -> {
-                    if (!mVotData.hasOAuthToken()) {
-                        MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
-                        startYandexOAuth();
-                        return;
+                    if (optionItem.isSelected()) {
+                        if (!mVotData.hasOAuthToken()) {
+                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
+                            startYandexOAuth();
+                            return;
+                        }
+                        if (mVotData.getAuthState() == VotData.AuthState.REJECTED) {
+                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_rejected);
+                            startYandexOAuth();
+                            return;
+                        }
                     }
                     mVotData.setLivelyVoiceEnabled(optionItem.isSelected());
                 },

@@ -118,8 +118,8 @@ public class VotAuthBatchTest {
     }
 
     @Test
-    public void http500MapsToGeneric() {
-        assertEquals(VotErrorCategory.GENERIC_ERROR, VotErrorCategory.fromHttpCode(500));
+    public void http500MapsToServerUnavailable() {
+        assertEquals(VotErrorCategory.SERVER_UNAVAILABLE, VotErrorCategory.fromHttpCode(500));
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -326,6 +326,22 @@ public class VotAuthBatchTest {
         int currentSessionId = 42;
         int nextSessionId = currentSessionId + 1;
         assertTrue(nextSessionId > currentSessionId);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Блок K: Защита от устаревших откликов (Stale token confirmation/rejection)
+    // ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void staleTokenDoesNotMatchCurrentToken() {
+        String oldToken = "old-oauth-token-123";
+        String currentToken = "new-oauth-token-456";
+        assertFalse("Старый токен не должен совпадать с новым",
+                com.liskovsoft.sharedutils.helpers.Helpers.equals(oldToken, currentToken));
+        assertTrue("Тот же токен должен совпадать",
+                com.liskovsoft.sharedutils.helpers.Helpers.equals(currentToken, currentToken));
+        assertFalse("Null токен не должен совпадать с валидным",
+                com.liskovsoft.sharedutils.helpers.Helpers.equals(null, currentToken));
     }
 
     // ────────────────────────────────────────────────────────────────────────

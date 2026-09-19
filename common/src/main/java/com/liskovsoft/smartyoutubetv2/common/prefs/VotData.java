@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.text.TextUtils;
 
+import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.prefs.SharedPreferencesBase;
 
 public class VotData extends SharedPreferencesBase {
@@ -94,20 +95,38 @@ public class VotData extends SharedPreferencesBase {
      * ВАЖНО: токен НЕ удаляется из SharedPreferences — пользователь может
      * исправить его или пройти повторную авторизацию через Яндекс ID.
      * Lively Voice выключается до нового подтверждения.
+     *
+     * @param rejectedToken токен, с которым был выполнен запрос. Если указан,
+     *                      проверяется совпадение с текущим токеном, что защищает
+     *                      от отклонения нового токена старым откликом.
      */
+    public void markOAuthRejected(String rejectedToken) {
+        if (hasOAuthToken() && (rejectedToken == null || Helpers.equals(getOAuthToken(), rejectedToken))) {
+            setAuthState(AuthState.REJECTED);
+            setLivelyVoiceEnabled(false);
+        }
+    }
+
     public void markOAuthRejected() {
-        setAuthState(AuthState.REJECTED);
-        setLivelyVoiceEnabled(false);
+        markOAuthRejected(null);
     }
 
     /**
      * Помечает OAuth-токен как подтверждённый (бэкенд принял его).
      * Вызывается при успешном получении Lively-перевода.
+     *
+     * @param confirmedToken токен, с которым был выполнен успешный запрос.
+     *                       Если указан, проверяется совпадение с текущим токеном,
+     *                       что защищает от подтверждения старым ответом уже заменённого токена.
      */
-    public void markOAuthConfirmed() {
-        if (hasOAuthToken()) {
+    public void markOAuthConfirmed(String confirmedToken) {
+        if (hasOAuthToken() && (confirmedToken == null || Helpers.equals(getOAuthToken(), confirmedToken))) {
             setAuthState(AuthState.CONFIRMED);
         }
+    }
+
+    public void markOAuthConfirmed() {
+        markOAuthConfirmed(null);
     }
 
     public boolean hasOAuthToken() {

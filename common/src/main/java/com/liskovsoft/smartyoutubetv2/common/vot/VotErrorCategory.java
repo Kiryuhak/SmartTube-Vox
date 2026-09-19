@@ -23,10 +23,10 @@ public enum VotErrorCategory {
     /** HTTP 429 — превышен лимит запросов к API перевода. */
     RATE_LIMITED,
 
-    /** HTTP 502/503/504 или таймаут соединения — сервер Яндекса временно недоступен. */
+    /** HTTP 500/502/503/504 или таймаут соединения — сервер Яндекса временно недоступен. */
     SERVER_UNAVAILABLE,
 
-    /** Сетевой сбой (SocketException, UnknownHostException, ConnectException и т.п.). */
+    /** Сетевой сбой (SocketException, UnknownHostException и т.п.). */
     NETWORK_ERROR,
 
     /** Исчерпан лимит попыток опроса (MAX_POLL_ATTEMPTS) — перевод занял слишком долго. */
@@ -51,7 +51,7 @@ public enum VotErrorCategory {
         if (statusCode == 429) {
             return RATE_LIMITED;
         }
-        if (statusCode == 502 || statusCode == 503 || statusCode == 504) {
+        if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504) {
             return SERVER_UNAVAILABLE;
         }
         return GENERIC_ERROR;
