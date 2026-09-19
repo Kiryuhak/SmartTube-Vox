@@ -909,6 +909,9 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void disarm() {
+        if (mProgressOverlay != null) {
+            mProgressOverlay.dismissImmediately();
+        }
         disarmQuiet();
     }
 
@@ -925,7 +928,9 @@ public class VoiceTranslateController extends BasePlayerController {
         releaseTranslationPlayer();
         restoreMainVolume();
         restoreSavedAudioFormat();
-        if (mProgressOverlay != null) {
+        if (mProgressOverlay != null
+                && mProgressOverlay.getState() != VotProgressOverlay.STATE_ERROR
+                && mProgressOverlay.getState() != VotProgressOverlay.STATE_TIMEOUT) {
             mProgressOverlay.dismissImmediately();
         }
         setState(STATE_OFF);
@@ -1002,7 +1007,7 @@ public class VoiceTranslateController extends BasePlayerController {
             disarmQuiet();
             if (wasUserArmed) {
                 showBriefErrorButtonState();
-                MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
+                MessageHelpers.showMessage(getContext(), category.getMessageResId());
             }
             return;
         }
@@ -1010,23 +1015,7 @@ public class VoiceTranslateController extends BasePlayerController {
         disarmQuiet();
         if (wasUserArmed) {
             showBriefErrorButtonState();
-            switch (category) {
-                case TIMEOUT:
-                    MessageHelpers.showMessage(getContext(), R.string.vot_error_timeout);
-                    break;
-                case RATE_LIMITED:
-                case SERVER_UNAVAILABLE:
-                case NETWORK_ERROR:
-                    MessageHelpers.showMessage(getContext(), R.string.vot_error_network);
-                    break;
-                case PROTOCOL_SESSION_REQUIRED:
-                    // Сессия не удалась после всех ретраев — показываем сетевую ошибку
-                    MessageHelpers.showMessage(getContext(), R.string.vot_error_network);
-                    break;
-                default:
-                    MessageHelpers.showMessage(getContext(), R.string.vot_error_generic);
-                    break;
-            }
+            MessageHelpers.showMessage(getContext(), category.getMessageResId());
         }
     }
     private void setState(int state) {

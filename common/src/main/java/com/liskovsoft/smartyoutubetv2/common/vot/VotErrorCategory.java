@@ -1,5 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.common.vot;
 
+import com.liskovsoft.smartyoutubetv2.common.R;
+
 /**
  * Категории ошибок VOT-перевода для корректного сопоставления сообщений пользователю.
  *
@@ -96,5 +98,29 @@ public enum VotErrorCategory {
     /** @return true если ошибка сетевая или серверная (не связана с токеном) */
     public boolean isTransient() {
         return this == NETWORK_ERROR || this == SERVER_UNAVAILABLE || this == RATE_LIMITED;
+    }
+
+    /**
+     * Возвращает идентификатор ресурса строки с понятным описанием для пользователя на ТВ.
+     */
+    public int getMessageResId() {
+        switch (this) {
+            case AUTH_REJECTED:
+                return R.string.vot_error_auth_rejected;
+            case SERVER_UNAVAILABLE:
+                return R.string.vot_error_server_unavailable;
+            case RATE_LIMITED:
+                return R.string.vot_error_rate_limited;
+            case TIMEOUT:
+                return R.string.vot_error_timeout;
+            case NETWORK_ERROR:
+            case PROTOCOL_SESSION_REQUIRED:
+                return R.string.vot_error_network;
+            case UNSUPPORTED_VIDEO:
+                return R.string.vot_error_unsupported_video;
+            case GENERIC_ERROR:
+            default:
+                return R.string.vot_error_generic;
+        }
     }
 }

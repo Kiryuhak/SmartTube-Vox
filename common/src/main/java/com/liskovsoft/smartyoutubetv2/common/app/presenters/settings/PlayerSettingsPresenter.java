@@ -245,20 +245,25 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 },
                 mVotData.isLivelyVoiceEnabled()));
 
-        String statusText = authStateToStatusString(mVotData.getAuthState());
+        VotData.AuthState state = mVotData.getAuthState();
+        String statusText = authStateToStatusString(state);
 
         settingsPresenter.appendSingleButton(UiOptionItem.from(statusText, optionItem -> {
-            VotData.AuthState state = mVotData.getAuthState();
-            if (state == VotData.AuthState.ABSENT) {
-                startYandexOAuth();
-            } else if (state == VotData.AuthState.REJECTED) {
-                // Токен отклонён — предлагаем повторную авторизацию
+            if (state == VotData.AuthState.ABSENT || state == VotData.AuthState.REJECTED) {
                 startYandexOAuth();
             }
-            // UNVERIFIED / CONFIRMED — нажатие ничего не делает (информационный пункт)
         }));
 
-        if (mVotData.hasOAuthToken()) {
+        if (state == VotData.AuthState.REJECTED) {
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_relogin),
+                    optionItem -> startYandexOAuth()
+            ));
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_logout),
+                    optionItem -> performYandexLogout()
+            ));
+        } else if (mVotData.hasOAuthToken()) {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
                     getContext().getString(R.string.vot_yandex_logout),
                     optionItem -> performYandexLogout()

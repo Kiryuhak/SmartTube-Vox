@@ -14,8 +14,9 @@
     <string name="vot_yandex_status_authorized">Яндекс ID: Авторизован</string>
     <string name="vot_yandex_status_not_authorized">Яндекс ID: Не авторизован</string>
     <string name="vot_yandex_status_unverified">Яндекс ID: Токен задан (не проверен)</string>
-    <string name="vot_yandex_status_rejected">Яндекс ID: Ошибка авторизации — нажмите для входа</string>
+    <string name="vot_yandex_status_rejected">Яндекс ID: Ошибка авторизации — требуется повторный вход</string>
     <string name="vot_yandex_login">Войти в Яндекс</string>
+    <string name="vot_yandex_relogin">Войти заново в Яндекс</string>
     <string name="vot_yandex_logout">Выйти из Яндекса</string>
     <string name="vot_yandex_logout_done">Вы вышли из Яндекс ID</string>
     <string name="vot_manual_token_entry">Ввести токен вручную…</string>
@@ -27,6 +28,10 @@
     <string name="vot_disabled">Перевод отключён</string>
     <string name="vot_error_timeout">Время ожидания перевода истекло</string>
     <string name="vot_error_network">Ошибка сети при получении перевода</string>
+    <string name="vot_error_server_unavailable">Сервер перевода Яндекса временно недоступен</string>
+    <string name="vot_error_rate_limited">Слишком много запросов на перевод. Попробуйте позже</string>
+    <string name="vot_error_unsupported_video">Перевод для этого видео недоступен</string>
+    <string name="vot_error_auth_rejected">Ошибка авторизации Яндекс ID. Войдите заново в настройках</string>
     <string name="vot_error_playback">Не удалось воспроизвести перевод</string>
     <string name="vot_unknown_lang_manual">Язык аудиодорожки не определён. Запустите перевод вручную.</string>
     <string name="vot_skip_russian">Русская аудиодорожка — перевод не требуется</string>

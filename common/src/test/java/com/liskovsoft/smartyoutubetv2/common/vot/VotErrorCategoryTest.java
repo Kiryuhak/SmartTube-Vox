@@ -164,4 +164,26 @@ public class VotErrorCategoryTest {
         assertEquals(VotErrorCategory.PROTOCOL_SESSION_REQUIRED, cat);
         assertFalse("Протокольная сессия не должна считаться ошибкой OAuth!", cat.isOAuthFailure());
     }
+
+    // ── Привязка к понятным сообщениям пользователя ─────────────────────────
+
+    @Test
+    public void eachCategoryMapsToDistinctUserFriendlyMessage() {
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_auth_rejected,
+                VotErrorCategory.AUTH_REJECTED.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_server_unavailable,
+                VotErrorCategory.SERVER_UNAVAILABLE.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_rate_limited,
+                VotErrorCategory.RATE_LIMITED.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_timeout,
+                VotErrorCategory.TIMEOUT.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_network,
+                VotErrorCategory.NETWORK_ERROR.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_network,
+                VotErrorCategory.PROTOCOL_SESSION_REQUIRED.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_unsupported_video,
+                VotErrorCategory.UNSUPPORTED_VIDEO.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_generic,
+                VotErrorCategory.GENERIC_ERROR.getMessageResId());
+    }
 }

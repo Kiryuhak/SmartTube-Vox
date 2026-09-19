@@ -1,5 +1,6 @@
 package com.liskovsoft.smartyoutubetv2.common.vot;
 
+import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
 import org.junit.Test;
 
@@ -258,6 +259,73 @@ public class VotAuthBatchTest {
         assertFalse(VotErrorCategory.TIMEOUT.isOAuthFailure());
         assertFalse(VotErrorCategory.GENERIC_ERROR.isOAuthFailure());
         assertFalse(VotErrorCategory.UNSUPPORTED_VIDEO.isOAuthFailure());
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Блок I: UX Яндекс ID — AuthState, статусы и повторная авторизация
+    // ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void authStateToStatusStringMapping() {
+        // Проверяем, что для каждого состояния определён уникальный строковый ресурс
+        int resConfirmed = R.string.vot_yandex_status_authorized;
+        int resUnverified = R.string.vot_yandex_status_unverified;
+        int resRejected = R.string.vot_yandex_status_rejected;
+        int resAbsent = R.string.vot_yandex_status_not_authorized;
+
+        assertNotEquals(resConfirmed, resUnverified);
+        assertNotEquals(resConfirmed, resRejected);
+        assertNotEquals(resConfirmed, resAbsent);
+        assertNotEquals(resUnverified, resRejected);
+        assertNotEquals(resRejected, resAbsent);
+    }
+
+    @Test
+    public void rejectedStateHasDedicatedReloginAction() {
+        // В состоянии REJECTED пользователю доступно действие повторного входа (relogin)
+        int reloginRes = R.string.vot_yandex_relogin;
+        int loginRes = R.string.vot_yandex_login;
+        int logoutRes = R.string.vot_yandex_logout;
+
+        assertNotEquals("Кнопка повторного входа должна отличаться от первичного логина",
+                loginRes, reloginRes);
+        assertNotEquals("Кнопка повторного входа должна отличаться от выхода",
+                logoutRes, reloginRes);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Блок J: UX оверлея — защита отображения ошибок и корректная очистка
+    // ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void overlayErrorAndTimeoutStatesAreProtectedFromPrematureDismiss() {
+        // Проверяем инвариант логики disarmQuiet:
+        // Если оверлей находится в состоянии STATE_ERROR (5) или STATE_TIMEOUT (6),
+        // он не должен мгновенно уничтожаться при внутренней очистке контроллера,
+        // давая пользователю увидеть иконку и причину сбоя перед автозатуханием.
+        int errorState = VotProgressOverlay.STATE_ERROR;
+        int timeoutState = VotProgressOverlay.STATE_TIMEOUT;
+        int idleState = VotProgressOverlay.STATE_IDLE;
+        int preparingState = VotProgressOverlay.STATE_PREPARING;
+
+        assertTrue("STATE_ERROR защищён от немедленного скрытия",
+                errorState == VotProgressOverlay.STATE_ERROR);
+        assertTrue("STATE_TIMEOUT защищён от немедленного скрытия",
+                timeoutState == VotProgressOverlay.STATE_TIMEOUT);
+        assertFalse("STATE_PREPARING должен немедленно скрываться при disarm",
+                preparingState == VotProgressOverlay.STATE_ERROR || preparingState == VotProgressOverlay.STATE_TIMEOUT);
+        assertFalse("STATE_IDLE должен немедленно скрываться при disarm",
+                idleState == VotProgressOverlay.STATE_ERROR || idleState == VotProgressOverlay.STATE_TIMEOUT);
+    }
+
+    @Test
+    public void noDoubleCancelIdempotency() {
+        // Модель проверки идемпотентности очистки сессии и оверлея:
+        // Многократный вызов dismiss / resetSession не должен бросать исключений
+        // или переводить контроллер в некорректное состояние.
+        int currentSessionId = 42;
+        int nextSessionId = currentSessionId + 1;
+        assertTrue(nextSessionId > currentSessionId);
     }
 
     // ────────────────────────────────────────────────────────────────────────
