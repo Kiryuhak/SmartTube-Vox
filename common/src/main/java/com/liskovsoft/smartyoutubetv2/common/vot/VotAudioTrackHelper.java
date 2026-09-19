@@ -2,7 +2,10 @@ package com.liskovsoft.smartyoutubetv2.common.vot;
 
 import androidx.annotation.Nullable;
 
+import com.liskovsoft.sharedutils.helpers.Helpers;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.ExoFormatItem;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.track.MediaTrack;
 
 import java.util.List;
 import java.util.Locale;
@@ -412,7 +415,67 @@ public final class VotAudioTrackHelper {
         if (a == null || b == null) {
             return false;
         }
-        return a.getId() == b.getId();
+        if (a == b) {
+            return true;
+        }
+
+        if (a.getType() != b.getType()) {
+            return false;
+        }
+
+        // Compare MediaTrack indices if available
+        MediaTrack trackA = a.getTrack();
+        MediaTrack trackB = b.getTrack();
+        if (trackA != null && trackB != null
+                && trackA.groupIndex != -1 && trackB.groupIndex != -1
+                && trackA.trackIndex != -1 && trackB.trackIndex != -1) {
+            if (trackA.groupIndex != trackB.groupIndex || trackA.trackIndex != trackB.trackIndex) {
+                return false;
+            }
+        }
+
+        // Compare language metadata via TrackInfo
+        TrackInfo infoA = from(a);
+        TrackInfo infoB = from(b);
+        String langA = infoA.langCode != null ? infoA.langCode : (a.getLanguage() != null ? a.getLanguage().trim().toLowerCase(Locale.US) : null);
+        String langB = infoB.langCode != null ? infoB.langCode : (b.getLanguage() != null ? b.getLanguage().trim().toLowerCase(Locale.US) : null);
+
+        if (langA != null && langB != null && !langA.equalsIgnoreCase(langB)) {
+            return false;
+        }
+
+        if (infoA.rawLabel != null && infoB.rawLabel != null && !infoA.rawLabel.equalsIgnoreCase(infoB.rawLabel)) {
+            if (infoA.acont != null || infoB.acont != null) {
+                if (!Helpers.equals(infoA.acont, infoB.acont)) {
+                    return false;
+                }
+            }
+            if (langA != null || langB != null) {
+                if (!Helpers.equals(langA, langB)) {
+                    return false;
+                }
+            }
+        }
+
+        if (isRussianLang(infoA.langCode) != isRussianLang(infoB.langCode)) {
+            return false;
+        }
+
+        String formatIdA = a.getFormatId();
+        String formatIdB = b.getFormatId();
+        if (formatIdA != null && formatIdB != null) {
+            if (!Helpers.equals(formatIdA, formatIdB)) {
+                return false;
+            }
+        } else if (a.getId() != 0 && b.getId() != 0 && a.getId() != b.getId()) {
+            return false;
+        }
+
+        if (a instanceof ExoFormatItem && b instanceof ExoFormatItem) {
+            return a.equals(b);
+        }
+
+        return true;
     }
 
     /**

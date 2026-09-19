@@ -170,4 +170,51 @@ public class VotAudioTrackHelperTest {
         assertFalse("Must not be detected as Russian language without structured metadata",
                 VotAudioTrackHelper.isRussianLang(info.langCode));
     }
+
+    @Test
+    public void testIsSameFormat_RussianAndEnglishSameItag251_ReturnsFalse() {
+        FormatItem ruDubbed = new TestFormatItem(251, "ru (dubbed)", true, false);
+        FormatItem enOriginal = new TestFormatItem(251, "en (original)", false, true);
+
+        assertFalse("Russian dub and English original sharing ITAG 251 must not be considered the same format",
+                VotAudioTrackHelper.isSameFormat(ruDubbed, enOriginal));
+        assertFalse("Symmetric check must also return false",
+                VotAudioTrackHelper.isSameFormat(enOriginal, ruDubbed));
+    }
+
+    @Test
+    public void testIsSameFormat_SameRealAudioTrack_ReturnsTrue() {
+        FormatItem ruDubbed1 = new TestFormatItem(251, "ru (dubbed)", true, false);
+        FormatItem ruDubbed2 = new TestFormatItem(251, "ru (dubbed)", true, false);
+
+        assertTrue("Identical audio tracks with same language and ITAG must return true",
+                VotAudioTrackHelper.isSameFormat(ruDubbed1, ruDubbed2));
+    }
+
+    @Test
+    public void testIsSameFormat_DifferentItags_ReturnsFalse() {
+        FormatItem en251 = new TestFormatItem(251, "en (original)", true, false);
+        FormatItem en140 = new TestFormatItem(140, "en (original)", false, false);
+
+        assertFalse("Different ITAGs must return false even if language matches",
+                VotAudioTrackHelper.isSameFormat(en251, en140));
+    }
+
+    @Test
+    public void testIsSameFormat_SameLanguageDifferentContent_ReturnsFalse() {
+        FormatItem enOriginal = new TestFormatItem(251, "en (original)", true, false);
+        FormatItem enDubbed = new TestFormatItem(251, "en (dubbed)", false, false);
+
+        assertFalse("Original vs dubbed of same language and ITAG must not match",
+                VotAudioTrackHelper.isSameFormat(enOriginal, enDubbed));
+    }
+
+    @Test
+    public void testIsSameFormat_NullHandling() {
+        FormatItem item = new TestFormatItem(251, "en", true, false);
+        assertFalse(VotAudioTrackHelper.isSameFormat(null, item));
+        assertFalse(VotAudioTrackHelper.isSameFormat(item, null));
+        assertFalse(VotAudioTrackHelper.isSameFormat(null, null));
+        assertTrue(VotAudioTrackHelper.isSameFormat(item, item));
+    }
 }
