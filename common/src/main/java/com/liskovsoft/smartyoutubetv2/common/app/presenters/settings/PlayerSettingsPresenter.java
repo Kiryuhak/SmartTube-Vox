@@ -245,14 +245,17 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 },
                 mVotData.isLivelyVoiceEnabled()));
 
-        String statusText = mVotData.hasOAuthToken()
-                ? getContext().getString(R.string.vot_yandex_status_authorized)
-                : getContext().getString(R.string.vot_yandex_status_not_authorized);
+        String statusText = authStateToStatusString(mVotData.getAuthState());
 
         settingsPresenter.appendSingleButton(UiOptionItem.from(statusText, optionItem -> {
-            if (!mVotData.hasOAuthToken()) {
+            VotData.AuthState state = mVotData.getAuthState();
+            if (state == VotData.AuthState.ABSENT) {
+                startYandexOAuth();
+            } else if (state == VotData.AuthState.REJECTED) {
+                // Токен отклонён — предлагаем повторную авторизацию
                 startYandexOAuth();
             }
+            // UNVERIFIED / CONFIRMED — нажатие ничего не делает (информационный пункт)
         }));
 
         if (mVotData.hasOAuthToken()) {
@@ -312,6 +315,24 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
             getContext().startActivity(intent);
         } catch (Exception e) {
             MessageHelpers.showMessage(getContext(), e.getMessage());
+        }
+    }
+
+    /**
+     * Возвращает локализованный текст статуса авторизации Яндекс ID
+     * на основе реального состояния AuthState, а не просто наличия токена.
+     */
+    private String authStateToStatusString(VotData.AuthState state) {
+        switch (state) {
+            case CONFIRMED:
+                return getContext().getString(R.string.vot_yandex_status_authorized);
+            case UNVERIFIED:
+                return getContext().getString(R.string.vot_yandex_status_unverified);
+            case REJECTED:
+                return getContext().getString(R.string.vot_yandex_status_rejected);
+            case ABSENT:
+            default:
+                return getContext().getString(R.string.vot_yandex_status_not_authorized);
         }
     }
 

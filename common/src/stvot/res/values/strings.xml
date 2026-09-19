@@ -13,6 +13,8 @@
     <!-- Pulse: Yandex ID UX -->
     <string name="vot_yandex_status_authorized">Yandex ID: Authorized</string>
     <string name="vot_yandex_status_not_authorized">Yandex ID: Not authorized</string>
+    <string name="vot_yandex_status_unverified">Yandex ID: Token set (not yet verified)</string>
+    <string name="vot_yandex_status_rejected">Yandex ID: Auth error — tap to sign in again</string>
     <string name="vot_yandex_login">Sign in with Yandex</string>
     <string name="vot_yandex_logout">Sign out of Yandex</string>
     <string name="vot_yandex_logout_done">Signed out of Yandex ID</string>

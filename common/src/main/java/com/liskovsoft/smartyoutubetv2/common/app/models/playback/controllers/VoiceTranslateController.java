@@ -17,13 +17,13 @@ import com.liskovsoft.smartyoutubetv2.common.vot.TranslationAudioPlayer;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotAudioTrackHelper;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotAudioTrackHelper.TrackInfo;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotClient;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotErrorCategory;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgress;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressTimer;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Locale;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotHttpException;
 
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -720,7 +720,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 if (mUserArmed && progressOverlay() != null) {
                     progressOverlay().showError(getActivity());
                 }
-                handleTranslationError(progress.message, false);
+                handleTranslationError(VotErrorCategory.fromMarker(progress.message));
                 break;
         }
     }
@@ -731,17 +731,18 @@ public class VoiceTranslateController extends BasePlayerController {
         if (mUserArmed && progressOverlay() != null) {
             progressOverlay().showError(getActivity());
         }
+        VotErrorCategory category;
         if (e instanceof VotHttpException) {
             int code = ((VotHttpException) e).getStatusCode();
-            if (code == 401 || code == 403) {
-                votClient().resetSession();
-                handleTranslationError("auth required", false);
-                return;
+            if (code == 401) {
+                votData().markOAuthRejected();
+                Log.w(TAG, "VOT: onVotError HTTP 401 — OAuth rejected (authState→REJECTED)");
             }
+            category = VotErrorCategory.fromHttpCode(code);
+        } else {
+            category = VotErrorCategory.NETWORK_ERROR;
         }
-        String msg = e != null ? e.getMessage() : null;
-        boolean isNetwork = e instanceof IOException;
-        handleTranslationError(msg, isNetwork);
+        handleTranslationError(category);
     }
 
     private void prepareAndStartTranslationAudio(String audioUrl) {
@@ -973,45 +974,61 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     }
 
-    private void handleTranslationError(String message, boolean isNetworkError) {
-        Log.e(TAG, "Translation error: %s (network=%b)", message, isNetworkError);
+    /**
+     * Обрабатывает ошибку перевода по типизированной категории.
+     *
+     * Правила:
+     * - AUTH_REJECTED: токен уже помечен как REJECTED в VotData (в VotClient или onVotError).
+     *   Lively выключается. Если активен mUserArmed, показывается сообщение об ошибке авторизации.
+     *   Токен НЕ удаляется — пользователь может исправить его или авторизоваться снова.
+     * - PROTOCOL_SESSION_REQUIRED: показывается общая ошибка сети (сессия восстанавливается
+     *   автоматически в следующем цикле — этот путь достигается только если все ретраи исчерпаны).
+     * - TIMEOUT: показывается строка vot_error_timeout.
+     * - RATE_LIMITED / SERVER_UNAVAILABLE / NETWORK_ERROR: показывается vot_error_network.
+     * - Остальные: vot_error_generic.
+     */
+    private void handleTranslationError(VotErrorCategory category) {
+        Log.e(TAG, "Translation error category: %s", category);
         Utils.removeCallbacks(mProgressTickRunnable);
         boolean wasUserArmed = mUserArmed;
-        boolean isAuthRequired = isAuthError(message);
 
-        if (isAuthRequired) {
-            Log.w(TAG, "Yandex session required/invalid, clearing token and disabling lively voice");
-            votData().clearOAuthToken();
+        if (category == VotErrorCategory.AUTH_REJECTED) {
+            Log.w(TAG, "Yandex OAuth rejected — Lively Voice disabled, token preserved for user review");
+            // Токен помечен как REJECTED уже в VotClient или onVotError.
+            // Выключаем Lively (он и так выключится через markOAuthRejected),
+            // но НЕ удаляем токен из SharedPreferences.
             votData().setLivelyVoiceEnabled(false);
             votClient().resetSession();
+            disarmQuiet();
             if (wasUserArmed) {
+                showBriefErrorButtonState();
                 MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
             }
-        } else if (wasUserArmed) {
-            if (isNetworkError) {
-                MessageHelpers.showMessage(getContext(), R.string.vot_error_network);
-            } else {
-                MessageHelpers.showMessage(getContext(), R.string.vot_error_generic);
-            }
+            return;
         }
+
         disarmQuiet();
         if (wasUserArmed) {
             showBriefErrorButtonState();
+            switch (category) {
+                case TIMEOUT:
+                    MessageHelpers.showMessage(getContext(), R.string.vot_error_timeout);
+                    break;
+                case RATE_LIMITED:
+                case SERVER_UNAVAILABLE:
+                case NETWORK_ERROR:
+                    MessageHelpers.showMessage(getContext(), R.string.vot_error_network);
+                    break;
+                case PROTOCOL_SESSION_REQUIRED:
+                    // Сессия не удалась после всех ретраев — показываем сетевую ошибку
+                    MessageHelpers.showMessage(getContext(), R.string.vot_error_network);
+                    break;
+                default:
+                    MessageHelpers.showMessage(getContext(), R.string.vot_error_generic);
+                    break;
+            }
         }
     }
-
-    private static boolean isAuthError(String message) {
-        if (message == null) {
-            return false;
-        }
-        String lower = message.toLowerCase(Locale.ROOT);
-        return lower.contains("auth required")
-                || lower.contains("unauthorized")
-                || lower.contains("401")
-                || lower.contains("403")
-                || lower.contains("forbidden");
-    }
-
     private void setState(int state) {
         if (mState != state) {
             Log.d(TAG, "State transition: " + stateToString(mState) + " -> " + stateToString(state));
