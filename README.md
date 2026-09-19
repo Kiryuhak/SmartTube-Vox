@@ -2,7 +2,7 @@
   <img src="smarttubetv/src/stvot/res/mipmap-nodpi/ic_stvot.png" width="150" alt="SmartTube VOX Icon">
   <h1>SmartTube VOX</h1>
   <h3>SmartTube для Android TV с VOT-переводом и Живым голосом</h3>
-  <p>SmartTube VOX — форк SmartTube для Android TV / Google TV со встроенным закадровым переводом через Яндекс VOT.<br><em>(Ранее проект назывался SmartTube VOT)</em><br><b>Текущая версия:</b> 32.45-vot.9 (база SmartTube 32.45)</p>
+  <p>SmartTube VOX — форк SmartTube для Android TV / Google TV со встроенным закадровым переводом через Яндекс VOT.<br><em>(Ранее проект назывался SmartTube VOT)</em><br><b>Текущая версия:</b> 32.47-vot.1 (база SmartTube 32.47)</p>
 </div>
 
 <p align="center">
@@ -145,11 +145,10 @@ smarttube_vox.apk   (актуальный бинарник)
 
 ### Формат версий
 В проекте используется двухуровневая схема версий:
-- `32.45-vot.1`
-- `32.45-vot.2`
-- `32.46-vot.1`
+- `32.45-vot.9`
+- `32.47-vot.1`
 
-Первая часть (`32.45`, `32.46`) строго соответствует базовой версии оригинального SmartTube, а суффикс `-vot.N` обозначает порядковый номер ревизии SmartTube VOX с исправлением или улучшением функционала перевода.
+Первая часть (`32.45`, `32.47`) строго соответствует базовой версии оригинального SmartTube, а суффикс `-vot.N` обозначает порядковый номер ревизии SmartTube VOX с исправлением или улучшением функционала перевода.
 
 ---
 
