@@ -20,4 +20,10 @@
 
     <!-- VOX Sidebar Dimensions -->
     <dimen name="browse_headers_vertical_spacing">6dp</dimen>
+
+    <!-- VOX Dialog and Preference Dimensions -->
+    <dimen name="vox_dialog_corner_radius">16dp</dimen>
+    <dimen name="vox_dialog_padding">20dp</dimen>
+    <dimen name="vox_button_corner_radius">8dp</dimen>
+    <dimen name="vox_button_min_height">44dp</dimen>
 </resources>

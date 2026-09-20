@@ -41,6 +41,13 @@
     <!-- Preference Dialog Colors -->
     <color name="lb_preference_decor_list_background">#1A2230</color>
     <color name="lb_preference_item_primary_text_color">#F4F6FA</color>
+    <color name="lb_preference_item_secondary_text_color">#A7B0C0</color>
+
+    <!-- Dialog Colors (AppDialog, AlertDialog, Reset, Yandex ID) -->
+    <color name="dialog_bg_color">#1A2230</color>
+    <color name="dialog_text_color">#F4F6FA</color>
+    <color name="vox_dialog_stroke">#232B3E</color>
+    <color name="vox_dialog_code_bg">#10141E</color>
 
     <!-- Dark color scheme overrides -->
     <color name="scheme_grey_background">#10141E</color>

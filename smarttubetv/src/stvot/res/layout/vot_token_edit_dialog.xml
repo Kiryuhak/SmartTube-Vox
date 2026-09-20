@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SmartTube VOX — Диалог ручного ввода OAuth-токена Яндекса.
+    Оптимизирован для Android TV: чёткий ввод, поддержка буфера обмена, единый стиль кнопок.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/vot_token_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:textColor="@color/vox_text_secondary"
+        android:textSize="14sp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        android:maxHeight="160dp">
+
+        <EditText
+            android:id="@+id/vot_token_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/vox_edittext_bg"
+            android:gravity="top|start"
+            android:imeOptions="actionDone"
+            android:inputType="textPassword"
+            android:minLines="1"
+            android:scrollbars="vertical"
+            android:textColor="@color/vox_text_primary"
+            android:textColorHint="@color/vox_text_secondary"
+            android:textCursorDrawable="@null" />
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/vot_token_paste"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/vox_button_min_height"
+            android:layout_marginEnd="10dp"
+            android:layout_weight="1"
+            android:background="@drawable/vox_dialog_button_bg"
+            android:textColor="@color/vox_button_text_color"
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:focusable="true"
+            android:clickable="true"
+            android:text="@string/vot_paste_clipboard" />
+
+        <Button
+            android:id="@+id/vot_token_clear"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/vox_button_min_height"
+            android:layout_weight="1"
+            android:background="@drawable/vox_dialog_button_bg"
+            android:textColor="@color/vox_button_text_color"
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:focusable="true"
+            android:clickable="true"
+            android:text="@string/vot_clear_token" />
+    </LinearLayout>
+</LinearLayout>

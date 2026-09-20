@@ -267,11 +267,15 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         VotData.AuthState state = mVotData.getAuthState();
         String statusText = authStateToStatusString(state);
 
-        settingsPresenter.appendSingleButton(UiOptionItem.from(statusText, optionItem -> {
-            if (state == VotData.AuthState.ABSENT || state == VotData.AuthState.REJECTED) {
-                startYandexOAuth();
-            }
-        }));
+        settingsPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.vot_device_auth_title),
+                statusText,
+                optionItem -> {
+                    if (state == VotData.AuthState.ABSENT || state == VotData.AuthState.REJECTED) {
+                        startYandexOAuth();
+                    }
+                }
+        ));
 
         if (state == VotData.AuthState.REJECTED) {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
