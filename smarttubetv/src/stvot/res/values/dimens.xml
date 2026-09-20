@@ -11,12 +11,12 @@
     <dimen name="lb_playback_transport_controlbar_margin_start">0dp</dimen>
 
     <!-- VOX Settings Grid Dimensions -->
-    <dimen name="settings_card_width">120dp</dimen>
-    <dimen name="settings_card_height">116dp</dimen>
-    <dimen name="settings_image_size">44dp</dimen>
-    <dimen name="settings_image_padding">0dp</dimen>
-    <dimen name="grid_item_horizontal_spacing">14dp</dimen>
-    <dimen name="grid_item_vertical_spacing">14dp</dimen>
+    <dimen name="settings_card_width">156dp</dimen>
+    <dimen name="settings_card_height">120dp</dimen>
+    <dimen name="settings_image_size">34dp</dimen>
+    <dimen name="settings_image_padding">2dp</dimen>
+    <dimen name="grid_item_horizontal_spacing">12dp</dimen>
+    <dimen name="grid_item_vertical_spacing">12dp</dimen>
 
     <!-- VOX Sidebar Dimensions -->
     <dimen name="browse_headers_vertical_spacing">6dp</dimen>

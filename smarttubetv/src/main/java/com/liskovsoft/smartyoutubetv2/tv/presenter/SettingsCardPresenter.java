@@ -58,10 +58,8 @@ public class SettingsCardPresenter extends Presenter {
                 textView.setSelected(hasFocus);
                 if (hasFocus) {
                     v.animate().scaleX(1.04f).scaleY(1.04f).setDuration(120).start();
-                    ViewUtil.enableMarquee(textView);
                 } else {
                     v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start();
-                    ViewUtil.disableMarquee(textView);
                 }
             });
 
