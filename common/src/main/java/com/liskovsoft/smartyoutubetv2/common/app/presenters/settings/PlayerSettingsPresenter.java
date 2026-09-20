@@ -252,6 +252,18 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 },
                 mVotData.isLivelyVoiceEnabled()));
 
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_player_button_switch),
+                getContext().getString(R.string.vot_player_button_switch_desc),
+                option -> {
+                    if (option.isSelected()) {
+                        mPlayerTweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
+                    } else {
+                        mPlayerTweaksData.setPlayerButtonDisabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
+                    }
+                },
+                mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)));
+
         VotData.AuthState state = mVotData.getAuthState();
         String statusText = authStateToStatusString(state);
 

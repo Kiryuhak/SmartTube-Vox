@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VOX Compact Player HUD Dimensions -->
+    <dimen name="lb_control_button_height">24dp</dimen>
+    <dimen name="lb_control_button_diameter">40dp</dimen>
+    <dimen name="lb_control_button_secondary_height">24dp</dimen>
+    <dimen name="lb_control_button_secondary_diameter">28dp</dimen>
+    <dimen name="lb_control_icon_width">16dp</dimen>
+    <dimen name="lb_control_icon_height">16dp</dimen>
+    <dimen name="lb_playback_transport_progressbar_height">12dp</dimen>
+    <dimen name="lb_playback_transport_controlbar_margin_start">0dp</dimen>
+</resources>

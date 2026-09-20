@@ -8,6 +8,7 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
 import com.liskovsoft.smartyoutubetv2.common.prefs.AppPrefs.ProfileChangeListener;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 
 public class PlayerTweaksData implements ProfileChangeListener {
@@ -275,15 +276,27 @@ public class PlayerTweaksData implements ProfileChangeListener {
     }
 
     public boolean isPlayerButtonEnabled(int menuItems) {
+        if (menuItems == PLAYER_BUTTON_VOICE_TRANSLATE && VotOnboardingHelper.isStvot(mPrefs.getContext())) {
+            if (!mPrefs.getBoolean("vot_button_configured", false)) {
+                // In VOX, Voice Translate button is enabled by default on clean installs and upgrades
+                return true;
+            }
+        }
         return (mPlayerButtons & menuItems) == menuItems;
     }
 
     public void setPlayerButtonEnabled(int playerButtons) {
+        if ((playerButtons & PLAYER_BUTTON_VOICE_TRANSLATE) != 0) {
+            mPrefs.putBoolean("vot_button_configured", true);
+        }
         mPlayerButtons |= playerButtons;
         persistData();
     }
 
     public void setPlayerButtonDisabled(int playerButtons) {
+        if ((playerButtons & PLAYER_BUTTON_VOICE_TRANSLATE) != 0) {
+            mPrefs.putBoolean("vot_button_configured", true);
+        }
         mPlayerButtons &= ~playerButtons;
         persistData();
     }

@@ -12,6 +12,7 @@ public class VotData extends SharedPreferencesBase {
     private static final String OAUTH_TOKEN = "yandex_oauth_token";
     private static final String LIVELY_VOICE = "use_lively_voice";
     private static final String PREF_ONBOARDING_SHOWN = "yandex_onboarding_shown";
+    private static final String PREF_PLAYER_HINT_SHOWN = "vot_player_hint_shown";
     private static final String ORIGINAL_VOLUME_PERCENT = "original_volume_percent";
     private static final String TRANSLATION_VOLUME_PERCENT = "translation_volume_percent";
     private static final String AUTO_TRANSLATE = "auto_translate_enabled";
@@ -164,6 +165,14 @@ public class VotData extends SharedPreferencesBase {
 
     public void setOnboardingShown(boolean shown) {
         putBoolean(PREF_ONBOARDING_SHOWN, shown);
+    }
+
+    public boolean isPlayerHintShown() {
+        return getBoolean(PREF_PLAYER_HINT_SHOWN, false);
+    }
+
+    public void setPlayerHintShown(boolean shown) {
+        putBoolean(PREF_PLAYER_HINT_SHOWN, shown);
     }
 
     /** YouTube/original track level while translation plays (0–100%). */

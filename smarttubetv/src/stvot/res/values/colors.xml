@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VOX HUD colors -->
+    <color name="vox_hud_panel_bg">#D910141E</color>
+    <color name="vox_hud_panel_stroke">#232B3E</color>
+    <color name="vox_hud_button_focus_stroke">#3F8CFF</color>
+    <color name="vox_hud_button_focus_bg">#263F8CFF</color>
+</resources>

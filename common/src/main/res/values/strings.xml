@@ -850,6 +850,11 @@
     <string name="vot_device_auth_network_error" translatable="false"></string>
     <string name="vot_device_auth_pending" translatable="false"></string>
     <string name="vot_device_auth_invalid_client" translatable="false"></string>
+    <string name="vot_player_button_switch" translatable="false"></string>
+    <string name="vot_player_button_switch_desc" translatable="false"></string>
+    <string name="vot_player_hud_hint" translatable="false"></string>
+    <string name="vot_onboarding_ok" translatable="false"></string>
+    <string name="vot_onboarding_never" translatable="false"></string>
 
     <!-- Factory Reset placeholders for ststable -->
     <string name="settings_reset" translatable="false"></string>

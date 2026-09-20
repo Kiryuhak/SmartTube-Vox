@@ -1,5 +1,6 @@
 package com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers;
 
+import android.content.Context;
 import android.os.SystemClock;
 
 import com.liskovsoft.sharedutils.helpers.Helpers;
@@ -224,6 +225,21 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onVideoLoaded(Video item) {
         tryApplyAutoTranslate(false);
+        checkShowPlayerHint();
+    }
+
+    private void checkShowPlayerHint() {
+        if (!com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(getContext())
+                || votData().isPlayerHintShown()) {
+            return;
+        }
+        votData().setPlayerHintShown(true);
+        Utils.postDelayed(() -> {
+            Context ctx = getContext();
+            if (ctx != null) {
+                com.liskovsoft.sharedutils.helpers.MessageHelpers.showMessage(ctx, R.string.vot_player_hud_hint);
+            }
+        }, 2000);
     }
 
     @Override

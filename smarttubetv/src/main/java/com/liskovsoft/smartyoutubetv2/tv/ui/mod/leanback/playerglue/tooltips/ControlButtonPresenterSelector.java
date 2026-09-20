@@ -25,6 +25,7 @@ import androidx.leanback.widget.Action;
 import androidx.leanback.widget.PlaybackControlsRow;
 import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.PresenterSelector;
+import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 import com.liskovsoft.smartyoutubetv2.tv.ui.playback.actions.PaddingAction;
 
 /**
@@ -113,7 +114,7 @@ public class ControlButtonPresenterSelector extends PresenterSelector {
                 }
             }
             if (vh.mLabel != null) {
-                if (action.getIcon() == null) {
+                if (action.getIcon() == null || VotOnboardingHelper.isStvot(vh.view.getContext())) {
                     vh.mLabel.setText(action.getLabel1());
                 } else {
                     vh.mLabel.setText(null);
