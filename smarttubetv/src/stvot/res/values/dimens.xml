@@ -19,7 +19,13 @@
     <dimen name="grid_item_vertical_spacing">12dp</dimen>
 
     <!-- VOX Sidebar Dimensions -->
-    <dimen name="browse_headers_vertical_spacing">6dp</dimen>
+    <dimen name="browse_headers_vertical_spacing">2dp</dimen>
+    <dimen name="vox_sidebar_item_height">54dp</dimen>
+    <dimen name="vox_sidebar_icon_size">26dp</dimen>
+    <dimen name="vox_sidebar_text_size">21sp</dimen>
+    <dimen name="vox_sidebar_item_padding_start">14dp</dimen>
+    <dimen name="vox_sidebar_item_padding_end">16dp</dimen>
+    <dimen name="vox_sidebar_icon_text_spacing">16dp</dimen>
 
     <!-- VOX Dialog and Preference Dimensions -->
     <dimen name="vox_dialog_corner_radius">16dp</dimen>

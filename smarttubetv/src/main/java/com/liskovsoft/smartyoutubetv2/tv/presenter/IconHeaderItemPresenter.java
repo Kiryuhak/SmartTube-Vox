@@ -97,7 +97,7 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
     protected void onSelectLevelChanged(RowHeaderPresenter.ViewHolder holder) {
         if (VotOnboardingHelper.isStvot(holder.view.getContext())) {
             holder.view.setSelected(holder.getSelectLevel() > 0.5f);
-            holder.view.setAlpha(0.6f + holder.getSelectLevel() * 0.4f);
+            holder.view.setAlpha(0.72f + holder.getSelectLevel() * 0.28f);
             return;
         }
         holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
