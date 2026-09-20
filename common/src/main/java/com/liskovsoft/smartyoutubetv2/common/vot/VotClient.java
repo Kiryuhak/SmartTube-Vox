@@ -119,7 +119,7 @@ public class VotClient {
             for (int i = 0; i < MAX_POLL_ATTEMPTS && !emitter.isDisposed(); i++) {
                 Log.d(TAG, "VOT poll scheduled: attempt=%d/%d, interval=%ds (reported ETA=%ds)",
                         i + 1, MAX_POLL_ATTEMPTS, waitSec, response.remainingTimeSec);
-                sleep(waitSec);
+                sleep(waitSec, emitter);
                 if (emitter.isDisposed()) {
                     Log.d(TAG, "VOT polling cancelled (emitter disposed)");
                     return;
@@ -129,6 +129,9 @@ public class VotClient {
                     response = requestTranslation(youtubeUrl, durationSec, true, useLively);
                     consecutiveNetworkErrors = 0;
                 } catch (IOException e) {
+                    if (e instanceof VotHttpException) {
+                        throw e;
+                    }
                     consecutiveNetworkErrors++;
                     Log.w(TAG, "Network error during VOT poll attempt %d (retry %d/%d): %s",
                             i + 1, consecutiveNetworkErrors, MAX_CONSECUTIVE_NETWORK_RETRIES, e.getMessage());
@@ -437,12 +440,21 @@ public class VotClient {
         }
     }
 
-    private void sleep(int sec) throws VotException {
-        try {
-            TimeUnit.SECONDS.sleep(sec);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new VotException("Interrupted");
+    private void sleep(int sec, @Nullable ObservableEmitter<?> emitter) throws VotException {
+        for (int s = 0; s < sec; s++) {
+            if (emitter != null && emitter.isDisposed()) {
+                return;
+            }
+            try {
+                TimeUnit.SECONDS.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new VotException("Interrupted");
+            }
         }
+    }
+
+    private void sleep(int sec) throws VotException {
+        sleep(sec, null);
     }
 }

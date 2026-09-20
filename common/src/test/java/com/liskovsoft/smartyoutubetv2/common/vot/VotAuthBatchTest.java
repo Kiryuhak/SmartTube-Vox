@@ -345,6 +345,38 @@ public class VotAuthBatchTest {
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // Блок L: Network Resilience & Recovery (Batch #4)
+    // ────────────────────────────────────────────────────────────────────────
+
+    @Test
+    public void rateLimitedErrorIsTransientAndNotOAuth() {
+        VotErrorCategory cat = VotErrorCategory.fromHttpCode(429);
+        assertEquals(VotErrorCategory.RATE_LIMITED, cat);
+        assertTrue("HTTP 429 должна быть transient ошибкой", cat.isTransient());
+        assertFalse("HTTP 429 не должна отклонять OAuth", cat.isOAuthFailure());
+    }
+
+    @Test
+    public void serverUnavailableErrorIsTransientAndNotOAuth() {
+        for (int code : new int[]{500, 502, 503, 504}) {
+            VotErrorCategory cat = VotErrorCategory.fromHttpCode(code);
+            assertEquals("HTTP " + code + " должна быть SERVER_UNAVAILABLE",
+                    VotErrorCategory.SERVER_UNAVAILABLE, cat);
+            assertTrue("HTTP " + code + " должна быть transient ошибкой", cat.isTransient());
+            assertFalse("HTTP " + code + " не должна отклонять OAuth", cat.isOAuthFailure());
+        }
+    }
+
+    @Test
+    public void timeoutErrorIsCategorizedCorrectly() {
+        VotErrorCategory cat = VotErrorCategory.fromMarker(VotClient.ERROR_MARKER_TIMEOUT);
+        assertEquals(VotErrorCategory.TIMEOUT, cat);
+        assertFalse("TIMEOUT не является transient ошибкой (требует явного повторного запуска)", cat.isTransient());
+        assertFalse("TIMEOUT не является ошибкой OAuth", cat.isOAuthFailure());
+        assertEquals(R.string.vot_error_timeout, cat.getMessageResId());
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // Вспомогательные методы
     // ────────────────────────────────────────────────────────────────────────
 

@@ -345,7 +345,8 @@ public class VoiceTranslateController extends BasePlayerController {
         if (buttonId != ACTION_VOICE_TRANSLATE) {
             return;
         }
-        if (buttonState == BTN_OFF) {
+        if (mState == STATE_OFF || buttonState == BTN_OFF || buttonState == BTN_ERROR) {
+            Utils.removeCallbacks(mResetErrorButtonRunnable);
             armAndStart();
         } else {
             Log.i(TAG, "Trigger: manual stop");
@@ -716,10 +717,15 @@ public class VoiceTranslateController extends BasePlayerController {
             case VotProgress.TYPE_FAILED:
                 Log.e(TAG, "VOT translation failed: %s", progress.message);
                 Utils.removeCallbacks(mProgressTickRunnable);
+                VotErrorCategory category = VotErrorCategory.fromMarker(progress.message);
                 if (mUserArmed && progressOverlay() != null) {
-                    progressOverlay().showError(getActivity());
+                    if (category == VotErrorCategory.TIMEOUT) {
+                        progressOverlay().showTimeout(getActivity());
+                    } else {
+                        progressOverlay().showError(getActivity());
+                    }
                 }
-                handleTranslationError(VotErrorCategory.fromMarker(progress.message));
+                handleTranslationError(category);
                 break;
         }
     }
@@ -727,21 +733,35 @@ public class VoiceTranslateController extends BasePlayerController {
     private void onVotError(Throwable e) {
         Log.e(TAG, "VOT error callback: %s", e != null ? e.getMessage() : "unknown");
         Utils.removeCallbacks(mProgressTickRunnable);
-        if (mUserArmed && progressOverlay() != null) {
-            progressOverlay().showError(getActivity());
-        }
-        VotErrorCategory category;
         if (e instanceof VotHttpException) {
             int code = ((VotHttpException) e).getStatusCode();
             if (code == 401) {
-                votData().markOAuthRejected();
+                String currentToken = votData().getOAuthToken();
+                votData().markOAuthRejected(currentToken);
                 Log.w(TAG, "VOT: onVotError HTTP 401 — OAuth rejected (authState→REJECTED)");
             }
-            category = VotErrorCategory.fromHttpCode(code);
-        } else {
-            category = VotErrorCategory.NETWORK_ERROR;
         }
-        handleTranslationError(category);
+        if (!mArmed || getPlayer() == null || getPlayer().getVideo() == null) {
+            return;
+        }
+        String currentUrl = "https://www.youtube.com/watch?v=" + getPlayer().getVideo().videoId;
+        if (mPendingVideoUrl != null && !mPendingVideoUrl.equals(currentUrl)) {
+            return;
+        }
+        VotErrorCategory errCategory;
+        if (e instanceof VotHttpException) {
+            errCategory = VotErrorCategory.fromHttpCode(((VotHttpException) e).getStatusCode());
+        } else {
+            errCategory = VotErrorCategory.NETWORK_ERROR;
+        }
+        if (mUserArmed && progressOverlay() != null) {
+            if (errCategory == VotErrorCategory.TIMEOUT) {
+                progressOverlay().showTimeout(getActivity());
+            } else {
+                progressOverlay().showError(getActivity());
+            }
+        }
+        handleTranslationError(errCategory);
     }
 
     private void prepareAndStartTranslationAudio(String audioUrl) {

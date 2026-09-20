@@ -346,4 +346,50 @@ public class VotStateMachineTest {
         assertNull("Previous dub track must not carry over to new video",
                 sm.getEffectiveRestoreTrack());
     }
+
+    @Test
+    public void testRetryAfterTimeoutCreatesNewSession() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.startRequest();
+        int firstSessionId = sm.sessionId;
+        assertEquals(VotLifecycleState.PENDING, sm.state);
+
+        // Timeout happens
+        sm.onTimeout();
+        assertEquals(VotLifecycleState.STOPPED, sm.state);
+
+        // User retries
+        sm.startRequest();
+        int secondSessionId = sm.sessionId;
+        assertEquals(VotLifecycleState.PENDING, sm.state);
+        assertTrue("Новая попытка после таймаута должна получить новый sessionId",
+                secondSessionId > firstSessionId);
+
+        // Stale callback from first session must be rejected by generation guard
+        sm.onInitialSyncComplete(firstSessionId);
+        assertEquals("Устаревший отклик первой сессии не должен переводить в ACTIVE",
+                VotLifecycleState.PENDING, sm.state);
+
+        // Fresh callback from second session activates
+        sm.onInitialSyncComplete(secondSessionId);
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+    }
+
+    @Test
+    public void testRetryAfterPlaybackError() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.startRequest();
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+
+        // Playback error occurs
+        sm.onPlaybackError();
+        assertEquals(VotLifecycleState.STOPPED, sm.state);
+
+        // User retries after error
+        sm.startRequest();
+        assertEquals(VotLifecycleState.PENDING, sm.state);
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+    }
 }
