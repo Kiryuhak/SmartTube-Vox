@@ -317,18 +317,26 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
     }
 
     private void startYandexOAuth() {
-        Intent intent = new Intent();
-        intent.setClassName(
-                getContext(),
-                "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
-        );
+        Context ctx = getContext();
+        if (ctx == null) return;
 
-        try {
-            getContext().startActivity(intent);
-        } catch (Exception e) {
-            MessageHelpers.showMessage(getContext(), e.getMessage());
+        if (VotOnboardingHelper.isAndroidTv(ctx) && ctx instanceof android.app.Activity) {
+            com.liskovsoft.smartyoutubetv2.common.oauth.YandexDeviceAuthDialog
+                    .show((android.app.Activity) ctx);
+        } else {
+            Intent intent = new Intent();
+            intent.setClassName(
+                    ctx,
+                    "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
+            );
+            try {
+                ctx.startActivity(intent);
+            } catch (Exception e) {
+                MessageHelpers.showMessage(ctx, e.getMessage());
+            }
         }
     }
+
 
     /**
      * Возвращает локализованный текст статуса авторизации Яндекс ID

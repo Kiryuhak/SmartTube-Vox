@@ -836,4 +836,17 @@
     <string name="vot_progress_ready" translatable="false"></string>
     <string name="vot_progress_error" translatable="false"></string>
     <string name="vot_progress_timeout" translatable="false"></string>
+    <!-- Device Code Flow placeholders — overridden in stvot flavor -->
+    <string name="vot_device_auth_title" translatable="false"></string>
+    <string name="vot_device_auth_step1" translatable="false"></string>
+    <string name="vot_device_auth_url" translatable="false"></string>
+    <string name="vot_device_auth_step2" translatable="false"></string>
+    <string name="vot_device_auth_timer" translatable="false">%s</string>
+    <string name="vot_device_auth_expired" translatable="false"></string>
+    <string name="vot_device_auth_refresh" translatable="false"></string>
+    <string name="vot_device_auth_cancel" translatable="false"></string>
+    <string name="vot_device_auth_success" translatable="false"></string>
+    <string name="vot_device_auth_denied" translatable="false"></string>
+    <string name="vot_device_auth_network_error" translatable="false"></string>
+    <string name="vot_device_auth_pending" translatable="false"></string>
 </resources>

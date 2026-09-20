@@ -127,18 +127,38 @@ public final class VotOnboardingHelper {
             return;
         }
 
-        Intent intent = new Intent();
-        intent.setClassName(
-                context,
-                "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
-        );
+        if (isAndroidTv(context) && context instanceof android.app.Activity) {
+            // Android TV: Device Code Flow через диалог на экране
+            com.liskovsoft.smartyoutubetv2.common.oauth.YandexDeviceAuthDialog
+                    .show((android.app.Activity) context);
+        } else {
+            // Телефон/планшет: SDK flow через браузер/Yandex-app
+            Intent intent = new Intent();
+            intent.setClassName(
+                    context,
+                    "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
+            );
 
-        try {
-            context.startActivity(intent);
-        } catch (Exception e) {
-            MessageHelpers.showMessage(context, e.getMessage());
+            try {
+                context.startActivity(intent);
+            } catch (Exception e) {
+                MessageHelpers.showMessage(context, e.getMessage());
+            }
         }
     }
+
+    /**
+     * Определяет, запущено ли приложение на Android TV.
+     * Использует UiModeManager — официальный способ обнаружения TV.
+     */
+    public static boolean isAndroidTv(Context context) {
+        android.app.UiModeManager uiModeManager =
+                (android.app.UiModeManager) context.getSystemService(Context.UI_MODE_SERVICE);
+        return uiModeManager != null
+                && uiModeManager.getCurrentModeType()
+                    == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
+    }
+
 
     public static void dismiss() {
         if (sDialogInstance != null) {

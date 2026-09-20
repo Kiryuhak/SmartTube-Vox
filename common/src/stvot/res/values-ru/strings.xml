@@ -21,6 +21,20 @@
     <string name="vot_yandex_logout_done">Вы вышли из Яндекс ID</string>
     <string name="vot_manual_token_entry">Ввести токен вручную…</string>
 
+    <!-- Device Code Flow: вход на телевизоре -->
+    <string name="vot_device_auth_title">Вход в Яндекс ID</string>
+    <string name="vot_device_auth_step1">Откройте на телефоне или компьютере:</string>
+    <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_step2">Затем введите этот код:</string>
+    <string name="vot_device_auth_timer">Код действителен: %s</string>
+    <string name="vot_device_auth_expired">Код истёк. Запросите новый.</string>
+    <string name="vot_device_auth_refresh">Обновить код</string>
+    <string name="vot_device_auth_cancel">Отмена</string>
+    <string name="vot_device_auth_success">Вход выполнен!</string>
+    <string name="vot_device_auth_denied">Авторизация отклонена пользователем</string>
+    <string name="vot_device_auth_network_error">Ошибка сети. Проверьте соединение.</string>
+    <string name="vot_device_auth_pending">Ожидание подтверждения…</string>
+
     <!-- Pulse: Пользовательские статусы перевода -->
     <string name="vot_preparing">Подготовка перевода…</string>
     <string name="vot_pending_waiting">Ожидание перевода… (~%d мин)</string>

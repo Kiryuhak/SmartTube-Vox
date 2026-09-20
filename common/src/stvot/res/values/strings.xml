@@ -21,6 +21,21 @@
     <string name="vot_yandex_logout_done">Signed out of Yandex ID</string>
     <string name="vot_manual_token_entry">Enter token manually…</string>
 
+    <!-- Device Code Flow: TV login UX -->
+    <string name="vot_device_auth_title">Sign in to Yandex ID</string>
+    <string name="vot_device_auth_step1">Open on your phone or computer:</string>
+    <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_step2">Then enter this code:</string>
+    <string name="vot_device_auth_timer">Code valid: %s</string>
+    <string name="vot_device_auth_expired">Code expired. Request a new one.</string>
+    <string name="vot_device_auth_refresh">Refresh code</string>
+    <string name="vot_device_auth_cancel">Cancel</string>
+    <string name="vot_device_auth_success">Signed in!</string>
+    <string name="vot_device_auth_denied">Authorization denied by user</string>
+    <string name="vot_device_auth_network_error">Network error. Check your connection.</string>
+    <string name="vot_device_auth_pending">Waiting for confirmation…</string>
+
+
     <!-- Pulse: Translation UX statuses -->
     <string name="vot_preparing">Preparing translation…</string>
     <string name="vot_pending_waiting">Waiting for translation… (~%d min)</string>

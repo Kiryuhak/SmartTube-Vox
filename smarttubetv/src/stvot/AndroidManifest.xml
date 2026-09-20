@@ -14,6 +14,7 @@
             tools:replace="android:icon,android:banner,android:label" />
         <activity
             android:name="com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
             android:exported="false" />
     </application>
 </manifest>
