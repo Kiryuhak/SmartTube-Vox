@@ -849,4 +849,12 @@
     <string name="vot_device_auth_denied" translatable="false"></string>
     <string name="vot_device_auth_network_error" translatable="false"></string>
     <string name="vot_device_auth_pending" translatable="false"></string>
+
+    <!-- Factory Reset placeholders for ststable -->
+    <string name="settings_reset" translatable="false"></string>
+    <string name="reset_dialog_title" translatable="false"></string>
+    <string name="reset_dialog_message" translatable="false"></string>
+    <string name="reset_dialog_cancel" translatable="false"></string>
+    <string name="reset_dialog_confirm" translatable="false"></string>
+    <string name="reset_dialog_failed" translatable="false"></string>
 </resources>

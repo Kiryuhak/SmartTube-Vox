@@ -67,4 +67,12 @@
     <string name="vot_replace_dub_cancel">Cancel</string>
     <string name="vot_unable_to_switch_original">Unable to switch to the original audio track</string>
     <string name="vot_unable_to_determine_original">Unable to determine the original audio track</string>
+
+    <!-- Factory Reset -->
+    <string name="settings_reset">Reset settings</string>
+    <string name="reset_dialog_title">Reset SmartTube VOX?</string>
+    <string name="reset_dialog_message">All YouTube and Yandex ID accounts will be disconnected.\n\nLocal settings, watch history, and voice-over translation data will be deleted.\n\nThe app will return to its initial state.\n\nThis action cannot be undone.</string>
+    <string name="reset_dialog_cancel">Cancel</string>
+    <string name="reset_dialog_confirm">Reset all</string>
+    <string name="reset_dialog_failed">Failed to reset application data</string>
 </resources>

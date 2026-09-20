@@ -68,4 +68,12 @@
     <string name="vot_replace_dub_cancel">Отмена</string>
     <string name="vot_unable_to_switch_original">Не удалось переключиться на оригинальную аудиодорожку</string>
     <string name="vot_unable_to_determine_original">Не удалось определить оригинальную аудиодорожку</string>
+
+    <!-- Factory Reset -->
+    <string name="settings_reset">Сброс настроек</string>
+    <string name="reset_dialog_title">Сбросить SmartTube VOX?</string>
+    <string name="reset_dialog_message">Все аккаунты YouTube и Яндекс ID будут отключены.\n\nЛокальные настройки, история просмотра и данные закадрового перевода будут удалены.\n\nПриложение вернётся к первоначальному состоянию.\n\nЭто действие нельзя отменить.</string>
+    <string name="reset_dialog_cancel">Отмена</string>
+    <string name="reset_dialog_confirm">Сбросить всё</string>
+    <string name="reset_dialog_failed">Не удалось сбросить данные приложения</string>
 </resources>

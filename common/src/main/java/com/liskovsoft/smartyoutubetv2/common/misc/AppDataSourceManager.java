@@ -17,9 +17,11 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.MainUISetti
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.PlayerSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.RemoteControlSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.SearchSettingsPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.ResetSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.SubtitleSettingsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem.VideoPreset;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,6 +76,11 @@ public class AppDataSourceManager {
         } else {
             settingItems.add(new SettingsItem(
                     context.getString(R.string.settings_about), () -> AboutSimpleSettingsPresenter.instance(context).show(), R.drawable.settings_about));
+        }
+
+        if (VotOnboardingHelper.isStvot(context)) {
+            settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_reset), () -> ResetSettingsPresenter.instance(context).show(), R.drawable.settings_reset));
         }
 
         return settingItems;
