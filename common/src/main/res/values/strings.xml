@@ -849,6 +849,7 @@
     <string name="vot_device_auth_denied" translatable="false"></string>
     <string name="vot_device_auth_network_error" translatable="false"></string>
     <string name="vot_device_auth_pending" translatable="false"></string>
+    <string name="vot_device_auth_invalid_client" translatable="false"></string>
 
     <!-- Factory Reset placeholders for ststable -->
     <string name="settings_reset" translatable="false"></string>

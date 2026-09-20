@@ -326,6 +326,9 @@ public class YandexDeviceAuthDialog {
                                 case EXPIRED:
                                     onCodeExpired(sessionId);
                                     break;
+                                case INVALID_CLIENT:
+                                    onInvalidClient(sessionId, result.getErrorMessage());
+                                    break;
                                 case SUCCESS:
                                     onTokenReceived(sessionId, result.getAccessToken());
                                     break;
@@ -378,6 +381,18 @@ public class YandexDeviceAuthDialog {
         if (!isSessionCurrent(sessionId)) return;
         stopPolling();
         mStatusView.setText(R.string.vot_device_auth_network_error);
+        mRefreshButton.setEnabled(true);
+        mRefreshButton.requestFocus();
+    }
+
+    @MainThread
+    private void onInvalidClient(int sessionId, String message) {
+        if (!isSessionCurrent(sessionId)) return;
+        stopPolling();
+        Log.w(TAG, "OAuth client configuration error (invalid_client): " + message);
+        mStatusView.setText(R.string.vot_device_auth_invalid_client);
+        mCodeView.setText("✕");
+        mTimerView.setText("");
         mRefreshButton.setEnabled(true);
         mRefreshButton.requestFocus();
     }

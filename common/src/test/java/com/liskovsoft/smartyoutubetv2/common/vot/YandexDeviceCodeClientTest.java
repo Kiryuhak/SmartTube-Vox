@@ -243,6 +243,18 @@ public class YandexDeviceCodeClientTest {
     }
 
     @Test
+    public void testPoll_invalidClient_terminalError() {
+        String json = "{\"error\":\"invalid_client\",\"error_description\":\"Wrong client secret\"}";
+        YandexDeviceCodeClient client = clientWith(400, json);
+
+        YandexTokenPollResult result = client.pollForToken(FAKE_CLIENT_ID, "dummy_code");
+
+        assertEquals(YandexTokenPollResult.Type.INVALID_CLIENT, result.getType());
+        assertTrue("INVALID_CLIENT терминальный", result.isTerminal());
+        assertEquals("Wrong client secret", result.getErrorMessage());
+    }
+
+    @Test
     public void testPoll_unknownError_returnedAsNetworkError() {
         String json = "{\"error\":\"some_future_error\"}";
         YandexDeviceCodeClient client = clientWith(400, json);

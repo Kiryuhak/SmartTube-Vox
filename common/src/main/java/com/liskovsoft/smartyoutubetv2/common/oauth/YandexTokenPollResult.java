@@ -18,6 +18,7 @@ public final class YandexTokenPollResult {
         SLOW_DOWN,
         ACCESS_DENIED,
         EXPIRED,
+        INVALID_CLIENT,
         SUCCESS,
         NETWORK_ERROR
     }
@@ -50,6 +51,10 @@ public final class YandexTokenPollResult {
         return new YandexTokenPollResult(Type.EXPIRED, null, "expired_token");
     }
 
+    public static YandexTokenPollResult invalidClient(String description) {
+        return new YandexTokenPollResult(Type.INVALID_CLIENT, null, description != null ? description : "invalid_client");
+    }
+
     public static YandexTokenPollResult success(String accessToken) {
         return new YandexTokenPollResult(Type.SUCCESS, accessToken, null);
     }
@@ -72,7 +77,7 @@ public final class YandexTokenPollResult {
     }
 
     public boolean isTerminal() {
-        return type == Type.ACCESS_DENIED || type == Type.EXPIRED || type == Type.SUCCESS;
+        return type == Type.ACCESS_DENIED || type == Type.EXPIRED || type == Type.INVALID_CLIENT || type == Type.SUCCESS;
     }
 
     @Override

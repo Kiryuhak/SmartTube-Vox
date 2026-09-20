@@ -34,6 +34,7 @@
     <string name="vot_device_auth_denied">Authorization denied by user</string>
     <string name="vot_device_auth_network_error">Network error. Check your connection.</string>
     <string name="vot_device_auth_pending">Waiting for confirmation…</string>
+    <string name="vot_device_auth_invalid_client">Yandex ID client configuration error. Please enter token manually.</string>
 
 
     <!-- Pulse: Translation UX statuses -->

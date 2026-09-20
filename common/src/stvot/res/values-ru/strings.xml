@@ -34,6 +34,7 @@
     <string name="vot_device_auth_denied">Авторизация отклонена пользователем</string>
     <string name="vot_device_auth_network_error">Ошибка сети. Проверьте соединение.</string>
     <string name="vot_device_auth_pending">Ожидание подтверждения…</string>
+    <string name="vot_device_auth_invalid_client">Ошибка конфигурации клиента Яндекс ID. Используйте ручной ввод токена.</string>
 
     <!-- Pulse: Пользовательские статусы перевода -->
     <string name="vot_preparing">Подготовка перевода…</string>

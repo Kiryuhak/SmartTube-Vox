@@ -209,6 +209,9 @@ public class YandexDeviceCodeClient {
                 case "expired_token":
                 case "bad_verification_code":
                     return YandexTokenPollResult.expired();
+                case "invalid_client":
+                    String desc = map.get("error_description");
+                    return YandexTokenPollResult.invalidClient(desc != null ? desc : "invalid_client");
                 default:
                     return YandexTokenPollResult.networkError("OAuth error: " + error);
             }
