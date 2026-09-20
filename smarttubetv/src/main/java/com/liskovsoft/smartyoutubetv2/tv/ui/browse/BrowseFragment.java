@@ -33,6 +33,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.BrowseView;
 import com.liskovsoft.smartyoutubetv2.common.misc.CrashRestorer;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.presenter.IconHeaderItemPresenter;
 import com.liskovsoft.smartyoutubetv2.tv.ui.browse.dialog.ErrorDialogFragment;
@@ -196,11 +197,22 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView 
         // This title replaces badge in case one is null
         //setTitle(getString(R.string.browse_title));
 
-        // Set fastLane (or headers) background color
-        setBrandColor(ContextCompat.getColor(getContext(), brandColorRes));
+        if (VotOnboardingHelper.isStvot(getContext())) {
+            int bgRes = Helpers.getResourceId("vox_bg", "color", getContext());
+            int accentRes = Helpers.getResourceId("vox_accent", "color", getContext());
+            if (bgRes > 0) {
+                setBrandColor(ContextCompat.getColor(getContext(), bgRes));
+            }
+            if (accentRes > 0) {
+                setSearchAffordanceColor(ContextCompat.getColor(getContext(), accentRes));
+            }
+        } else {
+            // Set fastLane (or headers) background color
+            setBrandColor(ContextCompat.getColor(getContext(), brandColorRes));
 
-        // Set search icon color.
-        setSearchAffordanceColor(ContextCompat.getColor(getContext(), brandAccentColorRes));
+            // Set search icon color.
+            setSearchAffordanceColor(ContextCompat.getColor(getContext(), brandAccentColorRes));
+        }
 
         setHeaderPresenterSelector(new PresenterSelector() {
             private final Map<Integer, Presenter> mPresenterMap = new HashMap<>();

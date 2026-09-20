@@ -6,6 +6,7 @@ import android.os.Build.VERSION;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.graphics.Color;
 import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.core.content.ContextCompat;
@@ -13,6 +14,7 @@ import androidx.leanback.widget.Presenter;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.SettingsItem;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.util.ViewUtil;
 
@@ -37,16 +39,39 @@ public class SettingsCardPresenter extends Presenter {
 
         @SuppressLint("InflateParams")
         View container = LayoutInflater.from(context).inflate(R.layout.settings_card, null);
-        container.setBackgroundColor(mDefaultBackgroundColor);
-        //if (VERSION.SDK_INT >= 23 && MainUIData.instance(context).isUiTweakEnabled(MainUIData.UI_TWEAK_ROUNDED_CORNERS)) {
-        //    container.setForeground(ContextCompat.getDrawable(context, R.drawable.lb_card_outline));
-        //}
 
         TextView textView = container.findViewById(R.id.settings_title);
+        ViewUtil.setTextScrollSpeed(textView, getCardTextScrollSpeed(context));
+
+        if (VotOnboardingHelper.isStvot(context)) {
+            int bgResId = Helpers.getResourceId("vox_settings_card_bg", "drawable", context);
+            if (bgResId > 0) {
+                container.setBackgroundResource(bgResId);
+            }
+            textView.setBackgroundColor(Color.TRANSPARENT);
+            int textColorRes = Helpers.getResourceId("vox_text_primary", "color", context);
+            if (textColorRes > 0) {
+                textView.setTextColor(ContextCompat.getColor(context, textColorRes));
+            }
+
+            container.setOnFocusChangeListener((v, hasFocus) -> {
+                textView.setSelected(hasFocus);
+                if (hasFocus) {
+                    v.animate().scaleX(1.04f).scaleY(1.04f).setDuration(120).start();
+                    ViewUtil.enableMarquee(textView);
+                } else {
+                    v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start();
+                    ViewUtil.disableMarquee(textView);
+                }
+            });
+
+            return new ViewHolder(container);
+        }
+
+        container.setBackgroundColor(mDefaultBackgroundColor);
+
         textView.setBackgroundColor(mDefaultBackgroundColor);
         textView.setTextColor(mDefaultTextColor);
-
-        ViewUtil.setTextScrollSpeed(textView, getCardTextScrollSpeed(context));
 
         container.setOnFocusChangeListener((v, hasFocus) -> {
             int backgroundColor = hasFocus ? mSelectedBackgroundColor : mDefaultBackgroundColor;

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SmartTube VOX Compact Settings Category Card -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:focusableInTouchMode="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:layout_width="@dimen/settings_card_width"
+    android:layout_height="@dimen/settings_card_height"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingTop="14dp"
+    android:paddingBottom="10dp"
+    android:paddingStart="6dp"
+    android:paddingEnd="6dp">
+
+    <ImageView
+        android:id="@+id/settings_image"
+        android:layout_width="@dimen/settings_image_size"
+        android:layout_height="@dimen/settings_image_size"
+        android:layout_gravity="center_horizontal"
+        android:scaleType="fitCenter"
+        android:visibility="invisible"
+        tools:ignore="ContentDescription" />
+
+    <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.MarqueeTextViewCompat
+        android:id="@+id/settings_title"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:layout_gravity="center_horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="13sp"
+        android:textColor="@color/vox_text_primary"
+        android:gravity="center"
+        android:textAlignment="center" />
+</LinearLayout>
