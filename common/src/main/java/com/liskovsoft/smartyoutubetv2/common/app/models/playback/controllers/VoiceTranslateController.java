@@ -290,7 +290,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onSeekEnd() {
-        if (mState == STATE_ACTIVE && mTranslationPlayer != null && mTranslationPlayer.isReady()) {
+        if (mTranslationPlayer != null && getPlayer() != null) {
             long targetPos = getPlayer().getPositionMs();
             mLastSyncSeekTimestamp = System.currentTimeMillis();
             mTranslationPlayer.seekTo(targetPos);
@@ -299,7 +299,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onSpeedChanged(float speed) {
-        if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
+        if (mTranslationPlayer != null) {
             mTranslationPlayer.setPlaybackSpeed(speed);
         }
     }
@@ -806,7 +806,7 @@ public class VoiceTranslateController extends BasePlayerController {
                     return;
                 }
 
-                if (!mTranslationPlayer.isPlaying()) {
+                if (mState != STATE_ACTIVE) {
                     onInitialSyncComplete(sessionId, videoId);
                 }
             }

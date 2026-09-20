@@ -82,6 +82,19 @@ public class VotStateMachineTest {
         private boolean isPaused = false;
         private boolean userManuallyChangedTrack = false;
         private String restorableDubFormat = null;
+        private float currentSpeed = 1.0f;
+
+        public void setSpeed(float speed) {
+            this.currentSpeed = speed;
+        }
+
+        public float getSpeed() {
+            return currentSpeed;
+        }
+
+        public int getDuplicatePlayAttempts() {
+            return duplicatePlayAttempts;
+        }
 
         public void onFinish() {
             sessionId++;
@@ -391,5 +404,43 @@ public class VotStateMachineTest {
         assertEquals(VotLifecycleState.PENDING, sm.state);
         sm.onInitialSyncComplete(sm.sessionId);
         assertEquals(VotLifecycleState.ACTIVE, sm.state);
+    }
+
+    @Test
+    public void testSeekWhilePausedDoesNotDuplicateInitialSync() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.startRequest();
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+        assertEquals(0, sm.getDuplicatePlayAttempts());
+
+        // Pause video
+        sm.onPause();
+        assertTrue(sm.isPaused);
+
+        // Seek while paused — duplicate onInitialSyncComplete must be ignored
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(1, sm.getDuplicatePlayAttempts());
+        assertEquals(VotLifecycleState.ACTIVE, sm.state);
+    }
+
+    @Test
+    public void testSpeedPersistenceAcrossLifecycle() {
+        VotStateMachineModel sm = new VotStateMachineModel();
+        sm.setSpeed(1.5f);
+        assertEquals(1.5f, sm.getSpeed(), 0.001f);
+
+        sm.startRequest();
+        sm.onInitialSyncComplete(sm.sessionId);
+        assertEquals(1.5f, sm.getSpeed(), 0.001f);
+
+        sm.setSpeed(2.0f);
+        assertEquals(2.0f, sm.getSpeed(), 0.001f);
+
+        sm.onPause();
+        assertEquals(2.0f, sm.getSpeed(), 0.001f);
+
+        sm.onPlay();
+        assertEquals(2.0f, sm.getSpeed(), 0.001f);
     }
 }
