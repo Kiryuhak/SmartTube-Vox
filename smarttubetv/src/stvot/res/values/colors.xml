@@ -1,57 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VOX Core Palette -->
+    <!-- Palette used only by VOT-specific authorization and progress views. -->
     <color name="vox_bg">#10141E</color>
-    <color name="vox_panel">#1A2230</color>
     <color name="vox_accent">#3F8CFF</color>
     <color name="vox_accent_glow">#263F8CFF</color>
-    <color name="vox_stroke">#232B3E</color>
     <color name="vox_text_primary">#F4F6FA</color>
     <color name="vox_text_secondary">#A7B0C0</color>
-
-    <!-- VOX HUD colors (Batch #9) -->
-    <color name="vox_hud_panel_bg">#D910141E</color>
-    <color name="vox_hud_panel_stroke">#232B3E</color>
-    <color name="vox_hud_button_focus_stroke">#3F8CFF</color>
-    <color name="vox_hud_button_focus_bg">#263F8CFF</color>
-
-    <!-- Overrides for Leanback & SmartTube themes in stvot -->
-    <color name="fastlane_background">#1A2230</color>
-    <color name="fastlane_background_dark">#10141E</color>
-    <color name="shelf_background">#10141E</color>
-    <color name="shelf_background_dark">#10141E</color>
-    <color name="card_default_background">#1A2230</color>
-    <color name="card_default_background_dark">#1A2230</color>
-    <color name="card_default_text">#F4F6FA</color>
-    <color name="card_selected_background_white">#263F8CFF</color>
-    <color name="card_selected_background_white_grey">#263F8CFF</color>
-    <color name="card_selected_text_black">#F4F6FA</color>
-    <color name="card_selected_text_grey">#F4F6FA</color>
-
-    <!-- Orb buttons: search, accounts, pip -->
-    <color name="orb_color">#1A2230</color>
-    <color name="orb_bright_color">#3F8CFF</color>
-    <color name="orb_icon_color">#F4F6FA</color>
-
-    <!-- Header / Sidebar text colors -->
-    <color name="lb_browse_header_color">#A7B0C0</color>
-    <color name="lb_browse_title_color">#F4F6FA</color>
-    <color name="lb_browse_header_description_color">#80A7B0C0</color>
-
-    <!-- Preference Dialog Colors -->
-    <color name="lb_preference_decor_list_background">#1A2230</color>
-    <color name="lb_preference_item_primary_text_color">#F4F6FA</color>
-    <color name="lb_preference_item_secondary_text_color">#A7B0C0</color>
-
-    <!-- Dialog Colors (AppDialog, AlertDialog, Reset, Yandex ID) -->
-    <color name="dialog_bg_color">#1A2230</color>
-    <color name="dialog_text_color">#F4F6FA</color>
     <color name="vox_dialog_stroke">#232B3E</color>
     <color name="vox_dialog_code_bg">#10141E</color>
-
-    <!-- Dark color scheme overrides -->
-    <color name="scheme_grey_background">#10141E</color>
-    <color name="scheme_grey_background_dark">#10141E</color>
-    <color name="scheme_grey_shelf_background_dark">#10141E</color>
-    <color name="scheme_grey_card_background_dark">#1A2230</color>
 </resources>

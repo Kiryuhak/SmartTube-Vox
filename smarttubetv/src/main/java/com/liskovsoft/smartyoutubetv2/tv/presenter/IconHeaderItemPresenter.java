@@ -21,7 +21,6 @@ import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.request.RequestListener;
 import com.bumptech.glide.request.target.Target;
 import com.liskovsoft.sharedutils.mylogger.Log;
-import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.util.ViewUtil;
 
@@ -95,11 +94,6 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
     // mUnselectAlpha, and also assumes the xml inflation will return a RowHeaderView.
     @Override
     protected void onSelectLevelChanged(RowHeaderPresenter.ViewHolder holder) {
-        if (VotOnboardingHelper.isStvot(holder.view.getContext())) {
-            holder.view.setSelected(holder.getSelectLevel() > 0.5f);
-            holder.view.setAlpha(0.72f + holder.getSelectLevel() * 0.28f);
-            return;
-        }
         holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
                 (1.0f - mUnselectedAlpha));
     }

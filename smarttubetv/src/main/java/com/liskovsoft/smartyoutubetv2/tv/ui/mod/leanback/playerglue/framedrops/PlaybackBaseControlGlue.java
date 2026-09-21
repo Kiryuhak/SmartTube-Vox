@@ -119,7 +119,7 @@ public abstract class PlaybackBaseControlGlue<T extends PlayerAdapter> extends P
     final T mPlayerAdapter;
     PlaybackControlsRow mControlsRow;
     PlaybackRowPresenter mControlsRowPresenter;
-    protected PlaybackControlsRow.PlayPauseAction mPlayPauseAction;
+    PlaybackControlsRow.PlayPauseAction mPlayPauseAction;
     boolean mIsPlaying = false;
     boolean mFadeWhenPlaying = true;
 

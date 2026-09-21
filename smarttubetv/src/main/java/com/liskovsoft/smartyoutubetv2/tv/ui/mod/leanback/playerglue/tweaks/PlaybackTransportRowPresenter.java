@@ -26,8 +26,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
-
-import com.liskovsoft.smartyoutubetv2.tv.BuildConfig;
 import androidx.annotation.ColorInt;
 import androidx.leanback.R;
 import androidx.leanback.widget.AbstractDetailsDescriptionPresenter;
@@ -447,14 +445,11 @@ public class PlaybackTransportRowPresenter extends PlaybackRowPresenter {
             mTopEdge = (ViewGroup) rootView.findViewById(com.liskovsoft.smartyoutubetv2.tv.R.id.top_edge);
             mTopEdge.setOnFocusChangeListener((v, hasFocus) -> {
                 if (hasFocus) {
-                    TopEdgeFocusHandler.onFocusGained(
-                            "stvot".equals(BuildConfig.FLAVOR),
-                            mTopEdge::clearFocus,
-                            () -> {
-                                if (mTopEdgeFocusListener != null && mTopEdgeFocusListener.get() != null) {
-                                    mTopEdgeFocusListener.get().onTopEdgeFocused();
-                                }
-                            });
+                    mTopEdge.clearFocus();
+
+                    if (mTopEdgeFocusListener != null && mTopEdgeFocusListener.get() != null) {
+                        mTopEdgeFocusListener.get().onTopEdgeFocused();
+                    }
                 }
             });
             mProgressBar = (SeekBar) rootView.findViewById(R.id.playback_progress);

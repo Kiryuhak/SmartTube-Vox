@@ -1,35 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- VOX Compact Player HUD Dimensions -->
-    <dimen name="lb_control_button_height">24dp</dimen>
-    <dimen name="lb_control_button_diameter">40dp</dimen>
-    <dimen name="lb_control_button_secondary_height">24dp</dimen>
-    <dimen name="lb_control_button_secondary_diameter">28dp</dimen>
-    <dimen name="lb_control_icon_width">16dp</dimen>
-    <dimen name="lb_control_icon_height">16dp</dimen>
-    <dimen name="lb_playback_transport_progressbar_height">12dp</dimen>
-    <dimen name="lb_playback_transport_controlbar_margin_start">0dp</dimen>
-
-    <!-- VOX Settings Grid Dimensions -->
-    <dimen name="settings_card_width">156dp</dimen>
-    <dimen name="settings_card_height">120dp</dimen>
-    <dimen name="settings_image_size">34dp</dimen>
-    <dimen name="settings_image_padding">2dp</dimen>
-    <dimen name="grid_item_horizontal_spacing">12dp</dimen>
-    <dimen name="grid_item_vertical_spacing">12dp</dimen>
-
-    <!-- VOX Sidebar Dimensions -->
-    <dimen name="browse_headers_vertical_spacing">2dp</dimen>
-    <dimen name="vox_sidebar_item_height">54dp</dimen>
-    <dimen name="vox_sidebar_icon_size">26dp</dimen>
-    <dimen name="vox_sidebar_text_size">21sp</dimen>
-    <dimen name="vox_sidebar_item_padding_start">14dp</dimen>
-    <dimen name="vox_sidebar_item_padding_end">16dp</dimen>
-    <dimen name="vox_sidebar_icon_text_spacing">16dp</dimen>
-
-    <!-- VOX Dialog and Preference Dimensions -->
-    <dimen name="vox_dialog_corner_radius">16dp</dimen>
-    <dimen name="vox_dialog_padding">20dp</dimen>
-    <dimen name="vox_button_corner_radius">8dp</dimen>
+    <!-- Used only by VOT-specific authorization dialogs. -->
     <dimen name="vox_button_min_height">44dp</dimen>
 </resources>

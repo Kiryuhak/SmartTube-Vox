@@ -23,7 +23,6 @@ import com.bumptech.glide.request.transition.Transition;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
-import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.playerglue.tweaks.MaxControlsVideoPlayerGlue;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.playerglue.tweaks.PlaybackTransportRowPresenter;
@@ -141,67 +140,6 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
 
     @Override
     protected void onCreatePrimaryActions(ArrayObjectAdapter adapter) {
-        if (VotOnboardingHelper.isStvot(getContext())) {
-            // VOX Mockup Order:
-            // Previous -> Play/Pause -> Next -> Speed -> Background (PIP) -> Chat -> Translation
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_PREVIOUS)) {
-                adapter.add(mSkipPreviousAction);
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_PLAY_PAUSE)) {
-                if (mPlayPauseAction == null) {
-                    mPlayPauseAction = new PlaybackControlsRow.PlayPauseAction(getContext());
-                }
-                adapter.add(mPlayPauseAction);
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_NEXT)) {
-                adapter.add(mSkipNextAction);
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_SPEED)) {
-                adapter.add(mActions.get(R.id.action_video_speed));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_PIP)) {
-                adapter.add(mActions.get(R.id.action_pip));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_CHAT)) {
-                adapter.add(mActions.get(R.id.action_chat));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
-                adapter.add(mActions.get(R.id.action_voice_translate));
-            }
-            // Additional primary actions (if enabled by user in tweaks)
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_REPEAT_MODE)) {
-                adapter.add(mActions.get(R.id.action_repeat));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SCREEN_DIMMING)) {
-                adapter.add(mActions.get(R.id.action_screen_dimming));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SEARCH)) {
-                adapter.add(mActions.get(R.id.action_search));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SHARE)) {
-                adapter.add(mActions.get(R.id.action_share));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SEEK_INTERVAL)) {
-                adapter.add(mActions.get(R.id.action_seek_interval));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_ZOOM)) {
-                adapter.add(mActions.get(R.id.action_video_zoom));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_ROTATE)) {
-                adapter.add(mActions.get(R.id.action_rotate));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_FLIP)) {
-                adapter.add(mActions.get(R.id.action_flip));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SOUND_OFF)) {
-                adapter.add(mActions.get(R.id.action_sound_off));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_AFR)) {
-                adapter.add(mActions.get(R.id.action_afr));
-            }
-            return;
-        }
-
         // Order matters, super.onCreatePrimaryActions() will create the play / pause action.
         // Will display as follows:
         // play/pause, previous, rewind, fast forward, next
@@ -270,45 +208,6 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         // MAX: 7 items. But with custom modification it supports more.
         // Origin: {@link androidx.leanback.widget.ControlBarPresenter#MAX_CONTROLS}
         // Custom mod: {@link com.liskovsoft.smartyoutubetv2.tv.ui.mod.leanback.playerglue.ControlBarPresenter#MAX_CONTROLS}
-
-        if (VotOnboardingHelper.isStvot(getContext())) {
-            // VOX Mockup Secondary Order:
-            // HQ -> Like -> Dislike -> PlaylistAdd -> Channel -> Subscribe -> Info -> Subtitles
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_HIGH_QUALITY)) {
-                adapter.add(mActions.get(R.id.lb_control_high_quality));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_LIKE)) {
-                adapter.add(mActions.get(R.id.action_thumbs_up));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DISLIKE)) {
-                adapter.add(mActions.get(R.id.action_thumbs_down));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_ADD_TO_PLAYLIST)) {
-                adapter.add(mActions.get(R.id.action_playlist_add));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_OPEN_CHANNEL)) {
-                adapter.add(mActions.get(R.id.action_channel));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SUBSCRIBE)) {
-                adapter.add(mActions.get(R.id.action_subscribe));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_INFO)) {
-                adapter.add(mActions.get(R.id.action_info));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SUBTITLES)) {
-                adapter.add(mActions.get(R.id.lb_control_closed_captioning));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_PLAYBACK_QUEUE)) {
-                adapter.add(mActions.get(R.id.action_playback_queue));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_CONTENT_BLOCK)) {
-                adapter.add(mActions.get(R.id.action_content_block));
-            }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_STATS)) {
-                adapter.add(mActions.get(R.id.action_video_stats));
-            }
-            return;
-        }
 
         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_HIGH_QUALITY)) {
             adapter.add(mActions.get(R.id.lb_control_high_quality));
