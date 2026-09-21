@@ -142,7 +142,7 @@ public final class VotOnboardingHelper {
             try {
                 context.startActivity(intent);
             } catch (Exception e) {
-                MessageHelpers.showMessage(context, e.getMessage());
+                MessageHelpers.showMessage(context, R.string.vot_auth_unavailable);
             }
         }
     }

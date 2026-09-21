@@ -628,7 +628,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
         long durationSec = Math.max(1, getPlayer().getDurationMs() / 1000);
         final boolean requestUsesOAuth = votData().isLivelyVoiceEnabled();
-        Log.i(TAG, "VOT request started: url=" + videoUrl + ", duration=" + durationSec + "s, userArmed=" + mUserArmed);
+        Log.i(TAG, "VOT request started: duration=" + durationSec + "s, userArmed=" + mUserArmed);
         mTranslationDisposable = votClient().observeTranslation(videoUrl, durationSec)
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
@@ -742,21 +742,14 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     }
 
-    private void onVotError(int requestSessionId, String requestVideoUrl, boolean requestUsesOAuth, Throwable e) {
+    private void onVotError(int requestSessionId, String requestVideoUrl,
+                            boolean requestUsesOAuth, Throwable e) {
         if (!isCurrentTranslationRequest(requestSessionId, requestVideoUrl)) {
             Log.w(TAG, "Ignoring stale VOT error callback for session=%d", requestSessionId);
             return;
         }
-        Log.e(TAG, "VOT error callback: %s", e != null ? e.getMessage() : "unknown");
+        Log.e(TAG, "VOT error callback");
         Utils.removeCallbacks(mProgressTickRunnable);
-        if (e instanceof VotHttpException) {
-            int code = ((VotHttpException) e).getStatusCode();
-            if (code == 401 && requestUsesOAuth) {
-                String currentToken = votData().getOAuthToken();
-                votData().markOAuthRejected(currentToken);
-                Log.w(TAG, "VOT: onVotError HTTP 401 — OAuth rejected (authState→REJECTED)");
-            }
-        }
         VotErrorCategory errCategory;
         if (e instanceof VotHttpException) {
             errCategory = VotErrorCategory.fromHttpCode(
@@ -995,7 +988,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void onTranslationPlaybackError(Exception e) {
-        Log.e(TAG, "Translation playback error: %s", e != null ? e.getMessage() : "unknown");
+        Log.e(TAG, "Translation playback error");
         if (mState == STATE_OFF) {
             return;
         }

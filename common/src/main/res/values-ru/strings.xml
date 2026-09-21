@@ -325,6 +325,9 @@
     <string name="vot_settings_category">Закадровый перевод (Яндекс)</string>
     <string name="vot_token_dialog_title">OAuth-токен Яндекса</string>
     <string name="vot_token_dialog_hint">Вставьте токен с oauth.yandex.ru. На TV удобнее: скопируйте на телефоне → «Вставить из буфера».</string>
+    <string name="vot_token_invalid">Некорректный OAuth-токен. Проверьте, что он скопирован полностью и без пробелов.</string>
+    <string name="vot_token_dialog_unavailable">Не удалось открыть ввод токена.</string>
+    <string name="vot_auth_unavailable">Не удалось открыть авторизацию Яндекс ID.</string>
     <string name="vot_edit_token">Указать OAuth-токен</string>
     <string name="vot_paste_clipboard_action">Вставить токен из буфера обмена</string>
     <string name="vot_paste_clipboard">Вставить</string>

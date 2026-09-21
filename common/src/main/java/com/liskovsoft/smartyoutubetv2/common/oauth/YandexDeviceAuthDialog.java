@@ -16,10 +16,10 @@ import androidx.appcompat.app.AlertDialog;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
+import com.liskovsoft.smartyoutubetv2.common.utils.VotOAuthTokenValidator;
 
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import io.reactivex.Observable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -61,7 +61,7 @@ public class YandexDeviceAuthDialog {
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     /** Монотонно возрастающий счётчик сессии — защита от stale callbacks. */
-    private final AtomicInteger mSessionId = new AtomicInteger(0);
+    private final YandexPollingSession mSession = new YandexPollingSession();
 
     // UI views (lazy init — null до show())
     private TextView mCodeView;
@@ -139,7 +139,7 @@ public class YandexDeviceAuthDialog {
                 .setView(view)
                 .setCancelable(true)
                 .setOnDismissListener(d -> {
-                    stopPolling();
+                    invalidateSessionAndStopPolling();
                     sCurrentInstance = null;
                     if (mOnDismiss != null) {
                         mOnDismiss.run();
@@ -159,9 +159,9 @@ public class YandexDeviceAuthDialog {
 
     @MainThread
     private void requestNewCode() {
-        stopPolling();
+        invalidateSessionAndStopPolling();
 
-        int sessionId = mSessionId.incrementAndGet();
+        int sessionId = mSession.start();
 
         mRefreshButton.setEnabled(false);
         mStatusView.setText(R.string.vot_device_auth_pending);
@@ -197,7 +197,7 @@ public class YandexDeviceAuthDialog {
             return; // stale response
         }
 
-        Log.d(TAG, "Device code received: " + response);
+        Log.d(TAG, "Device code received");
 
         if (!response.isValid()) {
             onDeviceCodeError(sessionId, new YandexDeviceCodeException(0, "Invalid device code response"));
@@ -217,7 +217,7 @@ public class YandexDeviceAuthDialog {
         if (!isSessionCurrent(sessionId)) {
             return;
         }
-        Log.e(TAG, "Failed to get device code: " + error.getMessage());
+        Log.e(TAG, "Failed to get device code");
         mStatusView.setText(R.string.vot_device_auth_network_error);
         mCodeView.setText("—");
         mTimerView.setText("");
@@ -255,7 +255,7 @@ public class YandexDeviceAuthDialog {
     @MainThread
     private void onCodeExpired(int sessionId) {
         if (!isSessionCurrent(sessionId)) return;
-        stopPolling();
+        invalidateSessionAndStopPolling();
         mStatusView.setText(R.string.vot_device_auth_expired);
         mCodeView.setText("—");
         mTimerView.setText("");
@@ -314,8 +314,7 @@ public class YandexDeviceAuthDialog {
                                     break;
                                 case NETWORK_ERROR:
                                     networkErrors[0]++;
-                                    Log.w(TAG, "Poll network error #" + networkErrors[0]
-                                            + ": " + result.getErrorMessage());
+                                    Log.w(TAG, "Poll network error #" + networkErrors[0]);
                                     if (networkErrors[0] >= MAX_NETWORK_ERRORS) {
                                         onPollError(sessionId, result.getErrorMessage());
                                     }
@@ -347,11 +346,18 @@ public class YandexDeviceAuthDialog {
         if (!isSessionCurrent(sessionId)) {
             return; // stale callback — не применяем токен
         }
-        stopPolling();
+        invalidateSessionAndStopPolling();
         // Сохраняем токен: setOAuthToken устанавливает UNVERIFIED + включает Lively
+        if (!VotOAuthTokenValidator.isValid(token)) {
+            Log.w(TAG, "Yandex OAuth returned an invalid token");
+            mStatusView.setText(R.string.vot_device_auth_network_error);
+            mRefreshButton.setEnabled(true);
+            mRefreshButton.requestFocus();
+            return;
+        }
         mVotData.setOAuthToken(token);
         // token здесь не логируется
-        Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true, length=" + token.length() + ")");
+        Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true)");
         mStatusView.setText(R.string.vot_device_auth_success);
         mCodeView.setText("✓");
         mTimerView.setText("");
@@ -368,7 +374,7 @@ public class YandexDeviceAuthDialog {
     @MainThread
     private void onAccessDenied(int sessionId) {
         if (!isSessionCurrent(sessionId)) return;
-        stopPolling();
+        invalidateSessionAndStopPolling();
         mStatusView.setText(R.string.vot_device_auth_denied);
         mCodeView.setText("✕");
         mTimerView.setText("");
@@ -379,7 +385,7 @@ public class YandexDeviceAuthDialog {
     @MainThread
     private void onPollError(int sessionId, String message) {
         if (!isSessionCurrent(sessionId)) return;
-        stopPolling();
+        invalidateSessionAndStopPolling();
         mStatusView.setText(R.string.vot_device_auth_network_error);
         mRefreshButton.setEnabled(true);
         mRefreshButton.requestFocus();
@@ -388,8 +394,8 @@ public class YandexDeviceAuthDialog {
     @MainThread
     private void onInvalidClient(int sessionId, String message) {
         if (!isSessionCurrent(sessionId)) return;
-        stopPolling();
-        Log.w(TAG, "OAuth client configuration error (invalid_client): " + message);
+        invalidateSessionAndStopPolling();
+        Log.w(TAG, "OAuth client configuration error (invalid_client)");
         mStatusView.setText(R.string.vot_device_auth_invalid_client);
         mCodeView.setText("✕");
         mTimerView.setText("");
@@ -403,7 +409,7 @@ public class YandexDeviceAuthDialog {
 
     @MainThread
     private void cancel() {
-        stopPolling();
+        invalidateSessionAndStopPolling();
         // Существующий токен сохраняется — НЕ вызываем clearOAuthToken()
         if (mDialog != null && mDialog.isShowing()) {
             mDialog.dismiss();
@@ -421,12 +427,17 @@ public class YandexDeviceAuthDialog {
         }
     }
 
+    private void invalidateSessionAndStopPolling() {
+        mSession.invalidate();
+        stopPolling();
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private boolean isSessionCurrent(int sessionId) {
-        return mSessionId.get() == sessionId && isActivityAlive();
+        return mSession.isCurrent(sessionId) && isActivityAlive();
     }
 
     private boolean isActivityAlive() {

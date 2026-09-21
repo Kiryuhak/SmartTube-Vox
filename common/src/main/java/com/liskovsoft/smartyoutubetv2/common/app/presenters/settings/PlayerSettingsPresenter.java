@@ -348,7 +348,7 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
             try {
                 ctx.startActivity(intent);
             } catch (Exception e) {
-                MessageHelpers.showMessage(ctx, e.getMessage());
+                MessageHelpers.showMessage(ctx, R.string.vot_auth_unavailable);
             }
         }
     }

@@ -104,13 +104,18 @@ public class VotClient {
     private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
                                  boolean allowAudioFallback, boolean allowLivelyFallback) {
         boolean useLively = allowLivelyFallback && mVotData.isLivelyVoiceEnabled();
+        // Bind the credential to this request cycle. A late response sent with an old token must
+        // never confirm or reject a token that the user saved while the request was in flight.
+        String requestOAuthToken = useLively ? mVotData.getOAuthToken() : null;
         try {
-            Log.d(TAG, "VOT request started: %s (duration=%ds, useLively=%b, authState=%s)",
-                    youtubeUrl, durationSec, useLively, mVotData.getAuthState());
-            VotTranslationResponse response = requestTranslation(youtubeUrl, durationSec, false, useLively);
-            Log.d(TAG, "Initial translation response: status=%d, remainingTime=%ds, message=%s",
-                    response.status, response.remainingTimeSec, response.message);
-            if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, useLively, response, 0)) {
+            Log.d(TAG, "VOT request started: duration=%ds, useLively=%b, authState=%s",
+                    durationSec, useLively, mVotData.getAuthState());
+            VotTranslationResponse response = requestTranslation(
+                    youtubeUrl, durationSec, false, useLively, requestOAuthToken);
+            Log.d(TAG, "Initial translation response: status=%d, remainingTime=%ds",
+                    response.status, response.remainingTimeSec);
+            if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
+                    allowLivelyFallback, useLively, requestOAuthToken, response, 0)) {
                 return;
             }
 
@@ -127,15 +132,16 @@ public class VotClient {
                 }
 
                 try {
-                    response = requestTranslation(youtubeUrl, durationSec, true, useLively);
+                    response = requestTranslation(
+                            youtubeUrl, durationSec, true, useLively, requestOAuthToken);
                     consecutiveNetworkErrors = 0;
                 } catch (IOException e) {
                     if (e instanceof VotHttpException) {
                         throw e;
                     }
                     consecutiveNetworkErrors++;
-                    Log.w(TAG, "Network error during VOT poll attempt %d (retry %d/%d): %s",
-                            i + 1, consecutiveNetworkErrors, MAX_CONSECUTIVE_NETWORK_RETRIES, e.getMessage());
+                    Log.w(TAG, "Network error during VOT poll attempt %d (retry %d/%d)",
+                            i + 1, consecutiveNetworkErrors, MAX_CONSECUTIVE_NETWORK_RETRIES);
                     if (consecutiveNetworkErrors <= MAX_CONSECUTIVE_NETWORK_RETRIES && !emitter.isDisposed()) {
                         waitSec = 5;
                         continue;
@@ -146,7 +152,8 @@ public class VotClient {
                 Log.d(TAG, "VOT poll response: attempt=%d, status=%d, remainingTime=%ds",
                         i + 1, response.status, response.remainingTimeSec);
 
-                if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, useLively, response, 0)) {
+                if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
+                        allowLivelyFallback, useLively, requestOAuthToken, response, 0)) {
                     return;
                 }
                 waitSec = calculateWaitSec(response.remainingTimeSec, i + 1);
@@ -157,7 +164,7 @@ public class VotClient {
                 emitter.onComplete();
             }
         } catch (IOException e) {
-            Log.e(TAG, "VOT IO error: %s", e.getMessage());
+            Log.e(TAG, "VOT IO error");
             if (!emitter.isDisposed()) {
                 if (e instanceof VotHttpException) {
                     int code = ((VotHttpException) e).getStatusCode();
@@ -165,8 +172,8 @@ public class VotClient {
                         VotErrorCategory category = VotErrorCategory.fromHttpCode(code, useLively);
                         if (category == VotErrorCategory.AUTH_REJECTED) {
                             // Only Lively sends OAuth credentials. Standard must not alter Yandex ID state.
-                            String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
-                            mVotData.markOAuthRejected(currentToken);
+                            updateAuthStateForHttpFailure(
+                                    mVotData, code, useLively, requestOAuthToken);
                             Log.w(TAG, "VOT: HTTP 401 for Lively — OAuth token rejected (authState→REJECTED)");
                             emitter.onNext(VotProgress.failed(ERROR_MARKER_AUTH_REJECTED));
                         } else {
@@ -204,7 +211,7 @@ public class VotClient {
                 emitter.onComplete();
             }
         } catch (VotException e) {
-            Log.e(TAG, "VOT error: %s", e.getMessage());
+            Log.e(TAG, "VOT error");
             if (!emitter.isDisposed()) {
                 emitter.onNext(VotProgress.failed(ERROR_MARKER_NETWORK));
                 emitter.onComplete();
@@ -212,10 +219,36 @@ public class VotClient {
         }
     }
 
+    static void updateAuthStateForHttpFailure(VotData data, int statusCode,
+                                              boolean requestUsedOAuth,
+                                              String requestOAuthToken) {
+        if (data != null && shouldApplyOAuthFailure(statusCode, requestUsedOAuth,
+                requestOAuthToken, data.getOAuthToken())) {
+            data.markOAuthRejected(requestOAuthToken);
+        }
+    }
+
+    static boolean shouldApplyOAuthFailure(int statusCode, boolean requestUsedOAuth,
+                                           String requestOAuthToken, String currentOAuthToken) {
+        return VotErrorCategory.fromHttpCode(statusCode, requestUsedOAuth)
+                == VotErrorCategory.AUTH_REJECTED
+                && requestOAuthToken != null
+                && !requestOAuthToken.isEmpty()
+                && Helpers.equals(requestOAuthToken, currentOAuthToken);
+    }
+
+    static boolean shouldApplyOAuthSuccess(boolean requestUsedOAuth,
+                                           String requestOAuthToken, String currentOAuthToken) {
+        return requestUsedOAuth
+                && requestOAuthToken != null
+                && !requestOAuthToken.isEmpty()
+                && Helpers.equals(requestOAuthToken, currentOAuthToken);
+    }
+
     /** @return false если опрос должен прекратиться (готово, ошибка или disposed) */
     private boolean processResponse(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
                                     boolean allowAudioFallback, boolean allowLivelyFallback, boolean useLively,
-                                    VotTranslationResponse response, int sessionRetryCount)
+                                    String requestOAuthToken, VotTranslationResponse response, int sessionRetryCount)
             throws IOException, VotException {
         if (emitter.isDisposed()) {
             return false;
@@ -234,14 +267,16 @@ public class VotClient {
                     sessionRetryCount + 1, MAX_SESSION_RETRIES);
             resetSession();
             ensureSession();
-            VotTranslationResponse retry = requestTranslation(youtubeUrl, durationSec, false, useLively);
+            VotTranslationResponse retry = requestTranslation(
+                    youtubeUrl, durationSec, false, useLively, requestOAuthToken);
             return processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
-                    allowLivelyFallback, useLively, retry, sessionRetryCount + 1);
+                    allowLivelyFallback, useLively, requestOAuthToken, retry, sessionRetryCount + 1);
         }
 
         if (response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED) {
             if (allowAudioFallback) {
-                handleAudioRequested(youtubeUrl, durationSec, response.translationId, useLively);
+                handleAudioRequested(youtubeUrl, durationSec, response.translationId,
+                        useLively, requestOAuthToken);
                 pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback);
                 return false;
             } else {
@@ -254,9 +289,9 @@ public class VotClient {
 
         if (response.isReady() && response.url != null && !response.url.isEmpty()) {
             // Успешный ответ — если использовался Lively, подтверждаем токен
-            if (useLively) {
-                String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
-                mVotData.markOAuthConfirmed(currentToken);
+            if (shouldApplyOAuthSuccess(useLively, requestOAuthToken,
+                    mVotData != null ? mVotData.getOAuthToken() : null)) {
+                mVotData.markOAuthConfirmed(requestOAuthToken);
                 Log.d(TAG, "VOT: Lively translation ready — OAuth marked CONFIRMED");
             }
             emitter.onNext(VotProgress.ready(response.url));
@@ -292,7 +327,9 @@ public class VotClient {
         return false;
     }
 
-    private VotTranslationResponse requestTranslation(String youtubeUrl, double durationSec, boolean subsequent, boolean useLively)
+    private VotTranslationResponse requestTranslation(String youtubeUrl, double durationSec,
+                                                       boolean subsequent, boolean useLively,
+                                                       String requestOAuthToken)
             throws IOException {
         byte[] body = VotProtobuf.encodeTranslationRequest(
                 youtubeUrl,
@@ -303,7 +340,7 @@ public class VotClient {
                 useLively
         );
 
-        Map<String, String> headers = buildTranslateHeaders(body, useLively);
+        Map<String, String> headers = buildTranslateHeaders(body, useLively, requestOAuthToken);
         byte[] raw = mHttp.postProtobuf("/video-translation/translate", body, headers);
 
         if (raw == null || raw.length == 0) {
@@ -312,7 +349,8 @@ public class VotClient {
         return VotProtobuf.decodeTranslationResponse(raw);
     }
 
-    private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively) {
+    private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively,
+                                                      String requestOAuthToken) {
         String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
         if (!Helpers.equals(currentToken, mLastOAuthToken)) {
             mLastOAuthToken = currentToken;
@@ -325,16 +363,19 @@ public class VotClient {
         } else {
             headers = VotHeaders.simpleTranslate(body);
         }
-        if (useLively && currentToken != null && !currentToken.isEmpty()) {
-            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(currentToken));
+        if (useLively && requestOAuthToken != null && !requestOAuthToken.isEmpty()) {
+            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(requestOAuthToken));
         }
         return headers;
     }
 
-    private void handleAudioRequested(String youtubeUrl, long durationSec, @Nullable String translationId, boolean useLively)
+    private void handleAudioRequested(String youtubeUrl, long durationSec,
+                                      @Nullable String translationId, boolean useLively,
+                                      String requestOAuthToken)
             throws IOException, VotException {
         if (translationId == null || translationId.isEmpty()) {
-            VotTranslationResponse r = requestTranslation(youtubeUrl, durationSec, false, useLively);
+            VotTranslationResponse r = requestTranslation(
+                    youtubeUrl, durationSec, false, useLively, requestOAuthToken);
             translationId = r.translationId;
         }
         if (translationId == null || translationId.isEmpty()) {
@@ -362,7 +403,7 @@ public class VotClient {
         } catch (VotException e) {
             throw e;
         } catch (Exception e) {
-            Log.e(TAG, "fail-audio-js parse error: %s", e.getMessage());
+            Log.e(TAG, "fail-audio-js parse error");
         }
     }
 

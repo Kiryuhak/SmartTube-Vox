@@ -86,7 +86,6 @@ public final class YandexTokenPollResult {
         if (type == Type.SUCCESS) {
             return "YandexTokenPollResult{type=SUCCESS, tokenPresent=true}";
         }
-        return "YandexTokenPollResult{type=" + type
-                + (errorMessage != null ? ", error=" + errorMessage : "") + "}";
+        return "YandexTokenPollResult{type=" + type + "}";
     }
 }

@@ -217,17 +217,6 @@ public class VotData extends SharedPreferencesBase {
         return getTranslationVolumePercent() / 100f;
     }
 
-    public String getTokenPreview() {
-        String token = getOAuthToken();
-        if (TextUtils.isEmpty(token)) {
-            return "";
-        }
-        if (token.length() <= 12) {
-            return token.substring(0, 4) + "…";
-        }
-        return token.substring(0, 6) + "…" + token.substring(token.length() - 4);
-    }
-
     private static String normalizeToken(String token) {
         if (token == null) {
             return "";

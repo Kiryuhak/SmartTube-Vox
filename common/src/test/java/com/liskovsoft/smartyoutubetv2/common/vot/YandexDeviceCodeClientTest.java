@@ -252,6 +252,7 @@ public class YandexDeviceCodeClientTest {
         assertEquals(YandexTokenPollResult.Type.INVALID_CLIENT, result.getType());
         assertTrue("INVALID_CLIENT терминальный", result.isTerminal());
         assertEquals("Wrong client secret", result.getErrorMessage());
+        assertFalse(result.toString().contains("Wrong client secret"));
     }
 
     @Test

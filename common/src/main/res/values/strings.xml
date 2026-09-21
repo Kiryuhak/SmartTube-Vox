@@ -329,6 +329,9 @@
     <string name="vot_settings_category">Voice translation (Yandex)</string>
     <string name="vot_token_dialog_title">Yandex OAuth token</string>
     <string name="vot_token_dialog_hint">Paste token from oauth.yandex.ru (scope: direct access). Use «Paste from clipboard» on TV.</string>
+    <string name="vot_token_invalid">Invalid OAuth token. Check that it is complete and contains no spaces.</string>
+    <string name="vot_token_dialog_unavailable">Unable to open token entry.</string>
+    <string name="vot_auth_unavailable">Unable to open Yandex ID authorization.</string>
     <string name="vot_edit_token">Set OAuth token</string>
     <string name="vot_paste_clipboard_action">Paste token from clipboard</string>
     <string name="vot_paste_clipboard">Paste</string>
