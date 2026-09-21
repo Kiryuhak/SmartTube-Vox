@@ -55,6 +55,7 @@
     <string name="vot_error_rate_limited">Too many translation requests. Please try again later</string>
     <string name="vot_error_unsupported_video">Translation is not available for this video</string>
     <string name="vot_error_auth_rejected">Yandex ID authorization failed. Please sign in again in settings</string>
+    <string name="vot_error_access_denied">The translation service denied this request</string>
     <string name="vot_error_playback">Failed to play translation</string>
     <string name="vot_unknown_lang_manual">Audio track language unknown. Start translation manually.</string>
     <string name="vot_lively_fallback_standard">Lively voice unavailable, using standard voice</string>

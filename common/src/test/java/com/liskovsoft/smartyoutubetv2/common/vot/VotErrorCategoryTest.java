@@ -22,6 +22,12 @@ public class VotErrorCategoryTest {
     }
 
     @Test
+    public void http401WithoutOAuthContextIsAccessDenied() {
+        assertEquals(VotErrorCategory.ACCESS_DENIED, VotErrorCategory.fromHttpCode(401, false));
+        assertEquals(VotErrorCategory.AUTH_REJECTED, VotErrorCategory.fromHttpCode(401, true));
+    }
+
+    @Test
     public void http429IsRateLimited() {
         assertEquals(VotErrorCategory.RATE_LIMITED, VotErrorCategory.fromHttpCode(429));
     }
@@ -48,11 +54,8 @@ public class VotErrorCategoryTest {
     }
 
     @Test
-    public void http403IsGeneric() {
-        // 403 обрабатывается в VotClient особым образом (reset session),
-        // но fromHttpCode возвращает GENERIC — это корректно, VotClient
-        // не передаёт 403 как AUTH_REJECTED
-        assertEquals(VotErrorCategory.GENERIC_ERROR, VotErrorCategory.fromHttpCode(403));
+    public void http403IsAccessDenied() {
+        assertEquals(VotErrorCategory.ACCESS_DENIED, VotErrorCategory.fromHttpCode(403));
     }
 
     @Test
@@ -85,6 +88,12 @@ public class VotErrorCategoryTest {
     public void markerServerUnavailable() {
         assertEquals(VotErrorCategory.SERVER_UNAVAILABLE,
                 VotErrorCategory.fromMarker(VotClient.ERROR_MARKER_SERVER_UNAVAILABLE));
+    }
+
+    @Test
+    public void markerAccessDenied() {
+        assertEquals(VotErrorCategory.ACCESS_DENIED,
+                VotErrorCategory.fromMarker(VotClient.ERROR_MARKER_ACCESS_DENIED));
     }
 
     @Test
@@ -134,6 +143,7 @@ public class VotErrorCategoryTest {
         assertFalse(VotErrorCategory.TIMEOUT.isOAuthFailure());
         assertFalse(VotErrorCategory.SERVER_UNAVAILABLE.isOAuthFailure());
         assertFalse(VotErrorCategory.RATE_LIMITED.isOAuthFailure());
+        assertFalse(VotErrorCategory.ACCESS_DENIED.isOAuthFailure());
         assertFalse(VotErrorCategory.GENERIC_ERROR.isOAuthFailure());
     }
 
@@ -150,6 +160,7 @@ public class VotErrorCategoryTest {
         assertFalse(VotErrorCategory.TIMEOUT.isTransient());
         assertFalse(VotErrorCategory.GENERIC_ERROR.isTransient());
         assertFalse(VotErrorCategory.PROTOCOL_SESSION_REQUIRED.isTransient());
+        assertFalse(VotErrorCategory.ACCESS_DENIED.isTransient());
     }
 
     // ── Критический инвариант: AUTH vs SESSION ────────────────────────────────
@@ -175,6 +186,8 @@ public class VotErrorCategoryTest {
                 VotErrorCategory.SERVER_UNAVAILABLE.getMessageResId());
         assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_rate_limited,
                 VotErrorCategory.RATE_LIMITED.getMessageResId());
+        assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_access_denied,
+                VotErrorCategory.ACCESS_DENIED.getMessageResId());
         assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_timeout,
                 VotErrorCategory.TIMEOUT.getMessageResId());
         assertEquals(com.liskovsoft.smartyoutubetv2.common.R.string.vot_error_network,

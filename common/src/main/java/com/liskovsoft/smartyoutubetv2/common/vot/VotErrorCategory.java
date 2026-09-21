@@ -23,6 +23,9 @@ public enum VotErrorCategory {
     /** HTTP 429 — превышен лимит запросов к API перевода. */
     RATE_LIMITED,
 
+    /** HTTP 401 without OAuth context or HTTP 403: translation request was denied. */
+    ACCESS_DENIED,
+
     /** HTTP 500/502/503/504 или таймаут соединения — сервер Яндекса временно недоступен. */
     SERVER_UNAVAILABLE,
 
@@ -51,10 +54,24 @@ public enum VotErrorCategory {
         if (statusCode == 429) {
             return RATE_LIMITED;
         }
+        if (statusCode == 403) {
+            return ACCESS_DENIED;
+        }
         if (statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504) {
             return SERVER_UNAVAILABLE;
         }
         return GENERIC_ERROR;
+    }
+
+    /**
+     * HTTP 401 identifies an OAuth failure only when the rejected request actually carried
+     * Lively credentials. Standard translation has no Yandex ID requirement.
+     */
+    public static VotErrorCategory fromHttpCode(int statusCode, boolean hasOAuthContext) {
+        if (statusCode == 401 && !hasOAuthContext) {
+            return ACCESS_DENIED;
+        }
+        return fromHttpCode(statusCode);
     }
 
     /**
@@ -79,6 +96,8 @@ public enum VotErrorCategory {
                 return RATE_LIMITED;
             case VotClient.ERROR_MARKER_SERVER_UNAVAILABLE:
                 return SERVER_UNAVAILABLE;
+            case VotClient.ERROR_MARKER_ACCESS_DENIED:
+                return ACCESS_DENIED;
             case VotClient.ERROR_MARKER_TIMEOUT:
                 return TIMEOUT;
             case VotClient.ERROR_MARKER_NETWORK:
@@ -111,6 +130,8 @@ public enum VotErrorCategory {
                 return R.string.vot_error_server_unavailable;
             case RATE_LIMITED:
                 return R.string.vot_error_rate_limited;
+            case ACCESS_DENIED:
+                return R.string.vot_error_access_denied;
             case TIMEOUT:
                 return R.string.vot_error_timeout;
             case NETWORK_ERROR:

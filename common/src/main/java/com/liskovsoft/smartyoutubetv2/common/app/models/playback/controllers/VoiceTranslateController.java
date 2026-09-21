@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.VotErrorCategory;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgress;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressTimer;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotRequestGuard;
 
 import java.io.IOException;
 import java.util.List;
@@ -614,7 +615,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         cancelTranslationJob();
-        mTranslationSessionId++;
+        final int requestSessionId = ++mTranslationSessionId;
         mPendingToastShown = false;
         mPendingVideoUrl = videoUrl;
         mRequestStartTimestamp = SystemClock.elapsedRealtime();
@@ -626,12 +627,13 @@ public class VoiceTranslateController extends BasePlayerController {
         Utils.postDelayed(mProgressTickRunnable, PROGRESS_TICK_INTERVAL_MS);
 
         long durationSec = Math.max(1, getPlayer().getDurationMs() / 1000);
+        final boolean requestUsesOAuth = votData().isLivelyVoiceEnabled();
         Log.i(TAG, "VOT request started: url=" + videoUrl + ", duration=" + durationSec + "s, userArmed=" + mUserArmed);
         mTranslationDisposable = votClient().observeTranslation(videoUrl, durationSec)
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
-                        this::onVotProgress,
-                        this::onVotError
+                        progress -> onVotProgress(requestSessionId, videoUrl, progress),
+                        error -> onVotError(requestSessionId, videoUrl, requestUsesOAuth, error)
                 );
     }
 
@@ -693,15 +695,9 @@ public class VoiceTranslateController extends BasePlayerController {
         return getPlayer() != null ? getPlayer().getAudioFormats() : null;
     }
 
-    private void onVotProgress(VotProgress progress) {
-        if (getPlayer() == null || getPlayer().getVideo() == null) {
-            return;
-        }
-        String currentUrl = "https://www.youtube.com/watch?v=" + getPlayer().getVideo().videoId;
-        if (mPendingVideoUrl != null && !mPendingVideoUrl.equals(currentUrl)) {
-            return;
-        }
-        if (!mArmed) {
+    private void onVotProgress(int requestSessionId, String requestVideoUrl, VotProgress progress) {
+        if (!isCurrentTranslationRequest(requestSessionId, requestVideoUrl)) {
+            Log.w(TAG, "Ignoring stale VOT progress callback for session=%d", requestSessionId);
             return;
         }
 
@@ -746,27 +742,25 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     }
 
-    private void onVotError(Throwable e) {
+    private void onVotError(int requestSessionId, String requestVideoUrl, boolean requestUsesOAuth, Throwable e) {
+        if (!isCurrentTranslationRequest(requestSessionId, requestVideoUrl)) {
+            Log.w(TAG, "Ignoring stale VOT error callback for session=%d", requestSessionId);
+            return;
+        }
         Log.e(TAG, "VOT error callback: %s", e != null ? e.getMessage() : "unknown");
         Utils.removeCallbacks(mProgressTickRunnable);
         if (e instanceof VotHttpException) {
             int code = ((VotHttpException) e).getStatusCode();
-            if (code == 401) {
+            if (code == 401 && requestUsesOAuth) {
                 String currentToken = votData().getOAuthToken();
                 votData().markOAuthRejected(currentToken);
                 Log.w(TAG, "VOT: onVotError HTTP 401 — OAuth rejected (authState→REJECTED)");
             }
         }
-        if (!mArmed || getPlayer() == null || getPlayer().getVideo() == null) {
-            return;
-        }
-        String currentUrl = "https://www.youtube.com/watch?v=" + getPlayer().getVideo().videoId;
-        if (mPendingVideoUrl != null && !mPendingVideoUrl.equals(currentUrl)) {
-            return;
-        }
         VotErrorCategory errCategory;
         if (e instanceof VotHttpException) {
-            errCategory = VotErrorCategory.fromHttpCode(((VotHttpException) e).getStatusCode());
+            errCategory = VotErrorCategory.fromHttpCode(
+                    ((VotHttpException) e).getStatusCode(), requestUsesOAuth);
         } else {
             errCategory = VotErrorCategory.NETWORK_ERROR;
         }
@@ -778,6 +772,19 @@ public class VoiceTranslateController extends BasePlayerController {
             }
         }
         handleTranslationError(errCategory);
+    }
+
+    private boolean isCurrentTranslationRequest(int requestSessionId, String requestVideoUrl) {
+        if (!mArmed || getPlayer() == null || getPlayer().getVideo() == null) {
+            return false;
+        }
+        String currentVideoUrl = "https://www.youtube.com/watch?v=" + getPlayer().getVideo().videoId;
+        return VotRequestGuard.isCurrent(
+                requestSessionId,
+                requestVideoUrl,
+                mTranslationSessionId,
+                mPendingVideoUrl,
+                currentVideoUrl);
     }
 
     private void prepareAndStartTranslationAudio(String audioUrl) {

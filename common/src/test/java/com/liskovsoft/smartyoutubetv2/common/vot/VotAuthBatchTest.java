@@ -100,8 +100,7 @@ public class VotAuthBatchTest {
 
     @Test
     public void http403DoesNotMapToAuthRejected() {
-        // 403 обрабатывается VotClient как reset сессии (не OAuth).
-        // fromHttpCode возвращает GENERIC для 403.
+        // 403 обрабатывается VotClient как access denied с reset сессии (не OAuth).
         VotErrorCategory cat = VotErrorCategory.fromHttpCode(403);
         assertNotEquals("HTTP 403 не должен считаться OAuth-ошибкой!", VotErrorCategory.AUTH_REJECTED, cat);
         assertFalse("HTTP 403 не должен быть isOAuthFailure!", cat.isOAuthFailure());
@@ -215,6 +214,7 @@ public class VotAuthBatchTest {
         assertMarkerValid(VotClient.ERROR_MARKER_PROTOCOL_SESSION);
         assertMarkerValid(VotClient.ERROR_MARKER_RATE_LIMITED);
         assertMarkerValid(VotClient.ERROR_MARKER_SERVER_UNAVAILABLE);
+        assertMarkerValid(VotClient.ERROR_MARKER_ACCESS_DENIED);
         assertMarkerValid(VotClient.ERROR_MARKER_TIMEOUT);
         assertMarkerValid(VotClient.ERROR_MARKER_NETWORK);
         assertMarkerValid(VotClient.ERROR_MARKER_UNSUPPORTED_VIDEO);
@@ -228,6 +228,7 @@ public class VotAuthBatchTest {
                 VotClient.ERROR_MARKER_PROTOCOL_SESSION,
                 VotClient.ERROR_MARKER_RATE_LIMITED,
                 VotClient.ERROR_MARKER_SERVER_UNAVAILABLE,
+                VotClient.ERROR_MARKER_ACCESS_DENIED,
                 VotClient.ERROR_MARKER_TIMEOUT,
                 VotClient.ERROR_MARKER_NETWORK,
                 VotClient.ERROR_MARKER_UNSUPPORTED_VIDEO,

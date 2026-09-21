@@ -35,6 +35,7 @@ public class VotClient {
     public static final String ERROR_MARKER_PROTOCOL_SESSION    = "vot:protocol_session_required";
     public static final String ERROR_MARKER_RATE_LIMITED        = "vot:rate_limited";
     public static final String ERROR_MARKER_SERVER_UNAVAILABLE  = "vot:server_unavailable";
+    public static final String ERROR_MARKER_ACCESS_DENIED       = "vot:access_denied";
     public static final String ERROR_MARKER_TIMEOUT             = "vot:timeout";
     public static final String ERROR_MARKER_NETWORK             = "vot:network_error";
     public static final String ERROR_MARKER_UNSUPPORTED_VIDEO   = "vot:unsupported_video";
@@ -102,8 +103,8 @@ public class VotClient {
 
     private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
                                  boolean allowAudioFallback, boolean allowLivelyFallback) {
+        boolean useLively = allowLivelyFallback && mVotData.isLivelyVoiceEnabled();
         try {
-            boolean useLively = allowLivelyFallback && mVotData.isLivelyVoiceEnabled();
             Log.d(TAG, "VOT request started: %s (duration=%ds, useLively=%b, authState=%s)",
                     youtubeUrl, durationSec, useLively, mVotData.getAuthState());
             VotTranslationResponse response = requestTranslation(youtubeUrl, durationSec, false, useLively);
@@ -161,11 +162,17 @@ public class VotClient {
                 if (e instanceof VotHttpException) {
                     int code = ((VotHttpException) e).getStatusCode();
                     if (code == 401) {
-                        // Бэкенд отклонил OAuth-токен — маркируем как REJECTED, не удаляем
-                        String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
-                        mVotData.markOAuthRejected(currentToken);
-                        Log.w(TAG, "VOT: HTTP 401 — OAuth token rejected by backend (authState→REJECTED)");
-                        emitter.onNext(VotProgress.failed(ERROR_MARKER_AUTH_REJECTED));
+                        VotErrorCategory category = VotErrorCategory.fromHttpCode(code, useLively);
+                        if (category == VotErrorCategory.AUTH_REJECTED) {
+                            // Only Lively sends OAuth credentials. Standard must not alter Yandex ID state.
+                            String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
+                            mVotData.markOAuthRejected(currentToken);
+                            Log.w(TAG, "VOT: HTTP 401 for Lively — OAuth token rejected (authState→REJECTED)");
+                            emitter.onNext(VotProgress.failed(ERROR_MARKER_AUTH_REJECTED));
+                        } else {
+                            Log.w(TAG, "VOT: HTTP 401 for Standard — request denied without OAuth context");
+                            emitter.onNext(VotProgress.failed(ERROR_MARKER_ACCESS_DENIED));
+                        }
                         emitter.onComplete();
                         return;
                     }
@@ -186,7 +193,7 @@ public class VotClient {
                     if (code == 403) {
                         resetSession();
                         Log.w(TAG, "VOT: HTTP 403 — session/access denied, resetting session (not OAuth)");
-                        emitter.onNext(VotProgress.failed(ERROR_MARKER_SERVER_UNAVAILABLE));
+                        emitter.onNext(VotProgress.failed(ERROR_MARKER_ACCESS_DENIED));
                         emitter.onComplete();
                         return;
                     }
@@ -434,6 +441,7 @@ public class VotClient {
             case PROTOCOL_SESSION_REQUIRED: return ERROR_MARKER_PROTOCOL_SESSION;
             case RATE_LIMITED:          return ERROR_MARKER_RATE_LIMITED;
             case SERVER_UNAVAILABLE:    return ERROR_MARKER_SERVER_UNAVAILABLE;
+            case ACCESS_DENIED:         return ERROR_MARKER_ACCESS_DENIED;
             case TIMEOUT:               return ERROR_MARKER_TIMEOUT;
             case UNSUPPORTED_VIDEO:     return ERROR_MARKER_UNSUPPORTED_VIDEO;
             default:                    return ERROR_MARKER_NETWORK;

@@ -827,6 +827,7 @@
     <string name="vot_error_rate_limited" translatable="false"></string>
     <string name="vot_error_unsupported_video" translatable="false"></string>
     <string name="vot_error_auth_rejected" translatable="false"></string>
+    <string name="vot_error_access_denied" translatable="false"></string>
     <string name="vot_error_playback" translatable="false"></string>
     <string name="vot_unknown_lang_manual" translatable="false"></string>
     <string name="vot_progress_preparing" translatable="false"></string>
