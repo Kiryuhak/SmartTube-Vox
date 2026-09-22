@@ -154,12 +154,6 @@ smarttube_vox.apk   (актуальный бинарник)
 
 ## 🖼 Скриншоты
 
-<!--
-| Главный экран | Авторизация Яндекс | VOT |
-|---|---|---|
-| ![](docs/screenshots/home.png) | ![](docs/screenshots/oauth.png) | ![](docs/screenshots/vot.png) |
--->
-
 *Скриншоты интерфейса будут добавлены позже.*
 
 ---
