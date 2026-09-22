@@ -73,14 +73,29 @@ public class VotClient {
     }
 
     public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec) {
-        return Observable.<VotProgress>create(emitter -> pollTranslation(emitter, youtubeUrl, durationSec, true, true))
+        return observeTranslation(youtubeUrl, durationSec, false);
+    }
+
+    public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec, boolean subsequent) {
+        return Observable.<VotProgress>create(emitter -> pollTranslation(emitter, youtubeUrl, durationSec, true, true, subsequent))
                 .subscribeOn(Schedulers.io());
     }
 
     private static final int MAX_POLL_ATTEMPTS = 120;
-    private static final int MAX_CONSECUTIVE_NETWORK_RETRIES = 3;
+    private static final int MAX_CONSECUTIVE_TRANSIENT_RETRIES = 3;
     private static final int DEFAULT_POLL_INTERVAL_SEC = 20;
     private static final int MAX_WAIT_INTERVAL_SEC = 45;
+
+    public static boolean isTransientHttpCode(int code) {
+        return code == 429 || code == 500 || code == 502 || code == 503 || code == 504;
+    }
+
+    public static boolean isTransientException(IOException e) {
+        if (e instanceof VotHttpException) {
+            return isTransientHttpCode(((VotHttpException) e).getStatusCode());
+        }
+        return true;
+    }
 
     private int calculateWaitSec(int remainingTimeSec, int attempt) {
         if (remainingTimeSec <= 0) {
@@ -103,15 +118,43 @@ public class VotClient {
 
     private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
                                  boolean allowAudioFallback, boolean allowLivelyFallback) {
+        pollTranslation(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, false);
+    }
+
+    private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
+                                 boolean allowAudioFallback, boolean allowLivelyFallback, boolean subsequent) {
         boolean useLively = allowLivelyFallback && mVotData.isLivelyVoiceEnabled();
         // Bind the credential to this request cycle. A late response sent with an old token must
         // never confirm or reject a token that the user saved while the request was in flight.
         String requestOAuthToken = useLively ? mVotData.getOAuthToken() : null;
         try {
-            Log.d(TAG, "VOT request started: duration=%ds, useLively=%b, authState=%s",
-                    durationSec, useLively, mVotData.getAuthState());
-            VotTranslationResponse response = requestTranslation(
-                    youtubeUrl, durationSec, false, useLively, requestOAuthToken);
+            Log.d(TAG, "VOT request started: duration=%ds, useLively=%b, authState=%s, subsequent=%b",
+                    durationSec, useLively, mVotData.getAuthState(), subsequent);
+
+            VotTranslationResponse response = null;
+            int initTransientErrors = 0;
+            while (!emitter.isDisposed()) {
+                try {
+                    response = requestTranslation(
+                            youtubeUrl, durationSec, subsequent || (initTransientErrors > 0), useLively, requestOAuthToken);
+                    break;
+                } catch (IOException e) {
+                    if (isTransientException(e) && initTransientErrors < MAX_CONSECUTIVE_TRANSIENT_RETRIES && !emitter.isDisposed()) {
+                        initTransientErrors++;
+                        int retryAfter = (e instanceof VotHttpException) ? ((VotHttpException) e).getRetryAfterSec() : -1;
+                        int waitDelay = retryAfter > 0 ? Math.min(Math.max(3, retryAfter), 30) : 5;
+                        Log.w(TAG, "Transient error on initial VOT request (retry %d/%d in %ds): %s",
+                                initTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, waitDelay, e.getMessage());
+                        sleep(waitDelay, emitter);
+                        continue;
+                    }
+                    throw e;
+                }
+            }
+            if (response == null || emitter.isDisposed()) {
+                return;
+            }
+
             Log.d(TAG, "Initial translation response: status=%d, remainingTime=%ds",
                     response.status, response.remainingTimeSec);
             if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
@@ -120,7 +163,7 @@ public class VotClient {
             }
 
             int waitSec = calculateWaitSec(response.remainingTimeSec, 0);
-            int consecutiveNetworkErrors = 0;
+            int consecutiveTransientErrors = 0;
 
             for (int i = 0; i < MAX_POLL_ATTEMPTS && !emitter.isDisposed(); i++) {
                 Log.d(TAG, "VOT poll scheduled: attempt=%d/%d, interval=%ds (reported ETA=%ds)",
@@ -134,17 +177,17 @@ public class VotClient {
                 try {
                     response = requestTranslation(
                             youtubeUrl, durationSec, true, useLively, requestOAuthToken);
-                    consecutiveNetworkErrors = 0;
+                    consecutiveTransientErrors = 0;
                 } catch (IOException e) {
-                    if (e instanceof VotHttpException) {
-                        throw e;
-                    }
-                    consecutiveNetworkErrors++;
-                    Log.w(TAG, "Network error during VOT poll attempt %d (retry %d/%d)",
-                            i + 1, consecutiveNetworkErrors, MAX_CONSECUTIVE_NETWORK_RETRIES);
-                    if (consecutiveNetworkErrors <= MAX_CONSECUTIVE_NETWORK_RETRIES && !emitter.isDisposed()) {
-                        waitSec = 5;
-                        continue;
+                    if (isTransientException(e)) {
+                        consecutiveTransientErrors++;
+                        int retryAfter = (e instanceof VotHttpException) ? ((VotHttpException) e).getRetryAfterSec() : -1;
+                        Log.w(TAG, "Transient error during VOT poll attempt %d (retry %d/%d, retryAfter=%ds): %s",
+                                i + 1, consecutiveTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, retryAfter, e.getMessage());
+                        if (consecutiveTransientErrors <= MAX_CONSECUTIVE_TRANSIENT_RETRIES && !emitter.isDisposed()) {
+                            waitSec = retryAfter > 0 ? Math.min(Math.max(3, retryAfter), 30) : 5;
+                            continue;
+                        }
                     }
                     throw e;
                 }

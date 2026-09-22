@@ -19,11 +19,15 @@ public class VotHttp {
 
     private final OkHttpClient mClient;
 
+    public static final int CONNECT_TIMEOUT_SEC = 15;
+    public static final int READ_TIMEOUT_SEC = 20;
+    public static final int WRITE_TIMEOUT_SEC = 20;
+
     public VotHttp() {
         this(new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(120, TimeUnit.SECONDS)
-                .writeTimeout(120, TimeUnit.SECONDS)
+                .connectTimeout(CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .writeTimeout(WRITE_TIMEOUT_SEC, TimeUnit.SECONDS)
                 .build());
     }
 
