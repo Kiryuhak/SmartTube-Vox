@@ -1,8 +1,8 @@
 # Исследование и архитектурный план: Авторизация Яндекс ID (Device Code Flow) в SmartTube VOX
 
-> **Статус документа:** Исследовательский отчёт и архитектурный план (Batch #23)  
-> **Базовый коммит:** `177b6204` (`fix/yandex-auth-diagnostics`)  
-> **Изменения в коде:** Отсутствуют (Source changes: NONE)  
+> **Статус документа:** Исследовательский отчёт и архитектурный план (Batch #23)<br>
+> **Базовый коммит:** `177b6204` (`fix/yandex-auth-diagnostics`)<br>
+> **Изменения в коде:** Отсутствуют (Source changes: NONE)<br>
 > **Принцип:** Никаких недокументированных допущений; отделение подтверждённых фактов от гипотез.
 
 ---
@@ -52,7 +52,7 @@ sequenceDiagram
     TV->>YandexCode: POST /device/code (client_id, scope=login:info)
     YandexCode-->>TV: 200 OK (device_code, user_code, ya.ru/device, expires_in=300, interval=5)
     TV->>User: Показ диалога: user_code + ya.ru/device + таймер
-    
+
     par Пользователь на смартфоне
         User->>YandexCode: Открывает ya.ru/device, вводит user_code, подтверждает вход
     and TV Polling цикл
