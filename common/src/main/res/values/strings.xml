@@ -840,6 +840,11 @@
     <string name="vot_progress_ready" translatable="false"></string>
     <string name="vot_progress_error" translatable="false"></string>
     <string name="vot_progress_timeout" translatable="false"></string>
+    <string name="vot_progress_waiting_title" translatable="false"></string>
+    <string name="vot_progress_subtitle_default" translatable="false"></string>
+    <string name="vot_progress_subtitle_ready" translatable="false"></string>
+    <string name="vot_progress_retry_title" translatable="false"></string>
+    <string name="vot_progress_retry_countdown" translatable="false"></string>
     <!-- Device Code Flow placeholders — overridden in stvot flavor -->
     <string name="vot_device_auth_title" translatable="false"></string>
     <string name="vot_device_auth_step1" translatable="false"></string>

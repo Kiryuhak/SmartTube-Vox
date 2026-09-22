@@ -64,7 +64,15 @@ public class VotHttp {
 
         try (Response response = mClient.newCall(builder.build()).execute()) {
             if (!response.isSuccessful()) {
-                throw new VotHttpException(response.code(), response.message());
+                String retryAfterHeader = response.header("Retry-After");
+                int retryAfterSec = -1;
+                if (retryAfterHeader != null) {
+                    try {
+                        retryAfterSec = Integer.parseInt(retryAfterHeader.trim());
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+                throw new VotHttpException(response.code(), response.message(), retryAfterSec);
             }
             if (response.body() == null) {
                 return null;

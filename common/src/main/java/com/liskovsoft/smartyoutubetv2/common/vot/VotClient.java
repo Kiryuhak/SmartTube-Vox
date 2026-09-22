@@ -183,15 +183,16 @@ public class VotClient {
                         emitter.onComplete();
                         return;
                     }
+                    int retryAfter = ((VotHttpException) e).getRetryAfterSec();
                     if (code == 429) {
-                        Log.w(TAG, "VOT: HTTP 429 — rate limited");
-                        emitter.onNext(VotProgress.failed(ERROR_MARKER_RATE_LIMITED));
+                        Log.w(TAG, "VOT: HTTP 429 — rate limited, retryAfter=%ds", retryAfter);
+                        emitter.onNext(VotProgress.failed(ERROR_MARKER_RATE_LIMITED, retryAfter));
                         emitter.onComplete();
                         return;
                     }
                     if (code == 500 || code == 502 || code == 503 || code == 504) {
-                        Log.w(TAG, "VOT: HTTP %d — server unavailable", code);
-                        emitter.onNext(VotProgress.failed(ERROR_MARKER_SERVER_UNAVAILABLE));
+                        Log.w(TAG, "VOT: HTTP %d — server unavailable, retryAfter=%ds", code, retryAfter);
+                        emitter.onNext(VotProgress.failed(ERROR_MARKER_SERVER_UNAVAILABLE, retryAfter));
                         emitter.onComplete();
                         return;
                     }

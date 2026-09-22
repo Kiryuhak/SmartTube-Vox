@@ -56,6 +56,8 @@ public class VoiceTranslateController extends BasePlayerController {
     private static final long MAX_TOTAL_WAIT_MS = 25 * 60 * 1000L;
     private static final long PENDING_HEARTBEAT_TIMEOUT_MS = 90 * 1000L;
     private static final long PROGRESS_TICK_INTERVAL_MS = 1000L;
+    public static final int MAX_TRANSLATION_RETRIES = 3;
+    private static final int[] RETRY_BACKOFF_SEC = {5, 10, 15};
 
     public enum TrackSwitchState {
         IDLE,
@@ -89,6 +91,8 @@ public class VoiceTranslateController extends BasePlayerController {
     private String mPendingVideoUrl;
     private String mCurrentVideoId;
     private int mAutoTranslateRetryCount;
+    private int mTranslationRetryCount;
+    private int mRetrySecondsRemaining;
     private int mTranslationSessionId;
     private long mLastSyncSeekTimestamp;
 
@@ -130,10 +134,42 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     };
 
+    private final Runnable mRetryCountdownRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mState != STATE_PENDING || !mUserArmed) {
+                return;
+            }
+            mRetrySecondsRemaining--;
+            if (mRetrySecondsRemaining > 0) {
+                if (progressOverlay() != null) {
+                    progressOverlay().showRetryWait(getActivity(), mTranslationRetryCount, MAX_TRANSLATION_RETRIES, mRetrySecondsRemaining);
+                }
+                Utils.postDelayed(mRetryCountdownRunnable, 1000L);
+            } else {
+                executeTranslationRetry();
+            }
+        }
+    };
+
+    private void executeTranslationRetry() {
+        if (mState != STATE_PENDING || !mUserArmed) {
+            return;
+        }
+        Log.i(TAG, "VOT executing retry %d/%d for video=%s", mTranslationRetryCount, MAX_TRANSLATION_RETRIES, mCurrentVideoId);
+        if (progressOverlay() != null) {
+            progressOverlay().showPreparing(getActivity());
+        }
+        startYandexTranslation(false);
+    }
+
     private final Runnable mProgressTickRunnable = new Runnable() {
         @Override
         public void run() {
             if (mState != STATE_PENDING) {
+                return;
+            }
+            if (mRetrySecondsRemaining > 0) {
                 return;
             }
             long now = SystemClock.elapsedRealtime();
@@ -200,9 +236,12 @@ public class VoiceTranslateController extends BasePlayerController {
         resetTrackSwitch();
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
+        Utils.removeCallbacks(mRetryCountdownRunnable);
         Utils.removeCallbacks(mSyncRunnable);
         mProgressTimer.clear();
         mAutoTranslateRetryCount = 0;
+        mTranslationRetryCount = 0;
+        mRetrySecondsRemaining = 0;
         cancelTranslationJob();
         releaseTranslationPlayer();
         restoreMainVolume();
@@ -588,6 +627,10 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void startYandexTranslation() {
+        startYandexTranslation(true);
+    }
+
+    private void startYandexTranslation(boolean resetRetryCount) {
         if (getPlayer() == null || getPlayer().getVideo() == null) {
             MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
             return;
@@ -615,6 +658,11 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         cancelTranslationJob();
+        if (resetRetryCount) {
+            mTranslationRetryCount = 0;
+            mRetrySecondsRemaining = 0;
+            Utils.removeCallbacks(mRetryCountdownRunnable);
+        }
         final int requestSessionId = ++mTranslationSessionId;
         mPendingToastShown = false;
         mPendingVideoUrl = videoUrl;
@@ -628,7 +676,8 @@ public class VoiceTranslateController extends BasePlayerController {
 
         long durationSec = Math.max(1, getPlayer().getDurationMs() / 1000);
         final boolean requestUsesOAuth = votData().isLivelyVoiceEnabled();
-        Log.i(TAG, "VOT request started: duration=" + durationSec + "s, userArmed=" + mUserArmed);
+        Log.i(TAG, "VOT request started: duration=" + durationSec + "s, userArmed=" + mUserArmed
+                + ", retryCount=" + mTranslationRetryCount);
         mTranslationDisposable = votClient().observeTranslation(videoUrl, durationSec)
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
@@ -722,22 +771,17 @@ public class VoiceTranslateController extends BasePlayerController {
             case VotProgress.TYPE_READY:
                 Log.d(TAG, "VOT translation ready (audio URL received=%b)", progress.audioUrl != null);
                 Utils.removeCallbacks(mProgressTickRunnable);
+                Utils.removeCallbacks(mRetryCountdownRunnable);
+                mTranslationRetryCount = 0;
+                mRetrySecondsRemaining = 0;
                 if (progress.audioUrl != null) {
                     prepareAndStartTranslationAudio(progress.audioUrl);
                 }
                 break;
             case VotProgress.TYPE_FAILED:
                 Log.e(TAG, "VOT translation failed: %s", progress.message);
-                Utils.removeCallbacks(mProgressTickRunnable);
                 VotErrorCategory category = VotErrorCategory.fromMarker(progress.message);
-                if (mUserArmed && progressOverlay() != null) {
-                    if (category == VotErrorCategory.TIMEOUT) {
-                        progressOverlay().showTimeout(getActivity());
-                    } else {
-                        progressOverlay().showError(getActivity());
-                    }
-                }
-                handleTranslationError(category);
+                onTranslationFailed(category, progress.retryAfterSec);
                 break;
         }
     }
@@ -749,22 +793,58 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
         Log.e(TAG, "VOT error callback");
-        Utils.removeCallbacks(mProgressTickRunnable);
         VotErrorCategory errCategory;
+        int retryAfterSec = -1;
         if (e instanceof VotHttpException) {
+            VotHttpException httpEx = (VotHttpException) e;
             errCategory = VotErrorCategory.fromHttpCode(
-                    ((VotHttpException) e).getStatusCode(), requestUsesOAuth);
+                    httpEx.getStatusCode(), requestUsesOAuth);
+            retryAfterSec = httpEx.getRetryAfterSec();
         } else {
             errCategory = VotErrorCategory.NETWORK_ERROR;
         }
+        onTranslationFailed(errCategory, retryAfterSec);
+    }
+
+    private void onTranslationFailed(VotErrorCategory category, int retryAfterSec) {
+        Utils.removeCallbacks(mProgressTickRunnable);
+        boolean isRetryable = category.isTransient() && mUserArmed;
+
+        if (isRetryable && mTranslationRetryCount < MAX_TRANSLATION_RETRIES) {
+            mTranslationRetryCount++;
+            int delaySec = retryAfterSec > 0
+                    ? Math.min(Math.max(3, retryAfterSec), 30)
+                    : RETRY_BACKOFF_SEC[Math.min(mTranslationRetryCount - 1, RETRY_BACKOFF_SEC.length - 1)];
+
+            Log.w(TAG, "VOT transient error (%s), scheduling retry %d/%d in %ds (video=%s)",
+                    category, mTranslationRetryCount, MAX_TRANSLATION_RETRIES, delaySec, mCurrentVideoId);
+
+            cancelTranslationJob();
+            mRetrySecondsRemaining = delaySec;
+            if (mUserArmed && progressOverlay() != null) {
+                progressOverlay().showRetryWait(getActivity(), mTranslationRetryCount, MAX_TRANSLATION_RETRIES, mRetrySecondsRemaining);
+            }
+            setState(STATE_PENDING);
+
+            Utils.removeCallbacks(mRetryCountdownRunnable);
+            Utils.postDelayed(mRetryCountdownRunnable, 1000L);
+            return;
+        }
+
+        Log.e(TAG, "VOT non-retryable error or retries exhausted (%s, attempt=%d/%d)",
+                category, mTranslationRetryCount, MAX_TRANSLATION_RETRIES);
+        mTranslationRetryCount = 0;
+        mRetrySecondsRemaining = 0;
+        Utils.removeCallbacks(mRetryCountdownRunnable);
+
         if (mUserArmed && progressOverlay() != null) {
-            if (errCategory == VotErrorCategory.TIMEOUT) {
+            if (category == VotErrorCategory.TIMEOUT) {
                 progressOverlay().showTimeout(getActivity());
             } else {
-                progressOverlay().showError(getActivity());
+                progressOverlay().showError(getActivity(), getContext() != null ? getContext().getString(category.getMessageResId()) : null);
             }
         }
-        handleTranslationError(errCategory);
+        handleTranslationError(category);
     }
 
     private boolean isCurrentTranslationRequest(int requestSessionId, String requestVideoUrl) {
@@ -928,6 +1008,8 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void cancelTranslationJob() {
         Utils.removeCallbacks(mProgressTickRunnable);
+        Utils.removeCallbacks(mRetryCountdownRunnable);
+        mRetrySecondsRemaining = 0;
         mProgressTimer.clear();
         if (mTranslationDisposable != null && !mTranslationDisposable.isDisposed()) {
             mTranslationDisposable.dispose();
@@ -955,8 +1037,11 @@ public class VoiceTranslateController extends BasePlayerController {
         mTranslationSessionId++;
         mUserArmed = false;
         mArmed = false;
+        mTranslationRetryCount = 0;
+        mRetrySecondsRemaining = 0;
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
+        Utils.removeCallbacks(mRetryCountdownRunnable);
         Utils.removeCallbacks(mResetErrorButtonRunnable);
         Utils.removeCallbacks(mSyncRunnable);
         cancelTranslationJob();
@@ -1094,5 +1179,17 @@ public class VoiceTranslateController extends BasePlayerController {
         if (index == BTN_PENDING) {
             getPlayer().updateVoiceTranslatePendingEta(mPendingEtaSec);
         }
+    }
+
+    public int getTranslationRetryCount() {
+        return mTranslationRetryCount;
+    }
+
+    public int getRetrySecondsRemaining() {
+        return mRetrySecondsRemaining;
+    }
+
+    public VotProgressOverlay getProgressOverlay() {
+        return progressOverlay();
     }
 }

@@ -30,15 +30,18 @@ public class VotProgressOverlay {
     public static final int STATE_READY = 4;
     public static final int STATE_ERROR = 5;
     public static final int STATE_TIMEOUT = 6;
+    public static final int STATE_RETRY = 7;
 
-    private static final long DISMISS_DELAY_READY_MS = 2500L;
+    private static final long DISMISS_DELAY_READY_MS = 2000L;
     private static final long DISMISS_DELAY_ERROR_MS = 3500L;
 
     private final Context mContext;
     private View mOverlayView;
     private ProgressBar mSpinner;
     private ImageView mIcon;
-    private TextView mText;
+    private TextView mTitle;
+    private TextView mSubtitle;
+    private TextView mTimer;
     private int mCurrentState = STATE_IDLE;
     private ViewGroup mParentView;
 
@@ -61,7 +64,9 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_PREPARING;
         showSpinnerMode();
-        setText(mContext.getString(R.string.vot_progress_preparing));
+        setTitle(getStringSafe(R.string.vot_progress_preparing));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        hideTimer();
         fadeIn();
     }
 
@@ -70,7 +75,9 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_PREPARING;
         showSpinnerMode();
-        setText(mContext.getString(R.string.vot_progress_starting));
+        setTitle(getStringSafe(R.string.vot_progress_starting));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        hideTimer();
         fadeIn();
     }
 
@@ -78,8 +85,10 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_WAITING_WITH_ETA;
-        showTimerMode();
-        setText(timeRemainingFormatted);
+        showSpinnerMode();
+        setTitle(getStringSafe(R.string.vot_progress_waiting_title));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        setTimer("~ " + timeRemainingFormatted);
         fadeIn();
     }
 
@@ -87,8 +96,29 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_ETA_EXPIRED_STILL_WAITING;
-        showTimerMode();
-        setText("+" + timeElapsedFormatted);
+        showSpinnerMode();
+        setTitle(getStringSafe(R.string.vot_progress_waiting_title));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        setTimer("+" + timeElapsedFormatted);
+        fadeIn();
+    }
+
+    public void showRetryWait(@Nullable Activity activity, int attempt, int maxAttempts, int secondsRemaining) {
+        if (!ensureAttached(activity)) return;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        mCurrentState = STATE_RETRY;
+        showIconMode(R.drawable.ic_vot_retry);
+        String title = formatStringSafe(R.string.vot_progress_retry_title, attempt, maxAttempts);
+        if (title.isEmpty()) {
+            title = "Повторная попытка " + attempt + "/" + maxAttempts;
+        }
+        setTitle(title);
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        String timer = formatStringSafe(R.string.vot_progress_retry_countdown, secondsRemaining);
+        if (timer.isEmpty()) {
+            timer = "через " + secondsRemaining + " с";
+        }
+        setTimer(timer);
         fadeIn();
     }
 
@@ -97,17 +127,29 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_READY;
         showIconMode(R.drawable.ic_vot_ready);
-        setText(mContext.getString(R.string.vot_progress_ready));
+        setTitle(getStringSafe(R.string.vot_progress_ready));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_ready));
+        hideTimer();
         fadeIn();
         Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
     }
 
     public void showError(@Nullable Activity activity) {
+        showError(activity, null);
+    }
+
+    public void showError(@Nullable Activity activity, @Nullable String errorMessage) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_ERROR;
         showIconMode(R.drawable.ic_vot_error);
-        setText(mContext.getString(R.string.vot_progress_error));
+        if (errorMessage != null && !errorMessage.isEmpty()) {
+            setTitle(errorMessage);
+        } else {
+            setTitle(getStringSafe(R.string.vot_progress_error));
+        }
+        hideSubtitle();
+        hideTimer();
         fadeIn();
         Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_ERROR_MS);
     }
@@ -117,7 +159,9 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_TIMEOUT;
         showIconMode(R.drawable.ic_vot_timeout);
-        setText(mContext.getString(R.string.vot_progress_timeout));
+        setTitle(getStringSafe(R.string.vot_progress_timeout));
+        hideSubtitle();
+        hideTimer();
         fadeIn();
         Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_ERROR_MS);
     }
@@ -158,7 +202,9 @@ public class VotProgressOverlay {
         mParentView = null;
         mSpinner = null;
         mIcon = null;
-        mText = null;
+        mTitle = null;
+        mSubtitle = null;
+        mTimer = null;
     }
 
     private void showSpinnerMode() {
@@ -174,19 +220,45 @@ public class VotProgressOverlay {
         }
     }
 
-    private void showTimerMode() {
-        if (mSpinner != null) mSpinner.setVisibility(View.GONE);
-        if (mIcon != null) mIcon.setVisibility(View.GONE);
+    private void setTitle(String text) {
+        if (mTitle != null) {
+            mTitle.setText(text);
+        }
     }
 
-    private void setText(String text) {
-        if (mText != null) {
-            mText.setText(text);
+    private void setSubtitle(String text) {
+        if (mSubtitle != null) {
+            if (text != null && !text.isEmpty()) {
+                mSubtitle.setText(text);
+                mSubtitle.setVisibility(View.VISIBLE);
+            } else {
+                mSubtitle.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private void hideSubtitle() {
+        if (mSubtitle != null) {
+            mSubtitle.setVisibility(View.GONE);
+        }
+    }
+
+    private void setTimer(String text) {
+        if (mTimer != null) {
+            mTimer.setText(text);
+            mTimer.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void hideTimer() {
+        if (mTimer != null) {
+            mTimer.setVisibility(View.GONE);
         }
     }
 
     private void fadeIn() {
         if (mOverlayView != null) {
+            mOverlayView.bringToFront();
             mOverlayView.animate().cancel();
             if (mOverlayView.getVisibility() != View.VISIBLE) {
                 mOverlayView.setAlpha(0f);
@@ -198,6 +270,7 @@ public class VotProgressOverlay {
 
     private boolean ensureAttached(@Nullable Activity activity) {
         if (mOverlayView != null && mOverlayView.getParent() != null) {
+            mOverlayView.bringToFront();
             return true;
         }
         if (activity == null || activity.isFinishing()) {
@@ -213,40 +286,44 @@ public class VotProgressOverlay {
         try {
             View existing = targetContainer.findViewById(R.id.vot_progress_root);
             if (existing != null) {
-                mOverlayView = existing;
-                mSpinner = mOverlayView.findViewById(R.id.vot_progress_spinner);
-                mIcon = mOverlayView.findViewById(R.id.vot_progress_icon);
-                mText = mOverlayView.findViewById(R.id.vot_progress_text);
+                bindViews(existing);
                 mParentView = targetContainer;
+                mOverlayView.bringToFront();
                 return true;
             }
 
             LayoutInflater inflater = LayoutInflater.from(mContext);
             mOverlayView = inflater.inflate(R.layout.vot_progress_overlay, targetContainer, false);
-            mSpinner = mOverlayView.findViewById(R.id.vot_progress_spinner);
-            mIcon = mOverlayView.findViewById(R.id.vot_progress_icon);
-            mText = mOverlayView.findViewById(R.id.vot_progress_text);
+            bindViews(mOverlayView);
 
             mOverlayView.setFocusable(false);
             mOverlayView.setFocusableInTouchMode(false);
             mOverlayView.setClickable(false);
 
-            if (targetContainer instanceof LinearLayout) {
+            if (targetContainer instanceof FrameLayout) {
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+                lp.gravity = Gravity.BOTTOM | Gravity.END;
+                lp.rightMargin = dpToPx(48);
+                lp.bottomMargin = dpToPx(88);
+                mOverlayView.setLayoutParams(lp);
+            } else if (targetContainer instanceof LinearLayout) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 );
                 lp.gravity = Gravity.END;
-                lp.topMargin = dpToPx(6);
+                lp.bottomMargin = dpToPx(88);
                 mOverlayView.setLayoutParams(lp);
             } else {
-                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.MarginLayoutParams lp = new ViewGroup.MarginLayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 );
-                lp.gravity = Gravity.TOP | Gravity.END;
-                lp.rightMargin = dpToPx(14);
-                lp.topMargin = dpToPx(68);
+                lp.rightMargin = dpToPx(48);
+                lp.bottomMargin = dpToPx(88);
                 mOverlayView.setLayoutParams(lp);
             }
 
@@ -254,6 +331,7 @@ public class VotProgressOverlay {
             mOverlayView.setAlpha(0f);
 
             targetContainer.addView(mOverlayView);
+            mOverlayView.bringToFront();
             mParentView = targetContainer;
             return true;
         } catch (Exception e) {
@@ -262,16 +340,18 @@ public class VotProgressOverlay {
         }
     }
 
+    private void bindViews(View root) {
+        mOverlayView = root;
+        mSpinner = root.findViewById(R.id.vot_progress_spinner);
+        mIcon = root.findViewById(R.id.vot_progress_icon);
+        mTitle = root.findViewById(R.id.vot_progress_text);
+        mSubtitle = root.findViewById(R.id.vot_progress_subtitle);
+        mTimer = root.findViewById(R.id.vot_progress_timer);
+    }
+
     private ViewGroup findTargetContainer(@Nullable Activity activity) {
         if (activity == null) {
             return null;
-        }
-        int wrapperId = activity.getResources().getIdentifier("player_overlay_wrapper", "id", activity.getPackageName());
-        if (wrapperId != 0) {
-            View wrapper = activity.findViewById(wrapperId);
-            if (wrapper instanceof ViewGroup) {
-                return (ViewGroup) wrapper;
-            }
         }
         int rootId = activity.getResources().getIdentifier("playback_fragment_root", "id", activity.getPackageName());
         if (rootId != 0) {
@@ -291,11 +371,55 @@ public class VotProgressOverlay {
         return null;
     }
 
+    private String getStringSafe(int resId) {
+        if (mContext == null || resId == 0) return "";
+        try {
+            return mContext.getString(resId);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String formatStringSafe(int resId, Object... args) {
+        if (mContext == null || resId == 0) return "";
+        try {
+            return mContext.getString(resId, args);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     private int dpToPx(float dp) {
         return (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP,
                 dp,
                 mContext.getResources().getDisplayMetrics()
         );
+    }
+
+    // --- Helpers for regression tests ---
+
+    public String getTitleText() {
+        return mTitle != null && mTitle.getText() != null ? mTitle.getText().toString() : "";
+    }
+
+    public String getSubtitleText() {
+        return mSubtitle != null && mSubtitle.getText() != null ? mSubtitle.getText().toString() : "";
+    }
+
+    public String getTimerText() {
+        return mTimer != null && mTimer.getText() != null ? mTimer.getText().toString() : "";
+    }
+
+    public boolean isSpinnerVisible() {
+        return mSpinner != null && mSpinner.getVisibility() == View.VISIBLE;
+    }
+
+    public boolean isIconVisible() {
+        return mIcon != null && mIcon.getVisibility() == View.VISIBLE;
+    }
+
+    public boolean isTimerVisible() {
+        return mTimer != null && mTimer.getVisibility() == View.VISIBLE;
     }
 }

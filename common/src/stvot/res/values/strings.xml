@@ -63,11 +63,16 @@
     <!-- VOT Progress Indicator -->
     <string name="vot_progress_preparing">Preparing translation…</string>
     <string name="vot_progress_starting">Starting translation…</string>
-    <string name="vot_progress_waiting_eta">Translation: ~%s</string>
-    <string name="vot_progress_still_waiting">Translation is still processing… %s</string>
+    <string name="vot_progress_waiting_title">Preparing translation</string>
+    <string name="vot_progress_waiting_eta">~ %s</string>
+    <string name="vot_progress_still_waiting">+%s</string>
     <string name="vot_progress_ready">Translation ready</string>
     <string name="vot_progress_error">Failed to prepare translation</string>
     <string name="vot_progress_timeout">Translation was not prepared</string>
+    <string name="vot_progress_subtitle_default">Status remains until completion</string>
+    <string name="vot_progress_subtitle_ready">Available in settings</string>
+    <string name="vot_progress_retry_title">Retry attempt %1$d/%2$d</string>
+    <string name="vot_progress_retry_countdown">in %d s</string>
 
     <!-- Replace YouTube Dub with Yandex VOT -->
     <string name="vot_replace_dub_title">Replace dubbing with Yandex?</string>
