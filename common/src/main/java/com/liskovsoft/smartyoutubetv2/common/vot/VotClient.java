@@ -14,7 +14,9 @@ import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.schedulers.Schedulers;
 
+import java.io.EOFException;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -22,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLException;
 
 public class VotClient {
     private static final String TAG = VotClient.class.getSimpleName();
@@ -39,6 +42,7 @@ public class VotClient {
     public static final String ERROR_MARKER_TIMEOUT             = "vot:timeout";
     public static final String ERROR_MARKER_NETWORK             = "vot:network_error";
     public static final String ERROR_MARKER_UNSUPPORTED_VIDEO   = "vot:unsupported_video";
+    public static final String ERROR_MARKER_GENERIC             = "vot:generic_error";
 
     interface TranslationRequester {
         VotTranslationResponse request(String youtubeUrl, long durationSec, boolean subsequent,
@@ -167,7 +171,7 @@ public class VotClient {
                         int retryAfter = (e instanceof VotHttpException) ? ((VotHttpException) e).getRetryAfterSec() : -1;
                         int waitDelay = retryAfter > 0 ? Math.min(Math.max(3, retryAfter), 30) : 5;
                         logW("Transient error on initial VOT request (retry %d/%d in %ds): %s",
-                                initTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, waitDelay, e.getMessage());
+                                initTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, waitDelay, e.getClass().getSimpleName());
                         sleep(waitDelay, emitter);
                         continue;
                     }
@@ -206,7 +210,7 @@ public class VotClient {
                         consecutiveTransientErrors++;
                         int retryAfter = (e instanceof VotHttpException) ? ((VotHttpException) e).getRetryAfterSec() : -1;
                         logW("Transient error during VOT poll attempt %d (retry %d/%d, retryAfter=%ds): %s",
-                                i + 1, consecutiveTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, retryAfter, e.getMessage());
+                                i + 1, consecutiveTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, retryAfter, e.getClass().getSimpleName());
                         if (consecutiveTransientErrors <= MAX_CONSECUTIVE_TRANSIENT_RETRIES && !emitter.isDisposed()) {
                             waitSec = retryAfter > 0 ? Math.min(Math.max(3, retryAfter), 30) : 5;
                             continue;
@@ -276,6 +280,10 @@ public class VotClient {
                         emitter.onComplete();
                         return;
                     }
+                    logW("VOT: HTTP %d — unhandled HTTP status, emitting generic error", code);
+                    emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
+                    emitter.onComplete();
+                    return;
                 }
                 // Сетевая ошибка (SocketException, UnknownHostException и т.п.)
                 VotErrorCategory netCategory = classifyNetworkException(e);
@@ -283,9 +291,9 @@ public class VotClient {
                 emitter.onComplete();
             }
         } catch (VotException e) {
-            logE("VOT error");
+            logE("VOT error: %s", e.getClass().getSimpleName());
             if (!emitter.isDisposed()) {
-                emitter.onNext(VotProgress.failed(ERROR_MARKER_NETWORK));
+                emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
                 emitter.onComplete();
             }
         }
@@ -384,7 +392,7 @@ public class VotClient {
                 emitter.onComplete();
                 return false;
             }
-            emitter.onNext(VotProgress.failed(ERROR_MARKER_NETWORK));
+            emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
             emitter.onComplete();
             return false;
         }
@@ -394,7 +402,7 @@ public class VotClient {
             return true;
         }
 
-        emitter.onNext(VotProgress.failed(ERROR_MARKER_NETWORK));
+        emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
         emitter.onComplete();
         return false;
     }
@@ -538,30 +546,34 @@ public class VotClient {
     }
 
     /** Классифицирует IOException не-HTTP природы (сетевые сбои). */
-    private static VotErrorCategory classifyNetworkException(IOException e) {
-        if (e instanceof SocketTimeoutException) {
-            return VotErrorCategory.NETWORK_ERROR;
-        }
-        if (e instanceof UnknownHostException) {
-            return VotErrorCategory.NETWORK_ERROR;
-        }
-        if (e instanceof SocketException) {
+    static VotErrorCategory classifyNetworkException(IOException e) {
+        if (e instanceof SocketTimeoutException
+                || e instanceof ConnectException
+                || e instanceof UnknownHostException
+                || e instanceof SocketException
+                || e instanceof SSLException
+                || e instanceof EOFException) {
             return VotErrorCategory.NETWORK_ERROR;
         }
         return VotErrorCategory.NETWORK_ERROR;
     }
 
     /** Конвертирует категорию ошибки в строковый маркер для VotProgress. */
-    private static String categoryToMarker(VotErrorCategory category) {
+    static String categoryToMarker(VotErrorCategory category) {
+        if (category == null) {
+            return ERROR_MARKER_GENERIC;
+        }
         switch (category) {
-            case AUTH_REJECTED:         return ERROR_MARKER_AUTH_REJECTED;
+            case AUTH_REJECTED:             return ERROR_MARKER_AUTH_REJECTED;
             case PROTOCOL_SESSION_REQUIRED: return ERROR_MARKER_PROTOCOL_SESSION;
-            case RATE_LIMITED:          return ERROR_MARKER_RATE_LIMITED;
-            case SERVER_UNAVAILABLE:    return ERROR_MARKER_SERVER_UNAVAILABLE;
-            case ACCESS_DENIED:         return ERROR_MARKER_ACCESS_DENIED;
-            case TIMEOUT:               return ERROR_MARKER_TIMEOUT;
-            case UNSUPPORTED_VIDEO:     return ERROR_MARKER_UNSUPPORTED_VIDEO;
-            default:                    return ERROR_MARKER_NETWORK;
+            case RATE_LIMITED:              return ERROR_MARKER_RATE_LIMITED;
+            case SERVER_UNAVAILABLE:        return ERROR_MARKER_SERVER_UNAVAILABLE;
+            case ACCESS_DENIED:             return ERROR_MARKER_ACCESS_DENIED;
+            case TIMEOUT:                   return ERROR_MARKER_TIMEOUT;
+            case NETWORK_ERROR:             return ERROR_MARKER_NETWORK;
+            case UNSUPPORTED_VIDEO:         return ERROR_MARKER_UNSUPPORTED_VIDEO;
+            case GENERIC_ERROR:             return ERROR_MARKER_GENERIC;
+            default:                        return ERROR_MARKER_GENERIC;
         }
     }
 

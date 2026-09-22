@@ -115,6 +115,14 @@ public class VotErrorCategoryTest {
     }
 
     @Test
+    public void markerGeneric() {
+        assertEquals(VotErrorCategory.GENERIC_ERROR,
+                VotErrorCategory.fromMarker(VotClient.ERROR_MARKER_GENERIC));
+        assertEquals(VotClient.ERROR_MARKER_GENERIC,
+                VotClient.categoryToMarker(VotErrorCategory.GENERIC_ERROR));
+    }
+
+    @Test
     public void markerNullIsGeneric() {
         assertEquals(VotErrorCategory.GENERIC_ERROR, VotErrorCategory.fromMarker(null));
     }

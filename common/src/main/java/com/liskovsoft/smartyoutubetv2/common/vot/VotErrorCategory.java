@@ -104,6 +104,7 @@ public enum VotErrorCategory {
                 return NETWORK_ERROR;
             case VotClient.ERROR_MARKER_UNSUPPORTED_VIDEO:
                 return UNSUPPORTED_VIDEO;
+            case VotClient.ERROR_MARKER_GENERIC:
             default:
                 return GENERIC_ERROR;
         }
