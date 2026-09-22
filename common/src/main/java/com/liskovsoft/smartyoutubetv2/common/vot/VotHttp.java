@@ -66,7 +66,9 @@ public class VotHttp {
             }
         }
 
+        long startTimeMs = System.currentTimeMillis();
         try (Response response = mClient.newCall(builder.build()).execute()) {
+            long durationMs = System.currentTimeMillis() - startTimeMs;
             if (!response.isSuccessful()) {
                 String retryAfterHeader = response.header("Retry-After");
                 int retryAfterSec = -1;
@@ -76,12 +78,33 @@ public class VotHttp {
                     } catch (NumberFormatException ignored) {
                     }
                 }
+                logW("VOT HTTP non-success: path=%s, code=%d, duration=%dms, retryAfter=%d",
+                        path, response.code(), durationMs, retryAfterSec);
                 throw new VotHttpException(response.code(), response.message(), retryAfterSec);
             }
             if (response.body() == null) {
                 return null;
             }
             return response.body().bytes();
+        } catch (IOException e) {
+            long durationMs = System.currentTimeMillis() - startTimeMs;
+            logE("VOT HTTP transport failure: path=%s, exception=%s, duration=%dms",
+                    path, e.getClass().getSimpleName(), durationMs);
+            throw e;
+        }
+    }
+
+    private static void logW(String msg, Object... args) {
+        try {
+            com.liskovsoft.sharedutils.mylogger.Log.w("VotHttp", msg, args);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void logE(String msg, Object... args) {
+        try {
+            com.liskovsoft.sharedutils.mylogger.Log.e("VotHttp", msg, args);
+        } catch (Throwable ignored) {
         }
     }
 }

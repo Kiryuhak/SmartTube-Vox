@@ -230,7 +230,12 @@ public class VotClient {
                 emitter.onComplete();
             }
         } catch (IOException e) {
-            logE("VOT IO error");
+            if (e instanceof VotHttpException) {
+                VotHttpException he = (VotHttpException) e;
+                logE("VOT IO error: HTTP code=%d, retryAfter=%d", he.getStatusCode(), he.getRetryAfterSec());
+            } else {
+                logE("VOT IO error: transport exception=%s", e.getClass().getSimpleName());
+            }
             if (!emitter.isDisposed()) {
                 if (e instanceof VotHttpException) {
                     int code = ((VotHttpException) e).getStatusCode();
