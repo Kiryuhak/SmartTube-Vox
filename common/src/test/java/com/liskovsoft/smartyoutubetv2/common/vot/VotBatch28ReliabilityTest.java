@@ -6,6 +6,10 @@ import java.io.IOException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -24,7 +28,8 @@ import static org.junit.Assert.assertTrue;
  * 6. Истечение ETA (remainingSec == 0) не считается ошибкой и не считает перевод готовым (переход в showStillWaiting).
  * 7. Устранение дублирования уведомлений: если оверлей отобразил ошибку, Toast не показывается.
  * 8. Защита поколений запросов (Session Generation Guard) при смене видео или отмене.
- * 9. Полная симуляция сценария: PENDING 90s → 20s опрос → временный сбой 502 → повторный опрос subsequent=true → READY.
+ * 9. Source-level модель: PENDING 90s → 20s индикатора → временный сбой 502 → READY.
+ * 10. Реальный цикл VotClient с fake backend/scheduler: retry, firstRequest, отмена и исчерпание retry.
  */
 public class VotBatch28ReliabilityTest {
 
@@ -200,11 +205,11 @@ public class VotBatch28ReliabilityTest {
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 8. Симуляция сценария Batch #28
+    // 8. Source-level модель сценария Batch #28
     // ────────────────────────────────────────────────────────────────────────
 
     @Test
-    public void testBatch28SimulatedPollingSequence() {
+    public void testBatch28SourceLevelPollingSequence() {
         // 1. Старт перевода для видео
         VotProgressTimer timer = new VotProgressTimer();
         long now = 10_000L;
@@ -237,5 +242,168 @@ public class VotBatch28ReliabilityTest {
         assertTrue(readyResponse.isReady());
         assertNotNull(readyResponse.url);
         assertEquals("https://storage.yandex.net/translated_audio_track.mp3", readyResponse.url);
+    }
+
+    @Test
+    public void testRealVotClientResumesPollingAfter502WithoutDuplicatingFirstRequest() {
+        ScriptedRequester backend = new ScriptedRequester(
+                waitingResponse(90),
+                new VotHttpException(502, "Bad Gateway"),
+                waitingResponse(65),
+                readyResponse("https://fake.invalid/audio.mp3"));
+        RecordingWaitStrategy scheduler = new RecordingWaitStrategy();
+        VotClient client = new VotClient(null, backend, scheduler);
+
+        List<VotProgress> progress = client.observeTranslation(
+                "https://www.youtube.com/watch?v=TEST_VIDEO_1", 120).toList().blockingGet();
+
+        assertEquals(3, progress.size());
+        assertEquals(VotProgress.TYPE_WAITING, progress.get(0).type);
+        assertEquals(90, progress.get(0).remainingTimeSec);
+        assertEquals(VotProgress.TYPE_WAITING, progress.get(1).type);
+        assertEquals(VotProgress.TYPE_READY, progress.get(2).type);
+        assertEquals("https://fake.invalid/audio.mp3", progress.get(2).audioUrl);
+        assertEquals(Arrays.asList(false, true, true, true), backend.subsequentFlags);
+        assertEquals("Only the first call may create a server task", 1, backend.firstRequestCount());
+        assertEquals("Requests must remain sequential", 1, backend.maxConcurrentRequests.get());
+        assertEquals(Arrays.asList(45, 5, 20), scheduler.waitsSec);
+    }
+
+    @Test
+    public void testInitialTransientFailureSwitchesToFirstRequestFalse() {
+        ScriptedRequester backend = new ScriptedRequester(
+                new VotHttpException(502, "Bad Gateway"),
+                waitingResponse(90),
+                readyResponse("https://fake.invalid/audio.mp3"));
+        RecordingWaitStrategy scheduler = new RecordingWaitStrategy();
+        VotClient client = new VotClient(null, backend, scheduler);
+
+        List<VotProgress> progress = client.observeTranslation(
+                "https://www.youtube.com/watch?v=TEST_VIDEO_2", 120).toList().blockingGet();
+
+        assertEquals(VotProgress.TYPE_READY, progress.get(progress.size() - 1).type);
+        assertEquals(Arrays.asList(false, true, true), backend.subsequentFlags);
+        assertEquals(1, backend.firstRequestCount());
+        assertEquals(Arrays.asList(5, 45), scheduler.waitsSec);
+    }
+
+    @Test
+    public void testReadTimeoutDuringPollingIsRetriedInsteadOfFailingEarly() {
+        ScriptedRequester backend = new ScriptedRequester(
+                waitingResponse(90),
+                new SocketTimeoutException("read timed out"),
+                readyResponse("https://fake.invalid/audio.mp3"));
+        RecordingWaitStrategy scheduler = new RecordingWaitStrategy();
+        VotClient client = new VotClient(null, backend, scheduler);
+
+        List<VotProgress> progress = client.observeTranslation(
+                "https://www.youtube.com/watch?v=TEST_VIDEO_TIMEOUT", 120).toList().blockingGet();
+
+        assertEquals(2, progress.size());
+        assertEquals(VotProgress.TYPE_WAITING, progress.get(0).type);
+        assertEquals(VotProgress.TYPE_READY, progress.get(1).type);
+        assertEquals(Arrays.asList(false, true, true), backend.subsequentFlags);
+        assertEquals(Arrays.asList(45, 5), scheduler.waitsSec);
+    }
+
+    @Test
+    public void testRetryExhaustionEmitsSingleFailure() {
+        ScriptedRequester backend = new ScriptedRequester(
+                waitingResponse(90),
+                new VotHttpException(502, "Bad Gateway"),
+                new VotHttpException(502, "Bad Gateway"),
+                new VotHttpException(502, "Bad Gateway"),
+                new VotHttpException(502, "Bad Gateway"));
+        RecordingWaitStrategy scheduler = new RecordingWaitStrategy();
+        VotClient client = new VotClient(null, backend, scheduler);
+
+        List<VotProgress> progress = client.observeTranslation(
+                "https://www.youtube.com/watch?v=TEST_VIDEO_3", 120).toList().blockingGet();
+
+        assertEquals(2, progress.size());
+        assertEquals(VotProgress.TYPE_WAITING, progress.get(0).type);
+        assertEquals(VotProgress.TYPE_FAILED, progress.get(1).type);
+        assertEquals(VotClient.ERROR_MARKER_SERVER_UNAVAILABLE, progress.get(1).message);
+        assertEquals(1, backend.firstRequestCount());
+        assertEquals(1, backend.maxConcurrentRequests.get());
+    }
+
+    @Test
+    public void testDisposalAfterPendingCancelsFurtherPolling() {
+        ScriptedRequester backend = new ScriptedRequester(
+                waitingResponse(90),
+                readyResponse("https://fake.invalid/should-not-be-requested.mp3"));
+        RecordingWaitStrategy scheduler = new RecordingWaitStrategy();
+        VotClient client = new VotClient(null, backend, scheduler);
+
+        List<VotProgress> progress = client.observeTranslation(
+                "https://www.youtube.com/watch?v=TEST_VIDEO_4", 120).take(1).toList().blockingGet();
+
+        assertEquals(1, progress.size());
+        assertEquals(VotProgress.TYPE_WAITING, progress.get(0).type);
+        assertEquals(1, backend.subsequentFlags.size());
+        assertTrue("Cancellation must prevent the scheduled poll", scheduler.waitsSec.isEmpty());
+    }
+
+    private static VotTranslationResponse waitingResponse(int etaSec) {
+        VotTranslationResponse response = new VotTranslationResponse();
+        response.status = VotTranslationResponse.STATUS_WAITING;
+        response.remainingTimeSec = etaSec;
+        return response;
+    }
+
+    private static VotTranslationResponse readyResponse(String url) {
+        VotTranslationResponse response = new VotTranslationResponse();
+        response.status = VotTranslationResponse.STATUS_FINISHED;
+        response.url = url;
+        return response;
+    }
+
+    private static final class RecordingWaitStrategy implements VotClient.WaitStrategy {
+        final List<Integer> waitsSec = new ArrayList<>();
+
+        @Override
+        public void waitSeconds(int sec, io.reactivex.ObservableEmitter<?> emitter) {
+            waitsSec.add(sec);
+        }
+    }
+
+    private static final class ScriptedRequester implements VotClient.TranslationRequester {
+        final List<Boolean> subsequentFlags = new ArrayList<>();
+        final AtomicInteger concurrentRequests = new AtomicInteger();
+        final AtomicInteger maxConcurrentRequests = new AtomicInteger();
+        private final List<Object> results;
+        private int index;
+
+        ScriptedRequester(Object... results) {
+            this.results = Arrays.asList(results);
+        }
+
+        @Override
+        public VotTranslationResponse request(String youtubeUrl, long durationSec, boolean subsequent,
+                                              boolean useLively, String requestOAuthToken) throws IOException {
+            subsequentFlags.add(subsequent);
+            int active = concurrentRequests.incrementAndGet();
+            maxConcurrentRequests.set(Math.max(maxConcurrentRequests.get(), active));
+            try {
+                Object result = results.get(index++);
+                if (result instanceof IOException) {
+                    throw (IOException) result;
+                }
+                return (VotTranslationResponse) result;
+            } finally {
+                concurrentRequests.decrementAndGet();
+            }
+        }
+
+        int firstRequestCount() {
+            int count = 0;
+            for (boolean subsequent : subsequentFlags) {
+                if (!subsequent) {
+                    count++;
+                }
+            }
+            return count;
+        }
     }
 }
