@@ -9,6 +9,11 @@ on:
       tag:
         description: 'Тег для сборки релиза (например: v32.45-vot.1)'
         required: false
+      repair_existing_release:
+        description: 'Дозагрузить только отсутствующие assets в существующий Release без перезаписи'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -74,10 +79,12 @@ jobs:
           echo "Выбрана версия: $VERSION_NAME (versionCode: $EXPECTED_CODE, votPatch: $VOT_PATCH, baseCode: $BASE_CODE)"
 
       - name: Validate tag, release state and CHANGELOG
+        id: release_guard
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag_info.outputs.TAG }}
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
+          REPAIR_EXISTING_RELEASE: ${{ github.event.inputs.repair_existing_release || 'false' }}
         run: |
           if ! git rev-parse --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1; then
             echo "::error::Тег $TAG отсутствует или не указывает на commit."
@@ -85,8 +92,17 @@ jobs:
           fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::GitHub Release или draft для $TAG уже существует. Автоматическое перезаписывание запрещено."
-            exit 1
+            if [ "$REPAIR_EXISTING_RELEASE" != "true" ]; then
+              echo "::error::GitHub Release или draft для $TAG уже существует. Для безопасной дозагрузки assets требуется явный repair_existing_release."
+              exit 1
+            fi
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+            IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
+            echo "release_is_draft=$IS_DRAFT" >> "$GITHUB_OUTPUT"
+            echo "Обнаружен существующий Release $TAG: разрешена только проверяемая дозагрузка отсутствующих assets."
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+            echo "release_is_draft=false" >> "$GITHUB_OUTPUT"
           fi
 
           python3 - "$VERSION_NAME" <<'PY'
@@ -472,27 +488,85 @@ jobs:
              (.[$version].changelog_ru | type == "array")' \
             smarttube_vox.json >/dev/null
 
-      - name: Publish Atomic GitHub Release
+      - name: Publish or safely repair GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag_info.outputs.TAG }}
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
+          RELEASE_EXISTS: ${{ steps.release_guard.outputs.release_exists }}
+          RELEASE_IS_DRAFT: ${{ steps.release_guard.outputs.release_is_draft }}
         run: |
-          echo "Публикация GitHub Release для тега $TAG..."
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::Release или draft для $TAG появился после предварительной проверки. Перезаписывание запрещено."
+          RELEASE_ASSETS=(
+            smarttube_vox.apk
+            smarttube_vox-arm64-v8a.apk
+            smarttube_vox-armeabi-v7a.apk
+            smarttube_vox-x86.apk
+            smarttube_vox.json
+            SHA256SUMS.txt
+          )
+          if [ -f smarttube_vox-x86_64.apk ]; then
+            RELEASE_ASSETS+=(smarttube_vox-x86_64.apk)
+          fi
+
+          if [ "$RELEASE_EXISTS" != "true" ]; then
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "::error::Release или draft для $TAG появился после предварительной проверки."
+              exit 1
+            fi
+            gh release create "$TAG" \
+              --draft \
+              --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
+              --notes-file release_notes.md
+            RELEASE_IS_DRAFT=true
+          fi
+
+          mapfile -t REMOTE_ASSETS < <(
+            gh release view "$TAG" --json assets --jq '.assets[].name'
+          )
+
+          for asset in "${RELEASE_ASSETS[@]}"; do
+            LOCAL_SHA256=$(sha256sum "$asset" | awk '{print $1}')
+            if printf '%s\n' "${REMOTE_ASSETS[@]}" | grep -Fxq "$asset"; then
+              REMOTE_DIGEST=$(
+                gh release view "$TAG" --json assets \
+                  --jq ".assets[] | select(.name == \"$asset\") | .digest"
+              )
+              if [ "$REMOTE_DIGEST" != "sha256:$LOCAL_SHA256" ]; then
+                echo "::error::Существующий asset $asset имеет другой SHA-256; перезапись запрещена."
+                exit 1
+              fi
+              echo "Asset уже существует и совпадает по SHA-256: $asset"
+            else
+              gh release upload "$TAG" "$asset"
+              echo "Загружен отсутствующий asset: $asset"
+            fi
+          done
+
+          mapfile -t VERIFIED_REMOTE_ASSETS < <(
+            gh release view "$TAG" --json assets --jq '.assets[].name'
+          )
+          if [ "${#VERIFIED_REMOTE_ASSETS[@]}" -ne "${#RELEASE_ASSETS[@]}" ]; then
+            echo "::error::Набор assets Release отличается от ожидаемого."
             exit 1
           fi
 
-          gh release create "$TAG" \
-            --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
-            --notes-file release_notes.md \
-            smarttube_vox.apk \
-            smarttube_vox-*.apk \
-            smarttube_vox.json \
-            SHA256SUMS.txt
+          for asset in "${RELEASE_ASSETS[@]}"; do
+            LOCAL_SHA256=$(sha256sum "$asset" | awk '{print $1}')
+            REMOTE_DIGEST=$(
+              gh release view "$TAG" --json assets \
+                --jq ".assets[] | select(.name == \"$asset\") | .digest"
+            )
+            if [ "$REMOTE_DIGEST" != "sha256:$LOCAL_SHA256" ]; then
+              echo "::error::Проверка загруженного asset не пройдена: $asset"
+              exit 1
+            fi
+          done
 
-          echo "Релиз успешно опубликован со всеми VOX ассетами и метаданными обновления."
+          if [ "$RELEASE_IS_DRAFT" = "true" ]; then
+            gh release edit "$TAG" --draft=false
+          fi
+
+          echo "Release содержит полный проверенный набор VOX assets и метаданных обновления."
 
       - name: Clean up runner secrets
         if: always()
