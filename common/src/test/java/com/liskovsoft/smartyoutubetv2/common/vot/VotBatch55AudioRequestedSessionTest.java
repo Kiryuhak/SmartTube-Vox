@@ -40,7 +40,7 @@ public class VotBatch55AudioRequestedSessionTest {
 
         assertTrue("Initial request must keep firstRequest=true",
                 hasVarintField(http.translateBodies.get(0), 5, 1));
-        assertFalse("First continuation must keep firstRequest=false",
+        assertTrue("Request after audio upload must have firstRequest=true to queue task",
                 hasVarintField(http.translateBodies.get(1), 5, 1));
         assertFalse("Regular polling must keep firstRequest=false",
                 hasVarintField(http.translateBodies.get(2), 5, 1));

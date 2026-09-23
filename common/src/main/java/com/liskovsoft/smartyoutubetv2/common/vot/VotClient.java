@@ -368,10 +368,10 @@ public class VotClient {
             if (allowAudioFallback) {
                 handleAudioRequested(youtubeUrl, durationSec, response.translationId,
                         useLively, requestOAuthToken);
-                // The server task already exists: STATUS_AUDIO_REQUESTED came from its first
-                // request and the audio fallback completed that same task. Continue polling it
-                // with firstRequest=false instead of accidentally creating a second task.
-                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback, true);
+                // After audio fallback upload completes, Yandex requires a translation request
+                // with firstRequest=true (subsequent=false) to queue the synthesis task.
+                // allowAudioFallback is set to false to guard against infinite upload loops.
+                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback, false);
                 return false;
             } else {
                 logW("Audio upload already attempted or disabled, stopping polling");

@@ -40,8 +40,8 @@ public class VotBatch53TvGenericErrorTest {
                 "https://www.youtube.com/watch?v=8Dgdk555G0g", 1453).toList().blockingGet();
 
         assertEquals(1, audioFallbackCalls[0]);
-        assertEquals(Arrays.asList(false, true, true), backend.subsequentFlags);
-        assertEquals(1, countFirstRequests(backend.subsequentFlags));
+        assertEquals(Arrays.asList(false, false, true), backend.subsequentFlags);
+        assertEquals(2, countFirstRequests(backend.subsequentFlags));
         assertEquals(Arrays.asList(25), scheduler.waitsSec);
         assertEquals(2, progress.size());
         assertEquals(VotProgress.TYPE_WAITING, progress.get(0).type);
