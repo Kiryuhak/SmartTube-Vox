@@ -73,6 +73,37 @@ jobs:
 
           echo "Выбрана версия: $VERSION_NAME (versionCode: $EXPECTED_CODE, votPatch: $VOT_PATCH, baseCode: $BASE_CODE)"
 
+      - name: Validate tag, release state and CHANGELOG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag_info.outputs.TAG }}
+          VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
+        run: |
+          if ! git rev-parse --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1; then
+            echo "::error::Тег $TAG отсутствует или не указывает на commit."
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::GitHub Release или draft для $TAG уже существует. Автоматическое перезаписывание запрещено."
+            exit 1
+          fi
+
+          python3 - "$VERSION_NAME" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          version = sys.argv[1]
+          content = pathlib.Path('CHANGELOG.md').read_text(encoding='utf-8')
+          pattern = rf'^## \[{re.escape(version)}\][^\n]*\n(.+?)(?=^## \[|\Z)'
+          match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+          if not match or not match.group(1).strip():
+              print(f'::error::Секция [{version}] отсутствует или пуста в CHANGELOG.md!', file=sys.stderr)
+              sys.exit(1)
+          print(f'CHANGELOG содержит непустую секцию [{version}].')
+          PY
+
       - name: Set up JDK 17
         uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with:
@@ -275,6 +306,19 @@ jobs:
             echo "::error::APK не подписан или цифровая подпись недействительна!"
             exit 1
           fi
+
+          EXPECTED_CERT_SHA256="e07a27097e3ed7b74b3aceb457348e84474930a050e4f2e21d4a6465bd383a2d"
+          ACTUAL_CERT_SHA256=$(
+            "$APKSIGNER" verify --print-certs "$UNIVERSAL_APK" |
+              sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+              head -n 1 |
+              tr '[:upper:]' '[:lower:]' |
+              tr -d ':'
+          )
+          if [ "$ACTUAL_CERT_SHA256" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK подписан неожиданным сертификатом!"
+            exit 1
+          fi
           echo "Цифровая подпись успешно верифицирована."
 
           # Подготовка основных ассетов для release и updater (только SmartTube VOX)
@@ -304,6 +348,33 @@ jobs:
             cp "$X86_64_APK" smarttube_vox-x86_64.apk
             echo "Создан ассет: smarttube_vox-x86_64.apk"
           fi
+
+          for required_apk in \
+            smarttube_vox.apk \
+            smarttube_vox-arm64-v8a.apk \
+            smarttube_vox-armeabi-v7a.apk \
+            smarttube_vox-x86.apk; do
+            if [ ! -f "$required_apk" ]; then
+              echo "::error::Обязательный release asset не найден: $required_apk"
+              exit 1
+            fi
+          done
+
+      - name: Generate and verify SHA256SUMS
+        run: |
+          APK_ASSETS=(
+            smarttube_vox.apk
+            smarttube_vox-arm64-v8a.apk
+            smarttube_vox-armeabi-v7a.apk
+            smarttube_vox-x86.apk
+          )
+          if [ -f smarttube_vox-x86_64.apk ]; then
+            APK_ASSETS+=(smarttube_vox-x86_64.apk)
+          fi
+
+          sha256sum "${APK_ASSETS[@]}" > SHA256SUMS.txt
+          test -s SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
 
       - name: Extract Release Notes and Generate Update JSON
         env:
@@ -365,11 +436,11 @@ jobs:
               version: {
                   'versionCode': int(sys.argv[2]),
                   'changelog': [
-                      'Voice-over translation via Yandex VOT for Android TV',
-                      'Yandex OAuth and Lively Voice support',
-                      'Dedicated stvot flavor with isolated package ID',
-                      'Adaptive TV launcher icon and banner',
-                      'In-app updater support'
+                      'Reliable Yandex VOT polling with continuous ETA',
+                      'Bounded retries for temporary network failures',
+                      'Correct STATUS_FAILED handling and safe diagnostics',
+                      'Original SmartTube TV interface preserved',
+                      'Yandex ID diagnostics; Device Code and Lively remain limited'
                   ],
                   'changelog_ru': ru_items
               }
@@ -390,6 +461,17 @@ jobs:
             exit 1
           fi
 
+          EXPECTED_URL="https://github.com/$REPO/releases/latest/download/smarttube_vox.apk"
+          jq -e \
+            --arg version "$VERSION_NAME" \
+            --argjson version_code "$EXPECTED_CODE" \
+            --arg download_url "$EXPECTED_URL" \
+            '.package.downloadUrl == $download_url and
+             .[$version].versionCode == $version_code and
+             (.[$version].changelog | type == "array") and
+             (.[$version].changelog_ru | type == "array")' \
+            smarttube_vox.json >/dev/null
+
       - name: Publish Atomic GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -397,12 +479,18 @@ jobs:
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
         run: |
           echo "Публикация GitHub Release для тега $TAG..."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release или draft для $TAG появился после предварительной проверки. Перезаписывание запрещено."
+            exit 1
+          fi
+
           gh release create "$TAG" \
             --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
             --notes-file release_notes.md \
             smarttube_vox.apk \
             smarttube_vox-*.apk \
-            smarttube_vox.json
+            smarttube_vox.json \
+            SHA256SUMS.txt
 
           echo "Релиз успешно опубликован со всеми VOX ассетами и метаданными обновления."
 
