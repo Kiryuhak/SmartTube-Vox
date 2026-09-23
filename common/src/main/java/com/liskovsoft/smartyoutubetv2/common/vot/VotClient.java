@@ -77,11 +77,22 @@ public class VotClient {
 
     VotClient(@Nullable VotData votData, @Nullable TranslationRequester translationRequester,
               WaitStrategy waitStrategy) {
+        this(votData, new VotHttp(), translationRequester, waitStrategy);
+    }
+
+    VotClient(@Nullable VotData votData, VotHttp http,
+              @Nullable TranslationRequester translationRequester, WaitStrategy waitStrategy) {
+        this(votData, http, translationRequester, waitStrategy, translationRequester == null);
+    }
+
+    VotClient(@Nullable VotData votData, VotHttp http,
+              @Nullable TranslationRequester translationRequester, WaitStrategy waitStrategy,
+              boolean logEnabled) {
         mVotData = votData;
-        mHttp = new VotHttp();
+        mHttp = http;
         mTranslationRequester = translationRequester;
         mWaitStrategy = waitStrategy;
-        mLogEnabled = translationRequester == null;
+        mLogEnabled = logEnabled;
     }
 
     public String translateToRussian(String youtubeUrl, long durationSec) throws IOException, VotException {
@@ -418,6 +429,11 @@ public class VotClient {
             return mTranslationRequester.request(
                     youtubeUrl, (long) durationSec, subsequent, useLively, requestOAuthToken);
         }
+
+        // Keep one cryptographic session for the complete server-task lifecycle. In
+        // particular, AUDIO_REQUESTED uploads are session-signed and the following
+        // request must not switch from legacy headers to a newly created session.
+        prepareTranslationSession();
         byte[] body = VotProtobuf.encodeTranslationRequest(
                 youtubeUrl,
                 durationSec,
@@ -438,22 +454,21 @@ public class VotClient {
 
     private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively,
                                                       String requestOAuthToken) {
+        Map<String, String> headers = VotHeaders.sessionTranslate(
+                mSession, body, "/video-translation/translate");
+        if (useLively && requestOAuthToken != null && !requestOAuthToken.isEmpty()) {
+            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(requestOAuthToken));
+        }
+        return headers;
+    }
+
+    private void prepareTranslationSession() throws IOException {
         String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
         if (!Helpers.equals(currentToken, mLastOAuthToken)) {
             mLastOAuthToken = currentToken;
             resetSession();
         }
-
-        Map<String, String> headers;
-        if (mSession != null) {
-            headers = VotHeaders.sessionTranslate(mSession, body, "/video-translation/translate");
-        } else {
-            headers = VotHeaders.simpleTranslate(body);
-        }
-        if (useLively && requestOAuthToken != null && !requestOAuthToken.isEmpty()) {
-            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(requestOAuthToken));
-        }
-        return headers;
+        ensureSession();
     }
 
     void handleAudioRequested(String youtubeUrl, long durationSec,
