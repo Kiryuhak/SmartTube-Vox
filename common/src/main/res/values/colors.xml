@@ -33,4 +33,16 @@
     <color name="magenta">#FF00FF</color>
     <color name="brown">#964B00</color>
     <color name="light_pink">#FF1684</color>
+
+    <!-- VOX Translation indicator & auth palette -->
+    <color name="vox_bg">#10141E</color>
+    <color name="vox_accent">#3F8CFF</color>
+    <color name="vox_accent_glow">#263F8CFF</color>
+    <color name="vox_text_primary">#F4F6FA</color>
+    <color name="vox_text_secondary">#A7B0C0</color>
+    <color name="vox_retry">#FFB020</color>
+    <color name="vox_ready">#22C55E</color>
+    <color name="vox_error">#EF4444</color>
+    <color name="vox_capsule_bg">#E61A2230</color>
+    <color name="vox_capsule_stroke">#2A3548</color>
 </resources>

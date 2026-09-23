@@ -11,6 +11,9 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
 
+import android.text.InputType;
+import android.text.method.PasswordTransformationMethod;
+
 import com.liskovsoft.sharedutils.helpers.KeyHelpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.smartyoutubetv2.common.R;
@@ -37,6 +40,8 @@ public final class VotTokenEditDialog {
         Button clearBtn = contentView.findViewById(R.id.vot_token_clear);
 
         hint.setText(R.string.vot_token_dialog_hint);
+        editField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        editField.setTransformationMethod(PasswordTransformationMethod.getInstance());
         KeyHelpers.fixShowKeyboard(editField);
 
         String initial = clipboardPrefill != null ? clipboardPrefill : currentToken;
@@ -70,12 +75,19 @@ public final class VotTokenEditDialog {
         try {
             dialog.show();
         } catch (RuntimeException e) {
-            MessageHelpers.showMessage(context, e.getMessage());
+            MessageHelpers.showMessage(context, R.string.vot_token_dialog_unavailable);
             return;
         }
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String value = editField.getText().toString().trim();
+            // Empty + OK is the existing explicit clear action. Non-empty input is opaque, but
+            // obviously truncated or whitespace-containing values must not replace a saved token.
+            if (!value.isEmpty() && !VotOAuthTokenValidator.isValid(value)) {
+                editField.setError(context.getString(R.string.vot_token_invalid));
+                editField.requestFocus();
+                return;
+            }
             onSave.onSave(value);
             dialog.dismiss();
         });

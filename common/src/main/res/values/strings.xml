@@ -329,6 +329,9 @@
     <string name="vot_settings_category">Voice translation (Yandex)</string>
     <string name="vot_token_dialog_title">Yandex OAuth token</string>
     <string name="vot_token_dialog_hint">Paste token from oauth.yandex.ru (scope: direct access). Use «Paste from clipboard» on TV.</string>
+    <string name="vot_token_invalid">Invalid OAuth token. Check that it is complete and contains no spaces.</string>
+    <string name="vot_token_dialog_unavailable">Unable to open token entry.</string>
+    <string name="vot_auth_unavailable">Unable to open Yandex ID authorization.</string>
     <string name="vot_edit_token">Set OAuth token</string>
     <string name="vot_paste_clipboard_action">Paste token from clipboard</string>
     <string name="vot_paste_clipboard">Paste</string>
@@ -810,7 +813,10 @@
     <string name="vot_onboarding_later" translatable="false"></string>
     <string name="vot_yandex_status_authorized" translatable="false"></string>
     <string name="vot_yandex_status_not_authorized" translatable="false"></string>
+    <string name="vot_yandex_status_unverified" translatable="false"></string>
+    <string name="vot_yandex_status_rejected" translatable="false"></string>
     <string name="vot_yandex_login" translatable="false"></string>
+    <string name="vot_yandex_relogin" translatable="false"></string>
     <string name="vot_yandex_logout" translatable="false"></string>
     <string name="vot_yandex_logout_done" translatable="false"></string>
     <string name="vot_manual_token_entry" translatable="false"></string>
@@ -820,6 +826,11 @@
     <string name="vot_disabled" translatable="false"></string>
     <string name="vot_error_timeout" translatable="false"></string>
     <string name="vot_error_network" translatable="false"></string>
+    <string name="vot_error_server_unavailable" translatable="false"></string>
+    <string name="vot_error_rate_limited" translatable="false"></string>
+    <string name="vot_error_unsupported_video" translatable="false"></string>
+    <string name="vot_error_auth_rejected" translatable="false"></string>
+    <string name="vot_error_access_denied" translatable="false"></string>
     <string name="vot_error_playback" translatable="false"></string>
     <string name="vot_unknown_lang_manual" translatable="false"></string>
     <string name="vot_progress_preparing" translatable="false"></string>
@@ -829,4 +840,36 @@
     <string name="vot_progress_ready" translatable="false"></string>
     <string name="vot_progress_error" translatable="false"></string>
     <string name="vot_progress_timeout" translatable="false"></string>
+    <string name="vot_progress_waiting_title" translatable="false"></string>
+    <string name="vot_progress_subtitle_default" translatable="false"></string>
+    <string name="vot_progress_subtitle_ready" translatable="false"></string>
+    <string name="vot_progress_retry_title" translatable="false"></string>
+    <string name="vot_progress_retry_countdown" translatable="false"></string>
+    <!-- Device Code Flow placeholders — overridden in stvot flavor -->
+    <string name="vot_device_auth_title" translatable="false"></string>
+    <string name="vot_device_auth_step1" translatable="false"></string>
+    <string name="vot_device_auth_url" translatable="false"></string>
+    <string name="vot_device_auth_step2" translatable="false"></string>
+    <string name="vot_device_auth_timer" translatable="false">%s</string>
+    <string name="vot_device_auth_expired" translatable="false"></string>
+    <string name="vot_device_auth_refresh" translatable="false"></string>
+    <string name="vot_device_auth_cancel" translatable="false"></string>
+    <string name="vot_device_auth_success" translatable="false"></string>
+    <string name="vot_device_auth_denied" translatable="false"></string>
+    <string name="vot_device_auth_network_error" translatable="false"></string>
+    <string name="vot_device_auth_pending" translatable="false"></string>
+    <string name="vot_device_auth_invalid_client" translatable="false"></string>
+    <string name="vot_player_button_switch" translatable="false"></string>
+    <string name="vot_player_button_switch_desc" translatable="false"></string>
+    <string name="vot_player_hud_hint" translatable="false"></string>
+    <string name="vot_onboarding_ok" translatable="false"></string>
+    <string name="vot_onboarding_never" translatable="false"></string>
+
+    <!-- Factory Reset placeholders for ststable -->
+    <string name="settings_reset" translatable="false"></string>
+    <string name="reset_dialog_title" translatable="false"></string>
+    <string name="reset_dialog_message" translatable="false"></string>
+    <string name="reset_dialog_cancel" translatable="false"></string>
+    <string name="reset_dialog_confirm" translatable="false"></string>
+    <string name="reset_dialog_failed" translatable="false"></string>
 </resources>

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SmartTube VOX — Индикатор состояния закадрового перевода поверх видео.
+    Соответствует компактной капсуле по референсу: панель #1A2230 с полупрозрачностью,
+    скругление 24dp, тонкая рамка #2A3548, spinner/icon слева, заголовок и подзаголовок по центру,
+    обратный отсчёт справа.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vot_progress_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_vot_progress_overlay"
+    android:paddingStart="16dp"
+    android:paddingEnd="18dp"
+    android:paddingTop="9dp"
+    android:paddingBottom="9dp"
+    android:elevation="8dp"
+    android:focusable="false"
+    android:clickable="false">
+
+    <ProgressBar
+        android:id="@+id/vot_progress_spinner"
+        style="?android:attr/progressBarStyleSmall"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="center_vertical"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/vox_accent" />
+
+    <ImageView
+        android:id="@+id/vot_progress_icon"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="center_vertical"
+        android:visibility="gone"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/vot_progress_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/vox_text_primary"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/vot_progress_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textColor="@color/vox_text_secondary"
+            android:textSize="11sp"
+            android:fontFamily="sans-serif"
+            android:singleLine="true" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/vot_progress_timer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="14dp"
+        android:textColor="@color/vox_accent"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:singleLine="true" />
+
+</LinearLayout>

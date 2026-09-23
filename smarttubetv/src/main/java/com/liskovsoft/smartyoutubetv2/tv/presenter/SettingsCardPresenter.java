@@ -38,9 +38,6 @@ public class SettingsCardPresenter extends Presenter {
         @SuppressLint("InflateParams")
         View container = LayoutInflater.from(context).inflate(R.layout.settings_card, null);
         container.setBackgroundColor(mDefaultBackgroundColor);
-        //if (VERSION.SDK_INT >= 23 && MainUIData.instance(context).isUiTweakEnabled(MainUIData.UI_TWEAK_ROUNDED_CORNERS)) {
-        //    container.setForeground(ContextCompat.getDrawable(context, R.drawable.lb_card_outline));
-        //}
 
         TextView textView = container.findViewById(R.id.settings_title);
         textView.setBackgroundColor(mDefaultBackgroundColor);

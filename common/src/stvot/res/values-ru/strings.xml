@@ -5,18 +5,43 @@
     <string name="about_vot_title">О проекте SmartTube VOX</string>
     <string name="about_vot_desc">SmartTube VOX — неофициальная сборка SmartTube для Android TV с интегрированным VOT-переводом, Яндекс ID и поддержкой «Живого голоса». Основано на SmartTube.</string>
     <string name="about_vot_url" translatable="false">https://github.com/Kiryuhak/SmartTube-Vox</string>
-    <string name="vot_onboarding_title">Включить Живой голос?</string>
-    <string name="vot_onboarding_message">Для перевода с “Живым голосом” войдите через Яндекс ID.\nЭто можно сделать сейчас или позже в настройках VOT.</string>
+    <string name="vot_onboarding_title">SmartTube VOX — Голосовой перевод</string>
+    <string name="vot_onboarding_message">Для озвучивания зарубежных видео нейросетью Яндекса нажмите OK на пульте во время просмотра — кнопка «Перевод» доступна на панели управления.</string>
     <string name="vot_onboarding_login">Войти в Яндекс</string>
     <string name="vot_onboarding_later">Позже</string>
+    <string name="vot_onboarding_ok">Понятно</string>
+    <string name="vot_onboarding_never">Больше не показывать</string>
+    <string name="action_voice_translate">Перевод</string>
+    <string name="vot_auto_translate">Закадровый перевод (Яндекс)</string>
+    <string name="vot_player_button_switch">Кнопка «Перевод» на панели</string>
+    <string name="vot_player_button_switch_desc">Отображать кнопку перевода в основном ряду управления плеера</string>
+    <string name="vot_player_hud_hint">Нажмите OK на пульте во время видео для управления и перевода</string>
 
     <!-- Pulse: Яндекс ID UX -->
     <string name="vot_yandex_status_authorized">Яндекс ID: Авторизован</string>
     <string name="vot_yandex_status_not_authorized">Яндекс ID: Не авторизован</string>
+    <string name="vot_yandex_status_unverified">Яндекс ID: Токен задан (не проверен)</string>
+    <string name="vot_yandex_status_rejected">Яндекс ID: Ошибка авторизации — требуется повторный вход</string>
     <string name="vot_yandex_login">Войти в Яндекс</string>
+    <string name="vot_yandex_relogin">Войти заново в Яндекс</string>
     <string name="vot_yandex_logout">Выйти из Яндекса</string>
     <string name="vot_yandex_logout_done">Вы вышли из Яндекс ID</string>
     <string name="vot_manual_token_entry">Ввести токен вручную…</string>
+
+    <!-- Device Code Flow: вход на телевизоре -->
+    <string name="vot_device_auth_title">Вход в Яндекс ID</string>
+    <string name="vot_device_auth_step1">Откройте на телефоне или компьютере:</string>
+    <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_step2">Затем введите этот код:</string>
+    <string name="vot_device_auth_timer">Код действителен: %s</string>
+    <string name="vot_device_auth_expired">Код истёк. Запросите новый.</string>
+    <string name="vot_device_auth_refresh">Обновить код</string>
+    <string name="vot_device_auth_cancel">Отмена</string>
+    <string name="vot_device_auth_success">Вход выполнен!</string>
+    <string name="vot_device_auth_denied">Авторизация отклонена пользователем</string>
+    <string name="vot_device_auth_network_error">Ошибка сети. Проверьте соединение.</string>
+    <string name="vot_device_auth_pending">Ожидание подтверждения…</string>
+    <string name="vot_device_auth_invalid_client">Ошибка конфигурации клиента Яндекс ID. Используйте ручной ввод токена.</string>
 
     <!-- Pulse: Пользовательские статусы перевода -->
     <string name="vot_preparing">Подготовка перевода…</string>
@@ -25,6 +50,11 @@
     <string name="vot_disabled">Перевод отключён</string>
     <string name="vot_error_timeout">Время ожидания перевода истекло</string>
     <string name="vot_error_network">Ошибка сети при получении перевода</string>
+    <string name="vot_error_server_unavailable">Сервер перевода Яндекса временно недоступен</string>
+    <string name="vot_error_rate_limited">Слишком много запросов на перевод. Попробуйте позже</string>
+    <string name="vot_error_unsupported_video">Перевод для этого видео недоступен</string>
+    <string name="vot_error_auth_rejected">Ошибка авторизации Яндекс ID. Войдите заново в настройках</string>
+    <string name="vot_error_access_denied">Сервис перевода отклонил запрос</string>
     <string name="vot_error_playback">Не удалось воспроизвести перевод</string>
     <string name="vot_unknown_lang_manual">Язык аудиодорожки не определён. Запустите перевод вручную.</string>
     <string name="vot_skip_russian">Русская аудиодорожка — перевод не требуется</string>
@@ -34,11 +64,16 @@
     <!-- VOT Progress Indicator -->
     <string name="vot_progress_preparing">Подготовка перевода…</string>
     <string name="vot_progress_starting">Запуск перевода…</string>
-    <string name="vot_progress_waiting_eta">Перевод: ~%s</string>
-    <string name="vot_progress_still_waiting">Перевод всё ещё готовится… %s</string>
+    <string name="vot_progress_waiting_title">Перевод готовится</string>
+    <string name="vot_progress_waiting_eta">~ %s</string>
+    <string name="vot_progress_still_waiting">+%s</string>
     <string name="vot_progress_ready">Перевод готов</string>
     <string name="vot_progress_error">Не удалось подготовить перевод</string>
     <string name="vot_progress_timeout">Перевод не был подготовлен</string>
+    <string name="vot_progress_subtitle_default">Индикатор остаётся до завершения</string>
+    <string name="vot_progress_subtitle_ready">Можно включить в настройках</string>
+    <string name="vot_progress_retry_title">Повторная попытка %1$d/%2$d</string>
+    <string name="vot_progress_retry_countdown">через %d с</string>
 
     <!-- Replace YouTube Dub with Yandex VOT -->
     <string name="vot_replace_dub_title">Заменить озвучку на Яндекс?</string>
@@ -47,4 +82,12 @@
     <string name="vot_replace_dub_cancel">Отмена</string>
     <string name="vot_unable_to_switch_original">Не удалось переключиться на оригинальную аудиодорожку</string>
     <string name="vot_unable_to_determine_original">Не удалось определить оригинальную аудиодорожку</string>
+
+    <!-- Factory Reset -->
+    <string name="settings_reset">Сброс настроек</string>
+    <string name="reset_dialog_title">Сбросить SmartTube VOX?</string>
+    <string name="reset_dialog_message">Все аккаунты YouTube и Яндекс ID будут отключены.\n\nЛокальные настройки, история просмотра и данные закадрового перевода будут удалены.\n\nПриложение вернётся к первоначальному состоянию.\n\nЭто действие нельзя отменить.</string>
+    <string name="reset_dialog_cancel">Отмена</string>
+    <string name="reset_dialog_confirm">Сбросить всё</string>
+    <string name="reset_dialog_failed">Не удалось сбросить данные приложения</string>
 </resources>

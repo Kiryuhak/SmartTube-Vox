@@ -19,11 +19,15 @@ public class VotHttp {
 
     private final OkHttpClient mClient;
 
+    public static final int CONNECT_TIMEOUT_SEC = 15;
+    public static final int READ_TIMEOUT_SEC = 20;
+    public static final int WRITE_TIMEOUT_SEC = 20;
+
     public VotHttp() {
         this(new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(120, TimeUnit.SECONDS)
-                .writeTimeout(120, TimeUnit.SECONDS)
+                .connectTimeout(CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                .writeTimeout(WRITE_TIMEOUT_SEC, TimeUnit.SECONDS)
                 .build());
     }
 
@@ -62,14 +66,45 @@ public class VotHttp {
             }
         }
 
+        long startTimeMs = System.currentTimeMillis();
         try (Response response = mClient.newCall(builder.build()).execute()) {
+            long durationMs = System.currentTimeMillis() - startTimeMs;
             if (!response.isSuccessful()) {
-                throw new VotHttpException(response.code(), response.message());
+                String retryAfterHeader = response.header("Retry-After");
+                int retryAfterSec = -1;
+                if (retryAfterHeader != null) {
+                    try {
+                        retryAfterSec = Integer.parseInt(retryAfterHeader.trim());
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+                logW("VOT HTTP non-success: path=%s, code=%d, duration=%dms, retryAfter=%d",
+                        path, response.code(), durationMs, retryAfterSec);
+                throw new VotHttpException(response.code(), response.message(), retryAfterSec);
             }
             if (response.body() == null) {
                 return null;
             }
             return response.body().bytes();
+        } catch (IOException e) {
+            long durationMs = System.currentTimeMillis() - startTimeMs;
+            logE("VOT HTTP transport failure: path=%s, exception=%s, duration=%dms",
+                    path, e.getClass().getSimpleName(), durationMs);
+            throw e;
+        }
+    }
+
+    private static void logW(String msg, Object... args) {
+        try {
+            com.liskovsoft.sharedutils.mylogger.Log.w("VotHttp", msg, args);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void logE(String msg, Object... args) {
+        try {
+            com.liskovsoft.sharedutils.mylogger.Log.e("VotHttp", msg, args);
+        } catch (Throwable ignored) {
         }
     }
 }

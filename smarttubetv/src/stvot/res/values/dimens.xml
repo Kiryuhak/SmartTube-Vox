@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Used only by VOT-specific authorization dialogs. -->
+    <dimen name="vox_button_min_height">44dp</dimen>
+</resources>

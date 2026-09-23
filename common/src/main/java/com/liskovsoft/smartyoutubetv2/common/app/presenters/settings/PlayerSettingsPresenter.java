@@ -236,26 +236,57 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 getContext().getString(R.string.vot_lively_voice),
                 getContext().getString(R.string.vot_lively_voice_desc),
                 optionItem -> {
-                    if (!mVotData.hasOAuthToken()) {
-                        MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
-                        startYandexOAuth();
-                        return;
+                    if (optionItem.isSelected()) {
+                        if (!mVotData.hasOAuthToken()) {
+                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
+                            startYandexOAuth();
+                            return;
+                        }
+                        if (mVotData.getAuthState() == VotData.AuthState.REJECTED) {
+                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_rejected);
+                            startYandexOAuth();
+                            return;
+                        }
                     }
                     mVotData.setLivelyVoiceEnabled(optionItem.isSelected());
                 },
                 mVotData.isLivelyVoiceEnabled()));
 
-        String statusText = mVotData.hasOAuthToken()
-                ? getContext().getString(R.string.vot_yandex_status_authorized)
-                : getContext().getString(R.string.vot_yandex_status_not_authorized);
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_player_button_switch),
+                getContext().getString(R.string.vot_player_button_switch_desc),
+                option -> {
+                    if (option.isSelected()) {
+                        mPlayerTweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
+                    } else {
+                        mPlayerTweaksData.setPlayerButtonDisabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
+                    }
+                },
+                mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)));
 
-        settingsPresenter.appendSingleButton(UiOptionItem.from(statusText, optionItem -> {
-            if (!mVotData.hasOAuthToken()) {
-                startYandexOAuth();
-            }
-        }));
+        VotData.AuthState state = mVotData.getAuthState();
+        String statusText = authStateToStatusString(state);
 
-        if (mVotData.hasOAuthToken()) {
+        settingsPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.vot_device_auth_title),
+                statusText,
+                optionItem -> {
+                    if (state == VotData.AuthState.ABSENT || state == VotData.AuthState.REJECTED) {
+                        startYandexOAuth();
+                    }
+                }
+        ));
+
+        if (state == VotData.AuthState.REJECTED) {
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_relogin),
+                    optionItem -> startYandexOAuth()
+            ));
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_logout),
+                    optionItem -> performYandexLogout()
+            ));
+        } else if (mVotData.hasOAuthToken()) {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
                     getContext().getString(R.string.vot_yandex_logout),
                     optionItem -> performYandexLogout()
@@ -302,16 +333,42 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
     }
 
     private void startYandexOAuth() {
-        Intent intent = new Intent();
-        intent.setClassName(
-                getContext(),
-                "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
-        );
+        Context ctx = getContext();
+        if (ctx == null) return;
 
-        try {
-            getContext().startActivity(intent);
-        } catch (Exception e) {
-            MessageHelpers.showMessage(getContext(), e.getMessage());
+        if (VotOnboardingHelper.isAndroidTv(ctx) && ctx instanceof android.app.Activity) {
+            com.liskovsoft.smartyoutubetv2.common.oauth.YandexDeviceAuthDialog
+                    .show((android.app.Activity) ctx);
+        } else {
+            Intent intent = new Intent();
+            intent.setClassName(
+                    ctx,
+                    "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
+            );
+            try {
+                ctx.startActivity(intent);
+            } catch (Exception e) {
+                MessageHelpers.showMessage(ctx, R.string.vot_auth_unavailable);
+            }
+        }
+    }
+
+
+    /**
+     * Возвращает локализованный текст статуса авторизации Яндекс ID
+     * на основе реального состояния AuthState, а не просто наличия токена.
+     */
+    private String authStateToStatusString(VotData.AuthState state) {
+        switch (state) {
+            case CONFIRMED:
+                return getContext().getString(R.string.vot_yandex_status_authorized);
+            case UNVERIFIED:
+                return getContext().getString(R.string.vot_yandex_status_unverified);
+            case REJECTED:
+                return getContext().getString(R.string.vot_yandex_status_rejected);
+            case ABSENT:
+            default:
+                return getContext().getString(R.string.vot_yandex_status_not_authorized);
         }
     }
 
