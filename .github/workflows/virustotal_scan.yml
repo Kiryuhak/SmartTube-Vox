@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_VT_KEY: ${{ secrets.VIRUS_TOTAL_API_KEY != '' }}
+      REPORT_MARKER: '<!-- SMARTTUBE_VOX_VIRUSTOTAL_REPORT -->'
 
     steps:
       - name: Set tag variable
@@ -26,19 +27,22 @@ jobs:
             echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
           fi
 
-      - name: Set report marker variable
+      - name: Report skipped when API key is unavailable
+        if: ${{ env.HAS_VT_KEY != 'true' }}
         run: |
-          echo -e "MARKER=\t\t\t" >> $GITHUB_ENV
-
-      - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+          echo "::notice::VIRUS_TOTAL_API_KEY отсутствует: сканирование, отчёт и изменение Release notes пропущены."
 
       - name: Download Release Assets
+        if: ${{ env.HAS_VT_KEY == 'true' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p release_assets
           gh release download "$TAG_NAME" --dir release_assets --pattern "*.apk"
+          compgen -G 'release_assets/*.apk' >/dev/null || {
+            echo "::error::APK assets для $TAG_NAME не найдены."
+            exit 1
+          }
 
       - name: VirusTotal Scan
         if: ${{ env.HAS_VT_KEY == 'true' }}
@@ -52,11 +56,12 @@ jobs:
 
       - name: Generate Custom Badge Report
         if: steps.vt.outcome == 'success'
+        id: report
         run: |
           echo "Waiting 150s for VirusTotal engines to report..."
           sleep 150
 
-          echo -e "$MARKER\n## 🛡️ VirusTotal Analysis" > vt_report.txt
+          printf '%s\n## 🛡️ VirusTotal Analysis\n' "$REPORT_MARKER" > vt_report.txt
           echo "" >> vt_report.txt
 
           echo "| Build Variant | VirusTotal Status | Detailed Report |" >> vt_report.txt
@@ -71,28 +76,38 @@ jobs:
             badge_url="https://badges.cssnr.com/vt/id/$sha256?start=green&end=red&n=8"
 
             echo "Purging badge cache for $filename..."
-            curl -s -X POST $badge_url
+            curl --fail --silent --show-error -X POST "$badge_url"
             
             asset_link="https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/$filename"
             
             echo "| [$filename]($asset_link) | [![]($badge_url&v=$(date +%s))]($vt_link) | [View Report]($vt_link) |" >> vt_report.txt
           done
 
+          test -s vt_report.txt
+          grep -Fq "$REPORT_MARKER" vt_report.txt
+
       - name: Update Release Notes
+        if: steps.vt.outcome == 'success' && steps.report.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view "$TAG_NAME" --json body -q .body > current_notes.txt || echo "" > current_notes.txt
+          test -s vt_report.txt
+          gh release view "$TAG_NAME" --json body -q .body > current_notes.txt
 
-          # If the header exists, delete from that line to the end
-          if grep -q "$MARKER" current_notes.txt; then
-            echo "Previous report found. Cleaning up..."
-            sed -i "/$MARKER/,\$d" current_notes.txt
-          fi
-          
-          {
-            cat current_notes.txt
-            cat vt_report.txt
-          } > final_notes.txt
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          marker = os.environ['REPORT_MARKER']
+          current = Path('current_notes.txt').read_text(encoding='utf-8')
+          report = Path('vt_report.txt').read_text(encoding='utf-8')
+          if marker not in report:
+              raise SystemExit('VirusTotal report marker is missing')
+          manual = current.split(marker, 1)[0].rstrip()
+          Path('final_notes.txt').write_text(
+              f'{manual}\n\n{report.lstrip()}',
+              encoding='utf-8',
+          )
+          PY
           
           gh release edit "$TAG_NAME" --notes-file final_notes.txt
