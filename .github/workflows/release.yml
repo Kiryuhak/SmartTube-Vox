@@ -85,6 +85,7 @@ jobs:
           TAG: ${{ steps.tag_info.outputs.TAG }}
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
           REPAIR_EXISTING_RELEASE: ${{ github.event.inputs.repair_existing_release || 'false' }}
+          REPO: ${{ github.repository }}
         run: |
           if ! git rev-parse --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1; then
             echo "::error::Тег $TAG отсутствует или не указывает на commit."
@@ -97,11 +98,14 @@ jobs:
               exit 1
             fi
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
+            RELEASE_ID=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')
+            echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
             IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
             echo "release_is_draft=$IS_DRAFT" >> "$GITHUB_OUTPUT"
             echo "Обнаружен существующий Release $TAG: разрешена только проверяемая дозагрузка отсутствующих assets."
           else
             echo "release_exists=false" >> "$GITHUB_OUTPUT"
+            echo "release_id=" >> "$GITHUB_OUTPUT"
             echo "release_is_draft=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -494,7 +498,9 @@ jobs:
           TAG: ${{ steps.tag_info.outputs.TAG }}
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
           RELEASE_EXISTS: ${{ steps.release_guard.outputs.release_exists }}
+          RELEASE_ID: ${{ steps.release_guard.outputs.release_id }}
           RELEASE_IS_DRAFT: ${{ steps.release_guard.outputs.release_is_draft }}
+          REPO: ${{ github.repository }}
         run: |
           RELEASE_ASSETS=(
             smarttube_vox.apk
@@ -517,19 +523,21 @@ jobs:
               --draft \
               --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
               --notes-file release_notes.md
+            RELEASE_ID=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')
             RELEASE_IS_DRAFT=true
           fi
 
           mapfile -t REMOTE_ASSETS < <(
-            gh release view "$TAG" --json assets --jq '.assets[].name'
+            gh api "repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
+              --jq '.[].name'
           )
 
           for asset in "${RELEASE_ASSETS[@]}"; do
             LOCAL_SHA256=$(sha256sum "$asset" | awk '{print $1}')
             if printf '%s\n' "${REMOTE_ASSETS[@]}" | grep -Fxq "$asset"; then
               REMOTE_DIGEST=$(
-                gh release view "$TAG" --json assets \
-                  --jq ".assets[] | select(.name == \"$asset\") | .digest"
+                gh api "repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
+                  --jq ".[] | select(.name == \"$asset\") | .digest"
               )
               if [ "$REMOTE_DIGEST" != "sha256:$LOCAL_SHA256" ]; then
                 echo "::error::Существующий asset $asset имеет другой SHA-256; перезапись запрещена."
@@ -543,7 +551,8 @@ jobs:
           done
 
           mapfile -t VERIFIED_REMOTE_ASSETS < <(
-            gh release view "$TAG" --json assets --jq '.assets[].name'
+            gh api "repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
+              --jq '.[].name'
           )
           if [ "${#VERIFIED_REMOTE_ASSETS[@]}" -ne "${#RELEASE_ASSETS[@]}" ]; then
             echo "::error::Набор assets Release отличается от ожидаемого."
@@ -553,8 +562,8 @@ jobs:
           for asset in "${RELEASE_ASSETS[@]}"; do
             LOCAL_SHA256=$(sha256sum "$asset" | awk '{print $1}')
             REMOTE_DIGEST=$(
-              gh release view "$TAG" --json assets \
-                --jq ".assets[] | select(.name == \"$asset\") | .digest"
+              gh api "repos/$REPO/releases/$RELEASE_ID/assets?per_page=100" \
+                --jq ".[] | select(.name == \"$asset\") | .digest"
             )
             if [ "$REMOTE_DIGEST" != "sha256:$LOCAL_SHA256" ]; then
               echo "::error::Проверка загруженного asset не пройдена: $asset"
