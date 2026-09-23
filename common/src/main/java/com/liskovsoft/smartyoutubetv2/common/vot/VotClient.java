@@ -357,7 +357,10 @@ public class VotClient {
             if (allowAudioFallback) {
                 handleAudioRequested(youtubeUrl, durationSec, response.translationId,
                         useLively, requestOAuthToken);
-                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback);
+                // The server task already exists: STATUS_AUDIO_REQUESTED came from its first
+                // request and the audio fallback completed that same task. Continue polling it
+                // with firstRequest=false instead of accidentally creating a second task.
+                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback, true);
                 return false;
             } else {
                 logW("Audio upload already attempted or disabled, stopping polling");
@@ -453,9 +456,9 @@ public class VotClient {
         return headers;
     }
 
-    private void handleAudioRequested(String youtubeUrl, long durationSec,
-                                      @Nullable String translationId, boolean useLively,
-                                      String requestOAuthToken)
+    void handleAudioRequested(String youtubeUrl, long durationSec,
+                              @Nullable String translationId, boolean useLively,
+                              String requestOAuthToken)
             throws IOException, VotException {
         if (translationId == null || translationId.isEmpty()) {
             VotTranslationResponse r = requestTranslation(
