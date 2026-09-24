@@ -434,12 +434,17 @@ public class VotClient {
         // particular, AUDIO_REQUESTED uploads are session-signed and the following
         // request must not switch from legacy headers to a newly created session.
         prepareTranslationSession();
+        // Yandex /video-translation/translate REST endpoint requires firstRequest=true (tag 5 = 1)
+        // for all requests in the lifecycle: initial translate, retry after audio upload, and
+        // all regular polling attempts. Reference implementations (vot.js, voice-over-translation)
+        // always send firstRequest=true. Sending firstRequest=false causes Yandex to reject the
+        // request with HTTP 400 Bad Request.
         byte[] body = VotProtobuf.encodeTranslationRequest(
                 youtubeUrl,
                 durationSec,
                 VotConfig.REQUEST_LANG,
                 VotConfig.RESPONSE_LANG,
-                !subsequent,
+                true,
                 useLively
         );
 

@@ -47,7 +47,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         assertEquals(Arrays.asList("session", "translate-1", "translate-2"), http.events);
         assertTrue("Initial translate must have firstRequest=true",
                 hasVarintField(http.translateBodies.get(0), 5, 1));
-        assertFalse("Subsequent poll must have firstRequest=false",
+        assertTrue("Subsequent poll must have firstRequest=true",
                 hasVarintField(http.translateBodies.get(1), 5, 1));
         assertEquals(Arrays.asList(10), waits.waitsSec);
         assertEquals(2, progress.size());
@@ -80,7 +80,7 @@ public class VotBatch58AudioRequestedProtocolTest {
                 hasVarintField(http.translateBodies.get(0), 5, 1));
         assertTrue("Post-upload retry MUST have firstRequest=true to queue task on Yandex backend",
                 hasVarintField(http.translateBodies.get(1), 5, 1));
-        assertFalse("Subsequent poll after post-upload waiting MUST have firstRequest=false",
+        assertTrue("Subsequent poll after post-upload waiting MUST have firstRequest=true",
                 hasVarintField(http.translateBodies.get(2), 5, 1));
 
         assertEquals(Arrays.asList(5), waits.waitsSec);
