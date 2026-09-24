@@ -10,6 +10,7 @@ public final class VotConfig {
     public static final String REQUEST_LANG = "en";
     public static final String RESPONSE_LANG = "ru";
     public static final String FAKE_AUDIO_FILE_ID = "web_api_get_all_generating_urls_data_from_iframe";
+    public static final int AUDIO_MIN_CHUNK_SIZE = 5295308;
 
     private VotConfig() {
     }

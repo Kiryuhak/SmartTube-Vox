@@ -50,6 +50,138 @@ public final class VotProtobuf {
         return w.toByteArray();
     }
 
+    public static byte[] encodeAudioRequestSinglePart(String url, String translationId, String fileId, byte[] audioFile) {
+        if (url == null || url.trim().isEmpty()) {
+            throw new IllegalArgumentException("url must not be empty");
+        }
+        if (translationId == null || translationId.trim().isEmpty()) {
+            throw new IllegalArgumentException("translationId must not be empty");
+        }
+        if (fileId == null || fileId.trim().isEmpty()) {
+            throw new IllegalArgumentException("fileId must not be empty");
+        }
+        if (audioFile == null || audioFile.length == 0) {
+            throw new IllegalArgumentException("audioFile must be non-empty");
+        }
+
+        VotWireWriter audioInfo = new VotWireWriter();
+        audioInfo.writeString(1, fileId);
+        audioInfo.writeBytes(2, audioFile);
+
+        VotWireWriter root = new VotWireWriter();
+        root.writeString(1, translationId);
+        root.writeString(2, url);
+        root.writeEmbedded(6, audioInfo.toByteArray());
+        return root.toByteArray();
+    }
+
+    public static byte[] encodeAudioRequestChunk(String url, String translationId, String fileId,
+                                                int chunkId, int audioPartsLength, byte[] audioFile) {
+        if (url == null || url.trim().isEmpty()) {
+            throw new IllegalArgumentException("url must not be empty");
+        }
+        if (translationId == null || translationId.trim().isEmpty()) {
+            throw new IllegalArgumentException("translationId must not be empty");
+        }
+        if (fileId == null || fileId.trim().isEmpty()) {
+            throw new IllegalArgumentException("fileId must not be empty");
+        }
+        if (chunkId < 0) {
+            throw new IllegalArgumentException("chunkId must be non-negative: " + chunkId);
+        }
+        if (audioPartsLength < 0) {
+            throw new IllegalArgumentException("audioPartsLength must be non-negative: " + audioPartsLength);
+        }
+        if (audioFile == null || audioFile.length == 0) {
+            throw new IllegalArgumentException("audioFile must be non-empty");
+        }
+
+        VotWireWriter audioBuffer = new VotWireWriter();
+        audioBuffer.writeInt32IncludeZero(1, chunkId);
+        audioBuffer.writeBytes(2, audioFile);
+
+        VotWireWriter partialAudioInfo = new VotWireWriter();
+        partialAudioInfo.writeEmbedded(1, audioBuffer.toByteArray());
+        if (audioPartsLength > 0) {
+            partialAudioInfo.writeInt32(2, audioPartsLength);
+        }
+        partialAudioInfo.writeString(3, fileId);
+        partialAudioInfo.writeInt32(4, 1); // version = 1
+
+        VotWireWriter root = new VotWireWriter();
+        root.writeString(1, translationId);
+        root.writeString(2, url);
+        root.writeEmbedded(4, partialAudioInfo.toByteArray());
+        return root.toByteArray();
+    }
+
+    public static VotTranslationAudioResponse decodeTranslationAudioResponse(byte[] data) {
+        VotTranslationAudioResponse r = new VotTranslationAudioResponse();
+        if (data == null || data.length == 0) {
+            return r;
+        }
+        int pos = 0;
+        parseLoop:
+        while (pos < data.length) {
+            int[] tag = readVarint(data, pos);
+            if (tag[0] <= 0) {
+                break;
+            }
+            pos = tag[1];
+            int fieldNumber = tag[0] >>> 3;
+            int wireType = tag[0] & 0x7;
+
+            switch (wireType) {
+                case 0: { // varint
+                    int[] val = readVarint(data, pos);
+                    if (val[0] < 0) {
+                        break parseLoop;
+                    }
+                    pos = val[1];
+                    if (fieldNumber == 1) {
+                        r.status = val[0];
+                    }
+                    break;
+                }
+                case 1: { // 64-bit
+                    if (data.length - pos < 8) {
+                        break parseLoop;
+                    }
+                    pos += 8;
+                    break;
+                }
+                case 2: { // length-delimited
+                    int[] len = readVarint(data, pos);
+                    if (len[0] < 0) {
+                        break parseLoop;
+                    }
+                    pos = len[1];
+                    int length = len[0];
+                    if (length < 0 || length > data.length - pos) {
+                        break parseLoop;
+                    }
+                    if (fieldNumber == 2) {
+                        byte[] chunk = new byte[length];
+                        System.arraycopy(data, pos, chunk, 0, length);
+                        r.remainingChunks.add(new String(chunk, StandardCharsets.UTF_8));
+                    }
+                    pos += length;
+                    break;
+                }
+                case 5: { // 32-bit
+                    if (data.length - pos < 4) {
+                        break parseLoop;
+                    }
+                    pos += 4;
+                    break;
+                }
+                default:
+                    break parseLoop;
+            }
+        }
+        return r;
+    }
+
     public static VotTranslationResponse decodeTranslationResponse(byte[] data) {
         Map<Integer, Object> fields = parseFields(data);
         VotTranslationResponse r = new VotTranslationResponse();
