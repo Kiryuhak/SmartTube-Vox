@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLException;
 
 public class VotClient {
@@ -65,10 +66,19 @@ public class VotClient {
     private String mLastOAuthToken;
     @Nullable
     private VotAudioSourceProvider mAudioSourceProvider;
+    private final Object mUploaderLock = new Object();
     private volatile VotAudioUploader mActiveAudioUploader;
+    private static final VotAudioUploader CANCELLED_UPLOADER = new VotAudioUploader();
+    private static final ThreadLocal<AtomicReference<VotAudioUploader>> sCurrentLocalUploader = new ThreadLocal<>();
+    private static final ThreadLocal<VotAudioSource> sCurrentAudioSource = new ThreadLocal<>();
+    private static final VotAudioSource EMPTY_SOURCE_MARKER = new VotAudioSource() {
+        @Override public void open() {}
+        @Override public int read(byte[] buffer, int offset, int length) { return -1; }
+        @Override public long getContentLength() { return 0; }
+        @Override public void close() {}
+    };
     private String mTestOAuthToken;
     private Boolean mTestLivelyEnabled;
-    private transient VotAudioSource mCurrentAudioSource;
 
     public void setAudioSourceProvider(@Nullable VotAudioSourceProvider provider) {
         mAudioSourceProvider = provider;
@@ -148,8 +158,19 @@ public class VotClient {
     public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec, boolean subsequent,
                                                       @Nullable VotAudioSourceProvider audioSourceProvider) {
         return Observable.<VotProgress>create(emitter -> {
-            emitter.setCancellable(this::cancelActiveAudioUpload);
-            pollTranslation(emitter, youtubeUrl, durationSec, true, true, subsequent, audioSourceProvider);
+            AtomicReference<VotAudioUploader> localUploaderRef = new AtomicReference<>();
+            emitter.setCancellable(() -> {
+                VotAudioUploader local = localUploaderRef.getAndSet(CANCELLED_UPLOADER);
+                if (local != null && local != CANCELLED_UPLOADER) {
+                    local.cancel();
+                }
+            });
+            sCurrentLocalUploader.set(localUploaderRef);
+            try {
+                pollTranslation(emitter, youtubeUrl, durationSec, true, true, subsequent, audioSourceProvider);
+            } finally {
+                sCurrentLocalUploader.remove();
+            }
         }).subscribeOn(Schedulers.io());
     }
 
@@ -419,22 +440,29 @@ public class VotClient {
 
         if (response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED) {
             if (allowAudioFallback) {
+                if (emitter.isDisposed()) {
+                    return false;
+                }
                 VotAudioSourceProvider provider = audioSourceProvider != null ? audioSourceProvider : mAudioSourceProvider;
                 VotAudioSource audioSource = null;
                 if (provider != null) {
                     try {
                         audioSource = provider.getAudioSource(youtubeUrl);
                     } catch (Throwable t) {
-                        logE("Error resolving audio source for %s: %s", youtubeUrl, t.getMessage());
+                        logE("Error resolving audio source for %s: %s", youtubeUrl, sanitizeLogMessage(t));
                     }
                 }
 
-                mCurrentAudioSource = audioSource;
+                if (emitter.isDisposed()) {
+                    return false;
+                }
+
+                sCurrentAudioSource.set(audioSource != null ? audioSource : EMPTY_SOURCE_MARKER);
                 try {
                     handleAudioRequested(youtubeUrl, durationSec, response.translationId,
                             useLively, requestOAuthToken);
                 } catch (IOException | VotException | IllegalArgumentException e) {
-                    logE("VOT audio upload failed: %s", e.getMessage());
+                    logE("VOT audio upload failed: %s", sanitizeLogMessage(e));
                     if (!emitter.isDisposed()) {
                         if (e instanceof VotCancellationException) {
                             return false;
@@ -453,7 +481,7 @@ public class VotClient {
                     }
                     return false;
                 } finally {
-                    mCurrentAudioSource = null;
+                    sCurrentAudioSource.remove();
                 }
 
                 // After audio fallback upload completes, Yandex requires a translation request
@@ -568,8 +596,15 @@ public class VotClient {
                               @Nullable String translationId, boolean useLively,
                               String requestOAuthToken)
             throws IOException, VotException {
-        VotAudioSource source = mCurrentAudioSource != null ? mCurrentAudioSource
-                : (mAudioSourceProvider != null ? mAudioSourceProvider.getAudioSource(youtubeUrl) : null);
+        VotAudioSource current = sCurrentAudioSource.get();
+        VotAudioSource source;
+        if (current == EMPTY_SOURCE_MARKER) {
+            source = null;
+        } else if (current != null) {
+            source = current;
+        } else {
+            source = mAudioSourceProvider != null ? mAudioSourceProvider.getAudioSource(youtubeUrl) : null;
+        }
         handleAudioRequested(youtubeUrl, durationSec, translationId, useLively, requestOAuthToken, source);
     }
 
@@ -595,7 +630,16 @@ public class VotClient {
 
         String fileId = "smarttube-" + VotSignature.randomToken();
         VotAudioUploader uploader = new VotAudioUploader(mHttp);
-        mActiveAudioUploader = uploader;
+        synchronized (mUploaderLock) {
+            mActiveAudioUploader = uploader;
+        }
+        AtomicReference<VotAudioUploader> localRef = sCurrentLocalUploader.get();
+        if (localRef != null) {
+            if (!localRef.compareAndSet(null, uploader)) {
+                uploader.cancel();
+                throw new VotCancellationException("Upload cancelled before starting");
+            }
+        }
         try {
             VotTranslationAudioResponse resp = uploader.uploadAudio(
                     youtubeUrl, translationId, fileId, mSession, requestOAuthToken, audioSource);
@@ -606,7 +650,14 @@ public class VotClient {
                 throw new VotException("Audio upload incomplete: server waiting for chunks " + resp.remainingChunks);
             }
         } finally {
-            mActiveAudioUploader = null;
+            synchronized (mUploaderLock) {
+                if (mActiveAudioUploader == uploader) {
+                    mActiveAudioUploader = null;
+                }
+            }
+            if (localRef != null) {
+                localRef.compareAndSet(uploader, null);
+            }
         }
     }
 
@@ -747,5 +798,27 @@ public class VotClient {
         if (mLogEnabled) {
             Log.e(TAG, message, args);
         }
+    }
+
+    public static String sanitizeLogMessage(@Nullable Throwable t) {
+        if (t == null) {
+            return "null";
+        }
+        String msg = t.getMessage();
+        if (msg == null || msg.trim().isEmpty()) {
+            return t.getClass().getSimpleName();
+        }
+        return sanitizeMessage(msg);
+    }
+
+    public static String sanitizeMessage(@Nullable String msg) {
+        if (msg == null) {
+            return "";
+        }
+        // Strip out complete URLs to avoid leaking CDN auth tokens/signatures
+        String sanitized = msg.replaceAll("https?://[^\\s\"'<>]+", "[REDACTED_URL]");
+        // Strip out any key-value token patterns
+        sanitized = sanitized.replaceAll("(?i)(sig|signature|token|key|secret|auth|bearer)=[^&\\s\"';]+", "$1=[REDACTED]");
+        return sanitized;
     }
 }

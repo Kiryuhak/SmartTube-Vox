@@ -804,15 +804,21 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Nullable
     private MediaItemFormatInfo getFormatInfo() {
+        String currentVideoId = getVideo() != null ? getVideo().videoId : null;
         VideoLoaderController loader = getController(VideoLoaderController.class);
         if (loader != null && loader.getFormatInfo() != null) {
-            return loader.getFormatInfo();
+            MediaItemFormatInfo loaderFormat = loader.getFormatInfo();
+            if (currentVideoId == null || loaderFormat.getVideoId() == null || currentVideoId.equals(loaderFormat.getVideoId())) {
+                return loaderFormat;
+            }
+            Log.w(TAG, "VOT: cached VideoLoaderController formatInfo belongs to %s, current is %s",
+                    loaderFormat.getVideoId(), currentVideoId);
         }
-        if (getVideo() != null && getVideo().videoId != null) {
+        if (currentVideoId != null) {
             ServiceManager service = YouTubeServiceManager.instance();
             if (service != null && service.getMediaItemService() != null) {
                 try {
-                    return service.getMediaItemService().getFormatInfo(getVideo().videoId);
+                    return service.getMediaItemService().getFormatInfo(currentVideoId);
                 } catch (Throwable ignored) {
                 }
             }
