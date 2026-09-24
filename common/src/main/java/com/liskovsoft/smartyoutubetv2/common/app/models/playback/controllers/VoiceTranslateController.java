@@ -17,7 +17,14 @@ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.common.vot.TranslationAudioPlayer;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotAudioTrackHelper;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotAudioTrackHelper.TrackInfo;
+import androidx.annotation.Nullable;
+import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaFormat;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotClient;
+import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotMediaFormatSelector;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotYouTubeAudioSource;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotErrorCategory;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgress;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay;
@@ -711,7 +718,25 @@ public class VoiceTranslateController extends BasePlayerController {
         final boolean requestUsesOAuth = votData().isLivelyVoiceEnabled();
         Log.i(TAG, "VOT request started: duration=" + durationSec + "s, userArmed=" + mUserArmed
                 + ", retryCount=" + mTranslationRetryCount + ", subsequent=" + subsequent);
-        mTranslationDisposable = votClient().observeTranslation(videoUrl, durationSec, subsequent)
+        mTranslationDisposable = votClient().observeTranslation(videoUrl, durationSec, subsequent, requestedUrl -> {
+            if (!isCurrentTranslationRequest(requestSessionId, requestedUrl)) {
+                Log.w(TAG, "VOT: audio source requested for stale session %d", requestSessionId);
+                return null;
+            }
+            MediaItemFormatInfo formatInfo = getFormatInfo();
+            if (formatInfo == null || formatInfo.getAdaptiveFormats() == null) {
+                Log.w(TAG, "VOT: no MediaItemFormatInfo available for audio upload");
+                return null;
+            }
+            MediaFormat best = VotMediaFormatSelector.selectBestAudioFormat(formatInfo.getAdaptiveFormats());
+            if (best == null) {
+                Log.w(TAG, "VOT: no compatible audio format found for upload");
+                return null;
+            }
+            Log.i(TAG, "VOT: selected format for upload: mime=%s, bitrate=%s, clen=%s",
+                    best.getMimeType(), best.getBitrate(), best.getClen());
+            return VotYouTubeAudioSource.fromMediaFormat(best);
+        })
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
                         progress -> onVotProgress(requestSessionId, videoUrl, progress),
@@ -775,6 +800,24 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private List<FormatItem> getAudioFormats() {
         return getPlayer() != null ? getPlayer().getAudioFormats() : null;
+    }
+
+    @Nullable
+    private MediaItemFormatInfo getFormatInfo() {
+        VideoLoaderController loader = getController(VideoLoaderController.class);
+        if (loader != null && loader.getFormatInfo() != null) {
+            return loader.getFormatInfo();
+        }
+        if (getVideo() != null && getVideo().videoId != null) {
+            ServiceManager service = YouTubeServiceManager.instance();
+            if (service != null && service.getMediaItemService() != null) {
+                try {
+                    return service.getMediaItemService().getFormatInfo(getVideo().videoId);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        return null;
     }
 
     private void onVotProgress(int requestSessionId, String requestVideoUrl, VotProgress progress) {

@@ -37,6 +37,7 @@ public class VotBatch61PollingProtocolTest {
 
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 600).toList().blockingGet();
 
@@ -252,6 +253,11 @@ public class VotBatch61PollingProtocolTest {
                 return new byte[]{0x08, 0x02};
             }
             throw new AssertionError("Unexpected PUT path: " + path);
+        }
+
+        @Override
+        public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers, CallHolder callHolder) {
+            return putProtobuf(path, body, headers);
         }
     }
 }

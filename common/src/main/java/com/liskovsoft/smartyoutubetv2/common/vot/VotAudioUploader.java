@@ -293,6 +293,9 @@ public class VotAudioUploader {
                 }
 
                 if (attempts >= MAX_CHUNK_RETRIES) {
+                    if (e instanceof VotHttpException) {
+                        throw (VotHttpException) e;
+                    }
                     throw new IOException("Failed uploading chunk " + chunkIndex + " after " + attempts + " attempts: " + e.getMessage(), e);
                 }
 

@@ -22,6 +22,7 @@ public class VotBatch55AudioRequestedSessionTest {
         RecordingHttp http = new RecordingHttp(false);
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 1453)
                 .toList().blockingGet();
@@ -55,6 +56,7 @@ public class VotBatch55AudioRequestedSessionTest {
         RecordingHttp http = new RecordingHttp(true);
         VotClient client = new VotClient(
                 null, http, null, new RecordingWaitStrategy(), false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 1453)
                 .toList().blockingGet();
@@ -193,6 +195,11 @@ public class VotBatch55AudioRequestedSessionTest {
             events.add("audio");
             audioHeaders = new HashMap<>(headers);
             return new byte[]{0x08, 0x02};
+        }
+
+        @Override
+        public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers, CallHolder callHolder) {
+            return putProtobuf(path, body, headers);
         }
     }
 }

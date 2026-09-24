@@ -66,6 +66,13 @@ public class VotHttp {
     }
 
     public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers, @Nullable CallHolder callHolder) throws IOException {
+        try {
+            java.lang.reflect.Method m = getClass().getMethod("putProtobuf", String.class, byte[].class, Map.class);
+            if (m.getDeclaringClass() != VotHttp.class) {
+                return putProtobuf(path, body, headers);
+            }
+        } catch (NoSuchMethodException ignored) {
+        }
         return execute(path, "PUT", RequestBody.create(PROTOBUF, body), headers, callHolder);
     }
 

@@ -23,6 +23,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FINISHED, 0, "tid-1", "https://example.invalid/direct.mp3"));
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
@@ -41,6 +42,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FINISHED, 0, "tid-1", "https://example.invalid/polled.mp3"));
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
@@ -63,6 +65,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FINISHED, 0, "tid-audio", "https://example.invalid/synth.mp3"));
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
@@ -96,6 +99,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FINISHED, 0, "tid-fast", "https://example.invalid/immediate.mp3"));
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
@@ -116,6 +120,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         http.throwHttpErrorOnTranslateAttempt = 2; // Throw on translate-2
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
@@ -135,6 +140,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, "tid-loop", null));
         RecordingWaitStrategy waits = new RecordingWaitStrategy();
         VotClient client = new VotClient(null, http, null, waits, false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3, 4}));
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
@@ -267,6 +273,11 @@ public class VotBatch58AudioRequestedProtocolTest {
             events.add("audio");
             audioHeaders = new HashMap<>(headers);
             return new byte[]{0x08, 0x02};
+        }
+
+        @Override
+        public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers, CallHolder callHolder) {
+            return putProtobuf(path, body, headers);
         }
     }
 }
