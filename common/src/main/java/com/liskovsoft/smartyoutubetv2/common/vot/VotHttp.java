@@ -35,20 +35,46 @@ public class VotHttp {
         mClient = client;
     }
 
+    public interface CallHolder {
+        void setCall(okhttp3.Call call);
+        void cancel();
+    }
+
+    public static class SimpleCallHolder implements CallHolder {
+        private volatile okhttp3.Call mCall;
+
+        @Override
+        public void setCall(okhttp3.Call call) {
+            mCall = call;
+        }
+
+        @Override
+        public void cancel() {
+            okhttp3.Call c = mCall;
+            if (c != null) {
+                c.cancel();
+            }
+        }
+    }
+
     public byte[] postProtobuf(String path, byte[] body, Map<String, String> headers) throws IOException {
-        return execute(path, "POST", RequestBody.create(PROTOBUF, body), headers);
+        return execute(path, "POST", RequestBody.create(PROTOBUF, body), headers, null);
     }
 
     public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers) throws IOException {
-        return execute(path, "PUT", RequestBody.create(PROTOBUF, body), headers);
+        return putProtobuf(path, body, headers, null);
+    }
+
+    public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers, @Nullable CallHolder callHolder) throws IOException {
+        return execute(path, "PUT", RequestBody.create(PROTOBUF, body), headers, callHolder);
     }
 
     public byte[] putJson(String path, String json, Map<String, String> headers) throws IOException {
-        return execute(path, "PUT", RequestBody.create(JSON, json.getBytes(StandardCharsets.UTF_8)), headers);
+        return execute(path, "PUT", RequestBody.create(JSON, json.getBytes(StandardCharsets.UTF_8)), headers, null);
     }
 
     @Nullable
-    private byte[] execute(String path, String method, RequestBody requestBody, Map<String, String> headers) throws IOException {
+    private byte[] execute(String path, String method, RequestBody requestBody, Map<String, String> headers, @Nullable CallHolder callHolder) throws IOException {
         Request.Builder builder = new Request.Builder()
                 .url("https://" + VotConfig.HOST + path)
                 .method(method, requestBody)
@@ -66,8 +92,12 @@ public class VotHttp {
             }
         }
 
+        okhttp3.Call call = mClient.newCall(builder.build());
+        if (callHolder != null) {
+            callHolder.setCall(call);
+        }
         long startTimeMs = System.currentTimeMillis();
-        try (Response response = mClient.newCall(builder.build()).execute()) {
+        try (Response response = call.execute()) {
             long durationMs = System.currentTimeMillis() - startTimeMs;
             if (!response.isSuccessful()) {
                 String retryAfterHeader = response.header("Retry-After");
