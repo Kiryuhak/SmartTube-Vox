@@ -183,19 +183,38 @@ public class VotYouTubeAudioSource implements VotAudioSource {
             return 0;
         }
 
+        if (mActualContentLength > 0 && mBytesRead >= mActualContentLength) {
+            return -1;
+        }
+
         InputStream in = mInputStream;
         if (in == null) {
             return -1;
         }
 
+        int bytesToRead = len;
+        if (mActualContentLength > 0) {
+            long remaining = mActualContentLength - mBytesRead;
+            if (bytesToRead > remaining) {
+                bytesToRead = (int) remaining;
+            }
+        }
+
         int r;
         try {
-            r = in.read(buffer, off, len);
+            r = in.read(buffer, off, bytesToRead);
         } catch (IOException e) {
             if (mClosed) {
                 throw new VotCancellationException("Read cancelled");
             }
             throw new VotAudioSourceException("Error reading from YouTube media stream: " + e.getMessage(), e);
+        }
+
+        if (r == -1) {
+            if (mActualContentLength > 0 && mBytesRead < mActualContentLength) {
+                throw new VotAudioSourceException("Premature EOF from YouTube media stream: expected " + mActualContentLength + " bytes, but read " + mBytesRead);
+            }
+            return -1;
         }
 
         if (r > 0) {
