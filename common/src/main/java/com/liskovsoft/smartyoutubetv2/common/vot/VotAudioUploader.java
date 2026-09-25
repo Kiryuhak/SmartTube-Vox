@@ -2,6 +2,8 @@ package com.liskovsoft.smartyoutubetv2.common.vot;
 
 import androidx.annotation.Nullable;
 
+import com.liskovsoft.sharedutils.mylogger.Log;
+
 import java.io.IOException;
 import java.util.Map;
 
@@ -11,6 +13,7 @@ import java.util.Map;
  * Strictly bounds peak memory on ARMv7 devices by never buffering complete long-form audio.
  */
 public class VotAudioUploader {
+    private static final String TAG = "VotAudioUploader";
     private static final int MAX_CHUNK_RETRIES = 3;
 
     private final VotHttp mHttp;
@@ -18,6 +21,12 @@ public class VotAudioUploader {
     private volatile boolean mCancelled = false;
     private VotHttp.SimpleCallHolder mCurrentCallHolder;
     private VotAudioSource mCurrentSource;
+
+    private volatile long mTotalBytesRead = 0;
+    private volatile long mTotalBytesUploaded = 0;
+    private volatile int mTotalChunksUploaded = 0;
+    private volatile int mFinalStatus = -1;
+    private volatile int mRemainingChunksCount = -1;
 
     public VotAudioUploader() {
         this(new VotHttp(), VotConfig.AUDIO_MIN_CHUNK_SIZE);
@@ -36,6 +45,26 @@ public class VotAudioUploader {
         }
         mHttp = http;
         mChunkSize = chunkSize;
+    }
+
+    public long getTotalBytesRead() {
+        return mTotalBytesRead;
+    }
+
+    public long getTotalBytesUploaded() {
+        return mTotalBytesUploaded;
+    }
+
+    public int getTotalChunksUploaded() {
+        return mTotalChunksUploaded;
+    }
+
+    public int getFinalStatus() {
+        return mFinalStatus;
+    }
+
+    public int getRemainingChunksCount() {
+        return mRemainingChunksCount;
     }
 
     /**
@@ -95,6 +124,16 @@ public class VotAudioUploader {
 
             long contentLength = audioSource.getContentLength();
             long totalRead = 0;
+            long totalBytesUploaded = 0;
+            int chunksUploaded = 0;
+
+            mTotalBytesRead = 0;
+            mTotalBytesUploaded = 0;
+            mTotalChunksUploaded = 0;
+            mFinalStatus = -1;
+            mRemainingChunksCount = -1;
+
+            logI("Audio upload started: declaredContentLength=%d, chunkSize=%d", contentLength, mChunkSize);
 
             byte[] chunkBuffer = new byte[mChunkSize];
             int read = readBlock(audioSource, chunkBuffer, 0, mChunkSize);
@@ -113,11 +152,25 @@ public class VotAudioUploader {
                 System.arraycopy(chunkBuffer, 0, payload, 0, read);
                 chunkBuffer = null; // release immediately
 
+                logI("Uploading single-part chunk: size=%d, totalRead=%d, expectedLength=%d",
+                        payload.length, totalRead, contentLength);
+                long startMs = System.currentTimeMillis();
                 byte[] body = VotProtobuf.encodeAudioRequestSinglePart(url, translationId, fileId, payload);
                 VotTranslationAudioResponse resp = uploadChunkWithRetry(body, session, oauthToken, 0);
+                long elapsedMs = System.currentTimeMillis() - startMs;
+
+                mTotalBytesRead = totalRead;
+                mTotalBytesUploaded = payload.length;
+                mTotalChunksUploaded = 1;
+                mFinalStatus = resp != null ? resp.status : -1;
+                mRemainingChunksCount = resp != null && resp.remainingChunks != null ? resp.remainingChunks.size() : 0;
+                logI("Single-part chunk acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
+                        mFinalStatus, mRemainingChunksCount, elapsedMs, mTotalBytesUploaded);
 
                 validateFinalResponse(resp, 1);
                 checkCancelled();
+                logI("Audio upload complete: totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=1, finalStatus=%d",
+                        mTotalBytesRead, mTotalBytesUploaded, mFinalStatus);
                 return resp;
             }
 
@@ -130,20 +183,47 @@ public class VotAudioUploader {
                 if (contentLength > 0 && totalRead != contentLength) {
                     throw new VotAudioSourceException("Premature EOF: expected " + contentLength + " bytes, but read " + totalRead);
                 }
+                logI("Uploading exact-boundary single-part chunk: size=%d, totalRead=%d, expectedLength=%d",
+                        chunkBuffer.length, totalRead, contentLength);
+                long startMs = System.currentTimeMillis();
                 byte[] body = VotProtobuf.encodeAudioRequestSinglePart(url, translationId, fileId, chunkBuffer);
                 chunkBuffer = null; // release immediately
 
                 VotTranslationAudioResponse resp = uploadChunkWithRetry(body, session, oauthToken, 0);
+                long elapsedMs = System.currentTimeMillis() - startMs;
+
+                mTotalBytesRead = totalRead;
+                mTotalBytesUploaded = mChunkSize;
+                mTotalChunksUploaded = 1;
+                mFinalStatus = resp != null ? resp.status : -1;
+                mRemainingChunksCount = resp != null && resp.remainingChunks != null ? resp.remainingChunks.size() : 0;
+                logI("Single-part chunk acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
+                        mFinalStatus, mRemainingChunksCount, elapsedMs, mTotalBytesUploaded);
+
                 validateFinalResponse(resp, 1);
                 checkCancelled();
+                logI("Audio upload complete: totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=1, finalStatus=%d",
+                        mTotalBytesRead, mTotalBytesUploaded, mFinalStatus);
                 return resp;
             }
 
             // More bytes exist -> Multi-part upload
             // Upload chunk 0 as intermediate (audioPartsLength = 0)
             totalRead += 1;
+            logI("Uploading multi-part chunk 0 (intermediate): size=%d, totalRead=%d",
+                    chunkBuffer.length, totalRead);
+            long startMs0 = System.currentTimeMillis();
             byte[] chunk0Body = VotProtobuf.encodeAudioRequestChunk(url, translationId, fileId, 0, 0, chunkBuffer);
             VotTranslationAudioResponse resp0 = uploadChunkWithRetry(chunk0Body, session, oauthToken, 0);
+            long elapsedMs0 = System.currentTimeMillis() - startMs0;
+            totalBytesUploaded = chunkBuffer.length;
+            chunksUploaded = 1;
+            mTotalBytesRead = totalRead;
+            mTotalBytesUploaded = totalBytesUploaded;
+            mTotalChunksUploaded = chunksUploaded;
+            int remainingChunks0 = resp0 != null && resp0.remainingChunks != null ? resp0.remainingChunks.size() : 0;
+            logI("Multi-part chunk 0 acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
+                    resp0 != null ? resp0.status : -1, remainingChunks0, elapsedMs0, totalBytesUploaded);
             validateIntermediateResponse(resp0, 0);
 
             int chunkIndex = 1;
@@ -165,10 +245,26 @@ public class VotAudioUploader {
                     System.arraycopy(chunkBuffer, 0, payload, 0, currentChunkSize);
                     chunkBuffer = null; // release
 
+                    logI("Uploading multi-part terminal chunk %d of %d: size=%d, totalRead=%d, expectedLength=%d",
+                            chunkIndex, totalChunks, payload.length, totalRead, contentLength);
+                    long startMs = System.currentTimeMillis();
                     byte[] body = VotProtobuf.encodeAudioRequestChunk(url, translationId, fileId, chunkIndex, totalChunks, payload);
                     VotTranslationAudioResponse resp = uploadChunkWithRetry(body, session, oauthToken, chunkIndex);
+                    long elapsedMs = System.currentTimeMillis() - startMs;
+                    totalBytesUploaded += payload.length;
+                    chunksUploaded++;
+                    mTotalBytesRead = totalRead;
+                    mTotalBytesUploaded = totalBytesUploaded;
+                    mTotalChunksUploaded = chunksUploaded;
+                    mFinalStatus = resp != null ? resp.status : -1;
+                    mRemainingChunksCount = resp != null && resp.remainingChunks != null ? resp.remainingChunks.size() : 0;
+                    logI("Multi-part terminal chunk %d acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
+                            chunkIndex, mFinalStatus, mRemainingChunksCount, elapsedMs, totalBytesUploaded);
+
                     validateFinalResponse(resp, totalChunks);
                     checkCancelled();
+                    logI("Audio upload complete: totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=%d, finalStatus=%d",
+                            mTotalBytesRead, mTotalBytesUploaded, totalChunks, mFinalStatus);
                     return resp;
                 }
 
@@ -180,19 +276,47 @@ public class VotAudioUploader {
                         throw new VotAudioSourceException("Premature EOF: expected " + contentLength + " bytes, but read " + totalRead);
                     }
                     int totalChunks = chunkIndex + 1;
+                    logI("Uploading multi-part terminal chunk %d of %d: size=%d, totalRead=%d, expectedLength=%d",
+                            chunkIndex, totalChunks, chunkBuffer.length, totalRead, contentLength);
+                    long startMs = System.currentTimeMillis();
                     byte[] body = VotProtobuf.encodeAudioRequestChunk(url, translationId, fileId, chunkIndex, totalChunks, chunkBuffer);
                     chunkBuffer = null; // release
 
                     VotTranslationAudioResponse resp = uploadChunkWithRetry(body, session, oauthToken, chunkIndex);
+                    long elapsedMs = System.currentTimeMillis() - startMs;
+                    totalBytesUploaded += mChunkSize;
+                    chunksUploaded++;
+                    mTotalBytesRead = totalRead;
+                    mTotalBytesUploaded = totalBytesUploaded;
+                    mTotalChunksUploaded = chunksUploaded;
+                    mFinalStatus = resp != null ? resp.status : -1;
+                    mRemainingChunksCount = resp != null && resp.remainingChunks != null ? resp.remainingChunks.size() : 0;
+                    logI("Multi-part terminal chunk %d acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
+                            chunkIndex, mFinalStatus, mRemainingChunksCount, elapsedMs, totalBytesUploaded);
+
                     validateFinalResponse(resp, totalChunks);
                     checkCancelled();
+                    logI("Audio upload complete: totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=%d, finalStatus=%d",
+                            mTotalBytesRead, mTotalBytesUploaded, totalChunks, mFinalStatus);
                     return resp;
                 }
 
                 // More chunks follow -> intermediate chunk
                 totalRead += 1;
+                logI("Uploading multi-part chunk %d (intermediate): size=%d, totalRead=%d",
+                        chunkIndex, chunkBuffer.length, totalRead);
+                long startMs = System.currentTimeMillis();
                 byte[] body = VotProtobuf.encodeAudioRequestChunk(url, translationId, fileId, chunkIndex, 0, chunkBuffer);
                 VotTranslationAudioResponse resp = uploadChunkWithRetry(body, session, oauthToken, chunkIndex);
+                long elapsedMs = System.currentTimeMillis() - startMs;
+                totalBytesUploaded += chunkBuffer.length;
+                chunksUploaded++;
+                mTotalBytesRead = totalRead;
+                mTotalBytesUploaded = totalBytesUploaded;
+                mTotalChunksUploaded = chunksUploaded;
+                int remainingChunks = resp != null && resp.remainingChunks != null ? resp.remainingChunks.size() : 0;
+                logI("Multi-part chunk %d acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
+                        chunkIndex, resp != null ? resp.status : -1, remainingChunks, elapsedMs, totalBytesUploaded);
                 validateIntermediateResponse(resp, chunkIndex);
 
                 chunkIndex++;
@@ -283,6 +407,7 @@ public class VotAudioUploader {
                 return VotProtobuf.decodeTranslationAudioResponse(rawResponse);
             } catch (IOException e) {
                 checkCancelled();
+                logW("Chunk %d upload attempt %d failed: %s", chunkIndex, attempts, e.getMessage());
                 if (e instanceof VotHttpException) {
                     VotHttpException he = (VotHttpException) e;
                     if (!VotClient.isTransientException(he)) {
@@ -330,6 +455,20 @@ public class VotAudioUploader {
     private void checkCancelled() throws VotCancellationException {
         if (mCancelled) {
             throw new VotCancellationException("Audio upload was cancelled");
+        }
+    }
+
+    private static void logI(String format, Object... args) {
+        try {
+            Log.i(TAG, format, args);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void logW(String format, Object... args) {
+        try {
+            Log.w(TAG, format, args);
+        } catch (Throwable ignored) {
         }
     }
 }

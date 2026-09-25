@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.liskovsoft.mediaserviceinterfaces.data.MediaFormat;
+import com.liskovsoft.sharedutils.mylogger.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,6 +30,7 @@ import okhttp3.ResponseBody;
  * - Thread-safe cancellation and resource cleanup.
  */
 public class VotYouTubeAudioSource implements VotAudioSource {
+    private static final String TAG = "VotYouTubeAudioSource";
     private static volatile OkHttpClient sDefaultClient;
 
     private final String mMediaUrl;
@@ -93,6 +95,8 @@ public class VotYouTubeAudioSource implements VotAudioSource {
         if (mOpened) {
             return;
         }
+
+        logI("Opening YouTube audio source: declaredLength=%d, url=%s", mDeclaredContentLength, sanitizeUrl(mMediaUrl));
 
         Request request = new Request.Builder()
                 .url(mMediaUrl)
@@ -163,6 +167,7 @@ public class VotYouTubeAudioSource implements VotAudioSource {
         mInputStream = body.byteStream();
         mBytesRead = 0;
         mOpened = true;
+        logI("YouTube audio stream successfully opened: httpCode=%d, contentLength=%d", code, mActualContentLength);
     }
 
     @Override
@@ -239,7 +244,21 @@ public class VotYouTubeAudioSource implements VotAudioSource {
     @Override
     public void close() throws IOException {
         mClosed = true;
+        logI("Closing YouTube audio source: bytesRead=%d, actualContentLength=%d", mBytesRead, mActualContentLength);
         closeQuietly();
+    }
+
+    private static void logI(String format, Object... args) {
+        try {
+            Log.i(TAG, format, args);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static String sanitizeUrl(String url) {
+        if (url == null) return "null";
+        int q = url.indexOf('?');
+        return q != -1 ? url.substring(0, q) + "?[query]" : url;
     }
 
     private void closeQuietly() {
@@ -283,8 +302,8 @@ public class VotYouTubeAudioSource implements VotAudioSource {
                 if (sDefaultClient == null) {
                     sDefaultClient = new OkHttpClient.Builder()
                             .connectTimeout(15, TimeUnit.SECONDS)
-                            .readTimeout(30, TimeUnit.SECONDS)
-                            .writeTimeout(30, TimeUnit.SECONDS)
+                            .readTimeout(60, TimeUnit.SECONDS)
+                            .writeTimeout(60, TimeUnit.SECONDS)
                             .build();
                 }
             }

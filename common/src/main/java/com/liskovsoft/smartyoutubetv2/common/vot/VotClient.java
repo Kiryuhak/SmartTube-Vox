@@ -641,6 +641,8 @@ public class VotClient {
             }
         }
         try {
+            logI("Starting VOT audio upload: url=%s, translationId=%s, fileId=%s, expectedContentLength=%d",
+                    youtubeUrl, translationId, fileId, audioSource.getContentLength());
             VotTranslationAudioResponse resp = uploader.uploadAudio(
                     youtubeUrl, translationId, fileId, mSession, requestOAuthToken, audioSource);
             if (resp == null || resp.status != VotTranslationAudioResponse.STATUS_DONE) {
@@ -649,6 +651,8 @@ public class VotClient {
             if (resp.remainingChunks != null && !resp.remainingChunks.isEmpty()) {
                 throw new VotException("Audio upload incomplete: server waiting for chunks " + resp.remainingChunks);
             }
+            logI("VOT audio upload successfully completed: status=%d, totalBytesUploaded=%d, totalChunks=%d",
+                    resp.status, uploader.getTotalBytesUploaded(), uploader.getTotalChunksUploaded());
         } finally {
             synchronized (mUploaderLock) {
                 if (mActiveAudioUploader == uploader) {
@@ -785,6 +789,12 @@ public class VotClient {
     private void logD(Object message, Object... args) {
         if (mLogEnabled) {
             Log.d(TAG, message, args);
+        }
+    }
+
+    private void logI(Object message, Object... args) {
+        if (mLogEnabled) {
+            Log.i(TAG, message, args);
         }
     }
 
