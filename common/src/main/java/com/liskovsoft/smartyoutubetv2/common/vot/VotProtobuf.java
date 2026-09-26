@@ -94,7 +94,7 @@ public final class VotProtobuf {
     public static byte[] encodeTranslationAudioRequest(String url, String translationId, String fileId) {
         VotWireWriter audioInfo = new VotWireWriter();
         audioInfo.writeString(1, fileId);
-        audioInfo.writeBytes(2, new byte[0]);
+        audioInfo.writeEmptyBytes(2);
 
         VotWireWriter w = new VotWireWriter();
         w.writeString(1, translationId);
@@ -245,6 +245,12 @@ public final class VotProtobuf {
         r.remainingTimeSec = remaining instanceof Integer ? (Integer) remaining : 0;
         r.translationId = (String) fields.get(7);
         r.message = (String) fields.get(9);
+        Object allow = fields.get(11);
+        r.allowToTranslateVideo = allow instanceof Integer ? (Integer) allow != 0 : null;
+        Object retry = fields.get(12);
+        r.shouldRetry = retry instanceof Integer ? (Integer) retry : null;
+        Object unknown3 = fields.get(13);
+        r.unknown3 = unknown3 instanceof Integer ? (Integer) unknown3 : null;
         return r;
     }
 

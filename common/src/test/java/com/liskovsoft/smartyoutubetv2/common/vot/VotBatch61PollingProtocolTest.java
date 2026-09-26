@@ -42,7 +42,7 @@ public class VotBatch61PollingProtocolTest {
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 600).toList().blockingGet();
 
         assertEquals(Arrays.asList(
-                "session", "translate-1", "fail-audio", "audio",
+                "session", "translate-1", "audio",
                 "translate-2", "translate-3", "translate-4"), http.events);
 
         // Verify single cryptographic session key across ALL requests

@@ -23,6 +23,7 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLException;
@@ -258,8 +259,7 @@ public class VotClient {
                 return;
             }
 
-            logD("Initial translation response: status=%d, remainingTime=%ds, message=%s",
-                    response.status, response.remainingTimeSec, response.message);
+            logTranslationStatus("Initial translation response", response);
             if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
                     allowLivelyFallback, useLively, requestOAuthToken, response, 0, audioSourceProvider)) {
                 return;
@@ -295,8 +295,7 @@ public class VotClient {
                     throw e;
                 }
 
-                logD("VOT poll response: attempt=%d, status=%d, remainingTime=%ds, message=%s",
-                        i + 1, response.status, response.remainingTimeSec, response.message);
+                logTranslationStatus("VOT poll response", response);
 
                 if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
                         allowLivelyFallback, useLively, requestOAuthToken, response, 0, audioSourceProvider)) {
@@ -510,7 +509,7 @@ public class VotClient {
         }
 
         if (response.status == VotTranslationResponse.STATUS_FAILED) {
-            logW("VOT translation response STATUS_FAILED: message=%s", response.message);
+            logTranslationStatus("VOT translation response STATUS_FAILED", response);
             if (allowLivelyFallback && useLively && isLivelyUnavailableError(response.message)) {
                 logD("Lively voice unavailable, retrying with Standard voice");
                 emitter.onNext(VotProgress.livelyFallback());
@@ -533,7 +532,7 @@ public class VotClient {
             return true;
         }
 
-        logW("VOT translation unexpected status: status=%d, message=%s", response.status, response.message);
+        logTranslationStatus("VOT translation unexpected status", response);
         emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
         emitter.onComplete();
         return false;
@@ -578,6 +577,12 @@ public class VotClient {
         return VotProtobuf.decodeTranslationResponse(raw);
     }
 
+    private void logTranslationStatus(String phase, VotTranslationResponse response) {
+        logD("%s: status=%d, remainingTime=%ds, messagePresent=%b, allowToTranslateVideo=%s, shouldRetry=%s, unknown3=%s",
+                phase, response.status, response.remainingTimeSec, response.message != null,
+                response.allowToTranslateVideo, response.shouldRetry, response.unknown3);
+    }
+
     private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively,
                                                       String requestOAuthToken) {
         Map<String, String> headers = VotHeaders.sessionTranslate(
@@ -618,9 +623,6 @@ public class VotClient {
                               String requestOAuthToken,
                               @Nullable VotAudioSource audioSource)
             throws IOException, VotException {
-        if (audioSource == null) {
-            throw new VotAudioSourceException("No audio source available for video translation");
-        }
         if (translationId == null || translationId.isEmpty()) {
             VotTranslationResponse r = requestTranslation(
                     youtubeUrl, durationSec, false, useLively, requestOAuthToken);
@@ -631,9 +633,12 @@ public class VotClient {
         }
 
         ensureSession();
-        requestFailAudio(youtubeUrl);
+        if (audioSource == null) {
+            requestEmptyAudioFallback(youtubeUrl, translationId, useLively, requestOAuthToken);
+            return;
+        }
 
-        String fileId = "smarttube-" + VotSignature.randomToken();
+        String fileId = "random-web_abr-" + UUID.randomUUID();
         VotAudioUploader uploader = new VotAudioUploader(mHttp);
         synchronized (mUploaderLock) {
             mActiveAudioUploader = uploader;
@@ -668,6 +673,48 @@ public class VotClient {
                 localRef.compareAndSet(uploader, null);
             }
         }
+    }
+
+    private void requestEmptyAudioFallback(String youtubeUrl, String translationId,
+                                           boolean useLively, String requestOAuthToken)
+            throws IOException, VotException {
+        String videoId = videoIdFromUrl(youtubeUrl);
+        if (videoId == null) {
+            throw new VotAudioSourceException("No audio source or canonical video ID available");
+        }
+        requestFailAudio(youtubeUrl);
+        byte[] body = VotProtobuf.encodeTranslationAudioRequest(youtubeUrl, translationId,
+                "fallback-empty-audio:video-translation:" + videoId);
+        Map<String, String> headers = VotHeaders.sessionTranslate(mSession, body, "/video-translation/audio");
+        if (useLively && requestOAuthToken != null && !requestOAuthToken.isEmpty()) {
+            headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(requestOAuthToken));
+        }
+        VotTranslationAudioResponse response = VotProtobuf.decodeTranslationAudioResponse(
+                mHttp.putProtobuf("/video-translation/audio", body, headers));
+        if (response == null || response.status != VotTranslationAudioResponse.STATUS_DONE
+                || !response.remainingChunks.isEmpty()) {
+            throw new VotException("Empty audio fallback not acknowledged");
+        }
+    }
+
+    @Nullable
+    private static String videoIdFromUrl(String url) {
+        if (url == null) return null;
+        int start = url.indexOf("?v=");
+        if (start < 0) start = url.indexOf("&v=");
+        if (start >= 0) start += 3;
+        else {
+            start = url.indexOf("youtu.be/");
+            if (start < 0) return null;
+            start += "youtu.be/".length();
+        }
+        int end = start;
+        while (end < url.length()) {
+            char c = url.charAt(end);
+            if (!Character.isLetterOrDigit(c) && c != '-' && c != '_') break;
+            end++;
+        }
+        return end > start ? url.substring(start, end) : null;
     }
 
     private void requestFailAudio(String youtubeUrl) throws IOException, VotException {

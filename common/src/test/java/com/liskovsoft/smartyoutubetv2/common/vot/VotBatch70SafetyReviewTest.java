@@ -288,12 +288,13 @@ public class VotBatch70SafetyReviewTest {
     }
 
     // =============================================================================================
-    // 7. Error Handling: Missing Audio Source Emits unsupported_video
+    // 7. Error Handling: Missing Audio Source Uses One Bounded Fallback
     // =============================================================================================
 
     @Test
-    public void testFailedAudioSourceResolution_TerminatesWithUnsupportedVideo() {
+    public void testFailedAudioSourceResolution_FallbackIsBounded() {
         MockHttp http = new MockHttp();
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 0, "tr-batch-70", null));
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 0, "tr-batch-70", null));
 
         VotClient client = new VotClient(null, http, null, (sec, emitter) -> {}, false);
@@ -307,6 +308,8 @@ public class VotBatch70SafetyReviewTest {
         assertEquals(1, progressList.size());
         assertEquals(VotProgress.TYPE_FAILED, progressList.get(0).type);
         assertEquals(VotClient.ERROR_MARKER_UNSUPPORTED_VIDEO, progressList.get(0).message);
+        assertEquals(1, http.failAudioCalls);
+        assertEquals(1, http.audioCalls);
     }
 
     // =============================================================================================
@@ -454,6 +457,8 @@ public class VotBatch70SafetyReviewTest {
     private static class MockHttp extends VotHttp {
         final List<byte[]> translateResponses = new ArrayList<>();
         int defaultTranslateStatus = VotTranslationResponse.STATUS_WAITING;
+        int failAudioCalls;
+        int audioCalls;
 
         @Override
         public byte[] postProtobuf(String path, byte[] body, Map<String, String> headers) throws IOException {
@@ -472,6 +477,7 @@ public class VotBatch70SafetyReviewTest {
         @Override
         public byte[] putJson(String path, String json, Map<String, String> headers) throws IOException {
             if ("/video-translation/fail-audio-js".equals(path)) {
+                failAudioCalls++;
                 return "{\"status\":1}".getBytes(StandardCharsets.UTF_8);
             }
             throw new IOException("Unhandled PUT JSON " + path);
@@ -480,6 +486,7 @@ public class VotBatch70SafetyReviewTest {
         @Override
         public byte[] putProtobuf(String path, byte[] body, Map<String, String> headers, CallHolder callHolder) throws IOException {
             if ("/video-translation/audio".equals(path)) {
+                audioCalls++;
                 return audioResponse(VotTranslationAudioResponse.STATUS_DONE, null);
             }
             throw new IOException("Unhandled PUT Protobuf " + path);

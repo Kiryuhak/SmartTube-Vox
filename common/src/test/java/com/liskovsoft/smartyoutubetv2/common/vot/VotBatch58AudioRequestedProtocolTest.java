@@ -70,7 +70,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
         assertEquals(Arrays.asList(
-                "session", "translate-1", "fail-audio", "audio",
+                "session", "translate-1", "audio",
                 "translate-2", "translate-3"), http.events);
         assertEquals(1, http.sessionCreateCalls);
 
@@ -104,7 +104,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
         assertEquals(Arrays.asList(
-                "session", "translate-1", "fail-audio", "audio", "translate-2"), http.events);
+                "session", "translate-1", "audio", "translate-2"), http.events);
         assertTrue("Retry after upload has firstRequest=true",
                 hasVarintField(http.translateBodies.get(1), 5, 1));
         assertEquals(0, waits.waitsSec.size());
@@ -125,7 +125,7 @@ public class VotBatch58AudioRequestedProtocolTest {
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
         assertEquals(Arrays.asList(
-                "session", "translate-1", "fail-audio", "audio", "translate-2"), http.events);
+                "session", "translate-1", "audio", "translate-2"), http.events);
         assertEquals(1, progress.size());
         assertEquals(VotProgress.TYPE_FAILED, progress.get(0).type);
         assertEquals(VotClient.ERROR_MARKER_GENERIC, progress.get(0).message);
@@ -146,7 +146,7 @@ public class VotBatch58AudioRequestedProtocolTest {
 
         // Must stop at translate-2 and NOT upload audio a second time
         assertEquals(Arrays.asList(
-                "session", "translate-1", "fail-audio", "audio", "translate-2"), http.events);
+                "session", "translate-1", "audio", "translate-2"), http.events);
         assertEquals(1, progress.size());
         assertEquals(VotProgress.TYPE_FAILED, progress.get(0).type);
         assertEquals(VotClient.ERROR_MARKER_UNSUPPORTED_VIDEO, progress.get(0).message);

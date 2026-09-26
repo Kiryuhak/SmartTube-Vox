@@ -547,6 +547,14 @@ public class VotBatch67AudioUploaderTest {
         byte[] secondPayload = ParsedWire.parse(second).getBytes(2);
         assertEquals(5_295_308, firstPayload.length);
         assertEquals(2_899_743, secondPayload.length);
+        ParsedWire firstOuter = ParsedWire.parse(http.requests.get(0).body);
+        ParsedWire secondOuter = ParsedWire.parse(http.requests.get(1).body);
+        assertEquals(TRANSLATION_ID, firstOuter.getString(1));
+        assertEquals(TRANSLATION_ID, secondOuter.getString(1));
+        assertEquals(VIDEO_URL, firstOuter.getString(2));
+        assertEquals(VIDEO_URL, secondOuter.getString(2));
+        assertEquals(FILE_ID, ParsedWire.parse(firstOuter.getBytes(4)).getString(3));
+        assertEquals(FILE_ID, ParsedWire.parse(secondOuter.getBytes(4)).getString(3));
         assertArrayEquals(Arrays.copyOfRange(audio, 0, firstPayload.length), firstPayload);
         assertArrayEquals(Arrays.copyOfRange(audio, firstPayload.length, audio.length), secondPayload);
         assertEquals(0, ParsedWire.parse(first).getInt(1));

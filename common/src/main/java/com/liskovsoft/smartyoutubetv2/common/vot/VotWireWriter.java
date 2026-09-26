@@ -65,6 +65,11 @@ final class VotWireWriter {
         mOut.write(value, 0, value.length);
     }
 
+    void writeEmptyBytes(int fieldNumber) {
+        writeTag(fieldNumber, 2);
+        writeVarint(0);
+    }
+
     void writeEmbedded(int fieldNumber, byte[] embedded) {
         if (embedded == null || embedded.length == 0) {
             return;

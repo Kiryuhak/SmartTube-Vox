@@ -28,7 +28,7 @@ public class VotBatch55AudioRequestedSessionTest {
                 .toList().blockingGet();
 
         assertEquals(Arrays.asList(
-                "session", "translate-1", "fail-audio", "audio",
+                "session", "translate-1", "audio",
                 "translate-2", "translate-3"), http.events);
         assertEquals(1, http.sessionCreateCalls);
         assertEquals(3, http.translateHeaders.size());

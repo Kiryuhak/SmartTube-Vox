@@ -144,7 +144,8 @@ public class VotBatch69RealAudioIntegrationTest {
         assertFalse("Outer Tag 4 (partialAudioInfo) must not be present for single-part audio", outer.hasField(4));
 
         ParsedWire inner = ParsedWire.parse(outer.getBytes(6));
-        assertTrue("File ID should start with smarttube-", inner.getString(1).startsWith("smarttube-"));
+        assertTrue("File ID identifies direct Web ABR audio", inner.getString(1).startsWith("random-web_abr-"));
+        assertFalse("Real audio must not trigger fail-audio fallback", http.events.contains("fail-audio"));
         assertArrayEquals("Uploaded audio bytes must match actual source bytes exactly",
                 originalMediaBytes, inner.getBytes(2));
     }
@@ -313,12 +314,14 @@ public class VotBatch69RealAudioIntegrationTest {
     }
 
     // =============================================================================================
-    // 10. Missing source: Controlled error
+    // 10. Missing source: bounded reference empty-audio fallback
     // =============================================================================================
     @Test
-    public void testMissingSource_ControlledError() {
+    public void testMissingSource_UsesEmptyAudioFallbackOnce() {
         MockHttp http = new MockHttp();
         http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, TRANSLATION_ID, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FINISHED, 0,
+                TRANSLATION_ID, "https://example.invalid/fallback.mp3"));
 
         VotClient client = new VotClient(null, http, null, new ImmediateWaitStrategy(), false);
         // Provider returns null
@@ -326,10 +329,107 @@ public class VotBatch69RealAudioIntegrationTest {
 
         List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
 
-        assertEquals(1, progress.size());
-        assertEquals(VotProgress.TYPE_FAILED, progress.get(0).type);
-        assertEquals(VotClient.ERROR_MARKER_UNSUPPORTED_VIDEO, progress.get(0).message);
-        assertTrue("No audio upload attempt should be made when source is missing", http.audioBodies.isEmpty());
+        assertEquals(VotProgress.TYPE_READY, progress.get(progress.size() - 1).type);
+        assertEquals(Arrays.asList("session", "translate-1", "fail-audio", "audio", "translate-2"), http.events);
+        assertEquals(1, http.audioBodies.size());
+        ParsedWire fallback = ParsedWire.parse(http.audioBodies.get(0));
+        assertEquals(TRANSLATION_ID, fallback.getString(1));
+        assertEquals(VIDEO_URL, fallback.getString(2));
+        ParsedWire audioInfo = ParsedWire.parse(fallback.getBytes(6));
+        assertEquals("fallback-empty-audio:video-translation:TEST_BATCH_69", audioInfo.getString(1));
+        assertEquals(0, audioInfo.getBytes(2).length);
+    }
+
+    @Test
+    public void testPhysicalSizeTwoChunkNormalLifecycle_NoFallbackOrDuplicate() {
+        MockHttp http = new MockHttp();
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, TRANSLATION_ID, null));
+        http.audioResponses.add(audioResponse(VotTranslationAudioResponse.STATUS_DONE, null));
+        http.audioResponses.add(audioResponse(VotTranslationAudioResponse.STATUS_DONE, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_WAITING, 1, TRANSLATION_ID, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FINISHED, 0,
+                TRANSLATION_ID, "https://example.invalid/finished.mp3"));
+        byte[] bytes = new byte[8_195_051];
+        VotClient client = new VotClient(null, http, null, new ImmediateWaitStrategy(), false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(bytes));
+
+        List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
+
+        assertEquals(VotProgress.TYPE_READY, progress.get(progress.size() - 1).type);
+        assertEquals(Arrays.asList("session", "translate-1", "audio", "audio", "translate-2", "translate-3"), http.events);
+        assertEquals(2, http.audioBodies.size());
+        assertEquals(1, http.sessionCreateCalls);
+        for (byte[] body : http.translateBodies) {
+            assertEquals(VIDEO_URL, ParsedWire.parse(body).getString(3));
+            assertTrue(hasVarintField(body, 5, 1));
+        }
+        String sessionKey = http.translateHeaders.get(0).get("Sec-Vtrans-Sk");
+        for (Map<String, String> headers : http.translateHeaders) {
+            assertEquals(sessionKey, headers.get("Sec-Vtrans-Sk"));
+        }
+        for (Map<String, String> headers : http.audioHeaders) {
+            assertEquals(sessionKey, headers.get("Sec-Vtrans-Sk"));
+        }
+        ParsedWire first = ParsedWire.parse(http.audioBodies.get(0));
+        ParsedWire second = ParsedWire.parse(http.audioBodies.get(1));
+        assertEquals(TRANSLATION_ID, first.getString(1));
+        assertEquals(TRANSLATION_ID, second.getString(1));
+        assertEquals(VIDEO_URL, first.getString(2));
+        assertEquals(VIDEO_URL, second.getString(2));
+        ParsedWire firstPart = ParsedWire.parse(first.getBytes(4));
+        ParsedWire secondPart = ParsedWire.parse(second.getBytes(4));
+        assertTrue(firstPart.getString(3).startsWith("random-web_abr-"));
+        assertEquals(firstPart.getString(3), secondPart.getString(3));
+        assertEquals(0, firstPart.getInt(2));
+        assertEquals(2, secondPart.getInt(2));
+        assertEquals(5_295_308, ParsedWire.parse(firstPart.getBytes(1)).getBytes(2).length);
+        assertEquals(2_899_743, ParsedWire.parse(secondPart.getBytes(1)).getBytes(2).length);
+    }
+
+    @Test
+    public void testReferenceCompatibleAudioOnlySelection_139And251() {
+        TestMediaFormat aac139 = new TestMediaFormat("https://cdn.example.invalid/139", "audio/mp4; codecs=mp4a.40.5",
+                "51175", "8195051", "en", null, false);
+        TestMediaFormat opus251 = new TestMediaFormat("https://cdn.example.invalid/251", "audio/webm; codecs=opus",
+                "128000", "20500000", "en", null, false);
+        TestMediaFormat dubbed = new TestMediaFormat("https://cdn.example.invalid/dubbed", "audio/webm; codecs=opus",
+                "32000", "5000000", "ru", "ru-dubbed", false);
+        TestMediaFormat autoDubbed = new TestMediaFormat("https://cdn.example.invalid/auto", "audio/webm; codecs=opus",
+                "24000", "4000000", "ru", "ru-auto-dubbed", true);
+        assertEquals(aac139, VotMediaFormatSelector.selectBestAudioFormat(
+                Arrays.asList(autoDubbed, dubbed, opus251, aac139)));
+    }
+
+    @Test
+    public void testEmptyAudioFallbackIsBoundedWhenAudioRequestedAgain() {
+        MockHttp http = new MockHttp();
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, TRANSLATION_ID, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, TRANSLATION_ID, null));
+        VotClient client = new VotClient(null, http, null, new ImmediateWaitStrategy(), false);
+        client.setAudioSourceProvider(url -> null);
+
+        List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
+
+        assertEquals(VotProgress.TYPE_FAILED, progress.get(progress.size() - 1).type);
+        assertEquals(Arrays.asList("session", "translate-1", "fail-audio", "audio", "translate-2"), http.events);
+        assertEquals(1, http.audioBodies.size());
+    }
+
+    @Test
+    public void testPostUploadFailedWithShouldRetryFlagDoesNotInventRetry() {
+        MockHttp http = new MockHttp();
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, TRANSLATION_ID, null));
+        VotWireWriter failed = new VotWireWriter();
+        failed.writeInt32IncludeZero(4, VotTranslationResponse.STATUS_FAILED);
+        failed.writeInt32(12, 1);
+        http.translateResponses.add(failed.toByteArray());
+        VotClient client = new VotClient(null, http, null, new ImmediateWaitStrategy(), false);
+        client.setAudioSourceProvider(url -> VotAudioSource.fromBytes(new byte[]{1, 2, 3}));
+
+        List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
+
+        assertEquals(VotProgress.TYPE_FAILED, progress.get(progress.size() - 1).type);
+        assertEquals(Arrays.asList("session", "translate-1", "audio", "translate-2"), http.events);
     }
 
     // =============================================================================================
