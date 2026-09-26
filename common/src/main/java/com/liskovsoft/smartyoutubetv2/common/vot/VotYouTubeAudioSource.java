@@ -36,6 +36,7 @@ public class VotYouTubeAudioSource implements VotAudioSource {
     private final String mMediaUrl;
     private final long mDeclaredContentLength;
     private final OkHttpClient mHttpClient;
+    private final int mRangeSize;
 
     private volatile Call mActiveCall;
     private volatile Response mResponse;
@@ -45,23 +46,32 @@ public class VotYouTubeAudioSource implements VotAudioSource {
     private volatile long mBytesRead = 0;
     private volatile boolean mOpened = false;
     private volatile boolean mClosed = false;
+    private volatile boolean mIsRanged = false;
 
     public VotYouTubeAudioSource(String mediaUrl) {
-        this(mediaUrl, -1, getDefaultClient());
+        this(mediaUrl, -1, getDefaultClient(), VotConfig.AUDIO_MIN_CHUNK_SIZE);
     }
 
     public VotYouTubeAudioSource(String mediaUrl, long declaredContentLength) {
-        this(mediaUrl, declaredContentLength, getDefaultClient());
+        this(mediaUrl, declaredContentLength, getDefaultClient(), VotConfig.AUDIO_MIN_CHUNK_SIZE);
     }
 
     public VotYouTubeAudioSource(String mediaUrl, long declaredContentLength, @Nullable OkHttpClient httpClient) {
+        this(mediaUrl, declaredContentLength, httpClient, VotConfig.AUDIO_MIN_CHUNK_SIZE);
+    }
+
+    public VotYouTubeAudioSource(String mediaUrl, long declaredContentLength, @Nullable OkHttpClient httpClient, int rangeSize) {
         if (mediaUrl == null || mediaUrl.trim().isEmpty()) {
             throw new IllegalArgumentException("mediaUrl must not be null or empty");
+        }
+        if (rangeSize <= 0) {
+            throw new IllegalArgumentException("rangeSize must be positive: " + rangeSize);
         }
         mMediaUrl = mediaUrl.trim();
         mDeclaredContentLength = declaredContentLength > 0 ? declaredContentLength : -1;
         mActualContentLength = mDeclaredContentLength;
         mHttpClient = httpClient != null ? httpClient : getDefaultClient();
+        mRangeSize = rangeSize;
     }
 
     public static VotYouTubeAudioSource fromMediaFormat(@NonNull MediaFormat format) {
@@ -96,13 +106,39 @@ public class VotYouTubeAudioSource implements VotAudioSource {
             return;
         }
 
-        logI("Opening YouTube audio source: declaredLength=%d, url=%s", mDeclaredContentLength, sanitizeUrl(mMediaUrl));
+        logI("Opening YouTube audio source: declaredLength=%d, rangeSize=%d, url=%s",
+                mDeclaredContentLength, mRangeSize, sanitizeUrl(mMediaUrl));
+
+        openRangeStream(0);
+        mBytesRead = 0;
+        mOpened = true;
+    }
+
+    private void openRangeStream(long startOffset) throws IOException {
+        if (mClosed) {
+            throw new VotCancellationException("Opening audio source was cancelled");
+        }
+
+        long endOffset;
+        if (mActualContentLength > 0) {
+            endOffset = Math.min(startOffset + mRangeSize - 1, mActualContentLength - 1);
+            if (startOffset > endOffset) {
+                // Nothing more to read
+                return;
+            }
+        } else {
+            endOffset = startOffset + mRangeSize - 1;
+        }
+
+        logI("Requesting YouTube audio range: bytes=%d-%d, declaredLength=%d, actualLength=%d",
+                startOffset, endOffset, mDeclaredContentLength, mActualContentLength);
 
         Request request = new Request.Builder()
                 .url(mMediaUrl)
                 .header("User-Agent", VotConfig.USER_AGENT)
                 .header("Accept", "*/*")
                 .header("Connection", "keep-alive")
+                .header("Range", "bytes=" + startOffset + "-" + endOffset)
                 .build();
 
         Call call = mHttpClient.newCall(request);
@@ -132,10 +168,19 @@ public class VotYouTubeAudioSource implements VotAudioSource {
         } else if (code == 404) {
             closeQuietly();
             throw new VotAudioSourceException("YouTube media stream not found (HTTP 404)");
+        } else if (code == 416) {
+            closeCurrentStream(false);
+            if (mActualContentLength < 0) {
+                mActualContentLength = startOffset;
+                return;
+            } else if (startOffset >= mActualContentLength) {
+                return;
+            }
+            throw new VotAudioSourceException("YouTube media stream range not satisfiable (HTTP 416)");
         } else if (code >= 500 && code < 600) {
             closeQuietly();
             throw new VotAudioSourceException("YouTube media stream server error (HTTP " + code + ")");
-        } else if (!response.isSuccessful()) {
+        } else if (code != 200 && code != 206) {
             closeQuietly();
             throw new VotAudioSourceException("YouTube media stream request failed with HTTP " + code + ": " + response.message());
         }
@@ -157,17 +202,41 @@ public class VotYouTubeAudioSource implements VotAudioSource {
             }
         }
 
-        long responseLen = body.contentLength();
-        if (responseLen > 0) {
-            mActualContentLength = responseLen;
-        } else if (mDeclaredContentLength > 0) {
-            mActualContentLength = mDeclaredContentLength;
+        if (code == 206) {
+            mIsRanged = true;
+            String contentRange = response.header("Content-Range");
+            if (contentRange != null) {
+                int slash = contentRange.lastIndexOf('/');
+                if (slash != -1) {
+                    String totalStr = contentRange.substring(slash + 1).trim();
+                    if (!"*".equals(totalStr)) {
+                        try {
+                            long parsedTotal = Long.parseLong(totalStr);
+                            if (parsedTotal > 0) {
+                                mActualContentLength = parsedTotal;
+                            }
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+            }
+            if (mActualContentLength <= 0 && mDeclaredContentLength > 0) {
+                mActualContentLength = mDeclaredContentLength;
+            }
+        } else {
+            // HTTP 200 (server ignored Range header, returning whole stream)
+            mIsRanged = false;
+            long responseLen = body.contentLength();
+            if (responseLen > 0) {
+                mActualContentLength = responseLen;
+            } else if (mDeclaredContentLength > 0) {
+                mActualContentLength = mDeclaredContentLength;
+            }
         }
 
         mInputStream = body.byteStream();
-        mBytesRead = 0;
-        mOpened = true;
-        logI("YouTube audio stream successfully opened: httpCode=%d, contentLength=%d", code, mActualContentLength);
+        logI("YouTube audio stream successfully opened: httpCode=%d, range=%d-%d, contentLength=%d, isRanged=%b",
+                code, startOffset, endOffset, mActualContentLength, mIsRanged);
     }
 
     @Override
@@ -192,40 +261,87 @@ public class VotYouTubeAudioSource implements VotAudioSource {
             return -1;
         }
 
-        InputStream in = mInputStream;
-        if (in == null) {
-            return -1;
-        }
-
-        int bytesToRead = len;
-        if (mActualContentLength > 0) {
-            long remaining = mActualContentLength - mBytesRead;
-            if (bytesToRead > remaining) {
-                bytesToRead = (int) remaining;
-            }
-        }
-
-        int r;
-        try {
-            r = in.read(buffer, off, bytesToRead);
-        } catch (IOException e) {
+        while (true) {
             if (mClosed) {
-                throw new VotCancellationException("Read cancelled");
+                throw new VotCancellationException("Audio source is closed / cancelled");
             }
-            throw new VotAudioSourceException("Error reading from YouTube media stream: " + e.getMessage(), e);
-        }
 
-        if (r == -1) {
-            if (mActualContentLength > 0 && mBytesRead < mActualContentLength) {
-                throw new VotAudioSourceException("Premature EOF from YouTube media stream: expected " + mActualContentLength + " bytes, but read " + mBytesRead);
+            InputStream in = mInputStream;
+            if (in == null) {
+                if (mIsRanged && (mActualContentLength < 0 || mBytesRead < mActualContentLength)) {
+                    openRangeStream(mBytesRead);
+                    in = mInputStream;
+                    if (in == null) {
+                        if (mActualContentLength > 0 && mBytesRead < mActualContentLength) {
+                            throw new VotAudioSourceException("Premature EOF from YouTube media stream: expected " + mActualContentLength + " bytes, but read " + mBytesRead);
+                        }
+                        return -1;
+                    }
+                } else {
+                    return -1;
+                }
             }
-            return -1;
-        }
 
-        if (r > 0) {
-            mBytesRead += r;
+            int bytesToRead = len;
+            if (mActualContentLength > 0) {
+                long remaining = mActualContentLength - mBytesRead;
+                if (bytesToRead > remaining) {
+                    bytesToRead = (int) remaining;
+                }
+            }
+
+            int r;
+            try {
+                r = in.read(buffer, off, bytesToRead);
+            } catch (IOException e) {
+                if (mClosed) {
+                    throw new VotCancellationException("Read cancelled");
+                }
+                throw new VotAudioSourceException("Error reading from YouTube media stream: " + e.getMessage(), e);
+            }
+
+            if (r == -1) {
+                if (mIsRanged && (mActualContentLength < 0 || mBytesRead < mActualContentLength)) {
+                    closeCurrentStream(false);
+                    openRangeStream(mBytesRead);
+                    if (mInputStream == null) {
+                        if (mActualContentLength > 0 && mBytesRead < mActualContentLength) {
+                            throw new VotAudioSourceException("Premature EOF from YouTube media stream: expected " + mActualContentLength + " bytes, but read " + mBytesRead);
+                        }
+                        return -1;
+                    }
+                    int nextR;
+                    try {
+                        nextR = mInputStream.read(buffer, off, bytesToRead);
+                    } catch (IOException e) {
+                        if (mClosed) {
+                            throw new VotCancellationException("Read cancelled");
+                        }
+                        throw new VotAudioSourceException("Error reading from YouTube media stream: " + e.getMessage(), e);
+                    }
+                    if (nextR == -1) {
+                        if (mActualContentLength > 0 && mBytesRead < mActualContentLength) {
+                            throw new VotAudioSourceException("Premature EOF from YouTube media stream: expected " + mActualContentLength + " bytes, but read " + mBytesRead);
+                        }
+                        return -1;
+                    }
+                    if (nextR > 0) {
+                        mBytesRead += nextR;
+                    }
+                    return nextR;
+                }
+
+                if (mActualContentLength > 0 && mBytesRead < mActualContentLength) {
+                    throw new VotAudioSourceException("Premature EOF from YouTube media stream: expected " + mActualContentLength + " bytes, but read " + mBytesRead);
+                }
+                return -1;
+            }
+
+            if (r > 0) {
+                mBytesRead += r;
+            }
+            return r;
         }
-        return r;
     }
 
     @Override
@@ -239,6 +355,14 @@ public class VotYouTubeAudioSource implements VotAudioSource {
 
     public String getMediaUrl() {
         return mMediaUrl;
+    }
+
+    public boolean isRanged() {
+        return mIsRanged;
+    }
+
+    public int getRangeSize() {
+        return mRangeSize;
     }
 
     @Override
@@ -262,37 +386,41 @@ public class VotYouTubeAudioSource implements VotAudioSource {
     }
 
     private void closeQuietly() {
+        closeCurrentStream(true);
+    }
+
+    private void closeCurrentStream(boolean cancelCall) {
         Call call = mActiveCall;
-        if (call != null) {
+        mActiveCall = null;
+        if (cancelCall && call != null) {
             try {
                 call.cancel();
             } catch (Throwable ignored) {
             }
-            mActiveCall = null;
         }
         InputStream in = mInputStream;
+        mInputStream = null;
         if (in != null) {
             try {
                 in.close();
             } catch (Throwable ignored) {
             }
-            mInputStream = null;
         }
         ResponseBody body = mResponseBody;
+        mResponseBody = null;
         if (body != null) {
             try {
                 body.close();
             } catch (Throwable ignored) {
             }
-            mResponseBody = null;
         }
         Response resp = mResponse;
+        mResponse = null;
         if (resp != null) {
             try {
                 resp.close();
             } catch (Throwable ignored) {
             }
-            mResponse = null;
         }
     }
 

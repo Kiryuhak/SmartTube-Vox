@@ -221,9 +221,20 @@ public class VotAudioUploader {
             mTotalBytesRead = totalRead;
             mTotalBytesUploaded = totalBytesUploaded;
             mTotalChunksUploaded = chunksUploaded;
+            mFinalStatus = resp0 != null ? resp0.status : -1;
             int remainingChunks0 = resp0 != null && resp0.remainingChunks != null ? resp0.remainingChunks.size() : 0;
+            mRemainingChunksCount = remainingChunks0;
             logI("Multi-part chunk 0 acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
-                    resp0 != null ? resp0.status : -1, remainingChunks0, elapsedMs0, totalBytesUploaded);
+                    mFinalStatus, remainingChunks0, elapsedMs0, totalBytesUploaded);
+
+            if (resp0 != null && resp0.status == VotTranslationAudioResponse.STATUS_DONE) {
+                validateFinalResponse(resp0, 1);
+                checkCancelled();
+                logI("Audio upload complete on chunk 0 (server acknowledged STATUS_DONE): totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=1, finalStatus=%d",
+                        mTotalBytesRead, mTotalBytesUploaded, mFinalStatus);
+                return resp0;
+            }
+
             validateIntermediateResponse(resp0, 0);
 
             int chunkIndex = 1;
@@ -315,8 +326,19 @@ public class VotAudioUploader {
                 mTotalBytesUploaded = totalBytesUploaded;
                 mTotalChunksUploaded = chunksUploaded;
                 int remainingChunks = resp != null && resp.remainingChunks != null ? resp.remainingChunks.size() : 0;
+                mFinalStatus = resp != null ? resp.status : -1;
+                mRemainingChunksCount = remainingChunks;
                 logI("Multi-part chunk %d acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
-                        chunkIndex, resp != null ? resp.status : -1, remainingChunks, elapsedMs, totalBytesUploaded);
+                        chunkIndex, mFinalStatus, remainingChunks, elapsedMs, totalBytesUploaded);
+
+                if (resp != null && resp.status == VotTranslationAudioResponse.STATUS_DONE) {
+                    validateFinalResponse(resp, chunkIndex + 1);
+                    checkCancelled();
+                    logI("Audio upload complete on intermediate chunk %d (server acknowledged STATUS_DONE): totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=%d, finalStatus=%d",
+                            chunkIndex, mTotalBytesRead, mTotalBytesUploaded, chunksUploaded, mFinalStatus);
+                    return resp;
+                }
+
                 validateIntermediateResponse(resp, chunkIndex);
 
                 chunkIndex++;
@@ -435,9 +457,6 @@ public class VotAudioUploader {
     }
 
     private void validateIntermediateResponse(VotTranslationAudioResponse resp, int chunkIndex) throws VotException {
-        if (resp.status == VotTranslationAudioResponse.STATUS_DONE) {
-            throw new VotException("Premature STATUS_DONE from server on intermediate chunk " + chunkIndex);
-        }
         if (resp.status != VotTranslationAudioResponse.STATUS_WAITING_CHUNKS) {
             throw new VotException("Unexpected audio upload response status on chunk " + chunkIndex + ": " + resp.status);
         }

@@ -258,8 +258,8 @@ public class VotClient {
                 return;
             }
 
-            logD("Initial translation response: status=%d, remainingTime=%ds",
-                    response.status, response.remainingTimeSec);
+            logD("Initial translation response: status=%d, remainingTime=%ds, message=%s",
+                    response.status, response.remainingTimeSec, response.message);
             if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
                     allowLivelyFallback, useLively, requestOAuthToken, response, 0, audioSourceProvider)) {
                 return;
@@ -295,8 +295,8 @@ public class VotClient {
                     throw e;
                 }
 
-                logD("VOT poll response: attempt=%d, status=%d, remainingTime=%ds",
-                        i + 1, response.status, response.remainingTimeSec);
+                logD("VOT poll response: attempt=%d, status=%d, remainingTime=%ds, message=%s",
+                        i + 1, response.status, response.remainingTimeSec, response.message);
 
                 if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
                         allowLivelyFallback, useLively, requestOAuthToken, response, 0, audioSourceProvider)) {
@@ -510,6 +510,7 @@ public class VotClient {
         }
 
         if (response.status == VotTranslationResponse.STATUS_FAILED) {
+            logW("VOT translation response STATUS_FAILED: message=%s", response.message);
             if (allowLivelyFallback && useLively && isLivelyUnavailableError(response.message)) {
                 logD("Lively voice unavailable, retrying with Standard voice");
                 emitter.onNext(VotProgress.livelyFallback());
@@ -532,6 +533,7 @@ public class VotClient {
             return true;
         }
 
+        logW("VOT translation unexpected status: status=%d, message=%s", response.status, response.message);
         emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
         emitter.onComplete();
         return false;

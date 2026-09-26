@@ -502,24 +502,21 @@ public class VotBatch67AudioUploaderTest {
     }
 
     // =============================================================================================
-    // 15. Premature STATUS_DONE on Intermediate Chunk: Protocol Violation
+    // 15. Server Returns STATUS_DONE on Intermediate Chunk: Completes Upload Immediately
     // =============================================================================================
     @Test
-    public void testPrematureStatusDone_OnIntermediateChunk_ThrowsVotException() throws Exception {
+    public void testStatusDone_OnIntermediateChunk_CompletesUploadImmediately() throws Exception {
         MockUploadHttp http = new MockUploadHttp();
-        // Chunk 0 returns STATUS_DONE prematurely while chunk 1 is still pending
+        // Server indicates it has enough audio on chunk 0 and returns STATUS_DONE
         http.enqueueResponse(makeResponseBytes(VotTranslationAudioResponse.STATUS_DONE, null));
 
         int chunkSize = 50;
         VotAudioUploader uploader = new VotAudioUploader(http, chunkSize);
         VotAudioSource source = VotAudioSource.fromBytes(new byte[100]); // 2 chunks
 
-        try {
-            uploader.uploadAudio(VIDEO_URL, TRANSLATION_ID, FILE_ID, createSession(), null, source);
-            fail("Premature STATUS_DONE must throw VotException");
-        } catch (VotException expected) {
-            assertTrue(expected.getMessage().contains("Premature STATUS_DONE"));
-        }
+        VotTranslationAudioResponse resp = uploader.uploadAudio(VIDEO_URL, TRANSLATION_ID, FILE_ID, createSession(), null, source);
+        assertNotNull(resp);
+        assertEquals(VotTranslationAudioResponse.STATUS_DONE, resp.status);
         assertEquals(1, http.requests.size());
     }
 
