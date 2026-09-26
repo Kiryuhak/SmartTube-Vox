@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLException;
 
 public class VotClient {
@@ -63,6 +64,42 @@ public class VotClient {
     @Nullable
     private VotSession mSession;
     private String mLastOAuthToken;
+    @Nullable
+    private VotAudioSourceProvider mAudioSourceProvider;
+    private final Object mUploaderLock = new Object();
+    private volatile VotAudioUploader mActiveAudioUploader;
+    private static final VotAudioUploader CANCELLED_UPLOADER = new VotAudioUploader();
+    private static final ThreadLocal<AtomicReference<VotAudioUploader>> sCurrentLocalUploader = new ThreadLocal<>();
+    private static final ThreadLocal<VotAudioSource> sCurrentAudioSource = new ThreadLocal<>();
+    private static final VotAudioSource EMPTY_SOURCE_MARKER = new VotAudioSource() {
+        @Override public void open() {}
+        @Override public int read(byte[] buffer, int offset, int length) { return -1; }
+        @Override public long getContentLength() { return 0; }
+        @Override public void close() {}
+    };
+    private String mTestOAuthToken;
+    private Boolean mTestLivelyEnabled;
+
+    public void setAudioSourceProvider(@Nullable VotAudioSourceProvider provider) {
+        mAudioSourceProvider = provider;
+    }
+
+    @Nullable
+    public VotAudioSourceProvider getAudioSourceProvider() {
+        return mAudioSourceProvider;
+    }
+
+    void setTestCredentials(@Nullable Boolean livelyEnabled, @Nullable String oauthToken) {
+        mTestLivelyEnabled = livelyEnabled;
+        mTestOAuthToken = oauthToken;
+    }
+
+    public void cancelActiveAudioUpload() {
+        VotAudioUploader uploader = mActiveAudioUploader;
+        if (uploader != null) {
+            uploader.cancel();
+        }
+    }
 
     /** Максимальное число автоматических повторов при STATUS_SESSION_REQUIRED в одном poll-цикле. */
     private static final int MAX_SESSION_RETRIES = 2;
@@ -77,11 +114,22 @@ public class VotClient {
 
     VotClient(@Nullable VotData votData, @Nullable TranslationRequester translationRequester,
               WaitStrategy waitStrategy) {
+        this(votData, new VotHttp(), translationRequester, waitStrategy);
+    }
+
+    VotClient(@Nullable VotData votData, VotHttp http,
+              @Nullable TranslationRequester translationRequester, WaitStrategy waitStrategy) {
+        this(votData, http, translationRequester, waitStrategy, translationRequester == null);
+    }
+
+    VotClient(@Nullable VotData votData, VotHttp http,
+              @Nullable TranslationRequester translationRequester, WaitStrategy waitStrategy,
+              boolean logEnabled) {
         mVotData = votData;
-        mHttp = new VotHttp();
+        mHttp = http;
         mTranslationRequester = translationRequester;
         mWaitStrategy = waitStrategy;
-        mLogEnabled = translationRequester == null;
+        mLogEnabled = logEnabled;
     }
 
     public String translateToRussian(String youtubeUrl, long durationSec) throws IOException, VotException {
@@ -100,12 +148,30 @@ public class VotClient {
     }
 
     public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec) {
-        return observeTranslation(youtubeUrl, durationSec, false);
+        return observeTranslation(youtubeUrl, durationSec, false, mAudioSourceProvider);
     }
 
     public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec, boolean subsequent) {
-        return Observable.<VotProgress>create(emitter -> pollTranslation(emitter, youtubeUrl, durationSec, true, true, subsequent))
-                .subscribeOn(Schedulers.io());
+        return observeTranslation(youtubeUrl, durationSec, subsequent, mAudioSourceProvider);
+    }
+
+    public Observable<VotProgress> observeTranslation(String youtubeUrl, long durationSec, boolean subsequent,
+                                                      @Nullable VotAudioSourceProvider audioSourceProvider) {
+        return Observable.<VotProgress>create(emitter -> {
+            AtomicReference<VotAudioUploader> localUploaderRef = new AtomicReference<>();
+            emitter.setCancellable(() -> {
+                VotAudioUploader local = localUploaderRef.getAndSet(CANCELLED_UPLOADER);
+                if (local != null && local != CANCELLED_UPLOADER) {
+                    local.cancel();
+                }
+            });
+            sCurrentLocalUploader.set(localUploaderRef);
+            try {
+                pollTranslation(emitter, youtubeUrl, durationSec, true, true, subsequent, audioSourceProvider);
+            } finally {
+                sCurrentLocalUploader.remove();
+            }
+        }).subscribeOn(Schedulers.io());
     }
 
     private static final int MAX_POLL_ATTEMPTS = 120;
@@ -145,15 +211,25 @@ public class VotClient {
 
     private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
                                  boolean allowAudioFallback, boolean allowLivelyFallback) {
-        pollTranslation(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, false);
+        pollTranslation(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, false, mAudioSourceProvider);
     }
 
     private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
                                  boolean allowAudioFallback, boolean allowLivelyFallback, boolean subsequent) {
-        boolean useLively = allowLivelyFallback && mVotData != null && mVotData.isLivelyVoiceEnabled();
+        pollTranslation(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback, subsequent, mAudioSourceProvider);
+    }
+
+    private void pollTranslation(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
+                                 boolean allowAudioFallback, boolean allowLivelyFallback, boolean subsequent,
+                                 @Nullable VotAudioSourceProvider audioSourceProvider) {
+        boolean useLively = (mTestLivelyEnabled != null)
+                ? (allowLivelyFallback && mTestLivelyEnabled)
+                : (allowLivelyFallback && mVotData != null && mVotData.isLivelyVoiceEnabled());
         // Bind the credential to this request cycle. A late response sent with an old token must
         // never confirm or reject a token that the user saved while the request was in flight.
-        String requestOAuthToken = useLively ? mVotData.getOAuthToken() : null;
+        String requestOAuthToken = (mTestOAuthToken != null)
+                ? (useLively ? mTestOAuthToken : null)
+                : (useLively ? mVotData.getOAuthToken() : null);
         try {
             logD("VOT request started: duration=%ds, useLively=%b, authState=%s, subsequent=%b",
                     durationSec, useLively, mVotData != null ? mVotData.getAuthState() : "TEST", subsequent);
@@ -182,10 +258,10 @@ public class VotClient {
                 return;
             }
 
-            logD("Initial translation response: status=%d, remainingTime=%ds",
-                    response.status, response.remainingTimeSec);
+            logD("Initial translation response: status=%d, remainingTime=%ds, message=%s",
+                    response.status, response.remainingTimeSec, response.message);
             if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
-                    allowLivelyFallback, useLively, requestOAuthToken, response, 0)) {
+                    allowLivelyFallback, useLively, requestOAuthToken, response, 0, audioSourceProvider)) {
                 return;
             }
 
@@ -219,11 +295,11 @@ public class VotClient {
                     throw e;
                 }
 
-                logD("VOT poll response: attempt=%d, status=%d, remainingTime=%ds",
-                        i + 1, response.status, response.remainingTimeSec);
+                logD("VOT poll response: attempt=%d, status=%d, remainingTime=%ds, message=%s",
+                        i + 1, response.status, response.remainingTimeSec, response.message);
 
                 if (!processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
-                        allowLivelyFallback, useLively, requestOAuthToken, response, 0)) {
+                        allowLivelyFallback, useLively, requestOAuthToken, response, 0, audioSourceProvider)) {
                     return;
                 }
                 waitSec = calculateWaitSec(response.remainingTimeSec, i + 1);
@@ -330,6 +406,15 @@ public class VotClient {
                                     boolean allowAudioFallback, boolean allowLivelyFallback, boolean useLively,
                                     String requestOAuthToken, VotTranslationResponse response, int sessionRetryCount)
             throws IOException, VotException {
+        return processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback, allowLivelyFallback,
+                useLively, requestOAuthToken, response, sessionRetryCount, mAudioSourceProvider);
+    }
+
+    private boolean processResponse(ObservableEmitter<VotProgress> emitter, String youtubeUrl, long durationSec,
+                                    boolean allowAudioFallback, boolean allowLivelyFallback, boolean useLively,
+                                    String requestOAuthToken, VotTranslationResponse response, int sessionRetryCount,
+                                    @Nullable VotAudioSourceProvider audioSourceProvider)
+            throws IOException, VotException {
         if (emitter.isDisposed()) {
             return false;
         }
@@ -350,14 +435,59 @@ public class VotClient {
             VotTranslationResponse retry = requestTranslation(
                     youtubeUrl, durationSec, false, useLively, requestOAuthToken);
             return processResponse(emitter, youtubeUrl, durationSec, allowAudioFallback,
-                    allowLivelyFallback, useLively, requestOAuthToken, retry, sessionRetryCount + 1);
+                    allowLivelyFallback, useLively, requestOAuthToken, retry, sessionRetryCount + 1, audioSourceProvider);
         }
 
         if (response.status == VotTranslationResponse.STATUS_AUDIO_REQUESTED) {
             if (allowAudioFallback) {
-                handleAudioRequested(youtubeUrl, durationSec, response.translationId,
-                        useLively, requestOAuthToken);
-                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback);
+                if (emitter.isDisposed()) {
+                    return false;
+                }
+                VotAudioSourceProvider provider = audioSourceProvider != null ? audioSourceProvider : mAudioSourceProvider;
+                VotAudioSource audioSource = null;
+                if (provider != null) {
+                    try {
+                        audioSource = provider.getAudioSource(youtubeUrl);
+                    } catch (Throwable t) {
+                        logE("Error resolving audio source for %s: %s", youtubeUrl, sanitizeLogMessage(t));
+                    }
+                }
+
+                if (emitter.isDisposed()) {
+                    return false;
+                }
+
+                sCurrentAudioSource.set(audioSource != null ? audioSource : EMPTY_SOURCE_MARKER);
+                try {
+                    handleAudioRequested(youtubeUrl, durationSec, response.translationId,
+                            useLively, requestOAuthToken);
+                } catch (IOException | VotException | IllegalArgumentException e) {
+                    logE("VOT audio upload failed: %s", sanitizeLogMessage(e));
+                    if (!emitter.isDisposed()) {
+                        if (e instanceof VotCancellationException) {
+                            return false;
+                        }
+                        Throwable cause = e.getCause();
+                        VotHttpException he = (e instanceof VotHttpException) ? (VotHttpException) e
+                                : (cause instanceof VotHttpException ? (VotHttpException) cause : null);
+                        if (e instanceof VotAudioSourceException || e instanceof IllegalArgumentException) {
+                            emitter.onNext(VotProgress.failed(ERROR_MARKER_UNSUPPORTED_VIDEO));
+                        } else if (he != null) {
+                            emitter.onNext(VotProgress.failed(categoryToMarker(VotErrorCategory.fromHttpCode(he.getStatusCode(), useLively))));
+                        } else {
+                            emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
+                        }
+                        emitter.onComplete();
+                    }
+                    return false;
+                } finally {
+                    sCurrentAudioSource.remove();
+                }
+
+                // After audio fallback upload completes, Yandex requires a translation request
+                // with firstRequest=true (subsequent=false) to queue the synthesis task.
+                // allowAudioFallback is set to false to guard against infinite upload loops.
+                pollTranslation(emitter, youtubeUrl, durationSec, false, allowLivelyFallback, false, audioSourceProvider);
                 return false;
             } else {
                 logW("Audio upload already attempted or disabled, stopping polling");
@@ -380,6 +510,7 @@ public class VotClient {
         }
 
         if (response.status == VotTranslationResponse.STATUS_FAILED) {
+            logW("VOT translation response STATUS_FAILED: message=%s", response.message);
             if (allowLivelyFallback && useLively && isLivelyUnavailableError(response.message)) {
                 logD("Lively voice unavailable, retrying with Standard voice");
                 emitter.onNext(VotProgress.livelyFallback());
@@ -402,6 +533,7 @@ public class VotClient {
             return true;
         }
 
+        logW("VOT translation unexpected status: status=%d, message=%s", response.status, response.message);
         emitter.onNext(VotProgress.failed(ERROR_MARKER_GENERIC));
         emitter.onComplete();
         return false;
@@ -415,12 +547,22 @@ public class VotClient {
             return mTranslationRequester.request(
                     youtubeUrl, (long) durationSec, subsequent, useLively, requestOAuthToken);
         }
+
+        // Keep one cryptographic session for the complete server-task lifecycle. In
+        // particular, AUDIO_REQUESTED uploads are session-signed and the following
+        // request must not switch from legacy headers to a newly created session.
+        prepareTranslationSession();
+        // Yandex /video-translation/translate REST endpoint requires firstRequest=true (tag 5 = 1)
+        // for all requests in the lifecycle: initial translate, retry after audio upload, and
+        // all regular polling attempts. Reference implementations (vot.js, voice-over-translation)
+        // always send firstRequest=true. Sending firstRequest=false causes Yandex to reject the
+        // request with HTTP 400 Bad Request.
         byte[] body = VotProtobuf.encodeTranslationRequest(
                 youtubeUrl,
                 durationSec,
                 VotConfig.REQUEST_LANG,
                 VotConfig.RESPONSE_LANG,
-                !subsequent,
+                true,
                 useLively
         );
 
@@ -435,28 +577,47 @@ public class VotClient {
 
     private Map<String, String> buildTranslateHeaders(byte[] body, boolean useLively,
                                                       String requestOAuthToken) {
-        String currentToken = mVotData != null ? mVotData.getOAuthToken() : null;
-        if (!Helpers.equals(currentToken, mLastOAuthToken)) {
-            mLastOAuthToken = currentToken;
-            resetSession();
-        }
-
-        Map<String, String> headers;
-        if (mSession != null) {
-            headers = VotHeaders.sessionTranslate(mSession, body, "/video-translation/translate");
-        } else {
-            headers = VotHeaders.simpleTranslate(body);
-        }
+        Map<String, String> headers = VotHeaders.sessionTranslate(
+                mSession, body, "/video-translation/translate");
         if (useLively && requestOAuthToken != null && !requestOAuthToken.isEmpty()) {
             headers = VotHeaders.merge(headers, VotHeaders.oauthHeader(requestOAuthToken));
         }
         return headers;
     }
 
-    private void handleAudioRequested(String youtubeUrl, long durationSec,
-                                      @Nullable String translationId, boolean useLively,
-                                      String requestOAuthToken)
+    private void prepareTranslationSession() throws IOException {
+        String currentToken = mTestOAuthToken != null ? mTestOAuthToken : (mVotData != null ? mVotData.getOAuthToken() : null);
+        if (!Helpers.equals(currentToken, mLastOAuthToken)) {
+            mLastOAuthToken = currentToken;
+            resetSession();
+        }
+        ensureSession();
+    }
+
+    void handleAudioRequested(String youtubeUrl, long durationSec,
+                              @Nullable String translationId, boolean useLively,
+                              String requestOAuthToken)
             throws IOException, VotException {
+        VotAudioSource current = sCurrentAudioSource.get();
+        VotAudioSource source;
+        if (current == EMPTY_SOURCE_MARKER) {
+            source = null;
+        } else if (current != null) {
+            source = current;
+        } else {
+            source = mAudioSourceProvider != null ? mAudioSourceProvider.getAudioSource(youtubeUrl) : null;
+        }
+        handleAudioRequested(youtubeUrl, durationSec, translationId, useLively, requestOAuthToken, source);
+    }
+
+    void handleAudioRequested(String youtubeUrl, long durationSec,
+                              @Nullable String translationId, boolean useLively,
+                              String requestOAuthToken,
+                              @Nullable VotAudioSource audioSource)
+            throws IOException, VotException {
+        if (audioSource == null) {
+            throw new VotAudioSourceException("No audio source available for video translation");
+        }
         if (translationId == null || translationId.isEmpty()) {
             VotTranslationResponse r = requestTranslation(
                     youtubeUrl, durationSec, false, useLively, requestOAuthToken);
@@ -468,7 +629,42 @@ public class VotClient {
 
         ensureSession();
         requestFailAudio(youtubeUrl);
-        uploadEmptyAudio(youtubeUrl, translationId);
+
+        String fileId = "smarttube-" + VotSignature.randomToken();
+        VotAudioUploader uploader = new VotAudioUploader(mHttp);
+        synchronized (mUploaderLock) {
+            mActiveAudioUploader = uploader;
+        }
+        AtomicReference<VotAudioUploader> localRef = sCurrentLocalUploader.get();
+        if (localRef != null) {
+            if (!localRef.compareAndSet(null, uploader)) {
+                uploader.cancel();
+                throw new VotCancellationException("Upload cancelled before starting");
+            }
+        }
+        try {
+            logI("Starting VOT audio upload: url=%s, translationId=%s, fileId=%s, expectedContentLength=%d",
+                    youtubeUrl, translationId, fileId, audioSource.getContentLength());
+            VotTranslationAudioResponse resp = uploader.uploadAudio(
+                    youtubeUrl, translationId, fileId, mSession, requestOAuthToken, audioSource);
+            if (resp == null || resp.status != VotTranslationAudioResponse.STATUS_DONE) {
+                throw new VotException("Audio upload incomplete or rejected: status=" + (resp != null ? resp.status : "null"));
+            }
+            if (resp.remainingChunks != null && !resp.remainingChunks.isEmpty()) {
+                throw new VotException("Audio upload incomplete: server waiting for chunks " + resp.remainingChunks);
+            }
+            logI("VOT audio upload successfully completed: status=%d, totalBytesUploaded=%d, totalChunks=%d",
+                    resp.status, uploader.getTotalBytesUploaded(), uploader.getTotalChunksUploaded());
+        } finally {
+            synchronized (mUploaderLock) {
+                if (mActiveAudioUploader == uploader) {
+                    mActiveAudioUploader = null;
+                }
+            }
+            if (localRef != null) {
+                localRef.compareAndSet(uploader, null);
+            }
+        }
     }
 
     private void requestFailAudio(String youtubeUrl) throws IOException, VotException {
@@ -491,14 +687,7 @@ public class VotClient {
         }
     }
 
-    private void uploadEmptyAudio(String youtubeUrl, String translationId) throws IOException {
-        byte[] body = VotProtobuf.encodeTranslationAudioRequest(
-                youtubeUrl, translationId, VotConfig.FAKE_AUDIO_FILE_ID);
-        mHttp.putProtobuf("/video-translation/audio", body,
-                VotHeaders.sessionTranslate(mSession, body, "/video-translation/audio"));
-    }
-
-    private void ensureSession() throws IOException {
+    void ensureSession() throws IOException {
         if (mSession != null && System.currentTimeMillis() - mSession.createdAtMs < mSession.expiresSec * 1000L) {
             return;
         }
@@ -605,6 +794,12 @@ public class VotClient {
         }
     }
 
+    private void logI(Object message, Object... args) {
+        if (mLogEnabled) {
+            Log.i(TAG, message, args);
+        }
+    }
+
     private void logW(Object message, Object... args) {
         if (mLogEnabled) {
             Log.w(TAG, message, args);
@@ -615,5 +810,27 @@ public class VotClient {
         if (mLogEnabled) {
             Log.e(TAG, message, args);
         }
+    }
+
+    public static String sanitizeLogMessage(@Nullable Throwable t) {
+        if (t == null) {
+            return "null";
+        }
+        String msg = t.getMessage();
+        if (msg == null || msg.trim().isEmpty()) {
+            return t.getClass().getSimpleName();
+        }
+        return sanitizeMessage(msg);
+    }
+
+    public static String sanitizeMessage(@Nullable String msg) {
+        if (msg == null) {
+            return "";
+        }
+        // Strip out complete URLs to avoid leaking CDN auth tokens/signatures
+        String sanitized = msg.replaceAll("https?://[^\\s\"'<>]+", "[REDACTED_URL]");
+        // Strip out any key-value token patterns
+        sanitized = sanitized.replaceAll("(?i)(sig|signature|token|key|secret|auth|bearer)=[^&\\s\"';]+", "$1=[REDACTED]");
+        return sanitized;
     }
 }

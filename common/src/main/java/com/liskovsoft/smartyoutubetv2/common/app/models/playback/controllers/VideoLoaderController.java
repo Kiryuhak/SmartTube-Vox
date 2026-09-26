@@ -36,6 +36,7 @@ public class VideoLoaderController extends BasePlayerController {
     private SuggestionsController mSuggestionsController;
     private ErrorFixerController mErrorFixerController;
     private Disposable mFormatInfoAction;
+    private MediaItemFormatInfo mFormatInfo;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
     };
@@ -266,6 +267,7 @@ public class VideoLoaderController extends BasePlayerController {
     }
 
     private void processFormatInfo(MediaItemFormatInfo formatInfo) {
+        mFormatInfo = formatInfo;
         PlaybackView player = getPlayer();
 
         if (player == null || getVideo() == null) {
@@ -393,7 +395,12 @@ public class VideoLoaderController extends BasePlayerController {
     private void disposeActions() {
         MediaServiceManager.instance().disposeActions();
         RxHelper.disposeActions(mFormatInfoAction);
+        mFormatInfo = null;
         Utils.removeCallbacks(mReloadVideo, mLoadNext, mRestartEngine, mMetadataSync);
+    }
+
+    public MediaItemFormatInfo getFormatInfo() {
+        return mFormatInfo;
     }
 
     public void restartEngine() {
