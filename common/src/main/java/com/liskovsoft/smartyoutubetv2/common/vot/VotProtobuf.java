@@ -1,11 +1,64 @@
 package com.liskovsoft.smartyoutubetv2.common.vot;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public final class VotProtobuf {
     private VotProtobuf() {
+    }
+
+    /** Unknown top-level wire fields, without their values or binary contents. */
+    public static List<String> unknownFieldMetadata(byte[] data, boolean audioResponse) {
+        List<String> result = new ArrayList<>();
+        if (data == null) {
+            return result;
+        }
+        int pos = 0;
+        while (pos < data.length) {
+            int[] tag = readVarint(data, pos);
+            if (tag[0] <= 0 || tag[1] <= pos) {
+                break;
+            }
+            pos = tag[1];
+            int field = tag[0] >>> 3;
+            int wire = tag[0] & 7;
+            int length;
+            if (wire == 0) {
+                int[] value = readVarint(data, pos);
+                if (value[0] < 0) break;
+                length = value[1] - pos;
+                pos = value[1];
+            } else if (wire == 1) {
+                length = 8;
+                pos += length;
+            } else if (wire == 2) {
+                int[] size = readVarint(data, pos);
+                if (size[0] < 0) break;
+                length = size[0];
+                pos = size[1] + length;
+            } else if (wire == 5) {
+                length = 4;
+                pos += length;
+            } else {
+                break;
+            }
+            if (length < 0 || pos > data.length) break;
+            boolean known = audioResponse
+                    ? (field == 1 && wire == 0) || (field == 2 && wire == 2)
+                    : (field == 1 && wire == 2) || (field == 2 && wire == 0)
+                    || (field == 4 && wire == 0) || (field == 5 && wire == 0)
+                    || (field == 6 && wire == 0) || (field == 7 && wire == 2)
+                    || (field == 8 && wire == 2) || (field == 9 && wire == 2)
+                    || (field == 10 && wire == 0) || (field == 11 && wire == 0)
+                    || (field == 12 && wire == 0) || (field == 13 && wire == 0);
+            if (!known) {
+                result.add("field=" + field + ", wireType=" + wire + ", length=" + length);
+            }
+        }
+        return result;
     }
 
     public static byte[] encodeTranslationRequest(

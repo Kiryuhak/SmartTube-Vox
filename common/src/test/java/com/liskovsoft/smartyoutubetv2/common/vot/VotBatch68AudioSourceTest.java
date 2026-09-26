@@ -47,6 +47,16 @@ import static org.junit.Assert.fail;
  */
 public class VotBatch68AudioSourceTest {
 
+    @Test
+    public void testSafeFormatDescriptionContainsOnlyAllowlistedMetadata() {
+        TestMediaFormat format = new TestMediaFormat("https://example.invalid/audio?secret=private",
+                "audio/webm; codecs=opus; secret=private", "50000", "8195051", "en", null, false);
+        String metadata = VotMediaFormatSelector.safeFormatDescription(format);
+        assertEquals("itag=251, mime=audio/webm, codec=opus, bitrate=50000, declaredContentLength=8195051", metadata);
+        assertFalse(metadata.contains("private"));
+        assertFalse(metadata.contains("https"));
+    }
+
     // =============================================================================================
     // Helper: TestMediaFormat mock
     // =============================================================================================

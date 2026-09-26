@@ -449,7 +449,7 @@ public class VotClient {
                     try {
                         audioSource = provider.getAudioSource(youtubeUrl);
                     } catch (Throwable t) {
-                        logE("Error resolving audio source for %s: %s", youtubeUrl, sanitizeLogMessage(t));
+                        logE("Error resolving audio source: %s", sanitizeLogMessage(t));
                     }
                 }
 
@@ -572,6 +572,9 @@ public class VotClient {
         if (raw == null || raw.length == 0) {
             throw new IOException("Empty translation response");
         }
+        for (String field : VotProtobuf.unknownFieldMetadata(raw, false)) {
+            logI("VOT translation unknown protobuf field: %s", field);
+        }
         return VotProtobuf.decodeTranslationResponse(raw);
     }
 
@@ -643,8 +646,8 @@ public class VotClient {
             }
         }
         try {
-            logI("Starting VOT audio upload: url=%s, translationId=%s, fileId=%s, expectedContentLength=%d",
-                    youtubeUrl, translationId, fileId, audioSource.getContentLength());
+            logI("Starting VOT audio upload: expectedContentLength=%d, lively=%b",
+                    audioSource.getContentLength(), useLively);
             VotTranslationAudioResponse resp = uploader.uploadAudio(
                     youtubeUrl, translationId, fileId, mSession, requestOAuthToken, audioSource);
             if (resp == null || resp.status != VotTranslationAudioResponse.STATUS_DONE) {

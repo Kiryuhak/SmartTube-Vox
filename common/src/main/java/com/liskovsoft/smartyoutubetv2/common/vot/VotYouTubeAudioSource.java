@@ -106,8 +106,8 @@ public class VotYouTubeAudioSource implements VotAudioSource {
             return;
         }
 
-        logI("Opening YouTube audio source: declaredLength=%d, rangeSize=%d, url=%s",
-                mDeclaredContentLength, mRangeSize, sanitizeUrl(mMediaUrl));
+        logI("Opening YouTube audio source: declaredLength=%d, rangeSize=%d",
+                mDeclaredContentLength, mRangeSize);
 
         openRangeStream(0);
         mBytesRead = 0;
@@ -377,12 +377,6 @@ public class VotYouTubeAudioSource implements VotAudioSource {
             Log.i(TAG, format, args);
         } catch (Throwable ignored) {
         }
-    }
-
-    private static String sanitizeUrl(String url) {
-        if (url == null) return "null";
-        int q = url.indexOf('?');
-        return q != -1 ? url.substring(0, q) + "?[query]" : url;
     }
 
     private void closeQuietly() {

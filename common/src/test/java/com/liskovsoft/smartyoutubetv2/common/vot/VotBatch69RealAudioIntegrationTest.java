@@ -206,6 +206,40 @@ public class VotBatch69RealAudioIntegrationTest {
                 1, http.translateBodies.size());
     }
 
+    @Test
+    public void testEarlyDoneThenWaitingWaitingFailed_OneLifecycle() {
+        MockHttp http = new MockHttp();
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_AUDIO_REQUESTED, 60, TRANSLATION_ID, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_WAITING, 40, TRANSLATION_ID, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_WAITING, 20, TRANSLATION_ID, null));
+        http.translateResponses.add(translationResponse(VotTranslationResponse.STATUS_FAILED, 0, TRANSLATION_ID, null));
+        http.audioResponses.add(audioResponse(VotTranslationAudioResponse.STATUS_DONE, null));
+        http.audioResponses.add(audioResponse(VotTranslationAudioResponse.STATUS_DONE, null));
+        TrackingAudioSource source = new TrackingAudioSource(new byte[5_295_309]);
+        VotClient client = new VotClient(null, http, null, new ImmediateWaitStrategy(), false);
+        client.setAudioSourceProvider(url -> source);
+
+        List<VotProgress> progress = client.observeTranslation(VIDEO_URL, 300).toList().blockingGet();
+
+        assertEquals(4, http.translateBodies.size());
+        assertEquals(2, http.audioBodies.size());
+        assertEquals(1, http.sessionCreateCalls);
+        assertEquals(VotProgress.TYPE_FAILED, progress.get(progress.size() - 1).type);
+        assertTrue(source.closed.get());
+        String sessionKey = http.translateHeaders.get(0).get("Sec-Vtrans-Sk");
+        for (Map<String, String> headers : http.translateHeaders) {
+            assertEquals(sessionKey, headers.get("Sec-Vtrans-Sk"));
+            assertFalse(headers.containsKey("Authorization"));
+        }
+        for (Map<String, String> headers : http.audioHeaders) {
+            assertEquals(sessionKey, headers.get("Sec-Vtrans-Sk"));
+            assertFalse(headers.containsKey("Authorization"));
+        }
+        for (byte[] body : http.translateBodies) {
+            assertTrue(hasVarintField(body, 5, 1));
+        }
+    }
+
     // =============================================================================================
     // 7. After-upload translate sends firstRequest=true
     // =============================================================================================

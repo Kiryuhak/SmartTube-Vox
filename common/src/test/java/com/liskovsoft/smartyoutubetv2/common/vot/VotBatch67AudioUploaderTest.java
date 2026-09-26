@@ -502,12 +502,13 @@ public class VotBatch67AudioUploaderTest {
     }
 
     // =============================================================================================
-    // 15. Server Returns STATUS_DONE on Intermediate Chunk: Completes Upload Immediately
+    // 15. Server Returns STATUS_DONE on Intermediate Chunk: Continue Through Terminal Chunk
     // =============================================================================================
     @Test
-    public void testStatusDone_OnIntermediateChunk_CompletesUploadImmediately() throws Exception {
+    public void testStatusDone_OnIntermediateChunk_ContinuesUpload() throws Exception {
         MockUploadHttp http = new MockUploadHttp();
-        // Server indicates it has enough audio on chunk 0 and returns STATUS_DONE
+        // STATUS_DONE is an ACK for chunk 0, not proof that all source bytes arrived.
+        http.enqueueResponse(makeResponseBytes(VotTranslationAudioResponse.STATUS_DONE, null));
         http.enqueueResponse(makeResponseBytes(VotTranslationAudioResponse.STATUS_DONE, null));
 
         int chunkSize = 50;
@@ -517,7 +518,62 @@ public class VotBatch67AudioUploaderTest {
         VotTranslationAudioResponse resp = uploader.uploadAudio(VIDEO_URL, TRANSLATION_ID, FILE_ID, createSession(), null, source);
         assertNotNull(resp);
         assertEquals(VotTranslationAudioResponse.STATUS_DONE, resp.status);
-        assertEquals(1, http.requests.size());
+        assertEquals(2, http.requests.size());
+        assertEquals(100, uploader.getTotalBytesRead());
+        assertEquals(100, uploader.getTotalBytesUploaded());
+    }
+
+    @Test
+    public void testPhysicalBoundary_EarlyDoneUploadsEveryByteExactlyOnce() throws Exception {
+        MockUploadHttp http = new MockUploadHttp();
+        http.enqueueResponse(makeResponseBytes(VotTranslationAudioResponse.STATUS_DONE, null));
+        http.enqueueResponse(makeResponseBytes(VotTranslationAudioResponse.STATUS_DONE, null));
+        byte[] audio = new byte[8_195_051];
+        for (int i = 0; i < audio.length; i++) {
+            audio[i] = (byte) (i * 31 + 7);
+        }
+        VotAudioUploader uploader = new VotAudioUploader(http, 5_295_308);
+        uploader.uploadAudio(VIDEO_URL, TRANSLATION_ID, FILE_ID, createSession(), null,
+                VotAudioSource.fromBytes(audio));
+
+        assertEquals(2, http.requests.size());
+        assertEquals(audio.length, uploader.getTotalBytesRead());
+        assertEquals(audio.length, uploader.getTotalBytesUploaded());
+        byte[] first = ParsedWire.parse(ParsedWire.parse(
+                http.requests.get(0).body).getBytes(4)).getBytes(1);
+        byte[] second = ParsedWire.parse(ParsedWire.parse(
+                http.requests.get(1).body).getBytes(4)).getBytes(1);
+        byte[] firstPayload = ParsedWire.parse(first).getBytes(2);
+        byte[] secondPayload = ParsedWire.parse(second).getBytes(2);
+        assertEquals(5_295_308, firstPayload.length);
+        assertEquals(2_899_743, secondPayload.length);
+        assertArrayEquals(Arrays.copyOfRange(audio, 0, firstPayload.length), firstPayload);
+        assertArrayEquals(Arrays.copyOfRange(audio, firstPayload.length, audio.length), secondPayload);
+        assertEquals(0, ParsedWire.parse(first).getInt(1));
+        assertEquals(1, ParsedWire.parse(second).getInt(1));
+        assertEquals(2, ParsedWire.parse(ParsedWire.parse(
+                http.requests.get(1).body).getBytes(4)).getInt(2));
+    }
+
+    @Test
+    public void testUnknownWireMetadataNeverContainsPayload() {
+        VotWireWriter audio = new VotWireWriter();
+        audio.writeInt32(1, VotTranslationAudioResponse.STATUS_DONE);
+        audio.writeString(42, "private-token-in-fixture");
+        byte[] audioWire = audio.toByteArray();
+        assertEquals(VotTranslationAudioResponse.STATUS_DONE,
+                VotProtobuf.decodeTranslationAudioResponse(audioWire).status);
+        assertEquals(Collections.singletonList("field=42, wireType=2, length=24"),
+                VotProtobuf.unknownFieldMetadata(audioWire, true));
+
+        VotWireWriter translation = new VotWireWriter();
+        translation.writeInt32(4, VotTranslationResponse.STATUS_FAILED);
+        translation.writeString(43, "hidden-url-in-fixture");
+        byte[] translationWire = translation.toByteArray();
+        assertEquals(VotTranslationResponse.STATUS_FAILED,
+                VotProtobuf.decodeTranslationResponse(translationWire).status);
+        assertEquals(1, VotProtobuf.unknownFieldMetadata(translationWire, false).size());
+        assertFalse(VotProtobuf.unknownFieldMetadata(translationWire, false).get(0).contains("hidden"));
     }
 
     // =============================================================================================

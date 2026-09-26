@@ -227,14 +227,6 @@ public class VotAudioUploader {
             logI("Multi-part chunk 0 acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
                     mFinalStatus, remainingChunks0, elapsedMs0, totalBytesUploaded);
 
-            if (resp0 != null && resp0.status == VotTranslationAudioResponse.STATUS_DONE) {
-                validateFinalResponse(resp0, 1);
-                checkCancelled();
-                logI("Audio upload complete on chunk 0 (server acknowledged STATUS_DONE): totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=1, finalStatus=%d",
-                        mTotalBytesRead, mTotalBytesUploaded, mFinalStatus);
-                return resp0;
-            }
-
             validateIntermediateResponse(resp0, 0);
 
             int chunkIndex = 1;
@@ -331,14 +323,6 @@ public class VotAudioUploader {
                 logI("Multi-part chunk %d acknowledged: httpStatus=200, protoStatus=%d, remainingChunks=%d, elapsedMs=%d, totalUploaded=%d",
                         chunkIndex, mFinalStatus, remainingChunks, elapsedMs, totalBytesUploaded);
 
-                if (resp != null && resp.status == VotTranslationAudioResponse.STATUS_DONE) {
-                    validateFinalResponse(resp, chunkIndex + 1);
-                    checkCancelled();
-                    logI("Audio upload complete on intermediate chunk %d (server acknowledged STATUS_DONE): totalBytesRead=%d, totalBytesUploaded=%d, totalChunks=%d, finalStatus=%d",
-                            chunkIndex, mTotalBytesRead, mTotalBytesUploaded, chunksUploaded, mFinalStatus);
-                    return resp;
-                }
-
                 validateIntermediateResponse(resp, chunkIndex);
 
                 chunkIndex++;
@@ -426,6 +410,9 @@ public class VotAudioUploader {
                     throw new VotException("Empty audio upload response from server");
                 }
 
+                for (String field : VotProtobuf.unknownFieldMetadata(rawResponse, true)) {
+                    logI("VOT audio unknown protobuf field: %s", field);
+                }
                 return VotProtobuf.decodeTranslationAudioResponse(rawResponse);
             } catch (IOException e) {
                 checkCancelled();
@@ -457,7 +444,10 @@ public class VotAudioUploader {
     }
 
     private void validateIntermediateResponse(VotTranslationAudioResponse resp, int chunkIndex) throws VotException {
-        if (resp.status != VotTranslationAudioResponse.STATUS_WAITING_CHUNKS) {
+        // STATUS_DONE acknowledges this request; the reference client still sends every
+        // source chunk and supplies audioPartsLength on the last one.
+        if (resp.status != VotTranslationAudioResponse.STATUS_WAITING_CHUNKS
+                && resp.status != VotTranslationAudioResponse.STATUS_DONE) {
             throw new VotException("Unexpected audio upload response status on chunk " + chunkIndex + ": " + resp.status);
         }
     }

@@ -733,8 +733,8 @@ public class VoiceTranslateController extends BasePlayerController {
                 Log.w(TAG, "VOT: no compatible audio format found for upload");
                 return null;
             }
-            Log.i(TAG, "VOT: selected format for upload: mime=%s, bitrate=%s, clen=%s",
-                    best.getMimeType(), best.getBitrate(), best.getClen());
+            Log.i(TAG, "VOT: selected format for upload: %s",
+                    VotMediaFormatSelector.safeFormatDescription(best));
             return VotYouTubeAudioSource.fromMediaFormat(best);
         })
                 .observeOn(AndroidSchedulers.mainThread())

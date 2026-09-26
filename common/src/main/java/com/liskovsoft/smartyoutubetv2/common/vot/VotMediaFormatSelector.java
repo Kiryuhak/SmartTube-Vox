@@ -28,6 +28,26 @@ public final class VotMediaFormatSelector {
     private VotMediaFormatSelector() {
     }
 
+    /** Metadata only; never includes the signed media URL or arbitrary MIME parameters. */
+    public static String safeFormatDescription(MediaFormat format) {
+        if (format == null) {
+            return "format=unknown";
+        }
+        String mime = format.getMimeType();
+        String lower = mime == null ? "" : mime.toLowerCase(Locale.US);
+        String base = lower.startsWith("audio/webm") ? MIME_WEBM
+                : lower.startsWith("audio/mp4") ? MIME_MP4 : "unknown";
+        String codec = lower.contains("opus") ? "opus"
+                : lower.contains("mp4a") ? "mp4a" : "unknown";
+        return "itag=" + safeDecimal(format.getITag()) + ", mime=" + base
+                + ", codec=" + codec + ", bitrate=" + safeDecimal(format.getBitrate())
+                + ", declaredContentLength=" + safeDecimal(format.getClen());
+    }
+
+    private static String safeDecimal(String value) {
+        return value != null && value.matches("[0-9]{1,16}") ? value : "unknown";
+    }
+
     /**
      * Inspects a list of adaptive media formats and selects the optimal original audio format.
      *
