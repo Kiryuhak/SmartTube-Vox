@@ -24,6 +24,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApi;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotAudioUploadTransport;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotOrchestrator;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotPlaybackAdapter;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotShadowController;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotState;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
@@ -70,6 +71,18 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             handleSync(pos);
         } else if ("video_switch".equalsIgnoreCase(action)) {
             handleVideoSwitch();
+        } else if ("enableShadow".equalsIgnoreCase(action)) {
+            handleSetShadowEnabled(true, intent.getBooleanExtra("autoStart", false));
+        } else if ("disableShadow".equalsIgnoreCase(action)) {
+            handleSetShadowEnabled(false, false);
+        } else if ("setShadow".equalsIgnoreCase(action)) {
+            boolean enabled = intent.getBooleanExtra("enabled", true);
+            boolean autoStart = intent.getBooleanExtra("autoStart", false);
+            handleSetShadowEnabled(enabled, autoStart);
+        } else if ("startShadow".equalsIgnoreCase(action) || "startCurrent".equalsIgnoreCase(action)) {
+            handleStartShadow(intent);
+        } else if ("stopShadow".equalsIgnoreCase(action) || "cancelShadow".equalsIgnoreCase(action)) {
+            handleStopShadow();
         } else if ("status".equalsIgnoreCase(action)) {
             handleStatus();
         } else {
@@ -318,18 +331,67 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         }
     }
 
+    private void handleSetShadowEnabled(boolean enabled, boolean autoStart) {
+        YandexVotShadowController shadow = YandexVotShadowController.instance();
+        if (shadow != null) {
+            shadow.setEnabled(enabled);
+            shadow.setAutoStartOnNewVideo(autoStart);
+            Log.i(TAG, "ShadowController configured: enabled=" + enabled + " autoStart=" + autoStart);
+        } else {
+            Log.w(TAG, "ShadowController instance is null (player not initialized yet)");
+        }
+    }
+
+    private void handleStartShadow(Intent intent) {
+        YandexVotShadowController shadow = YandexVotShadowController.instance();
+        if (shadow != null) {
+            String token = intent.getStringExtra("oauthToken");
+            Log.i(TAG, "Starting shadow translation via ShadowController (hasCustomToken=" + (token != null) + ")");
+            shadow.startCurrentTranslation(token);
+        } else {
+            Log.w(TAG, "ShadowController instance is null (player not initialized yet)");
+        }
+    }
+
+    private void handleStopShadow() {
+        YandexVotShadowController shadow = YandexVotShadowController.instance();
+        if (shadow != null) {
+            Log.i(TAG, "Stopping shadow translation via ShadowController");
+            shadow.stopTranslation();
+        } else {
+            Log.w(TAG, "ShadowController instance is null (player not initialized yet)");
+        }
+    }
+
     private void handleStatus() {
         synchronized (YandexVotTestReceiver.class) {
             if (sLastState != null) {
                 Log.i(TAG, "Current test status: " + sLastState.getStatus());
                 logState(sLastState);
             } else {
-                Log.i(TAG, "Current test status: IDLE (no state recorded)");
+                Log.i(TAG, "Current test status: IDLE (no standalone test recorded)");
             }
             if (sPlaybackAdapter != null) {
-                Log.i(TAG, "Playback adapter: isPrepared=" + sPlaybackAdapter.isPrepared()
+                Log.i(TAG, "Standalone playback adapter: isPrepared=" + sPlaybackAdapter.isPrepared()
                         + " isPlaying=" + sPlaybackAdapter.isPlaying()
                         + " isDucked=" + sPlaybackAdapter.isAudioDucked());
+            }
+
+            YandexVotShadowController shadow = YandexVotShadowController.instance();
+            if (shadow != null) {
+                YandexVotState shadowState = shadow.getLastState();
+                YandexVotPlaybackAdapter shadowAdapter = shadow.getPlaybackAdapter();
+                Log.i(TAG, "ShadowController status: enabled=" + shadow.isEnabled()
+                        + " autoStart=" + shadow.isAutoStartOnNewVideo()
+                        + " state=" + (shadowState != null ? shadowState.getStatus() : "IDLE")
+                        + " adapterPrepared=" + (shadowAdapter != null && shadowAdapter.isPrepared())
+                        + " adapterPlaying=" + (shadowAdapter != null && shadowAdapter.isPlaying())
+                        + " adapterDucked=" + (shadowAdapter != null && shadowAdapter.isAudioDucked()));
+                if (shadowState != null) {
+                    logState(shadowState);
+                }
+            } else {
+                Log.i(TAG, "ShadowController: instance null (player not initialized)");
             }
         }
     }
