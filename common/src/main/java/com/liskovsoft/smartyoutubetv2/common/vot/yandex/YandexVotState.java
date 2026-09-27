@@ -20,6 +20,8 @@ public final class YandexVotState {
         REQUESTING,
         WAITING,
         AUDIO_REQUIRED,
+        PREPARING_AUDIO,
+        UPLOADING,
         READY,
         CANCELLED,
         ERROR
@@ -32,6 +34,8 @@ public final class YandexVotState {
     private final String translationId;
     private final String audioUrl;
     private final int remainingSeconds;
+    private final int currentPart;
+    private final int totalParts;
     private final String errorMessage;
     private final String errorCategory;
     private final boolean requestedLively;
@@ -45,6 +49,8 @@ public final class YandexVotState {
             @Nullable String translationId,
             @Nullable String audioUrl,
             int remainingSeconds,
+            int currentPart,
+            int totalParts,
             @Nullable String errorMessage,
             @Nullable String errorCategory,
             boolean requestedLively,
@@ -57,6 +63,8 @@ public final class YandexVotState {
         this.translationId = translationId;
         this.audioUrl = audioUrl;
         this.remainingSeconds = remainingSeconds;
+        this.currentPart = currentPart;
+        this.totalParts = totalParts;
         this.errorMessage = errorMessage;
         this.errorCategory = errorCategory;
         this.requestedLively = requestedLively;
@@ -65,42 +73,54 @@ public final class YandexVotState {
 
     @NonNull
     public static YandexVotState idle() {
-        return new YandexVotState(Status.IDLE, 0, null, null, null, null, 0, null, null, false, false);
+        return new YandexVotState(Status.IDLE, 0, null, null, null, null, 0, 0, 0, null, null, false, false);
     }
 
     @NonNull
     public static YandexVotState requesting(long generationId, @Nullable String videoId, @Nullable String videoUrl, boolean requestedLively) {
-        return new YandexVotState(Status.REQUESTING, generationId, videoId, videoUrl, null, null, 0, null, null, requestedLively, false);
+        return new YandexVotState(Status.REQUESTING, generationId, videoId, videoUrl, null, null, 0, 0, 0, null, null, requestedLively, false);
     }
 
     @NonNull
     public static YandexVotState waiting(long generationId, @Nullable String videoId, @Nullable String videoUrl,
                                          @Nullable String translationId, int remainingSeconds, boolean requestedLively) {
-        return new YandexVotState(Status.WAITING, generationId, videoId, videoUrl, translationId, null, remainingSeconds, null, null, requestedLively, false);
+        return new YandexVotState(Status.WAITING, generationId, videoId, videoUrl, translationId, null, remainingSeconds, 0, 0, null, null, requestedLively, false);
     }
 
     @NonNull
     public static YandexVotState audioRequired(long generationId, @Nullable String videoId, @Nullable String videoUrl,
                                                @Nullable String translationId, boolean requestedLively) {
-        return new YandexVotState(Status.AUDIO_REQUIRED, generationId, videoId, videoUrl, translationId, null, 0, null, null, requestedLively, false);
+        return new YandexVotState(Status.AUDIO_REQUIRED, generationId, videoId, videoUrl, translationId, null, 0, 0, 0, null, null, requestedLively, false);
+    }
+
+    @NonNull
+    public static YandexVotState preparingAudio(long generationId, @Nullable String videoId, @Nullable String videoUrl,
+                                                @Nullable String translationId, boolean requestedLively) {
+        return new YandexVotState(Status.PREPARING_AUDIO, generationId, videoId, videoUrl, translationId, null, 0, 0, 0, null, null, requestedLively, false);
+    }
+
+    @NonNull
+    public static YandexVotState uploading(long generationId, @Nullable String videoId, @Nullable String videoUrl,
+                                           @Nullable String translationId, int currentPart, int totalParts, boolean requestedLively) {
+        return new YandexVotState(Status.UPLOADING, generationId, videoId, videoUrl, translationId, null, 0, currentPart, totalParts, null, null, requestedLively, false);
     }
 
     @NonNull
     public static YandexVotState ready(long generationId, @Nullable String videoId, @Nullable String videoUrl,
                                        @Nullable String translationId, @Nullable String audioUrl,
                                        boolean requestedLively, boolean receivedLively) {
-        return new YandexVotState(Status.READY, generationId, videoId, videoUrl, translationId, audioUrl, 0, null, null, requestedLively, receivedLively);
+        return new YandexVotState(Status.READY, generationId, videoId, videoUrl, translationId, audioUrl, 0, 0, 0, null, null, requestedLively, receivedLively);
     }
 
     @NonNull
     public static YandexVotState cancelled(long generationId, @Nullable String videoId, @Nullable String videoUrl) {
-        return new YandexVotState(Status.CANCELLED, generationId, videoId, videoUrl, null, null, 0, null, null, false, false);
+        return new YandexVotState(Status.CANCELLED, generationId, videoId, videoUrl, null, null, 0, 0, 0, null, null, false, false);
     }
 
     @NonNull
     public static YandexVotState error(long generationId, @Nullable String videoId, @Nullable String videoUrl,
                                        @Nullable String errorMessage, @Nullable String errorCategory, boolean requestedLively) {
-        return new YandexVotState(Status.ERROR, generationId, videoId, videoUrl, null, null, 0, errorMessage, errorCategory, requestedLively, false);
+        return new YandexVotState(Status.ERROR, generationId, videoId, videoUrl, null, null, 0, 0, 0, errorMessage, errorCategory, requestedLively, false);
     }
 
     @NonNull
@@ -134,6 +154,14 @@ public final class YandexVotState {
 
     public int getRemainingSeconds() {
         return remainingSeconds;
+    }
+
+    public int getCurrentPart() {
+        return currentPart;
+    }
+
+    public int getTotalParts() {
+        return totalParts;
     }
 
     @Nullable
@@ -170,6 +198,14 @@ public final class YandexVotState {
         return status == Status.AUDIO_REQUIRED;
     }
 
+    public boolean isPreparingAudio() {
+        return status == Status.PREPARING_AUDIO;
+    }
+
+    public boolean isUploading() {
+        return status == Status.UPLOADING;
+    }
+
     public boolean isReady() {
         return status == Status.READY;
     }
@@ -189,6 +225,8 @@ public final class YandexVotState {
         YandexVotState that = (YandexVotState) o;
         return generationId == that.generationId &&
                 remainingSeconds == that.remainingSeconds &&
+                currentPart == that.currentPart &&
+                totalParts == that.totalParts &&
                 requestedLively == that.requestedLively &&
                 receivedLively == that.receivedLively &&
                 status == that.status &&
@@ -203,7 +241,7 @@ public final class YandexVotState {
     @Override
     public int hashCode() {
         return Objects.hash(status, generationId, videoId, videoUrl, translationId,
-                audioUrl, remainingSeconds, errorMessage, errorCategory, requestedLively, receivedLively);
+                audioUrl, remainingSeconds, currentPart, totalParts, errorMessage, errorCategory, requestedLively, receivedLively);
     }
 
     @Override
@@ -216,6 +254,8 @@ public final class YandexVotState {
                 ", translationId='" + translationId + '\'' +
                 ", audioUrl=" + (audioUrl != null ? "[PROTECTED]" : "null") +
                 ", remainingSeconds=" + remainingSeconds +
+                ", currentPart=" + currentPart +
+                ", totalParts=" + totalParts +
                 ", errorMessage='" + errorMessage + '\'' +
                 ", errorCategory='" + errorCategory + '\'' +
                 ", requestedLively=" + requestedLively +

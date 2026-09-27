@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Isolated state machine orchestrating Yandex VOT translation requests, polling loops,
- * generation safety, and lifecycle state transitions.
+ * audio upload flow, generation safety, and lifecycle state transitions.
  */
 public class YandexVotOrchestrator {
     private static final String TAG = YandexVotOrchestrator.class.getSimpleName();
@@ -68,6 +68,8 @@ public class YandexVotOrchestrator {
     }
 
     private final YandexVotApi api;
+    @Nullable private final YandexVotAudioSourceProvider sourceProvider;
+    @Nullable private final YandexVotAudioUploadTransport uploadTransport;
     private final ScheduledExecutorService scheduler;
     private final boolean ownsScheduler;
 
@@ -76,30 +78,52 @@ public class YandexVotOrchestrator {
     @NonNull private YandexVotState currentState = YandexVotState.idle();
     @Nullable private Listener listener;
     @Nullable private ScheduledFuture<?> activePollFuture;
+    @Nullable private YandexVotAudioTransfer activeTransfer;
 
     public YandexVotOrchestrator() {
         this(YandexVotApi.DEFAULT);
     }
 
     public YandexVotOrchestrator(@NonNull YandexVotApi api) {
-        this(api, Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+        this(api, null, null, createDefaultScheduler(), true);
+    }
+
+    public YandexVotOrchestrator(@NonNull YandexVotApi api, @NonNull ScheduledExecutorService scheduler) {
+        this(api, null, null, scheduler, false);
+    }
+
+    public YandexVotOrchestrator(
+            @NonNull YandexVotApi api,
+            @Nullable YandexVotAudioSourceProvider sourceProvider,
+            @Nullable YandexVotAudioUploadTransport uploadTransport,
+            @NonNull ScheduledExecutorService scheduler
+    ) {
+        this(api, sourceProvider, uploadTransport, scheduler, false);
+    }
+
+    private YandexVotOrchestrator(
+            @NonNull YandexVotApi api,
+            @Nullable YandexVotAudioSourceProvider sourceProvider,
+            @Nullable YandexVotAudioUploadTransport uploadTransport,
+            @NonNull ScheduledExecutorService scheduler,
+            boolean ownsScheduler
+    ) {
+        this.api = Objects.requireNonNull(api, "api cannot be null");
+        this.sourceProvider = sourceProvider;
+        this.uploadTransport = uploadTransport;
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler cannot be null");
+        this.ownsScheduler = ownsScheduler;
+    }
+
+    private static ScheduledExecutorService createDefaultScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable r) {
                 Thread t = new Thread(r, "YandexVotOrchestrator-Worker");
                 t.setDaemon(true);
                 return t;
             }
-        }), true);
-    }
-
-    public YandexVotOrchestrator(@NonNull YandexVotApi api, @NonNull ScheduledExecutorService scheduler) {
-        this(api, scheduler, false);
-    }
-
-    private YandexVotOrchestrator(@NonNull YandexVotApi api, @NonNull ScheduledExecutorService scheduler, boolean ownsScheduler) {
-        this.api = Objects.requireNonNull(api, "api cannot be null");
-        this.scheduler = Objects.requireNonNull(scheduler, "scheduler cannot be null");
-        this.ownsScheduler = ownsScheduler;
+        });
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -119,7 +143,7 @@ public class YandexVotOrchestrator {
         long gen;
         YandexVotState newState;
         synchronized (lock) {
-            cancelActivePollLocked();
+            cancelActiveOperationsLocked();
             gen = ++generationCounter;
             newState = YandexVotState.requesting(
                     gen,
@@ -145,7 +169,7 @@ public class YandexVotOrchestrator {
     public void cancel() {
         YandexVotState newState = null;
         synchronized (lock) {
-            cancelActivePollLocked();
+            cancelActiveOperationsLocked();
             long gen = ++generationCounter;
             if (currentState.getStatus() != YandexVotState.Status.IDLE &&
                     currentState.getStatus() != YandexVotState.Status.CANCELLED) {
@@ -163,7 +187,7 @@ public class YandexVotOrchestrator {
 
     public void reset() {
         synchronized (lock) {
-            cancelActivePollLocked();
+            cancelActiveOperationsLocked();
             long gen = ++generationCounter;
             currentState = YandexVotState.idle();
             YandexVotLog.d(TAG, "VOT reset: gen=" + gen);
@@ -178,10 +202,14 @@ public class YandexVotOrchestrator {
         }
     }
 
-    private void cancelActivePollLocked() {
+    private void cancelActiveOperationsLocked() {
         if (activePollFuture != null) {
             activePollFuture.cancel(true);
             activePollFuture = null;
+        }
+        if (activeTransfer != null) {
+            activeTransfer.cancel();
+            activeTransfer = null;
         }
     }
 
@@ -277,15 +305,25 @@ public class YandexVotOrchestrator {
                 }
 
                 case YandexVotApiClient.STATUS_AUDIO_REQUESTED: {
+                    final String translationId = result.getTranslationId();
                     YandexVotState audioRequiredState = YandexVotState.audioRequired(
                             gen,
                             params.getVideoId(),
                             params.getVideoUrl(),
-                            result.getTranslationId(),
+                            translationId,
                             params.isUseLiveVoices()
                     );
                     currentState = audioRequiredState;
                     notifyListenerLocked(audioRequiredState);
+
+                    if (sourceProvider != null) {
+                        scheduler.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                handleAudioRequired(gen, params, translationId);
+                            }
+                        });
+                    }
                     break;
                 }
 
@@ -333,6 +371,176 @@ public class YandexVotOrchestrator {
                 }
             }
         }
+    }
+
+    private void handleAudioRequired(final long gen, final RequestParams params, final String translationId) {
+        synchronized (lock) {
+            if (gen != generationCounter) {
+                YandexVotLog.d(TAG, "VOT dropping stale handleAudioRequired: gen=" + gen);
+                return;
+            }
+            currentState = YandexVotState.preparingAudio(
+                    gen,
+                    params.getVideoId(),
+                    params.getVideoUrl(),
+                    translationId,
+                    params.isUseLiveVoices()
+            );
+            notifyListenerLocked(currentState);
+        }
+
+        YandexVotAudioSource source = null;
+        YandexVotAudioStreamReader reader = null;
+        try {
+            if (sourceProvider != null) {
+                source = sourceProvider.getAudioSource(params.getVideoId(), params.getVideoUrl());
+                if (source != null) {
+                    reader = sourceProvider.getStreamReader(source);
+                }
+            }
+        } catch (Exception e) {
+            YandexVotLog.d(TAG, "VOT sourceProvider error: " + e.getMessage());
+        }
+
+        if (source == null || reader == null) {
+            synchronized (lock) {
+                if (gen != generationCounter) return;
+                YandexVotState errorState = YandexVotState.error(
+                        gen,
+                        params.getVideoId(),
+                        params.getVideoUrl(),
+                        "Audio source unavailable",
+                        "source",
+                        params.isUseLiveVoices()
+                );
+                currentState = errorState;
+                notifyListenerLocked(errorState);
+            }
+            return;
+        }
+
+        final YandexVotAudioTransfer transfer = new YandexVotAudioTransfer();
+        synchronized (lock) {
+            if (gen != generationCounter) return;
+            activeTransfer = transfer;
+        }
+
+        YandexVotAudioUploadTransport transportToUse = uploadTransport != null
+                ? uploadTransport
+                : YandexVotAudioUploadTransport.DEFAULT;
+
+        YandexVotAudioResult transferResult = transfer.transfer(
+                source,
+                params.getVideoUrl(),
+                translationId,
+                params.getVideoId() != null ? params.getVideoId() : "video",
+                reader,
+                transportToUse,
+                new YandexVotAudioTransfer.TransferListener() {
+                    @Override
+                    public void onPreparing(long totalBytes, int totalParts) {
+                        synchronized (lock) {
+                            if (gen != generationCounter) return;
+                            currentState = YandexVotState.preparingAudio(
+                                    gen,
+                                    params.getVideoId(),
+                                    params.getVideoUrl(),
+                                    translationId,
+                                    params.isUseLiveVoices()
+                            );
+                            notifyListenerLocked(currentState);
+                        }
+                    }
+
+                    @Override
+                    public void onPartStarted(int partIndex, int totalParts, long startByte, int partLength) {
+                        synchronized (lock) {
+                            if (gen != generationCounter) return;
+                            currentState = YandexVotState.uploading(
+                                    gen,
+                                    params.getVideoId(),
+                                    params.getVideoUrl(),
+                                    translationId,
+                                    partIndex,
+                                    totalParts,
+                                    params.isUseLiveVoices()
+                            );
+                            notifyListenerLocked(currentState);
+                        }
+                    }
+
+                    @Override
+                    public void onPartCompleted(int partIndex, int totalParts) {
+                    }
+
+                    @Override
+                    public void onCompleted(long totalBytesTransferred) {
+                    }
+
+                    @Override
+                    public void onError(@NonNull YandexVotAudioResult error) {
+                    }
+
+                    @Override
+                    public void onCancelled() {
+                    }
+                }
+        );
+
+        synchronized (lock) {
+            if (activeTransfer == transfer) {
+                activeTransfer = null;
+            }
+            if (gen != generationCounter) {
+                YandexVotLog.d(TAG, "VOT dropping stale transfer outcome: gen=" + gen);
+                return;
+            }
+
+            if (transferResult == YandexVotAudioResult.SUCCESS) {
+                YandexVotLog.d(TAG, "VOT audio upload complete, scheduling post-upload poll: gen=" + gen);
+                schedulePostUploadPollLocked(gen, params, translationId);
+            } else if (transferResult == YandexVotAudioResult.CANCELLED) {
+                if (!currentState.isCancelled()) {
+                    currentState = YandexVotState.cancelled(gen, params.getVideoId(), params.getVideoUrl());
+                    notifyListenerLocked(currentState);
+                }
+            } else {
+                String category = transferResult.failureKind().name().toLowerCase();
+                String msg = "Audio upload failed: " + transferResult.name();
+                YandexVotState errorState = YandexVotState.error(
+                        gen,
+                        params.getVideoId(),
+                        params.getVideoUrl(),
+                        msg,
+                        category,
+                        params.isUseLiveVoices()
+                );
+                currentState = errorState;
+                notifyListenerLocked(errorState);
+            }
+        }
+    }
+
+    private void schedulePostUploadPollLocked(final long gen, final RequestParams params, final String translationId) {
+        int delaySeconds = YandexVotTiming.DEFAULT_POLL_DELAY_SECONDS;
+        YandexVotState waitingState = YandexVotState.waiting(
+                gen,
+                params.getVideoId(),
+                params.getVideoUrl(),
+                translationId,
+                0,
+                params.isUseLiveVoices()
+        );
+        currentState = waitingState;
+        notifyListenerLocked(waitingState);
+
+        YandexVotLog.d(TAG, "VOT scheduling post-upload poll in " + delaySeconds + "s: gen=" + gen);
+        activePollFuture = scheduler.schedule(new Runnable() {
+            @Override
+            public void run() {
+                executeRequest(gen, params, false, 0);
+            }
+        }, delaySeconds, TimeUnit.SECONDS);
     }
 
     private void schedulePollLocked(final long gen, final RequestParams params, final YandexVotApiClient.TranslationResult result) {
