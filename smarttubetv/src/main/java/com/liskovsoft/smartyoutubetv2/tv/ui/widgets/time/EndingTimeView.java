@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.tv.ui.widgets.time;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.TextView;
@@ -15,6 +16,7 @@ import com.liskovsoft.smartyoutubetv2.common.misc.TickleManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.TickleManager.TickleListener;
 import com.liskovsoft.smartyoutubetv2.common.prefs.common.DataChangeBase.OnDataChange;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.TopRightTimeMode;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 
 @SuppressLint("AppCompatCustomView")
@@ -82,9 +84,12 @@ public class EndingTimeView extends TextView implements TickleListener, OnDataCh
 
     public void update() {
         if (getVisibility() == View.VISIBLE) {
-            String endingTime = getEndingTime();
-
-            setText(formatEndingTime(endingTime));
+            TopRightTimeMode mode = mPlayerData.getTopRightTimeMode();
+            String time = mode.showRemaining ? getRemainingTime() : getEndingTime();
+            String formatted = formatEndingTime(time);
+            if (!TextUtils.equals(getText(), formatted)) {
+                setText(formatted);
+            }
 
             //if (endingTime != null) {
             //    // https://stackoverflow.com/questions/5437674/what-unicode-characters-represent-time/9454080
@@ -129,6 +134,15 @@ public class EndingTimeView extends TextView implements TickleListener, OnDataCh
         }
 
         return DateHelper.toShortTime(System.currentTimeMillis() + remainingTimeMs);
+    }
+
+    private String getRemainingTime() {
+        PlaybackView playbackView = PlaybackPresenter.instance(getContext()).getView();
+        if (playbackView == null || playbackView.getVideo() == null) {
+            return null;
+        }
+        return RemainingTimeFormatter.format(playbackView.getDurationMs(), playbackView.getPositionMs(),
+                playbackView.getVideo().isLive);
     }
 
     private long applySpeedCorrection(long timeMs) {

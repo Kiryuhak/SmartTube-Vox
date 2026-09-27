@@ -245,6 +245,8 @@ public final class VotProtobuf {
         r.remainingTimeSec = remaining instanceof Integer ? (Integer) remaining : 0;
         r.translationId = (String) fields.get(7);
         r.message = (String) fields.get(9);
+        Object lively = fields.get(10);
+        r.isLivelyVoice = lively instanceof Integer ? (Integer) lively != 0 : null;
         Object allow = fields.get(11);
         r.allowToTranslateVideo = allow instanceof Integer ? (Integer) allow != 0 : null;
         Object retry = fields.get(12);

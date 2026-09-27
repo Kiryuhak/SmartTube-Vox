@@ -230,6 +230,13 @@
     <string name="app_corner_clock">Главная страница: часы в правом верхнем углу</string>
     <string name="player_corner_clock">Плеер: часы в правом верхнем углу</string>
     <string name="player_corner_ending_time">Плеер: время окончания в правом верхнем углу</string>
+    <string name="player_top_right_time_display">Плеер: время в правом верхнем углу</string>
+    <string name="player_top_right_current_end">Текущее время + время окончания</string>
+    <string name="player_top_right_remaining">Оставшееся время</string>
+    <string name="player_top_right_current_remaining">Текущее время + оставшееся время</string>
+    <string name="player_top_right_off">Выключено</string>
+    <string name="player_top_right_current_only">Только текущее время</string>
+    <string name="player_top_right_end_only">Только время окончания</string>
     <string name="uploads_old_look">Вернуть старый вид раздела Загрузки</string>
     <string name="background_playback_activation">Фоновое воспроизведение (активация)</string>
     <string name="channels_old_look">Вернуть старый вид раздела Каналы</string>

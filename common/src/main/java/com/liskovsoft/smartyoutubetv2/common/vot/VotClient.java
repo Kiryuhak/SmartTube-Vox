@@ -232,7 +232,7 @@ public class VotClient {
                 ? (useLively ? mTestOAuthToken : null)
                 : (useLively ? mVotData.getOAuthToken() : null);
         try {
-            logD("VOT request started: duration=%ds, useLively=%b, authState=%s, subsequent=%b",
+            logD("VOT request started: duration=%ds, requestUseLively=%b, authState=%s, subsequent=%b",
                     durationSec, useLively, mVotData != null ? mVotData.getAuthState() : "TEST", subsequent);
 
             VotTranslationResponse response = null;
@@ -578,8 +578,9 @@ public class VotClient {
     }
 
     private void logTranslationStatus(String phase, VotTranslationResponse response) {
-        logD("%s: status=%d, remainingTime=%ds, messagePresent=%b, allowToTranslateVideo=%s, shouldRetry=%s, unknown3=%s",
+        logD("%s: status=%d, remainingTime=%ds, messagePresent=%b, responseIsLivelyVoice=%s, allowToTranslateVideo=%s, shouldRetry=%s, unknown3=%s",
                 phase, response.status, response.remainingTimeSec, response.message != null,
+                response.isLivelyVoice == null ? "ABSENT" : response.isLivelyVoice,
                 response.allowToTranslateVideo, response.shouldRetry, response.unknown3);
     }
 
