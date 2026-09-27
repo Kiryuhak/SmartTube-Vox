@@ -1,0 +1,48 @@
+/*
+ * Copyright (C) 2026 Dual VoT contributors
+ *
+ * Licensed under the GNU General Public License v3.0.
+ */
+
+package com.liskovsoft.smartyoutubetv2.common.vot.yandex;
+
+/** Pure timing policy shared by the Yandex request UI and polling loop. */
+public final class YandexVotTiming {
+    public static final int DEFAULT_POLL_DELAY_SECONDS = 10;
+    public static final int MAX_POLL_DELAY_SECONDS = 15;
+
+    private YandexVotTiming() {
+    }
+
+    /** Keeps server ETA presentation independent from how often readiness is checked. */
+    public static int pollDelaySeconds(int serverRemainingSeconds) {
+        if (serverRemainingSeconds <= 0) return DEFAULT_POLL_DELAY_SECONDS;
+        return Math.max(1, Math.min(serverRemainingSeconds, MAX_POLL_DELAY_SECONDS));
+    }
+
+    /**
+     * Returns only an ETA that Yandex actually supplied. A missing/zero value means that the
+     * service has accepted work but has not yet estimated processing time, so the UI must stay
+     * in its indeterminate processing state instead of inventing a countdown.
+     */
+    public static int serverEstimateOrNone(int serverRemainingSeconds) {
+        return serverRemainingSeconds > 0 ? serverRemainingSeconds : -1;
+    }
+
+    /**
+     * Accepts a more optimistic server ETA but never moves an active countdown backwards.
+     * Once a countdown expires it therefore stays in the generic waiting state instead of
+     * repeatedly restarting at a few seconds.
+     */
+    public static long tightenDeadlineMs(long nowMs, long currentDeadlineMs, int estimateSeconds) {
+        long candidateDeadlineMs = nowMs + Math.max(1, estimateSeconds) * 1000L;
+        return currentDeadlineMs < 0
+                ? candidateDeadlineMs
+                : Math.min(currentDeadlineMs, candidateDeadlineMs);
+    }
+
+    /** Uses the same ceiling rule everywhere a compact whole-minute ETA is shown. */
+    public static int roundedDisplayMinutes(int seconds) {
+        return Math.max(1, (Math.max(1, seconds) + 59) / 60);
+    }
+}
