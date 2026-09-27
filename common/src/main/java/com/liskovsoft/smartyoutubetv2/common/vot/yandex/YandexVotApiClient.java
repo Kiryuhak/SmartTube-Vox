@@ -47,8 +47,6 @@ package com.liskovsoft.smartyoutubetv2.common.vot.yandex;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.liskovsoft.sharedutils.mylogger.Log;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -213,14 +211,14 @@ public class YandexVotApiClient {
             @Nullable String oauthToken, boolean firstRequest
     ) {
         if (!ensureSession()) {
-            Log.d(TAG, "VOT: unable to establish session, network may be unavailable");
+            YandexVotLog.d(TAG, "VOT: unable to establish session, network may be unavailable");
             return null;
         }
 
         String cacheKey = getCacheKey(videoUrl, sourceLang, targetLang, useLiveVoices);
         CachedResult cached = translationCache.get(cacheKey);
         if (cached != null && !cached.isExpired()) {
-            Log.d(TAG, "VOT translation cache hit");
+            YandexVotLog.d(TAG, "VOT translation cache hit");
             return cached.getResult();
         }
         if (cached != null) {
@@ -233,7 +231,7 @@ public class YandexVotApiClient {
         }
 
         if (effectiveToken != null && !isValidOAuthToken(effectiveToken)) {
-            Log.d(TAG, "VOT OAuth token is invalid");
+            YandexVotLog.d(TAG, "VOT OAuth token is invalid");
             return new TranslationResult(STATUS_SESSION_REQUIRED, null, 0, null, null);
         }
 
@@ -263,7 +261,7 @@ public class YandexVotApiClient {
                 YandexVotProtobuf.TranslationResponse response = YandexVotProtobuf.decodeTranslationResponse(responseBytes);
 
                 if (response.status == STATUS_SESSION_REQUIRED && attempt == 0) {
-                    Log.d(TAG, "VOT: session required, creating session and retrying...");
+                    YandexVotLog.d(TAG, "VOT: session required, creating session and retrying...");
                     invalidateSession();
                     if (createSession()) {
                         continue;
@@ -285,7 +283,7 @@ public class YandexVotApiClient {
                 return result;
 
             } catch (Exception e) {
-                Log.d(TAG, "VOT requestTranslation failed: " + networkFailureCategory(e));
+                YandexVotLog.d(TAG, "VOT requestTranslation failed: " + networkFailureCategory(e));
                 return null;
             }
         }
@@ -352,7 +350,7 @@ public class YandexVotApiClient {
         }
 
         String requestUrl = getApiUrl(path);
-        Log.d(TAG, "VOT sendApiRequest: method=" + method + " endpoint=" + path);
+        YandexVotLog.d(TAG, "VOT sendApiRequest: method=" + method + " endpoint=" + path);
 
         HttpURLConnection connection = (HttpURLConnection) new URL(requestUrl).openConnection();
         try {
@@ -371,7 +369,7 @@ public class YandexVotApiClient {
 
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
-                Log.d(TAG, "VOT sendApiRequest: endpoint=" + path + " status=" + responseCode);
+                YandexVotLog.d(TAG, "VOT sendApiRequest: endpoint=" + path + " status=" + responseCode);
                 return null;
             }
 
@@ -435,7 +433,7 @@ public class YandexVotApiClient {
             yandexHeaders.put("X-Ya-Summary-Sk", "");
 
             String requestUrl = getApiUrl(path);
-            Log.d(TAG, "VOT createSession");
+            YandexVotLog.d(TAG, "VOT createSession");
 
             HttpURLConnection connection = (HttpURLConnection) new URL(requestUrl).openConnection();
             try {
@@ -454,19 +452,19 @@ public class YandexVotApiClient {
 
                 int responseCode = connection.getResponseCode();
                 if (responseCode != 200) {
-                    Log.d(TAG, "VOT createSession: returned " + responseCode);
+                    YandexVotLog.d(TAG, "VOT createSession: returned " + responseCode);
                     return false;
                 }
 
                 byte[] responseBytes = readBytes(connection.getInputStream());
                 if (responseBytes == null || responseBytes.length == 0) {
-                    Log.d(TAG, "VOT createSession: empty response");
+                    YandexVotLog.d(TAG, "VOT createSession: empty response");
                     return false;
                 }
 
                 YandexVotProtobuf.SessionResponse response = YandexVotProtobuf.decodeSessionResponse(responseBytes);
                 if (response.secretKey == null || response.secretKey.isEmpty()) {
-                    Log.d(TAG, "VOT createSession: no secretKey in response");
+                    YandexVotLog.d(TAG, "VOT createSession: no secretKey in response");
                     return false;
                 }
 
@@ -474,14 +472,14 @@ public class YandexVotApiClient {
                 sessionSecretKey = response.secretKey;
                 sessionExpiresAt = System.currentTimeMillis() + (response.expires > 0 ? response.expires * 1000L : 3600_000L);
 
-                Log.d(TAG, "VOT createSession: success");
+                YandexVotLog.d(TAG, "VOT createSession: success");
                 return true;
 
             } finally {
                 connection.disconnect();
             }
         } catch (Exception e) {
-            Log.d(TAG, "VOT createSession failed: " + networkFailureCategory(e));
+            YandexVotLog.d(TAG, "VOT createSession failed: " + networkFailureCategory(e));
             return false;
         }
     }
@@ -506,16 +504,16 @@ public class YandexVotApiClient {
                 int code = conn.getResponseCode();
                 lastValidatedToken = token;
                 tokenIsValid = (code == 200);
-                Log.d(TAG, "VOT OAuth token validation: HTTP " + code);
+                YandexVotLog.d(TAG, "VOT OAuth token validation: HTTP " + code);
                 return tokenIsValid;
             } finally {
                 conn.disconnect();
             }
         } catch (UnknownHostException | SocketTimeoutException | ConnectException e) {
-            Log.d(TAG, "VOT OAuth token validation: network transient error, assuming valid temporarily");
+            YandexVotLog.d(TAG, "VOT OAuth token validation: network transient error, assuming valid temporarily");
             return true;
         } catch (Exception e) {
-            Log.d(TAG, "VOT OAuth token validation failed");
+            YandexVotLog.d(TAG, "VOT OAuth token validation failed");
             lastValidatedToken = token;
             tokenIsValid = false;
             return false;
@@ -537,7 +535,7 @@ public class YandexVotApiClient {
             String jsonBody = "{\"video_url\":\"" + videoUrl + "\"}";
             sendJsonRequest(path, jsonBody, "PUT");
         } catch (Exception e) {
-            Log.d(TAG, "VOT sendFailedAudio exception: " + e.getMessage());
+            YandexVotLog.d(TAG, "VOT sendFailedAudio exception: " + e.getMessage());
         }
     }
 
@@ -552,7 +550,7 @@ public class YandexVotApiClient {
                     translationId, videoUrl, fileId, audioData);
             return sendAudioRequestBody(body);
         } catch (Exception e) {
-            Log.d(TAG, "VOT sendAudio exception: " + e.getMessage());
+            YandexVotLog.d(TAG, "VOT sendAudio exception: " + e.getMessage());
             return false;
         }
     }
@@ -578,7 +576,7 @@ public class YandexVotApiClient {
             );
             return sendAudioRequestBody(body);
         } catch (Exception e) {
-            Log.d(TAG, "VOT sendPartialAudio exception: " + e.getMessage());
+            YandexVotLog.d(TAG, "VOT sendPartialAudio exception: " + e.getMessage());
             return false;
         }
     }
@@ -619,7 +617,7 @@ public class YandexVotApiClient {
             }
             int responseCode = connection.getResponseCode();
             if (responseCode < 200 || responseCode >= 300) {
-                Log.d(TAG, "VOT sendJsonRequest: endpoint=" + path + " status=" + responseCode);
+                YandexVotLog.d(TAG, "VOT sendJsonRequest: endpoint=" + path + " status=" + responseCode);
             }
         } finally {
             connection.disconnect();
