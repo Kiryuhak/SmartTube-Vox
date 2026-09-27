@@ -15,6 +15,7 @@ import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.BasePlayerController;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
@@ -262,6 +263,11 @@ public class YandexVotShadowController extends BasePlayerController {
     }
 
     private void startCurrentTranslationInternal(@Nullable String oauthToken) {
+        if (VoiceTranslateController.isUserFlowActive()) {
+            YandexVotLog.w(TAG, "Cannot start shadow translation: user-flow VOX is active");
+            return;
+        }
+
         String videoId = getVideo() != null && getVideo().videoId != null ? getVideo().videoId : mCurrentVideoId;
         if (videoId == null) {
             YandexVotLog.w(TAG, "Cannot start shadow translation: no active videoId");

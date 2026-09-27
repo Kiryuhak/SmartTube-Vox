@@ -332,6 +332,22 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         }
     }
 
+    public void setPlaybackSpeed(float speed) {
+        synchronized (lock) {
+            if (activePlayer != null) {
+                activePlayer.setPlaybackSpeed(speed);
+            }
+        }
+    }
+
+    public void setVolume(float volume) {
+        synchronized (lock) {
+            if (activePlayer != null) {
+                activePlayer.setVolume(volume);
+            }
+        }
+    }
+
     public void checkPeriodicSync(long mainPosMs) {
         synchronized (lock) {
             if (activePlayer == null || !isPlaying || !activePlayer.isReady()) {

@@ -30,6 +30,17 @@ import com.liskovsoft.smartyoutubetv2.common.vot.VotProgress;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressTimer;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotRequestGuard;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.SmartTubeYandexVotAudioSourceProvider;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApi;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotAudioUploadTransport;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotOrchestrator;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotPlaybackAdapter;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotLog;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotShadowController;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotState;
+
+import androidx.annotation.NonNull;
+import android.os.Looper;
 
 import java.io.IOException;
 import java.util.List;
@@ -103,6 +114,110 @@ public class VoiceTranslateController extends BasePlayerController {
     private int mTranslationSessionId;
     private long mLastSyncSeekTimestamp;
 
+    private static volatile boolean sUseNewYandexBackend = false;
+    private static volatile boolean sInjectNewBackendFailure = false;
+    private static volatile VoiceTranslateController sInstance;
+
+    public static boolean isNewYandexBackendEnabled() {
+        return sUseNewYandexBackend;
+    }
+
+    public static void setNewYandexBackendEnabled(boolean enabled) {
+        YandexVotLog.i(TAG, "Feature flag USE_NEW_YANDEX_VOT_BACKEND set to: " + enabled);
+        sUseNewYandexBackend = enabled;
+    }
+
+    public static void setInjectNewBackendFailure(boolean fail) {
+        sInjectNewBackendFailure = fail;
+    }
+
+    public static boolean isInjectNewBackendFailure() {
+        return sInjectNewBackendFailure;
+    }
+
+    public static boolean isUserFlowActive() {
+        VoiceTranslateController instance = sInstance;
+        return instance != null && instance.mState != STATE_OFF;
+    }
+
+    public static VoiceTranslateController instance() {
+        return sInstance;
+    }
+
+    private YandexVotOrchestrator mYandexOrchestrator;
+    private YandexVotPlaybackAdapter mYandexPlaybackAdapter;
+    private boolean mIsNewBackendActive = false;
+    private long mNewBackendGenerationId = 0;
+    private boolean mNewBackendPlaybackStarted = false;
+    private boolean mFallbackTriggered = false;
+
+    private void runOnMainThread(Runnable action) {
+        try {
+            if (Looper.getMainLooper() != null && Looper.myLooper() == Looper.getMainLooper()) {
+                action.run();
+                return;
+            }
+        } catch (Throwable ignored) {
+            action.run();
+            return;
+        }
+        Utils.post(action);
+    }
+
+    private final YandexVotOrchestrator.Listener mNewBackendOrchestratorListener = new YandexVotOrchestrator.Listener() {
+        @Override
+        public void onStateChanged(@NonNull YandexVotState state) {
+            runOnMainThread(() -> onNewBackendStateChanged(state));
+        }
+    };
+
+    private final YandexVotPlaybackAdapter.PlaybackStateListener mNewBackendPlaybackListener = new YandexVotPlaybackAdapter.PlaybackStateListener() {
+        @Override
+        public void onPlaybackActive(long generationId) {
+            runOnMainThread(() -> {
+                if (!isCurrentNewBackendSession(generationId)) return;
+                mNewBackendPlaybackStarted = true;
+                YandexVotLog.i(TAG, "VOT NEW backend: audible playback active, ducking original audio");
+                duckMainAudio();
+                setState(STATE_ACTIVE);
+                if (mTrackSwitchState == TrackSwitchState.STARTING_VOT) {
+                    mTrackSwitchState = TrackSwitchState.VOT_ACTIVE;
+                }
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showReady(getActivity());
+                }
+                Utils.removeCallbacks(mSyncRunnable);
+                Utils.postDelayed(mSyncRunnable, INITIAL_SYNC_GRACE_PERIOD_MS);
+            });
+        }
+
+        @Override
+        public void onPlaybackPaused(long generationId) {
+            runOnMainThread(() -> {
+                if (!isCurrentNewBackendSession(generationId)) return;
+                YandexVotLog.i(TAG, "VOT NEW backend: playback paused");
+            });
+        }
+
+        @Override
+        public void onPlaybackStopped(long generationId) {
+            runOnMainThread(() -> {
+                if (!isCurrentNewBackendSession(generationId)) return;
+                YandexVotLog.i(TAG, "VOT NEW backend: playback stopped");
+                restoreMainVolume();
+            });
+        }
+
+        @Override
+        public void onPlaybackError(long generationId, @NonNull String category) {
+            runOnMainThread(() -> {
+                if (!isCurrentNewBackendSession(generationId)) return;
+                YandexVotLog.e(TAG, "VOT NEW backend: playback error category=" + category);
+                handleNewBackendError(generationId, "playback_error_" + category, true);
+            });
+        }
+    };
+
     private final Runnable mTrackSwitchTimeoutRunnable = () -> {
         if (mTrackSwitchState == TrackSwitchState.SWITCHING_TO_ORIGINAL) {
             Log.e(TAG, "VOT manual: switch to original track timed out");
@@ -122,7 +237,11 @@ public class VoiceTranslateController extends BasePlayerController {
         @Override
         public void run() {
             if (mState == STATE_ACTIVE) {
-                syncTranslationPositionIfNeeded();
+                if (mIsNewBackendActive && mYandexPlaybackAdapter != null && getPlayer() != null) {
+                    mYandexPlaybackAdapter.checkPeriodicSync(getPlayer().getPositionMs());
+                } else {
+                    syncTranslationPositionIfNeeded();
+                }
                 Utils.postDelayed(mSyncRunnable, SYNC_INTERVAL_MS);
             }
         }
@@ -228,6 +347,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     public VoiceTranslateController() {
+        sInstance = this;
     }
 
     private VotData votData() {
@@ -248,6 +368,10 @@ public class VoiceTranslateController extends BasePlayerController {
     public void onNewVideo(Video item) {
         Log.d(TAG, "VOT reset reason: new video (%s)", item != null ? item.videoId : "null");
         mTranslationSessionId++;
+        stopNewYandexBackend();
+        mIsNewBackendActive = false;
+        mFallbackTriggered = false;
+        mNewBackendPlaybackStarted = false;
         resetTrackSwitch();
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
@@ -346,7 +470,10 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onPlay() {
-        if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
+        if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.onPlay();
+            duckMainAudio();
+        } else if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
             mTranslationPlayer.resume();
             duckMainAudio();
         }
@@ -354,14 +481,20 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onPause() {
-        if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
+        if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.onPause();
+        } else if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
             mTranslationPlayer.pause();
         }
     }
 
     @Override
     public void onSeekEnd() {
-        if (mTranslationPlayer != null && getPlayer() != null) {
+        if (mIsNewBackendActive && mYandexPlaybackAdapter != null && getPlayer() != null) {
+            long targetPos = getPlayer().getPositionMs();
+            mLastSyncSeekTimestamp = System.currentTimeMillis();
+            mYandexPlaybackAdapter.onSeek(targetPos);
+        } else if (mTranslationPlayer != null && getPlayer() != null) {
             long targetPos = getPlayer().getPositionMs();
             mLastSyncSeekTimestamp = System.currentTimeMillis();
             mTranslationPlayer.seekTo(targetPos);
@@ -370,7 +503,9 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onSpeedChanged(float speed) {
-        if (mTranslationPlayer != null) {
+        if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.setPlaybackSpeed(speed);
+        } else if (mTranslationPlayer != null) {
             mTranslationPlayer.setPlaybackSpeed(speed);
         }
     }
@@ -650,6 +785,104 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void startYandexTranslation(boolean resetRetryCount, boolean subsequent) {
+        if (sUseNewYandexBackend) {
+            startNewYandexBackend(resetRetryCount, subsequent);
+            return;
+        }
+        startOldYandexBackend(resetRetryCount, subsequent);
+    }
+
+    private void startNewYandexBackend(boolean resetRetryCount, boolean subsequent) {
+        if (getPlayer() == null || getPlayer().getVideo() == null) {
+            MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
+            return;
+        }
+
+        ensureOriginalAudioForYandex();
+
+        TrackInfo info = resolveAudioInfo();
+        if (VotAudioTrackHelper.isRussianOriginal(info)) {
+            disarmWithMessage(R.string.vot_skip_russian);
+            return;
+        }
+
+        String videoId = getPlayer().getVideo().videoId;
+        if (videoId == null) {
+            MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
+            return;
+        }
+        String videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+
+        // Double-start protection: cancel old backend if running
+        cancelTranslationJob();
+        releaseTranslationPlayer();
+
+        // Mutual exclusion with shadow controller
+        YandexVotShadowController shadow = YandexVotShadowController.instance();
+        if (shadow != null && shadow.isEnabled()) {
+            Log.w(TAG, "Stopping active shadow controller before starting new backend user flow");
+            shadow.stopTranslation();
+            shadow.setEnabled(false);
+        }
+
+        if (resetRetryCount) {
+            mTranslationRetryCount = 0;
+            mRetrySecondsRemaining = 0;
+            mFallbackTriggered = false;
+            mNewBackendPlaybackStarted = false;
+        }
+
+        mIsNewBackendActive = true;
+        mPendingToastShown = false;
+        mPendingVideoUrl = videoUrl;
+        mCurrentVideoId = videoId;
+        mRequestStartTimestamp = SystemClock.elapsedRealtime();
+        mLastBackendPendingTimestamp = mRequestStartTimestamp;
+
+        setState(STATE_PENDING);
+
+        if (mUserArmed && progressOverlay() != null) {
+            progressOverlay().showPreparing(getActivity());
+        }
+
+        ensureNewBackendComponents();
+
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.stop();
+        }
+
+        double durationSec = Math.max(1, getPlayer().getDurationMs() / 1000.0);
+        boolean useLively = votData().isLivelyVoiceEnabled();
+        String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
+        String videoTitle = getPlayer().getVideo().getTitle();
+        TrackInfo audioInfo = resolveAudioInfo();
+        String sourceLang = audioInfo != null && audioInfo.langCode != null ? audioInfo.langCode : "en";
+
+        YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
+                videoId,
+                videoUrl,
+                durationSec,
+                sourceLang,
+                "ru",
+                videoTitle,
+                useLively,
+                oauthToken
+        );
+
+        YandexVotLog.i(TAG, "VOT request started: backend=NEW, videoId=" + videoId + ", duration=" + ((long) durationSec) + "s, useLively=" + useLively);
+
+        if (sInjectNewBackendFailure) {
+            YandexVotLog.w(TAG, "VOT NEW backend failure injection active, simulating failure");
+            mNewBackendGenerationId = ++mTranslationSessionId;
+            final long failGen = mNewBackendGenerationId;
+            runOnMainThread(() -> onNewBackendStateChanged(YandexVotState.error(failGen, "Injected test failure", "TEST_INJECTED")));
+            return;
+        }
+
+        mNewBackendGenerationId = mYandexOrchestrator.startTranslation(params);
+    }
+
+    private void startOldYandexBackend(boolean resetRetryCount, boolean subsequent) {
         if (getPlayer() == null || getPlayer().getVideo() == null) {
             MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
             return;
@@ -674,6 +907,18 @@ public class VoiceTranslateController extends BasePlayerController {
         if (mTranslationDisposable != null && !mTranslationDisposable.isDisposed()
                 && videoUrl.equals(mPendingVideoUrl)) {
             return;
+        }
+
+        // Double-start protection: stop new backend if running
+        stopNewYandexBackend();
+        mIsNewBackendActive = false;
+
+        // Mutual exclusion with shadow controller
+        YandexVotShadowController shadow = YandexVotShadowController.instance();
+        if (shadow != null && shadow.isEnabled()) {
+            Log.w(TAG, "Stopping active shadow controller before starting old backend user flow");
+            shadow.stopTranslation();
+            shadow.setEnabled(false);
         }
 
         if (!subsequent) {
@@ -716,14 +961,14 @@ public class VoiceTranslateController extends BasePlayerController {
 
         long durationSec = Math.max(1, getPlayer().getDurationMs() / 1000);
         final boolean requestUsesOAuth = votData().isLivelyVoiceEnabled();
-        Log.i(TAG, "VOT request started: duration=" + durationSec + "s, userArmed=" + mUserArmed
+        Log.i(TAG, "VOT request started: backend=OLD, duration=" + durationSec + "s, userArmed=" + mUserArmed
                 + ", retryCount=" + mTranslationRetryCount + ", subsequent=" + subsequent);
         mTranslationDisposable = votClient().observeTranslation(videoUrl, durationSec, subsequent, requestedUrl -> {
             if (!isCurrentTranslationRequest(requestSessionId, requestedUrl)) {
                 Log.w(TAG, "VOT: audio source requested for stale session %d", requestSessionId);
                 return null;
             }
-            MediaItemFormatInfo formatInfo = getFormatInfo();
+            MediaItemFormatInfo formatInfo = getFormatInfo(null);
             if (formatInfo == null || formatInfo.getAdaptiveFormats() == null) {
                 Log.w(TAG, "VOT: no MediaItemFormatInfo available for audio upload");
                 return null;
@@ -742,6 +987,192 @@ public class VoiceTranslateController extends BasePlayerController {
                         progress -> onVotProgress(requestSessionId, videoUrl, progress),
                         error -> onVotError(requestSessionId, videoUrl, requestUsesOAuth, error)
                 );
+    }
+
+    private void stopNewYandexBackend() {
+        mNewBackendGenerationId = 0;
+        if (mYandexOrchestrator != null) {
+            mYandexOrchestrator.cancel();
+        }
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.stop();
+        }
+        mIsNewBackendActive = false;
+    }
+
+    private void ensureNewBackendComponents() {
+        Context context = getContext();
+        if (mYandexPlaybackAdapter == null && context != null) {
+            mYandexPlaybackAdapter = new YandexVotPlaybackAdapter(
+                    YandexVotPlaybackAdapter.createDefaultPlayerFactory(context),
+                    createNewBackendDuckingBridge()
+            );
+            mYandexPlaybackAdapter.setStateListener(mNewBackendPlaybackListener);
+        }
+
+        if (mYandexOrchestrator == null) {
+            SmartTubeYandexVotAudioSourceProvider sourceProvider = new SmartTubeYandexVotAudioSourceProvider(
+                    (vid, vurl) -> {
+                        String currentVideoId = vid != null ? vid : (getVideo() != null ? getVideo().videoId : mCurrentVideoId);
+                        return getFormatInfo(currentVideoId);
+                    }
+            );
+            mYandexOrchestrator = new YandexVotOrchestrator(
+                    YandexVotApi.DEFAULT,
+                    sourceProvider,
+                    YandexVotAudioUploadTransport.DEFAULT
+            );
+            mYandexOrchestrator.setListener(mNewBackendOrchestratorListener);
+        }
+    }
+
+    private YandexVotPlaybackAdapter.AudioDuckingBridge createNewBackendDuckingBridge() {
+        return new YandexVotPlaybackAdapter.AudioDuckingBridge() {
+            @Override
+            public void duckOriginalAudio() {
+                duckMainAudio();
+            }
+
+            @Override
+            public void restoreOriginalAudio() {
+                restoreMainVolume();
+            }
+
+            @Override
+            public float getTranslationVolume() {
+                return votData().getTranslationVolumeMultiplier();
+            }
+
+            @Override
+            public long getCurrentVideoPositionMs() {
+                return getPlayer() != null ? getPlayer().getPositionMs() : 0L;
+            }
+
+            @Override
+            public boolean isMainVideoPlaying() {
+                return getPlayer() != null && getPlayer().isPlaying();
+            }
+        };
+    }
+
+    private void onNewBackendStateChanged(YandexVotState state) {
+        if (!mIsNewBackendActive || (mNewBackendGenerationId != 0 && mNewBackendGenerationId != state.getGenerationId())) {
+            YandexVotLog.w(TAG, "VOT NEW backend: ignoring stale state status=" + state.getStatus() + ", gen=" + state.getGenerationId() + ", currentGen=" + mNewBackendGenerationId);
+            return;
+        }
+
+        YandexVotState.Status status = state.getStatus();
+        YandexVotLog.i(TAG, "VOT NEW backend state: status=" + status + ", gen=" + state.getGenerationId());
+
+        switch (status) {
+            case REQUESTING:
+                setState(STATE_PENDING);
+                break;
+            case WAITING:
+                setState(STATE_PENDING);
+                int remainingSec = state.getRemainingSeconds();
+                if (remainingSec > 0) {
+                    if (getPlayer() != null) {
+                        getPlayer().updateVoiceTranslatePendingEta(remainingSec);
+                    }
+                    if (mUserArmed && progressOverlay() != null) {
+                        progressOverlay().showWaitingWithEta(getActivity(), VotProgressTimer.formatMmSs(remainingSec));
+                    }
+                } else if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showPreparing(getActivity());
+                }
+                break;
+            case AUDIO_REQUIRED:
+                YandexVotLog.i(TAG, "VOT NEW backend: AUDIO_REQUIRED received (upload_part=" + (state.getCurrentPart() >= 0 ? (state.getCurrentPart() + 1) + "/" + state.getTotalParts() : "pending") + ")");
+                setState(STATE_PENDING);
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showPreparing(getActivity());
+                }
+                break;
+            case READY:
+                YandexVotLog.i(TAG, "VOT NEW backend READY (audio_url_present=" + (state.getAudioUrl() != null) + ")");
+                if (mYandexPlaybackAdapter != null) {
+                    mYandexPlaybackAdapter.onStateChanged(state);
+                }
+                break;
+            case ERROR:
+                handleNewBackendError(state.getGenerationId(), state.getErrorMessage(), false);
+                break;
+            case CANCELLED:
+                stopNewYandexBackend();
+                break;
+            case IDLE:
+                break;
+        }
+    }
+
+    private void handleNewBackendError(long generationId, String errorMsg, boolean isPlaybackError) {
+        if (mNewBackendGenerationId != 0 && generationId != mNewBackendGenerationId && generationId != 0) {
+            YandexVotLog.w(TAG, "Ignoring stale error callback for generation=" + generationId);
+            return;
+        }
+
+        boolean isPrePlayback = !mNewBackendPlaybackStarted;
+
+        if (isPrePlayback && !mFallbackTriggered) {
+            YandexVotLog.w(TAG, "VOT NEW backend failed PRE-PLAYBACK (" + errorMsg + "). Falling back to OLD production backend once.");
+            mFallbackTriggered = true;
+            stopNewYandexBackend();
+            startOldYandexBackend(false, false);
+        } else {
+            YandexVotLog.e(TAG, "VOT NEW backend failed POST-PLAYBACK or fallback already triggered (" + errorMsg + "). Stopping cleanly without fallback.");
+            boolean wasUserArmed = mUserArmed;
+            stopNewYandexBackend();
+            disarmQuiet();
+            if (wasUserArmed) {
+                showBriefErrorButtonState();
+                if (progressOverlay() != null) {
+                    progressOverlay().showError(getActivity(), getContext() != null ? getContext().getString(R.string.vot_error_generic) : null);
+                }
+            }
+        }
+    }
+
+    private boolean isCurrentNewBackendSession(long generationId) {
+        return mIsNewBackendActive && (generationId == mNewBackendGenerationId || generationId == 0);
+    }
+
+    public void setYandexOrchestrator(@Nullable YandexVotOrchestrator orchestrator) {
+        mYandexOrchestrator = orchestrator;
+        if (mYandexOrchestrator != null) {
+            mYandexOrchestrator.setListener(mNewBackendOrchestratorListener);
+        }
+    }
+
+    public void setYandexPlaybackAdapter(@Nullable YandexVotPlaybackAdapter adapter) {
+        mYandexPlaybackAdapter = adapter;
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.setStateListener(mNewBackendPlaybackListener);
+        }
+    }
+
+    public boolean isNewBackendActive() {
+        return mIsNewBackendActive;
+    }
+
+    public boolean isFallbackTriggered() {
+        return mFallbackTriggered;
+    }
+
+    public boolean isNewBackendPlaybackStarted() {
+        return mNewBackendPlaybackStarted;
+    }
+
+    public long getNewBackendGenerationId() {
+        return mNewBackendGenerationId;
+    }
+
+    public YandexVotOrchestrator getYandexOrchestrator() {
+        return mYandexOrchestrator;
+    }
+
+    public YandexVotPlaybackAdapter getYandexPlaybackAdapter() {
+        return mYandexPlaybackAdapter;
     }
 
     private void ensureOriginalAudioForYandex() {
@@ -804,7 +1235,12 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Nullable
     private MediaItemFormatInfo getFormatInfo() {
-        String currentVideoId = getVideo() != null ? getVideo().videoId : null;
+        return getFormatInfo(null);
+    }
+
+    @Nullable
+    private MediaItemFormatInfo getFormatInfo(@Nullable String targetVideoId) {
+        String currentVideoId = targetVideoId != null ? targetVideoId : (getVideo() != null ? getVideo().videoId : null);
         VideoLoaderController loader = getController(VideoLoaderController.class);
         if (loader != null && loader.getFormatInfo() != null) {
             MediaItemFormatInfo loaderFormat = loader.getFormatInfo();
@@ -1085,6 +1521,9 @@ public class VoiceTranslateController extends BasePlayerController {
 		if (mTranslationPlayer != null) {
 			mTranslationPlayer.setVolume(votData().getTranslationVolumeMultiplier());
         }
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.setVolume(votData().getTranslationVolumeMultiplier());
+        }
     }
 
     private void duckMainAudio() {
@@ -1134,6 +1573,10 @@ public class VoiceTranslateController extends BasePlayerController {
     private void disarmQuiet() {
         Log.d(TAG, "VOT reset reason: disarmQuiet");
         mTranslationSessionId++;
+        stopNewYandexBackend();
+        mIsNewBackendActive = false;
+        mFallbackTriggered = false;
+        mNewBackendPlaybackStarted = false;
         mUserArmed = false;
         mArmed = false;
         mTranslationRetryCount = 0;

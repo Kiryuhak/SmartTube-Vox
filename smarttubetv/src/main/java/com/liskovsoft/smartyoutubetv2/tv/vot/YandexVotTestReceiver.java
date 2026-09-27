@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.SmartTubeYandexVotAudioSourceProvider;
@@ -83,6 +84,18 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             handleStartShadow(intent);
         } else if ("stopShadow".equalsIgnoreCase(action) || "cancelShadow".equalsIgnoreCase(action)) {
             handleStopShadow();
+        } else if ("enableNewBackend".equalsIgnoreCase(action)) {
+            VoiceTranslateController.setNewYandexBackendEnabled(true);
+            Log.i(TAG, "New Yandex VOT backend ENABLED for user flow");
+        } else if ("disableNewBackend".equalsIgnoreCase(action)) {
+            VoiceTranslateController.setNewYandexBackendEnabled(false);
+            Log.i(TAG, "New Yandex VOT backend DISABLED for user flow");
+        } else if ("setBackendFailure".equalsIgnoreCase(action)) {
+            boolean fail = intent.getBooleanExtra("fail", true);
+            VoiceTranslateController.setInjectNewBackendFailure(fail);
+            Log.i(TAG, "New Yandex VOT backend failure injection set to: " + fail);
+        } else if ("backendStatus".equalsIgnoreCase(action)) {
+            handleBackendStatus();
         } else if ("status".equalsIgnoreCase(action)) {
             handleStatus();
         } else {
@@ -393,7 +406,21 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             } else {
                 Log.i(TAG, "ShadowController: instance null (player not initialized)");
             }
+
+            handleBackendStatus();
         }
+    }
+
+    private void handleBackendStatus() {
+        boolean flagEnabled = VoiceTranslateController.isNewYandexBackendEnabled();
+        boolean userFlowActive = VoiceTranslateController.isUserFlowActive();
+        VoiceTranslateController controller = VoiceTranslateController.instance();
+        boolean isNewActive = controller != null && controller.isNewBackendActive();
+        boolean fallbackTriggered = controller != null && controller.isFallbackTriggered();
+        Log.i(TAG, "BackendStatus: flag_new_backend=" + (flagEnabled ? "ON" : "OFF")
+                + " user_flow_active=" + userFlowActive
+                + " active_backend=" + (isNewActive ? "NEW" : (userFlowActive ? "OLD" : "NONE"))
+                + " fallback_triggered=" + fallbackTriggered);
     }
 
     private static void logState(@NonNull YandexVotState state) {

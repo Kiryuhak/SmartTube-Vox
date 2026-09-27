@@ -124,6 +124,11 @@ public final class YandexVotState {
     }
 
     @NonNull
+    public static YandexVotState error(long generationId, @Nullable String errorMessage, @Nullable String errorCategory) {
+        return new YandexVotState(Status.ERROR, generationId, null, null, null, null, 0, 0, 0, errorMessage, errorCategory, false, false);
+    }
+
+    @NonNull
     public Status getStatus() {
         return status;
     }
