@@ -95,6 +95,14 @@ public class YandexVotOrchestrator {
     public YandexVotOrchestrator(
             @NonNull YandexVotApi api,
             @Nullable YandexVotAudioSourceProvider sourceProvider,
+            @Nullable YandexVotAudioUploadTransport uploadTransport
+    ) {
+        this(api, sourceProvider, uploadTransport, createDefaultScheduler(), true);
+    }
+
+    public YandexVotOrchestrator(
+            @NonNull YandexVotApi api,
+            @Nullable YandexVotAudioSourceProvider sourceProvider,
             @Nullable YandexVotAudioUploadTransport uploadTransport,
             @NonNull ScheduledExecutorService scheduler
     ) {
@@ -395,6 +403,10 @@ public class YandexVotOrchestrator {
             if (sourceProvider != null) {
                 source = sourceProvider.getAudioSource(params.getVideoId(), params.getVideoUrl());
                 if (source != null) {
+                    YandexVotLog.i(TAG, "source_selected itag=" + source.getItag()
+                            + " mime=" + source.getMimeType()
+                            + " bitrate=" + source.getBitrate()
+                            + " content_length=" + source.getContentLength());
                     reader = sourceProvider.getStreamReader(source);
                 }
             }

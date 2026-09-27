@@ -23,4 +23,28 @@ public final class YandexVotLog {
             // Android mock fallback in JVM unit tests
         }
     }
+
+    public static void i(String tag, String msg) {
+        try {
+            Log.i(tag, msg);
+        } catch (Throwable ignored) {
+            // Android mock fallback in JVM unit tests
+        }
+    }
+
+    public static void w(String tag, String msg) {
+        try {
+            Log.w(tag, msg);
+        } catch (Throwable ignored) {
+            // Android mock fallback in JVM unit tests
+        }
+    }
+
+    public static void e(String tag, String msg) {
+        try {
+            Log.e(tag, msg);
+        } catch (Throwable ignored) {
+            // Android mock fallback in JVM unit tests
+        }
+    }
 }

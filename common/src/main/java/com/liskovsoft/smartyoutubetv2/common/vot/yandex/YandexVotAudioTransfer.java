@@ -113,6 +113,8 @@ public class YandexVotAudioTransfer {
             int partLength = part.length();
             long startByte = part.start();
 
+            YandexVotLog.i(TAG, "upload part=" + (partIndex + 1) + "/" + totalParts);
+
             if (listener != null) {
                 try {
                     listener.onPartStarted(partIndex, totalParts, startByte, partLength);
