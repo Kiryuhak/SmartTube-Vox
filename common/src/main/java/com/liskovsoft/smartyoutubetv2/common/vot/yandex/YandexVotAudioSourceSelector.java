@@ -9,6 +9,9 @@ package com.liskovsoft.smartyoutubetv2.common.vot.yandex;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.liskovsoft.mediaserviceinterfaces.data.MediaFormat;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -73,6 +76,66 @@ public final class YandexVotAudioSourceSelector {
     }
 
     private YandexVotAudioSourceSelector() {
+    }
+
+    @Nullable
+    public static YandexVotAudioSource fromMediaItemFormatInfo(@Nullable MediaItemFormatInfo formatInfo) {
+        if (formatInfo == null || formatInfo.getAdaptiveFormats() == null) {
+            return null;
+        }
+        return fromMediaFormats(formatInfo.getVideoId(), formatInfo.getAdaptiveFormats());
+    }
+
+    @Nullable
+    public static YandexVotAudioSource fromMediaFormats(@Nullable String videoId, @Nullable List<MediaFormat> formats) {
+        if (formats == null || formats.isEmpty()) {
+            return null;
+        }
+        List<Candidate> candidates = new ArrayList<>();
+        for (MediaFormat f : formats) {
+            Candidate c = toCandidate(videoId, f);
+            if (c != null) {
+                candidates.add(c);
+            }
+        }
+        return selectBestAudioSource(candidates);
+    }
+
+    @Nullable
+    public static Candidate toCandidate(@Nullable String videoId, @Nullable MediaFormat f) {
+        if (f == null) return null;
+        String url = f.getUrl();
+        if (url == null || url.trim().isEmpty()) return null;
+
+        String rawMime = f.getMimeType();
+        if (rawMime == null || !rawMime.toLowerCase(Locale.US).startsWith("audio/")) {
+            return null;
+        }
+
+        boolean isSabr = (f.getFormatType() == MediaFormat.FORMAT_TYPE_SABR);
+        boolean isOtf = f.isOtf();
+        boolean rangeSupported = (!isSabr && !isOtf);
+
+        int bitrate = parseBitrate(f.getBitrate());
+        long clen = parseContentLength(f.getClen());
+        int itag = parseItag(f.getITag());
+
+        String mimeType = extractBaseMime(rawMime);
+        String codec = extractCodec(rawMime);
+
+        return new Candidate(
+                videoId,
+                url.trim(),
+                mimeType,
+                codec,
+                bitrate,
+                clen,
+                itag,
+                rangeSupported,
+                isSabr,
+                f.getAudioTrackId(),
+                f.getLanguage()
+        );
     }
 
     @Nullable
@@ -196,5 +259,47 @@ public final class YandexVotAudioSourceSelector {
             }
         }
         return false;
+    }
+
+    private static String extractBaseMime(String rawMime) {
+        if (rawMime == null) return "unknown";
+        int semicolon = rawMime.indexOf(';');
+        return semicolon > 0 ? rawMime.substring(0, semicolon).trim() : rawMime.trim();
+    }
+
+    private static String extractCodec(String rawMime) {
+        if (rawMime == null) return "";
+        String lower = rawMime.toLowerCase(Locale.US);
+        if (lower.contains("opus")) return "opus";
+        if (lower.contains("mp4a")) return "mp4a";
+        if (lower.contains("aac")) return "aac";
+        return "";
+    }
+
+    private static int parseBitrate(String bitrateStr) {
+        if (bitrateStr == null) return 0;
+        try {
+            return Integer.parseInt(bitrateStr.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static long parseContentLength(String clenStr) {
+        if (clenStr == null) return 0;
+        try {
+            return Long.parseLong(clenStr.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private static int parseItag(String itagStr) {
+        if (itagStr == null) return 0;
+        try {
+            return Integer.parseInt(itagStr.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }
