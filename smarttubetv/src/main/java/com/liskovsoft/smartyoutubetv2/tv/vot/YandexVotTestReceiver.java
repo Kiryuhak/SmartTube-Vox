@@ -17,20 +17,25 @@ import androidx.annotation.Nullable;
 import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.SmartTubeYandexVotAudioSourceProvider;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApi;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotAudioUploadTransport;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotOrchestrator;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotPlaybackAdapter;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotState;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
 /**
  * Controlled developer-only test entry point for exercising the isolated Yandex VOT backend
- * on Android emulator without touching the production player UI or live VOX flow.
+ * and translation audio playback on Android emulator without touching the production player UI or live VOX flow.
  *
  * Trigger via ADB:
  * adb shell am broadcast -a com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT --es action start --es videoId dQw4w9WgXcQ
+ * adb shell am broadcast -a com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT --es action pause
+ * adb shell am broadcast -a com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT --es action resume
+ * adb shell am broadcast -a com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT --es action seek --el positionMs 45000
  * adb shell am broadcast -a com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT --es action cancel
  * adb shell am broadcast -a com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT --es action status
  */
@@ -39,6 +44,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
     private static final String TAG = "YANDEX_VOT_TEST";
 
     private static volatile YandexVotOrchestrator sOrchestrator;
+    private static volatile YandexVotPlaybackAdapter sPlaybackAdapter;
     private static volatile YandexVotState sLastState;
 
     @Override
@@ -50,8 +56,20 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         String action = intent.getStringExtra("action");
         if (action == null || action.isEmpty() || "start".equalsIgnoreCase(action)) {
             handleStart(context, intent);
-        } else if ("cancel".equalsIgnoreCase(action)) {
+        } else if ("cancel".equalsIgnoreCase(action) || "stop".equalsIgnoreCase(action)) {
             handleCancel();
+        } else if ("pause".equalsIgnoreCase(action)) {
+            handlePause();
+        } else if ("resume".equalsIgnoreCase(action)) {
+            handleResume();
+        } else if ("seek".equalsIgnoreCase(action)) {
+            long pos = intent.getLongExtra("positionMs", 0);
+            handleSeek(pos);
+        } else if ("sync".equalsIgnoreCase(action)) {
+            long pos = intent.getLongExtra("positionMs", 0);
+            handleSync(pos);
+        } else if ("video_switch".equalsIgnoreCase(action)) {
+            handleVideoSwitch();
         } else if ("status".equalsIgnoreCase(action)) {
             handleStatus();
         } else {
@@ -59,7 +77,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         }
     }
 
-    private void handleStart(Context context, Intent intent) {
+    private void handleStart(final Context context, Intent intent) {
         String videoId = intent.getStringExtra("videoId");
         String videoUrl = intent.getStringExtra("videoUrl");
         if (videoId == null && videoUrl != null) {
@@ -81,6 +99,8 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         if (videoTitle == null) videoTitle = "Test Video";
         boolean useLively = intent.getBooleanExtra("useLively", false);
         boolean useOAuth = intent.getBooleanExtra("useOAuth", false);
+        boolean playAudio = intent.getBooleanExtra("playAudio", true);
+        final long initialPositionMs = intent.getLongExtra("positionMs", 0);
 
         String oauthToken = null;
         if (useOAuth || useLively) {
@@ -95,11 +115,16 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                 + " sourceLang=" + sourceLang
                 + " targetLang=" + targetLang
                 + " useLively=" + useLively
-                + " hasOAuth=" + (oauthToken != null && !oauthToken.isEmpty()));
+                + " hasOAuth=" + (oauthToken != null && !oauthToken.isEmpty())
+                + " playAudio=" + playAudio
+                + " initialPositionMs=" + initialPositionMs);
 
         synchronized (YandexVotTestReceiver.class) {
             if (sOrchestrator != null) {
                 sOrchestrator.cancel();
+            }
+            if (sPlaybackAdapter != null) {
+                sPlaybackAdapter.stop();
             }
 
             SmartTubeYandexVotAudioSourceProvider sourceProvider = new SmartTubeYandexVotAudioSourceProvider(
@@ -131,11 +156,84 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     YandexVotAudioUploadTransport.DEFAULT
             );
 
+            if (playAudio) {
+                YandexVotPlaybackAdapter.AudioDuckingBridge duckingBridge = new YandexVotPlaybackAdapter.AudioDuckingBridge() {
+                    private Float savedVolume = null;
+
+                    @Override
+                    public void duckOriginalAudio() {
+                        try {
+                            PlaybackPresenter presenter = PlaybackPresenter.instance(context);
+                            if (presenter != null && presenter.getPlayer() != null) {
+                                if (savedVolume == null) {
+                                    savedVolume = presenter.getPlayer().getVolume();
+                                }
+                                presenter.getPlayer().setVolume(VotData.instance(context).getOriginalVolumeMultiplier());
+                                Log.i(TAG, "Main player original audio ducked");
+                            }
+                        } catch (Throwable t) {
+                            Log.d(TAG, "Main player duck fallback: " + t.getMessage());
+                        }
+                    }
+
+                    @Override
+                    public void restoreOriginalAudio() {
+                        try {
+                            PlaybackPresenter presenter = PlaybackPresenter.instance(context);
+                            if (presenter != null && presenter.getPlayer() != null && savedVolume != null) {
+                                presenter.getPlayer().setVolume(savedVolume);
+                                savedVolume = null;
+                                Log.i(TAG, "Main player original audio restored");
+                            }
+                        } catch (Throwable t) {
+                            Log.d(TAG, "Main player restore fallback: " + t.getMessage());
+                        }
+                    }
+
+                    @Override
+                    public float getTranslationVolume() {
+                        return VotData.instance(context).getTranslationVolumeMultiplier();
+                    }
+
+                    @Override
+                    public long getCurrentVideoPositionMs() {
+                        try {
+                            PlaybackPresenter presenter = PlaybackPresenter.instance(context);
+                            if (presenter != null && presenter.getPlayer() != null && presenter.getPlayer().getVideo() != null) {
+                                return presenter.getPlayer().getPositionMs();
+                            }
+                        } catch (Throwable ignored) {}
+                        return initialPositionMs;
+                    }
+
+                    @Override
+                    public boolean isMainVideoPlaying() {
+                        try {
+                            PlaybackPresenter presenter = PlaybackPresenter.instance(context);
+                            if (presenter != null && presenter.getPlayer() != null && presenter.getPlayer().getVideo() != null) {
+                                return presenter.getPlayer().isPlaying();
+                            }
+                        } catch (Throwable ignored) {}
+                        return true;
+                    }
+                };
+
+                sPlaybackAdapter = new YandexVotPlaybackAdapter(
+                        YandexVotPlaybackAdapter.createDefaultPlayerFactory(context),
+                        duckingBridge
+                );
+            } else {
+                sPlaybackAdapter = null;
+            }
+
             sOrchestrator.setListener(new YandexVotOrchestrator.Listener() {
                 @Override
                 public void onStateChanged(@NonNull YandexVotState state) {
                     sLastState = state;
                     logState(state);
+                    if (sPlaybackAdapter != null) {
+                        sPlaybackAdapter.onStateChanged(state);
+                    }
                 }
             });
 
@@ -154,13 +252,68 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         }
     }
 
+    private void handlePause() {
+        synchronized (YandexVotTestReceiver.class) {
+            if (sPlaybackAdapter != null) {
+                Log.i(TAG, "Pausing test playback");
+                sPlaybackAdapter.onPause();
+            } else {
+                Log.i(TAG, "No active playback adapter to pause");
+            }
+        }
+    }
+
+    private void handleResume() {
+        synchronized (YandexVotTestReceiver.class) {
+            if (sPlaybackAdapter != null) {
+                Log.i(TAG, "Resuming test playback");
+                sPlaybackAdapter.onPlay();
+            } else {
+                Log.i(TAG, "No active playback adapter to resume");
+            }
+        }
+    }
+
+    private void handleSeek(long positionMs) {
+        synchronized (YandexVotTestReceiver.class) {
+            if (sPlaybackAdapter != null) {
+                Log.i(TAG, "Seeking test playback to " + positionMs + "ms");
+                sPlaybackAdapter.onSeek(positionMs);
+            } else {
+                Log.i(TAG, "No active playback adapter to seek");
+            }
+        }
+    }
+
+    private void handleSync(long positionMs) {
+        synchronized (YandexVotTestReceiver.class) {
+            if (sPlaybackAdapter != null) {
+                Log.i(TAG, "Sync check for position " + positionMs + "ms");
+                sPlaybackAdapter.checkPeriodicSync(positionMs);
+            }
+        }
+    }
+
+    private void handleVideoSwitch() {
+        synchronized (YandexVotTestReceiver.class) {
+            if (sOrchestrator != null) {
+                sOrchestrator.cancel();
+            }
+            if (sPlaybackAdapter != null) {
+                Log.i(TAG, "Video switch triggered");
+                sPlaybackAdapter.onVideoChanged();
+            }
+        }
+    }
+
     private void handleCancel() {
         synchronized (YandexVotTestReceiver.class) {
             if (sOrchestrator != null) {
                 Log.i(TAG, "Cancelling test request");
                 sOrchestrator.cancel();
-            } else {
-                Log.i(TAG, "No active test request to cancel");
+            }
+            if (sPlaybackAdapter != null) {
+                sPlaybackAdapter.stop();
             }
         }
     }
@@ -172,6 +325,11 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                 logState(sLastState);
             } else {
                 Log.i(TAG, "Current test status: IDLE (no state recorded)");
+            }
+            if (sPlaybackAdapter != null) {
+                Log.i(TAG, "Playback adapter: isPrepared=" + sPlaybackAdapter.isPrepared()
+                        + " isPlaying=" + sPlaybackAdapter.isPlaying()
+                        + " isDucked=" + sPlaybackAdapter.isAudioDucked());
             }
         }
     }
