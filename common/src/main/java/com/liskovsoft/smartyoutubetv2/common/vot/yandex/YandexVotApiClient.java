@@ -97,6 +97,7 @@ public class YandexVotApiClient {
     public static final int STATUS_SESSION_REQUIRED = 7;
 
     /** Session state — created on demand, shared across requests. */
+    private static final Object SESSION_LOCK = new Object();
     private static String sessionUuid = null;
     private static String sessionSecretKey = null;
     private static long sessionExpiresAt = 0;
@@ -304,9 +305,11 @@ public class YandexVotApiClient {
     }
 
     public static void invalidateSession() {
-        sessionSecretKey = null;
-        sessionUuid = null;
-        sessionExpiresAt = 0;
+        synchronized (SESSION_LOCK) {
+            sessionSecretKey = null;
+            sessionUuid = null;
+            sessionExpiresAt = 0;
+        }
     }
 
     private static byte[] sendApiRequest(String path, byte[] body, String oauthToken) throws IOException {
@@ -329,8 +332,14 @@ public class YandexVotApiClient {
     }
 
     private static byte[] sendApiRequest(String path, byte[] body, String method, String oauthToken) throws IOException {
+        String currentSessionUuid;
+        String currentSecretKey;
+        synchronized (SESSION_LOCK) {
+            currentSessionUuid = sessionUuid;
+            currentSecretKey = sessionSecretKey;
+        }
         String vtransSignature = computeHmacHex(body);
-        String uuid = sessionUuid != null ? sessionUuid : generateUuid();
+        String uuid = currentSessionUuid != null ? currentSessionUuid : generateUuid();
         String vtransToken = generateToken(uuid, path);
 
         Map<String, String> yandexHeaders = new LinkedHashMap<>();
@@ -342,8 +351,8 @@ public class YandexVotApiClient {
         yandexHeaders.put("Cache-Control", "no-cache");
         yandexHeaders.put("Vtrans-Signature", vtransSignature);
         yandexHeaders.put("Sec-Vtrans-Token", vtransToken);
-        if (sessionSecretKey != null && !sessionSecretKey.isEmpty()) {
-            yandexHeaders.put("Sec-Vtrans-Sk", sessionSecretKey);
+        if (currentSecretKey != null && !currentSecretKey.isEmpty()) {
+            yandexHeaders.put("Sec-Vtrans-Sk", currentSecretKey);
         }
         if (oauthToken != null && !oauthToken.isEmpty()) {
             yandexHeaders.put("Authorization", "OAuth " + oauthToken);
@@ -468,9 +477,11 @@ public class YandexVotApiClient {
                     return false;
                 }
 
-                sessionUuid = uuid;
-                sessionSecretKey = response.secretKey;
-                sessionExpiresAt = System.currentTimeMillis() + (response.expires > 0 ? response.expires * 1000L : 3600_000L);
+                synchronized (SESSION_LOCK) {
+                    sessionUuid = uuid;
+                    sessionSecretKey = response.secretKey;
+                    sessionExpiresAt = System.currentTimeMillis() + (response.expires > 0 ? response.expires * 1000L : 3600_000L);
+                }
 
                 YandexVotLog.d(TAG, "VOT createSession: success");
                 return true;
@@ -625,7 +636,9 @@ public class YandexVotApiClient {
     }
 
     public static boolean hasValidSession() {
-        return hasValidSession(System.currentTimeMillis(), sessionSecretKey, sessionExpiresAt);
+        synchronized (SESSION_LOCK) {
+            return hasValidSession(System.currentTimeMillis(), sessionSecretKey, sessionExpiresAt);
+        }
     }
 
     public static boolean hasValidSession(long nowMs, String secretKey, long expiresAt) {
@@ -633,14 +646,18 @@ public class YandexVotApiClient {
     }
 
     public static boolean ensureSession() {
-        if (hasValidSession()) return true;
-        return createSession();
+        synchronized (SESSION_LOCK) {
+            if (hasValidSession()) return true;
+            return createSession();
+        }
     }
 
     public static void setSessionStateForTesting(String uuid, String secretKey, long expiresAt) {
-        sessionUuid = uuid;
-        sessionSecretKey = secretKey;
-        sessionExpiresAt = expiresAt;
+        synchronized (SESSION_LOCK) {
+            sessionUuid = uuid;
+            sessionSecretKey = secretKey;
+            sessionExpiresAt = expiresAt;
+        }
     }
 
     private static byte[] readBytes(InputStream is) throws IOException {

@@ -467,7 +467,9 @@ public class VoiceTranslateController extends BasePlayerController {
     public void onPlay() {
         if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
             mYandexPlaybackAdapter.onPlay();
-            duckMainAudio();
+            if (mState == STATE_ACTIVE && mNewBackendPlaybackStarted) {
+                duckMainAudio();
+            }
         } else if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
             mTranslationPlayer.resume();
             duckMainAudio();
@@ -987,6 +989,7 @@ public class VoiceTranslateController extends BasePlayerController {
         if (mYandexPlaybackAdapter != null) {
             mYandexPlaybackAdapter.stop();
         }
+        restoreMainVolume();
         mIsNewBackendActive = false;
     }
 
@@ -1105,7 +1108,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void handleNewBackendError(long generationId, String errorMsg, boolean isPlaybackError) {
-        if (mNewBackendGenerationId != 0 && generationId != mNewBackendGenerationId && generationId != 0) {
+        if (!mIsNewBackendActive || (mNewBackendGenerationId != 0 && generationId != mNewBackendGenerationId)) {
             YandexVotLog.w(TAG, "Ignoring stale error callback for generation=" + generationId);
             return;
         }
@@ -1132,7 +1135,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private boolean isCurrentNewBackendSession(long generationId) {
-        return mIsNewBackendActive && (generationId == mNewBackendGenerationId || generationId == 0);
+        return mIsNewBackendActive && mNewBackendGenerationId != 0 && generationId == mNewBackendGenerationId;
     }
 
     public void setYandexOrchestrator(@Nullable YandexVotOrchestrator orchestrator) {
