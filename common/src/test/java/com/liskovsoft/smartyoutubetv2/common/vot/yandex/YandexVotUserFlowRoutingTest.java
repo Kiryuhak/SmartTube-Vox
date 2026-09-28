@@ -538,8 +538,6 @@ public class YandexVotUserFlowRoutingTest {
         VoiceTranslateController.resetDefaultBackend();
         assertTrue("Default candidate must be NEW backend after reset",
                 VoiceTranslateController.isNewYandexBackendEnabled());
-        assertFalse("Failure injection must be reset to false",
-                VoiceTranslateController.isInjectNewBackendFailure());
     }
 
     // 18. Default fresh process user click uses NEW backend

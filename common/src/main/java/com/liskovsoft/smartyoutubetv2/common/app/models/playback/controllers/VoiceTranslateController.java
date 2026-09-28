@@ -115,7 +115,6 @@ public class VoiceTranslateController extends BasePlayerController {
     private long mLastSyncSeekTimestamp;
 
     private static volatile boolean sUseNewYandexBackend = true;
-    private static volatile boolean sInjectNewBackendFailure = false;
     private static volatile VoiceTranslateController sInstance;
 
     public static boolean isNewYandexBackendEnabled() {
@@ -129,15 +128,6 @@ public class VoiceTranslateController extends BasePlayerController {
 
     public static void resetDefaultBackend() {
         sUseNewYandexBackend = true;
-        sInjectNewBackendFailure = false;
-    }
-
-    public static void setInjectNewBackendFailure(boolean fail) {
-        sInjectNewBackendFailure = fail;
-    }
-
-    public static boolean isInjectNewBackendFailure() {
-        return sInjectNewBackendFailure;
     }
 
     public static boolean isUserFlowActive() {
@@ -877,14 +867,6 @@ public class VoiceTranslateController extends BasePlayerController {
         );
 
         YandexVotLog.i(TAG, "VOT request started: backend=NEW, videoId=" + videoId + ", duration=" + ((long) durationSec) + "s, useLively=" + useLively);
-
-        if (sInjectNewBackendFailure) {
-            YandexVotLog.w(TAG, "VOT NEW backend failure injection active, simulating failure");
-            mNewBackendGenerationId = ++mTranslationSessionId;
-            final long failGen = mNewBackendGenerationId;
-            runOnMainThread(() -> onNewBackendStateChanged(YandexVotState.error(failGen, "Injected test failure", "TEST_INJECTED")));
-            return;
-        }
 
         mNewBackendGenerationId = 0;
         mNewBackendGenerationId = mYandexOrchestrator.startTranslation(params);
