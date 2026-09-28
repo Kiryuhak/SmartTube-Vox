@@ -75,3 +75,6 @@ hs_err_pid*.log
 /vot-log.txt
 /keystore.properties
 *.jks
+*.keystore
+*.log
+/release_verification/
