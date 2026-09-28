@@ -50,7 +50,10 @@ else:
     en_items = ru_items
     print(f"::warning::No English update changelog for {VERSION}; using CHANGELOG bullets.")
 
-title = f"SmartTube VOX {VERSION}"
+# A version-specific notes file supplies the public title; keep the version fallback
+# for older releases that only have a CHANGELOG section.
+heading = re.search(r"^#\s+(.+?)\s*$", notes, re.MULTILINE)
+title = heading.group(1).strip() if heading else f"SmartTube VOX {VERSION}"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 (OUTPUT / "release_notes.md").write_text(notes + "\n", encoding="utf-8")
 manifest = {
