@@ -743,4 +743,77 @@ public class YandexVotAudioRequiredIntegrationTest {
         assertTrue(state.toString().contains("[PROTECTED]"));
         assertFalse(state.toString().contains("final_meta_audio.mp3"));
     }
+
+    @Test
+    public void test18_RepeatedAudioRequestedAfterUploadDoesNotReUpload() {
+        fakeApi.setResponse(new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_AUDIO_REQUESTED,
+                null, 0, "trans_repeat_test", null
+        ));
+
+        YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
+                "vid_repeat", "https://youtube.com/watch?v=vid_repeat", 200.0, "en", "ru", "Title", false, null
+        );
+
+        orchestrator.startTranslation(params);
+
+        assertEquals(3, fakeTransport.getUploadedChunks().size());
+        assertTrue(orchestrator.isUploadCompleted("https://youtube.com/watch?v=vid_repeat", "trans_repeat_test"));
+        assertEquals(1, testExecutor.getPendingScheduledCount());
+
+        // Subsequent poll returns AUDIO_REQUESTED again while Yandex backend processes
+        fakeApi.setResponse(new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_AUDIO_REQUESTED,
+                null, 0, "trans_repeat_test", null
+        ));
+
+        testExecutor.runAllScheduled();
+
+        // Must NOT re-upload (chunks count stays 3)
+        assertEquals(3, fakeTransport.getUploadedChunks().size());
+        assertEquals(YandexVotState.Status.WAITING, orchestrator.getCurrentState().getStatus());
+        assertEquals(1, testExecutor.getPendingScheduledCount());
+
+        // Eventual finish
+        fakeApi.setResponse(new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_FINISHED,
+                "https://example.com/done_repeat.mp3", 0, "trans_repeat_test", null
+        ));
+
+        testExecutor.runAllScheduled();
+
+        assertEquals(YandexVotState.Status.READY, orchestrator.getCurrentState().getStatus());
+        assertEquals("https://example.com/done_repeat.mp3", orchestrator.getCurrentState().getAudioUrl());
+        assertEquals(3, fakeTransport.getUploadedChunks().size());
+    }
+
+    @Test
+    public void test19_RepeatedAudioRequestedMaxRetriesTimeout() {
+        fakeApi.setResponse(new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_AUDIO_REQUESTED,
+                null, 0, "trans_stuck", null
+        ));
+
+        YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
+                "vid_stuck", "https://youtube.com/watch?v=vid_stuck", 200.0, "en", "ru", "Title", false, null
+        );
+
+        orchestrator.startTranslation(params);
+        assertEquals(3, fakeTransport.getUploadedChunks().size());
+
+        for (int i = 0; i < 22; i++) {
+            if (orchestrator.getCurrentState().getStatus() == YandexVotState.Status.ERROR) {
+                break;
+            }
+            fakeApi.setResponse(new YandexVotApiClient.TranslationResult(
+                    YandexVotApiClient.STATUS_AUDIO_REQUESTED,
+                    null, 0, "trans_stuck", null
+            ));
+            testExecutor.runAllScheduled();
+        }
+
+        assertEquals(YandexVotState.Status.ERROR, orchestrator.getCurrentState().getStatus());
+        assertEquals("timeout", orchestrator.getCurrentState().getErrorCategory());
+        assertEquals(3, fakeTransport.getUploadedChunks().size());
+    }
 }

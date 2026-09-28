@@ -129,4 +129,15 @@ public class YandexVotApiClientTest {
         assertEquals("id-456", res.getTranslationId());
         assertEquals("Audio requested", res.getMessage());
     }
+
+    @Test
+    public void testSessionThreadSafetyAndInvalidation() {
+        assertFalse(YandexVotApiClient.hasValidSession());
+
+        YandexVotApiClient.setSessionStateForTesting("test-uuid-999", "test-sk-888", System.currentTimeMillis() + 60_000L);
+        assertTrue(YandexVotApiClient.hasValidSession());
+
+        YandexVotApiClient.invalidateSession();
+        assertFalse(YandexVotApiClient.hasValidSession());
+    }
 }

@@ -9,7 +9,9 @@ package com.liskovsoft.smartyoutubetv2.common.vot.yandex;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -74,6 +76,10 @@ public class YandexVotOrchestrator {
     private final boolean ownsScheduler;
 
     private final Object lock = new Object();
+    private static final int MAX_POST_UPLOAD_AUDIO_REQUESTED_RETRIES = 20;
+    private final Set<String> completedUploadKeys = new HashSet<>();
+    private final Set<String> inFlightUploadKeys = new HashSet<>();
+    private int postUploadAudioRequestedCount = 0;
     private long generationCounter = 0;
     @NonNull private YandexVotState currentState = YandexVotState.idle();
     @Nullable private Listener listener;
@@ -147,12 +153,30 @@ public class YandexVotOrchestrator {
         }
     }
 
+    @NonNull
+    public static String makeUploadKey(@NonNull String videoUrl, @Nullable String translationId) {
+        return videoUrl + "#" + (translationId != null ? translationId : "");
+    }
+
+    public boolean isUploadCompleted(@NonNull String videoUrl, @Nullable String translationId) {
+        synchronized (lock) {
+            return completedUploadKeys.contains(makeUploadKey(videoUrl, translationId));
+        }
+    }
+
+    public boolean isUploadInFlight(@NonNull String videoUrl, @Nullable String translationId) {
+        synchronized (lock) {
+            return inFlightUploadKeys.contains(makeUploadKey(videoUrl, translationId));
+        }
+    }
+
     public long startTranslation(@NonNull RequestParams params) {
         long gen;
         YandexVotState newState;
         synchronized (lock) {
             cancelActiveOperationsLocked();
             gen = ++generationCounter;
+            postUploadAudioRequestedCount = 0;
             newState = YandexVotState.requesting(
                     gen,
                     params.getVideoId(),
@@ -197,6 +221,7 @@ public class YandexVotOrchestrator {
         synchronized (lock) {
             cancelActiveOperationsLocked();
             long gen = ++generationCounter;
+            postUploadAudioRequestedCount = 0;
             currentState = YandexVotState.idle();
             YandexVotLog.d(TAG, "VOT reset: gen=" + gen);
             notifyListenerLocked(currentState);
@@ -219,6 +244,7 @@ public class YandexVotOrchestrator {
             activeTransfer.cancel();
             activeTransfer = null;
         }
+        inFlightUploadKeys.clear();
     }
 
     private void executeRequest(final long gen, final RequestParams params, final boolean firstRequest, final int sessionRetryCount) {
@@ -271,6 +297,7 @@ public class YandexVotOrchestrator {
 
             switch (status) {
                 case YandexVotApiClient.STATUS_FINISHED: {
+                    postUploadAudioRequestedCount = 0;
                     boolean receivedLively = params.isUseLiveVoices() && result.getAudioUrl() != null;
                     YandexVotState readyState = YandexVotState.ready(
                             gen,
@@ -287,6 +314,7 @@ public class YandexVotOrchestrator {
                 }
 
                 case YandexVotApiClient.STATUS_PART_CONTENT: {
+                    postUploadAudioRequestedCount = 0;
                     if (result.getAudioUrl() != null) {
                         boolean receivedLively = params.isUseLiveVoices();
                         YandexVotState readyState = YandexVotState.ready(
@@ -308,12 +336,45 @@ public class YandexVotOrchestrator {
 
                 case YandexVotApiClient.STATUS_WAITING:
                 case YandexVotApiClient.STATUS_LONG_WAITING: {
+                    postUploadAudioRequestedCount = 0;
                     schedulePollLocked(gen, params, result);
                     break;
                 }
 
                 case YandexVotApiClient.STATUS_AUDIO_REQUESTED: {
                     final String translationId = result.getTranslationId();
+                    final String uploadKey = makeUploadKey(params.getVideoUrl(), translationId);
+
+                    if (completedUploadKeys.contains(uploadKey)) {
+                        postUploadAudioRequestedCount++;
+                        if (postUploadAudioRequestedCount > MAX_POST_UPLOAD_AUDIO_REQUESTED_RETRIES) {
+                            YandexVotLog.w(TAG, "VOT AUDIO_REQUESTED repeated " + postUploadAudioRequestedCount
+                                    + " times after upload for " + uploadKey + ", timing out");
+                            YandexVotState errorState = YandexVotState.error(
+                                    gen,
+                                    params.getVideoId(),
+                                    params.getVideoUrl(),
+                                    "Audio processing timed out",
+                                    "timeout",
+                                    params.isUseLiveVoices()
+                            );
+                            currentState = errorState;
+                            notifyListenerLocked(errorState);
+                            return;
+                        }
+
+                        YandexVotLog.i(TAG, "VOT audio already uploaded for " + uploadKey
+                                + " (count=" + postUploadAudioRequestedCount + "), continuing to poll");
+                        schedulePostUploadPollLocked(gen, params, translationId);
+                        break;
+                    }
+
+                    if (inFlightUploadKeys.contains(uploadKey)) {
+                        YandexVotLog.i(TAG, "VOT audio upload already in flight for " + uploadKey + ", skipping duplicate trigger");
+                        break;
+                    }
+
+                    postUploadAudioRequestedCount = 0;
                     YandexVotState audioRequiredState = YandexVotState.audioRequired(
                             gen,
                             params.getVideoId(),
@@ -325,10 +386,11 @@ public class YandexVotOrchestrator {
                     notifyListenerLocked(audioRequiredState);
 
                     if (sourceProvider != null) {
+                        inFlightUploadKeys.add(uploadKey);
                         scheduler.execute(new Runnable() {
                             @Override
                             public void run() {
-                                handleAudioRequired(gen, params, translationId);
+                                handleAudioRequired(gen, params, translationId, uploadKey);
                             }
                         });
                     }
@@ -381,9 +443,10 @@ public class YandexVotOrchestrator {
         }
     }
 
-    private void handleAudioRequired(final long gen, final RequestParams params, final String translationId) {
+    private void handleAudioRequired(final long gen, final RequestParams params, final String translationId, final String uploadKey) {
         synchronized (lock) {
             if (gen != generationCounter) {
+                inFlightUploadKeys.remove(uploadKey);
                 YandexVotLog.d(TAG, "VOT dropping stale handleAudioRequired: gen=" + gen);
                 return;
             }
@@ -416,6 +479,7 @@ public class YandexVotOrchestrator {
 
         if (source == null || reader == null) {
             synchronized (lock) {
+                inFlightUploadKeys.remove(uploadKey);
                 if (gen != generationCounter) return;
                 YandexVotState errorState = YandexVotState.error(
                         gen,
@@ -433,7 +497,10 @@ public class YandexVotOrchestrator {
 
         final YandexVotAudioTransfer transfer = new YandexVotAudioTransfer();
         synchronized (lock) {
-            if (gen != generationCounter) return;
+            if (gen != generationCounter) {
+                inFlightUploadKeys.remove(uploadKey);
+                return;
+            }
             activeTransfer = transfer;
         }
 
@@ -500,6 +567,7 @@ public class YandexVotOrchestrator {
         );
 
         synchronized (lock) {
+            inFlightUploadKeys.remove(uploadKey);
             if (activeTransfer == transfer) {
                 activeTransfer = null;
             }
@@ -509,6 +577,7 @@ public class YandexVotOrchestrator {
             }
 
             if (transferResult == YandexVotAudioResult.SUCCESS) {
+                completedUploadKeys.add(uploadKey);
                 YandexVotLog.d(TAG, "VOT audio upload complete, scheduling post-upload poll: gen=" + gen);
                 schedulePostUploadPollLocked(gen, params, translationId);
             } else if (transferResult == YandexVotAudioResult.CANCELLED) {
