@@ -879,6 +879,7 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
+        mNewBackendGenerationId = 0;
         mNewBackendGenerationId = mYandexOrchestrator.startTranslation(params);
     }
 
@@ -1056,7 +1057,15 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void onNewBackendStateChanged(YandexVotState state) {
-        if (!mIsNewBackendActive || (mNewBackendGenerationId != 0 && mNewBackendGenerationId != state.getGenerationId())) {
+        if (!mIsNewBackendActive) {
+            return;
+        }
+
+        if (state.getStatus() == YandexVotState.Status.REQUESTING && state.getGenerationId() > mNewBackendGenerationId) {
+            mNewBackendGenerationId = state.getGenerationId();
+        }
+
+        if (mNewBackendGenerationId != 0 && mNewBackendGenerationId != state.getGenerationId()) {
             YandexVotLog.w(TAG, "VOT NEW backend: ignoring stale state status=" + state.getStatus() + ", gen=" + state.getGenerationId() + ", currentGen=" + mNewBackendGenerationId);
             return;
         }

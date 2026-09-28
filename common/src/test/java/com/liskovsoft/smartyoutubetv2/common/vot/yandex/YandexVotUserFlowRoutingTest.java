@@ -229,6 +229,10 @@ public class YandexVotUserFlowRoutingTest {
         public String getTokenUsed() {
             return tokenUsed;
         }
+
+        public long getNewBackendGenerationId() {
+            return newBackendGenerationId;
+        }
     }
 
     private UserFlowRouterModel router;
@@ -504,5 +508,25 @@ public class YandexVotUserFlowRoutingTest {
 
         // If shadow attempts to start while user flow is active, it must abort safely
         // Verified by shadow controller's startCurrentTranslationInternal check
+    }
+
+    // 16. Rapid restart advances generation and invalidates prior session
+    @Test
+    public void test16_RapidRestartGenerationAdvance() {
+        router.setFeatureFlag(true);
+        router.onVoxButtonClicked(false, null);
+        assertEquals(BackendType.NEW, router.getActiveBackend());
+        long gen1 = router.getNewBackendGenerationId();
+        assertTrue(gen1 > 0);
+
+        // Immediate subsequent click stops session
+        router.onVoxButtonClicked(false, null);
+        assertEquals(BackendType.NONE, router.getActiveBackend());
+
+        // Third click starts fresh session with advanced generation
+        router.onVoxButtonClicked(false, null);
+        long gen2 = router.getNewBackendGenerationId();
+        assertTrue("Subsequent session must advance generation: " + gen2 + " vs " + gen1, gen2 > gen1);
+        assertEquals(BackendType.NEW, router.getActiveBackend());
     }
 }
