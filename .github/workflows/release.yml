@@ -92,15 +92,19 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          RELEASE_MATCH=$(bash .github/scripts/find_vox_release.sh)
+          if [ -n "$RELEASE_MATCH" ]; then
+            IFS=$'\t' read -r RELEASE_ID IS_DRAFT FOUND_TAG <<< "$RELEASE_MATCH"
+            if [[ ! "$RELEASE_ID" =~ ^[0-9]+$ ]] || [[ ! "$IS_DRAFT" =~ ^(true|false)$ ]] || [ "$FOUND_TAG" != "$TAG" ]; then
+              echo "::error::Некорректные данные существующего Release для $TAG."
+              exit 1
+            fi
             if [ "$REPAIR_EXISTING_RELEASE" != "true" ]; then
               echo "::error::GitHub Release или draft для $TAG уже существует. Для безопасной дозагрузки assets требуется явный repair_existing_release."
               exit 1
             fi
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
-            RELEASE_ID=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')
             echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-            IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
             echo "release_is_draft=$IS_DRAFT" >> "$GITHUB_OUTPUT"
             echo "Обнаружен существующий Release $TAG: разрешена только проверяемая дозагрузка отсутствующих assets."
           else
@@ -427,7 +431,8 @@ jobs:
           )
 
           if [ "$RELEASE_EXISTS" != "true" ]; then
-            if gh release view "$TAG" >/dev/null 2>&1; then
+            RELEASE_MATCH=$(bash .github/scripts/find_vox_release.sh)
+            if [ -n "$RELEASE_MATCH" ]; then
               echo "::error::Release или draft для $TAG появился после предварительной проверки."
               exit 1
             fi
@@ -435,8 +440,19 @@ jobs:
               --draft \
               --title "${RELEASE_TITLE:-SmartTube VOX $VERSION_NAME}" \
               --notes-file release_notes.md
-            RELEASE_ID=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')
-            RELEASE_IS_DRAFT=true
+            RELEASE_MATCH=$(bash .github/scripts/find_vox_release.sh)
+            IFS=$'\t' read -r RELEASE_ID RELEASE_IS_DRAFT FOUND_TAG <<< "$RELEASE_MATCH"
+            if [[ ! "$RELEASE_ID" =~ ^[0-9]+$ ]] || [ "$RELEASE_IS_DRAFT" != "true" ] || [ "$FOUND_TAG" != "$TAG" ]; then
+              echo "::error::Созданный draft Release для $TAG не удалось однозначно подтвердить."
+              exit 1
+            fi
+          else
+            RELEASE_MATCH=$(bash .github/scripts/find_vox_release.sh)
+            IFS=$'\t' read -r FOUND_ID FOUND_DRAFT FOUND_TAG <<< "$RELEASE_MATCH"
+            if [ "$FOUND_ID" != "$RELEASE_ID" ] || [ "$FOUND_DRAFT" != "$RELEASE_IS_DRAFT" ] || [ "$FOUND_TAG" != "$TAG" ]; then
+              echo "::error::Состояние существующего Release для $TAG изменилось после предварительной проверки."
+              exit 1
+            fi
           fi
 
           mapfile -t REMOTE_ASSETS < <(
@@ -484,7 +500,13 @@ jobs:
           done
 
           if [ "$RELEASE_IS_DRAFT" = "true" ]; then
-            gh release edit "$TAG" --draft=false
+            PUBLISHED=$(gh api --method PATCH "repos/$REPO/releases/$RELEASE_ID" -F draft=false \
+              --jq '[.id, .draft, .tag_name] | @tsv')
+            IFS=$'\t' read -r PUBLISHED_ID PUBLISHED_DRAFT PUBLISHED_TAG <<< "$PUBLISHED"
+            if [ "$PUBLISHED_ID" != "$RELEASE_ID" ] || [ "$PUBLISHED_DRAFT" != "false" ] || [ "$PUBLISHED_TAG" != "$TAG" ]; then
+              echo "::error::Публикация Release $TAG не подтверждена."
+              exit 1
+            fi
           fi
 
           echo "Release содержит полный проверенный набор VOX assets и метаданных обновления."
