@@ -2,8 +2,6 @@
   <img src="docs/images/smarttube-vox-hero.png" alt="SmartTube VOX — видео, голос, перевод" width="780">
 </div>
 
-<h1 align="center">SmartTube VOX</h1>
-
 <p align="center">
   <strong>Независимая неофициальная версия SmartTube для Android TV и Google TV с расширенным закадровым переводом Яндекса.</strong>
 </p>
