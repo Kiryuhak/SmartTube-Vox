@@ -19,4 +19,4 @@
 
 **Версия:** `32.56-vot.3` · **Пакет:** `io.github.kiryuhak.smarttubevot.stable` · **versionCode:** `2446003`.
 
-SmartTube VOX — независимый неофициальный форк [SmartTube](https://github.com/yuliskov/SmartTube). Благодарности и сведения о лицензиях: [CREDITS.md](../CREDITS.md), [NOTICE](../NOTICE), [LICENSE](../LICENSE).
+SmartTube VOX — независимый неофициальный форк [SmartTube](https://github.com/yuliskov/SmartTube). Благодарности и сведения о лицензиях: [CREDITS.md](https://github.com/Kiryuhak/SmartTube-Vox/blob/main/CREDITS.md), [NOTICE](https://github.com/Kiryuhak/SmartTube-Vox/blob/main/NOTICE), [LICENSE](https://github.com/Kiryuhak/SmartTube-Vox/blob/main/LICENSE).

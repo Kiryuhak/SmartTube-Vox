@@ -171,7 +171,7 @@ jobs:
 
           vot_pattern = re.compile(r'^v([0-9]+\.[0-9]+)-vot\.([0-9]+)$')
 
-          # Фильтруем только релизы SmartTube VOT, исключая текущий тег и черновики
+          # Фильтруем только релизы SmartTube VOX, исключая текущий тег и черновики
           valid_prev_releases = [
               r for r in releases
               if r.get('tag_name') != tag_name
@@ -179,14 +179,14 @@ jobs:
               and vot_pattern.match(r.get('tag_name', ''))
           ]
 
-          # Случай A: Предыдущих релизов SmartTube VOT нет (первый релиз)
+          # Случай A: Предыдущих релизов SmartTube VOX нет (первый релиз)
           if not valid_prev_releases:
-              print('Первый релиз SmartTube VOT: проверка предыдущего versionCode не требуется.')
+              print('Первый релиз SmartTube VOX: проверка предыдущего versionCode не требуется.')
               sys.exit(0)
 
           prev_release = valid_prev_releases[0]
           prev_tag = prev_release.get('tag_name', '')
-          print(f'Найден предыдущий релиз SmartTube VOT: {prev_tag}')
+          print(f'Найден предыдущий релиз SmartTube VOX: {prev_tag}')
 
           prev_code = None
 
@@ -205,7 +205,7 @@ jobs:
                       for key, val in jdata.items():
                           if key != 'package' and isinstance(val, dict) and 'versionCode' in val:
                               prev_code = int(val['versionCode'])
-                              print(f'Извлечён предыдущий versionCode из {asset.get("name")}: {prev_code}')
+                              print(f'Извлечён предыдущий versionCode из {json_url}: {prev_code}')
                               break
               except Exception as e:
                   print(f'Предупреждение при чтении файла обновления: {e}')
@@ -357,23 +357,10 @@ jobs:
             echo "Создан ассет: smarttube_vox-armeabi-v7a.apk"
           fi
 
-          X86_APK=$(find "$OUTPUT_DIR" -name "*_x86.apk" | head -n 1)
-          if [ -n "$X86_APK" ] && [ -f "$X86_APK" ]; then
-            cp "$X86_APK" smarttube_vox-x86.apk
-            echo "Создан ассет: smarttube_vox-x86.apk"
-          fi
-
-          X86_64_APK=$(find "$OUTPUT_DIR" -name "*_x86_64.apk" | head -n 1)
-          if [ -n "$X86_64_APK" ] && [ -f "$X86_64_APK" ]; then
-            cp "$X86_64_APK" smarttube_vox-x86_64.apk
-            echo "Создан ассет: smarttube_vox-x86_64.apk"
-          fi
-
           for required_apk in \
             smarttube_vox.apk \
             smarttube_vox-arm64-v8a.apk \
-            smarttube_vox-armeabi-v7a.apk \
-            smarttube_vox-x86.apk; do
+            smarttube_vox-armeabi-v7a.apk; do
             if [ ! -f "$required_apk" ]; then
               echo "::error::Обязательный release asset не найден: $required_apk"
               exit 1
@@ -386,11 +373,7 @@ jobs:
             smarttube_vox.apk
             smarttube_vox-arm64-v8a.apk
             smarttube_vox-armeabi-v7a.apk
-            smarttube_vox-x86.apk
           )
-          if [ -f smarttube_vox-x86_64.apk ]; then
-            APK_ASSETS+=(smarttube_vox-x86_64.apk)
-          fi
 
           sha256sum "${APK_ASSETS[@]}" > SHA256SUMS.txt
           test -s SHA256SUMS.txt
@@ -402,74 +385,7 @@ jobs:
           EXPECTED_CODE: ${{ steps.tag_info.outputs.EXPECTED_CODE }}
           REPO: ${{ github.repository }}
         run: |
-          python3 -c "
-          import sys, re, json, os
-
-          version = '${VERSION_NAME}'
-          with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
-              content = f.read()
-
-          pattern = rf'## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)'
-          match = re.search(pattern, content, re.DOTALL)
-          if not match:
-              print(f'::error::Секция [{version}] не найдена в CHANGELOG.md!', file=sys.stderr)
-              sys.exit(1)
-
-          section = match.group(1).strip()
-          with open('release_notes.md', 'w', encoding='utf-8') as f:
-              f.write(section)
-
-          release_title = f'SmartTube VOX v{version}'
-          try:
-              header_line = re.search(rf'## \[{re.escape(version)}\]([^\n]*)', content)
-              raw_suffix = header_line.group(1).strip() if header_line else ''
-              codename_match = re.search(r'^[—\-–]\s*(.+)$', raw_suffix)
-              codename = codename_match.group(1).strip() if codename_match else ''
-              is_date = bool(re.match(r'^\d{4}-\d{2}-\d{2}$', codename))
-              base_ver = version.split('-')[0]
-              if codename and not is_date:
-                  release_title = f'SmartTube VOX {base_ver} — {codename}'
-              else:
-                  release_title = f'SmartTube VOX v{version}'
-          except Exception as e:
-              print(f'::warning::Не удалось извлечь кодовое имя релиза ({e}), используется fallback', file=sys.stderr)
-              release_title = f'SmartTube VOX v{version}'
-
-          print(f'Сформирован заголовок релиза: {release_title}')
-
-          env_file = os.getenv('GITHUB_ENV')
-          if env_file:
-              with open(env_file, 'a', encoding='utf-8') as ef:
-                  ef.write(f'RELEASE_TITLE={release_title}\n')
-
-          ru_items = [
-              line.strip().lstrip('-*').strip()
-              for line in section.splitlines()
-              if line.strip().startswith(('-', '*'))
-          ]
-
-          # Основной манифест обновления SmartTube VOX
-          json_vox = {
-              'package': {
-                  'downloadUrl': f'https://github.com/{sys.argv[1]}/releases/latest/download/smarttube_vox.apk'
-              },
-              version: {
-                  'versionCode': int(sys.argv[2]),
-                  'changelog': [
-                      'Reliable Yandex VOT polling with continuous ETA',
-                      'Bounded retries for temporary network failures',
-                      'Correct STATUS_FAILED handling and safe diagnostics',
-                      'Original SmartTube TV interface preserved',
-                      'Yandex ID diagnostics; Device Code and Lively remain limited'
-                  ],
-                  'changelog_ru': ru_items
-              }
-          }
-          with open('smarttube_vox.json', 'w', encoding='utf-8') as f:
-              json.dump(json_vox, f, ensure_ascii=False, indent=2)
-
-          print('smarttube_vox.json успешно сформирован и валидирован.')
-          " "$REPO" "$EXPECTED_CODE"
+          python3 .github/scripts/prepare_vox_release.py
 
           # Валидация сформированного JSON
           jq . smarttube_vox.json
@@ -506,13 +422,9 @@ jobs:
             smarttube_vox.apk
             smarttube_vox-arm64-v8a.apk
             smarttube_vox-armeabi-v7a.apk
-            smarttube_vox-x86.apk
             smarttube_vox.json
             SHA256SUMS.txt
           )
-          if [ -f smarttube_vox-x86_64.apk ]; then
-            RELEASE_ASSETS+=(smarttube_vox-x86_64.apk)
-          fi
 
           if [ "$RELEASE_EXISTS" != "true" ]; then
             if gh release view "$TAG" >/dev/null 2>&1; then
@@ -521,7 +433,7 @@ jobs:
             fi
             gh release create "$TAG" \
               --draft \
-              --title "${RELEASE_TITLE:-SmartTube VOX v$VERSION_NAME}" \
+              --title "${RELEASE_TITLE:-SmartTube VOX $VERSION_NAME}" \
               --notes-file release_notes.md
             RELEASE_ID=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.id')
             RELEASE_IS_DRAFT=true
