@@ -114,7 +114,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private int mTranslationSessionId;
     private long mLastSyncSeekTimestamp;
 
-    private static volatile boolean sUseNewYandexBackend = false;
+    private static volatile boolean sUseNewYandexBackend = true;
     private static volatile boolean sInjectNewBackendFailure = false;
     private static volatile VoiceTranslateController sInstance;
 
@@ -125,6 +125,11 @@ public class VoiceTranslateController extends BasePlayerController {
     public static void setNewYandexBackendEnabled(boolean enabled) {
         YandexVotLog.i(TAG, "Feature flag USE_NEW_YANDEX_VOT_BACKEND set to: " + enabled);
         sUseNewYandexBackend = enabled;
+    }
+
+    public static void resetDefaultBackend() {
+        sUseNewYandexBackend = true;
+        sInjectNewBackendFailure = false;
     }
 
     public static void setInjectNewBackendFailure(boolean fail) {
@@ -786,9 +791,11 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void startYandexTranslation(boolean resetRetryCount, boolean subsequent) {
         if (sUseNewYandexBackend) {
+            YandexVotLog.i(TAG, "Starting Yandex translation: backend=NEW (default candidate)");
             startNewYandexBackend(resetRetryCount, subsequent);
             return;
         }
+        YandexVotLog.i(TAG, "Starting Yandex translation: backend=OLD (forced/fallback)");
         startOldYandexBackend(resetRetryCount, subsequent);
     }
 

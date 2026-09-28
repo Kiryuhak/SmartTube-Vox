@@ -40,7 +40,7 @@ public class YandexVotUserFlowRoutingTest {
      * Test model implementing the exact routing and lifecycle rules of VoiceTranslateController.
      */
     public static class UserFlowRouterModel {
-        private boolean featureFlagEnabled = false;
+        private boolean featureFlagEnabled = true;
         private BackendType activeBackend = BackendType.NONE;
         private boolean isPending = false;
         private boolean isActive = false;
@@ -240,44 +240,42 @@ public class YandexVotUserFlowRoutingTest {
     @Before
     public void setUp() {
         router = new UserFlowRouterModel();
-        VoiceTranslateController.setNewYandexBackendEnabled(false);
-        VoiceTranslateController.setInjectNewBackendFailure(false);
+        VoiceTranslateController.resetDefaultBackend();
     }
 
     @After
     public void tearDown() {
-        VoiceTranslateController.setNewYandexBackendEnabled(false);
-        VoiceTranslateController.setInjectNewBackendFailure(false);
+        VoiceTranslateController.resetDefaultBackend();
     }
 
-    // 1. Feature flag default OFF
+    // 1. Feature flag default ON (NEW backend default candidate)
     @Test
-    public void test1_FeatureFlagDefaultOff() {
-        assertFalse("VoiceTranslateController flag must default to false",
+    public void test1_DefaultCandidateIsNewBackend() {
+        assertTrue("VoiceTranslateController flag must default to true (NEW backend default candidate)",
                 VoiceTranslateController.isNewYandexBackendEnabled());
-        assertFalse("Router model default must be false", router.isFeatureFlagEnabled());
+        assertTrue("Router model default must be true", router.isFeatureFlagEnabled());
     }
 
-    // 2. Flag OFF -> old backend selected
+    // 2. Force OLD override -> old backend selected
     @Test
-    public void test2_FlagOffSelectsOldBackend() {
+    public void test2_ForceOldOverrideSelectsOldBackend() {
         router.setFeatureFlag(false);
         router.onVoxButtonClicked(false, null);
 
-        assertEquals("Old backend must be selected when flag is OFF",
+        assertEquals("Old backend must be selected when forced to OLD",
                 BackendType.OLD, router.getActiveBackend());
         assertEquals(1, router.getOldBackendStartCount());
         assertEquals(0, router.getNewBackendStartCount());
         assertTrue(router.isPending());
     }
 
-    // 3. Flag ON -> new backend selected
+    // 3. Default candidate -> new backend selected
     @Test
-    public void test3_FlagOnSelectsNewBackend() {
-        router.setFeatureFlag(true);
+    public void test3_DefaultCandidateSelectsNewBackend() {
+        // Without overriding flags, default router selects NEW backend
         router.onVoxButtonClicked(false, null);
 
-        assertEquals("New backend must be selected when flag is ON",
+        assertEquals("New backend must be selected by default",
                 BackendType.NEW, router.getActiveBackend());
         assertEquals(0, router.getOldBackendStartCount());
         assertEquals(1, router.getNewBackendStartCount());
@@ -528,5 +526,30 @@ public class YandexVotUserFlowRoutingTest {
         long gen2 = router.getNewBackendGenerationId();
         assertTrue("Subsequent session must advance generation: " + gen2 + " vs " + gen1, gen2 > gen1);
         assertEquals(BackendType.NEW, router.getActiveBackend());
+    }
+
+    // 17. Process restart and reset restores NEW backend default
+    @Test
+    public void test17_ProcessRestartSemanticsAndReset() {
+        VoiceTranslateController.setNewYandexBackendEnabled(false);
+        assertFalse("Forced OLD override active", VoiceTranslateController.isNewYandexBackendEnabled());
+
+        // Process restart / reset restores default candidate (true)
+        VoiceTranslateController.resetDefaultBackend();
+        assertTrue("Default candidate must be NEW backend after reset",
+                VoiceTranslateController.isNewYandexBackendEnabled());
+        assertFalse("Failure injection must be reset to false",
+                VoiceTranslateController.isInjectNewBackendFailure());
+    }
+
+    // 18. Default fresh process user click uses NEW backend
+    @Test
+    public void test18_DefaultFreshProcessUserClickUsesNewBackend() {
+        UserFlowRouterModel freshRouter = new UserFlowRouterModel();
+        freshRouter.onVoxButtonClicked(false, null);
+        assertEquals("Fresh process click must route to NEW backend",
+                BackendType.NEW, freshRouter.getActiveBackend());
+        assertEquals(1, freshRouter.getNewBackendStartCount());
+        assertEquals(0, freshRouter.getOldBackendStartCount());
     }
 }

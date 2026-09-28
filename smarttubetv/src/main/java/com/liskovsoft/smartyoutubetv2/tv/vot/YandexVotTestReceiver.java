@@ -84,12 +84,12 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             handleStartShadow(intent);
         } else if ("stopShadow".equalsIgnoreCase(action) || "cancelShadow".equalsIgnoreCase(action)) {
             handleStopShadow();
-        } else if ("enableNewBackend".equalsIgnoreCase(action)) {
+        } else if ("enableNewBackend".equalsIgnoreCase(action) || "useDefaultBackend".equalsIgnoreCase(action)) {
             VoiceTranslateController.setNewYandexBackendEnabled(true);
-            Log.i(TAG, "New Yandex VOT backend ENABLED for user flow");
-        } else if ("disableNewBackend".equalsIgnoreCase(action)) {
+            Log.i(TAG, "New Yandex VOT backend ENABLED for user flow (default candidate)");
+        } else if ("disableNewBackend".equalsIgnoreCase(action) || "forceOldBackend".equalsIgnoreCase(action)) {
             VoiceTranslateController.setNewYandexBackendEnabled(false);
-            Log.i(TAG, "New Yandex VOT backend DISABLED for user flow");
+            Log.i(TAG, "New Yandex VOT backend DISABLED for user flow (forced OLD override)");
         } else if ("setBackendFailure".equalsIgnoreCase(action)) {
             boolean fail = intent.getBooleanExtra("fail", true);
             VoiceTranslateController.setInjectNewBackendFailure(fail);
@@ -418,6 +418,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         boolean isNewActive = controller != null && controller.isNewBackendActive();
         boolean fallbackTriggered = controller != null && controller.isFallbackTriggered();
         Log.i(TAG, "BackendStatus: flag_new_backend=" + (flagEnabled ? "ON" : "OFF")
+                + " default_candidate=" + (flagEnabled ? "NEW" : "OLD")
                 + " user_flow_active=" + userFlowActive
                 + " active_backend=" + (isNewActive ? "NEW" : (userFlowActive ? "OLD" : "NONE"))
                 + " fallback_triggered=" + fallbackTriggered);
