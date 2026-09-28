@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 210" role="img" aria-labelledby="title description">
+  <title id="title">SmartTube VOX</title>
+  <desc id="description">Экран с кнопкой воспроизведения и звуковыми волнами рядом с названием проекта</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10243e"/>
+      <stop offset="1" stop-color="#172b4b"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2362c9"/>
+      <stop offset="1" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="796" height="206" rx="32" fill="url(#panel)"/>
+  <rect x="3" y="3" width="794" height="204" rx="31" fill="none" stroke="#4d6684" stroke-opacity=".35" stroke-width="2"/>
+  <rect x="28" y="29" width="152" height="152" rx="38" fill="url(#mark)"/>
+  <rect x="53" y="55" width="102" height="83" rx="18" fill="#ffffff" fill-opacity=".14" stroke="#ffffff" stroke-width="5"/>
+  <path d="M91 76 Q91 71 96 74 L124 93 Q129 97 124 101 L96 120 Q91 123 91 118 Z" fill="#ffffff"/>
+  <path d="M70 156 V163 M83 151 V168 M96 155 V164 M109 147 V172 M122 154 V165 M135 150 V169" fill="none" stroke="#b3fff1" stroke-width="5" stroke-linecap="round"/>
+  <text x="218" y="94" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="700" letter-spacing="-2">SmartTube</text>
+  <text x="219" y="157" fill="#5eead4" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800" letter-spacing="2">VOX</text>
+  <text x="397" y="153" fill="#d4e0ee" font-family="Arial, Helvetica, sans-serif" font-size="22" letter-spacing="1">ВИДЕО · ГОЛОС · ПЕРЕВОД</text>
+</svg>
