@@ -1,16 +1,15 @@
-<p align="center">
-  <img src="docs/images/smarttube-vox-logo.svg" alt="Логотип SmartTube VOX: экран, воспроизведение и звуковая дорожка" width="680">
-</p>
+<div align="center">
+  <img src="docs/images/smarttube-vox-hero.png" alt="SmartTube VOX — видео, голос, перевод" width="780">
+</div>
 
 <h1 align="center">SmartTube VOX</h1>
 
 <p align="center">
-  Независимая неофициальная версия SmartTube для Android TV и Google TV<br>
-  с расширенным закадровым переводом Яндекса.
+  <strong>Независимая неофициальная версия SmartTube для Android TV и Google TV с расширенным закадровым переводом Яндекса.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk">Скачать</a> ·
+  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest"><strong>Скачать</strong></a> ·
   <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest">Последний релиз</a> ·
   <a href="CHANGELOG.md">История изменений</a> ·
   <a href="https://github.com/Kiryuhak/SmartTube-Vox/issues">Сообщить об ошибке</a> ·
