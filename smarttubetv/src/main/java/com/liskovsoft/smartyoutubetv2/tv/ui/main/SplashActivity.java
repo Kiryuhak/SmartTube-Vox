@@ -6,6 +6,8 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.SplashPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.SplashView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 
+import com.liskovsoft.smartyoutubetv2.tv.vot.YandexVotTestReceiver;
+
 public class SplashActivity extends MotherActivity implements SplashView {
     private static final String TAG = SplashActivity.class.getSimpleName();
     private Intent mNewIntent;
@@ -16,6 +18,7 @@ public class SplashActivity extends MotherActivity implements SplashView {
         super.onCreate(savedInstanceState);
 
         mNewIntent = getIntent();
+        forwardTestIntentIfNeeded(mNewIntent);
 
         mPresenter = SplashPresenter.instance(this);
         mPresenter.setView(this);
@@ -29,8 +32,17 @@ public class SplashActivity extends MotherActivity implements SplashView {
         super.onNewIntent(intent);
 
         mNewIntent = intent;
+        forwardTestIntentIfNeeded(intent);
 
         mPresenter.onViewInitialized();
+    }
+
+    private void forwardTestIntentIfNeeded(Intent intent) {
+        if (intent != null && YandexVotTestReceiver.ACTION_TEST_YANDEX_VOT.equals(intent.getAction())) {
+            Intent bcast = new Intent(intent);
+            bcast.setClass(this, YandexVotTestReceiver.class);
+            sendBroadcast(bcast);
+        }
     }
 
     @Override

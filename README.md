@@ -1,260 +1,53 @@
-<div align="center">
-  <img src="smarttubetv/src/stvot/res/mipmap-nodpi/ic_stvot.png" width="150" alt="SmartTube VOX Icon">
-  <h1>SmartTube VOX</h1>
-  <h3>SmartTube для Android TV с VOT-переводом и Живым голосом</h3>
-  <p>SmartTube VOX — форк SmartTube для Android TV / Google TV со встроенным закадровым переводом через Яндекс VOT.<br><em>(Ранее проект назывался SmartTube VOT)</em><br><b>Текущая версия:</b> 32.47-vot.1 (база SmartTube 32.47)</p>
-</div>
-
-<p align="center">
-  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest"><img src="https://img.shields.io/github/v/release/Kiryuhak/SmartTube-Vox?color=blue&label=%D0%A0%D0%B5%D0%BB%D0%B8%D0%B7" alt="Release"></a>
-  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases"><img src="https://img.shields.io/github/downloads/Kiryuhak/SmartTube-Vox/total?color=brightgreen&label=%D0%A1%D0%BA%D0%B0%D1%87%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9" alt="Downloads"></a>
-  <a href="https://android.com/tv/"><img src="https://img.shields.io/badge/%D0%9F%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0-Android%20TV%20%7C%20Google%20TV-blueviolet" alt="Platform"></a>
-  <a href="https://github.com/Kiryuhak/SmartTube-Vox/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kiryuhak/SmartTube-Vox/ci.yml?branch=main&label=CI" alt="CI"></a>
-  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest"><img src="https://img.shields.io/badge/%D0%9E%D0%B1%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F-In--App%20Updater-success" alt="Updates"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-GPLv3-orange" alt="License"></a>
-</p>
-
----
-
-## 📥 Скачать SmartTube VOX
-
-> **Основная ссылка для скачивания:**
->
-> 📦 **[Скачать smarttube_vox.apk (Universal APK)](https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk)**
->
-> Все актуальные сборки и архитектурные варианты (arm64-v8a, armeabi-v7a, x86) доступны в разделе **[GitHub Releases](https://github.com/Kiryuhak/SmartTube-Vox/releases/latest)**.
-
-> [!TIP]
-> **Обновление с предыдущих версий SmartTube VOT:**
-> Старые установки SmartTube VOT, которые больше не получают автоматические обновления по воздуху, можно обновить вручную, установив актуальный APK SmartTube VOX поверх существующей версии. Благодаря сохранённому package ID (`io.github.kiryuhak.smarttubevot.stable`) и неизменному ключу цифровой подписи все пользовательские настройки, аккаунты и история сохраняются.
-
-Рекомендуется скачивать SmartTube VOX **только из официальных Releases этого репозитория**. Не используйте сторонние непроверенные сайты и каталоги APK во избежание подмены установочных файлов.
-
----
-
-## 📖 О проекте
-
-> SmartTube VOX — независимая неофициальная сборка (форк) SmartTube для Android TV и Android TV Box с интеграцией голосового перевода Яндекс VOT, авторизацией через Яндекс ID и поддержкой «Живого голоса».
-
-Приложение использует собственный отдельный идентификатор пакета:
-```text
-io.github.kiryuhak.smarttubevot.stable
-```
-Благодаря отдельному package SmartTube VOX можно устанавливать параллельно с оригинальным SmartTube (как Stable, так и Beta). Они не перезаписывают друг друга, не затирают пользовательские данные и могут работать одновременно на одном устройстве.
-
----
-
-## ✨ Ключевые возможности
-
-### 🎙 VOT и Живой голос
-- **Закадровый перевод видео**: мгновенная русская голосовая озвучка иностранных роликов с помощью нейросетей.
-- **Индикатор прогресса перевода (VOT progress overlay)**: локальный обратный отсчёт ETA в формате `MM:SS`, который после ожидаемого срока продолжает считать время ожидания.
-- **Яндекс ID на TV и ручная авторизация**: приложение показывает Device Code и поддерживает резервный ручной ввод OAuth-токена; известное ограничение автоматического входа описано ниже.
-- **«Живой голос»**: режим доступен при наличии действительного OAuth-токена; фактическая работа Lively на TV требует отдельной пользовательской приёмки.
-- **Быстрый микшер звука (Quick Mixer)**: независимая регулировка громкости оригинальной дорожки видео и громкости перевода по долгому нажатию кнопки VOT.
-- **Замена русской дублированной дорожки YouTube**: ручной VOT может временно заменить дубляж YouTube на оригинальную аудиодорожку с переводом Яндекса (с подтверждением в диалоге и автовосстановлением без изменения глобальной настройки автодубляжа).
-- **Выбор аудиодорожки**: доступен в штатном HQ-меню плеера в разделе «Аудиодорожки».
-- **Поддержка длинных видео (Long video support)**: надёжный опрос очереди генерации озвучки для роликов длительностью более 2 часов.
-
-### 🌍 Умный автоперевод
-- **Русская аудиодорожка** ➔ автоперевод не запускается.
-- **Подтверждённая иностранная дорожка** ➔ перевод может стартовать автоматически.
-- **Неизвестный язык или дорожка без тега** ➔ автоматического запуска нет (исключены ложные срабатывания).
-- **Ручной запуск** ➔ в любой момент доступен по кнопке на панели управления плеера.
+# SmartTube VOX
 
-### 📺 Возможности SmartTube
-SmartTube VOX унаследовал все проверенные временем возможности базового плеера:
-- Полноценный интерфейс, адаптированный под экраны телевизоров и управление пультом ДУ;
-- Встроенный SponsorBlock (автоматический пропуск спонсорских вставок и интеграций);
-- Поддержка высоких разрешений до 4K, 60 кадров/сек (FPS) и расширенного динамического диапазона (HDR);
-- Автоподстройка частоты обновления экрана (AFR);
-- Гибкое управление скоростью воспроизведения;
-- Отсутствие обязательной зависимости от Google Services.
+**Unofficial SmartTube fork focused on improved voice-over translation for Android TV and Google TV.**
 
-> Полное описание базового плеера доступно в репозитории [yuliskov/SmartTube](https://github.com/yuliskov/SmartTube) и на сайте [smarttubeapp.github.io](https://smarttubeapp.github.io/).
+**Неофициальная версия SmartTube с улучшенным закадровым переводом для Android TV и Google TV.**
 
-### 🔄 Автообновление
-- Автоматическая проверка новых релизов SmartTube VOX;
-- Список изменений (changelog) на русском языке прямо на экране ТВ;
-- Фоновое скачивание нового APK;
-- Бесшовное обновление установленной сборки без потери настроек.
+[Download / Скачать](https://github.com/Kiryuhak/SmartTube-Vox/releases) · [What's new / Что нового](CHANGELOG.md) · [Credits / Благодарности](CREDITS.md)
 
----
+![SmartTube VOX player with the translation control](docs/images/smarttube-vox-player.png)
 
-## ⚖️ SmartTube vs SmartTube VOX
+## Features
 
-| Возможность | SmartTube | SmartTube VOX |
-|---|:---:|:---:|
-| Android TV интерфейс | ✅ | ✅ |
-| SponsorBlock | ✅ | ✅ |
-| VOT-перевод | — | ✅ |
-| Яндекс ID | — | ✅ |
-| Живой голос | — | ✅ |
-| Умный автозапуск VOT | — | ✅ |
-| Отдельный package | — | ✅ |
-| Собственный канал обновлений | — | ✅ |
+- Yandex voice-over translation with a standard voice or **Lively Voice** («Живой голос»).
+- Prepares translation for videos without a ready voice-over and waits for it automatically.
+- Keeps translated audio aligned with pause, resume, seeking, and playback speed.
+- Cleans up translation when switching videos and restores the original audio when translation stops.
+- Lets you mix the original sound with translated speech.
+- Falls back to the previous stable translation path if the newer path fails before playback.
+- TV-friendly controls with a **Translation / Перевод** button, time display choices, and in-app update support.
 
----
+## Download and install
 
-## 🚀 Установка
+1. Download an APK from [GitHub Releases](https://github.com/Kiryuhak/SmartTube-Vox/releases).
+2. Choose `armeabi-v7a` for many older or 32-bit Android TV devices, `arm64-v8a` for a 64-bit device, or `universal` if you are unsure (it is larger). The `x86` build is mainly for emulators.
+3. Allow APK installation on your TV or box, then open the downloaded file.
 
-SmartTube VOX рассчитан прежде всего на телевизоры и приставки под управлением Android TV и Google TV.
+Current build: **32.56-vot.3** · Android package: `io.github.kiryuhak.smarttubevot.stable` · versionCode: `2446003`.
 
-1. **Скачать** файл `smarttube_vox.apk` из раздела [Releases](https://github.com/Kiryuhak/SmartTube-Vox/releases/latest).
-2. **Разрешить** установку приложений из неизвестных источников в настройках безопасности Android TV.
-3. **Установить** APK (через приложение Downloader, с USB-флешки или через ADB).
-4. **Запустить** SmartTube VOX на телевизоре.
-5. При необходимости **выполнить вход** через Яндекс ID для активации «Живого голоса».
+SmartTube VOX installs alongside the original SmartTube. If you already use an older SmartTube VOT build with the same package ID and signing key, install the new APK as an update.
 
----
+## Lively Voice / «Живой голос»
 
-## 🔐 Яндекс ID и Живой голос
+Standard Yandex translation can work without a Yandex ID. For Lively Voice, sign in to SmartTube and Yandex ID. Where supported, activation happens automatically. You can also open **Settings → Player → Voice translation (Yandex) → Sign in with Yandex**.
 
-Приложение поддерживает экран Device Code и резервный ручной ввод OAuth-токена:
+Обычный перевод Яндекса может работать без Яндекс ID. Для «Живого голоса» войдите в SmartTube и Яндекс ID. Если автоматическое включение недоступно, откройте **Настройки → Плеер → Закадровый перевод (Яндекс) → Войти в Яндекс**.
 
-1. Пользователь запускает авторизацию из настроек плеера или меню перевода.
-2. На экране ТВ отображается QR-код и короткий код устройства для перехода на страницу Яндекс ID (`ya.ru/device`).
-3. Автоматический обмен Device Code на токен сейчас не считается подтверждённо работающим: сервер может вернуть `invalid_client` / `Wrong client secret`.
-4. До появления безопасного решения можно использовать ручной ввод действительного OAuth-токена; токен сохраняется только в локальных данных приложения на ТВ.
-5. При наличии действительного токена становится доступен выбор режима «Живой голос».
+## Русский
 
-> [!WARNING]
-> Нельзя встраивать `client_secret` в Android APK. Безопасное решение ограничения Device Code Flow пока не подтверждено.
-
-> [!NOTE]
-> **Безопасность данных**:
-> - Экран кода использует OAuth 2.0 Device Authorization Grant — пароли на ТВ не вводятся.
-> - OAuth-токен никогда не выводится в системные логи.
-> - Секретные ключи не вшиваются в открытый код APK.
-> - Пользователь может в любой момент выйти из аккаунта и удалить токен в настройках приложения.
+**Что умеет SmartTube VOX:** переводит видео голосом Яндекса, предлагает обычную озвучку и «Живой голос», а при отсутствии готового перевода запускает его подготовку и ожидает результат. Перевод следует за паузой, перемоткой и изменением скорости. При переключении ролика или отключении перевода обычный звук восстанавливается. Можно настроить баланс оригинального звука и озвучки.
 
----
+В плеере есть кнопка **«Перевод»**. Интерфейс приспособлен для телевизора и пульта; доступны варианты отображения времени и проверка обновлений в приложении.
 
-## 🔄 Обновления
+**Установка:** скачайте APK на странице [Releases](https://github.com/Kiryuhak/SmartTube-Vox/releases). Для многих старых или 32-битных устройств подойдёт `armeabi-v7a`, для 64-битных — `arm64-v8a`. Если не знаете архитектуру, выберите более крупный `universal`. Сборка `x86` предназначена главным образом для эмуляторов.
 
-Обновление SmartTube VOX работает напрямую через официальные GitHub Releases:
+## Project and license / О проекте и лицензии
 
-```text
-SmartTube VOX
-     ↓
-smarttube_vox.json  (манифест обновления)
-     ↓
-GitHub Release
-     ↓
-smarttube_vox.apk   (актуальный бинарник)
-```
+SmartTube VOX is an independent, unofficial fork of [SmartTube](https://github.com/yuliskov/SmartTube). It is not affiliated with SmartTube, Yandex, or Google. Source code is distributed under [GPLv3](LICENSE), with third-party attribution in [CREDITS.md](CREDITS.md) and [NOTICE](NOTICE).
 
-Каждый GitHub Release содержит новые APK-файлы (`smarttube_vox.apk`) и метаданные (`smarttube_vox.json`). Начиная с версии 32.45-vot.8, публикация устаревших compatibility-ассетов SmartTube VOT прекращена. Для пользователей старых сборок SmartTube VOT рекомендуется однократная ручная установка APK SmartTube VOX поверх имеющейся версии.
+SmartTube VOX — независимый неофициальный форк SmartTube. Проект не связан с авторами SmartTube, Яндексом или Google. Исходный код распространяется по GPLv3; сведения об использованных проектах и обязательные уведомления приведены в файлах выше.
 
-### Формат версий
-В проекте используется двухуровневая схема версий:
-- `32.45-vot.9`
-- `32.47-vot.1`
+Found a problem? / Нашли ошибку? [Open an issue / Создать обращение](https://github.com/Kiryuhak/SmartTube-Vox/issues).
 
-Первая часть (`32.45`, `32.47`) строго соответствует базовой версии оригинального SmartTube, а суффикс `-vot.N` обозначает порядковый номер ревизии SmartTube VOX с исправлением или улучшением функционала перевода.
-
----
-
-## 🖼 Скриншоты
-
-*Скриншоты интерфейса будут добавлены позже.*
-
----
-
-## 📝 История изменений
-
-Подробный список изменений для каждой выпущенной версии доступен в файле:
-- 📋 **[CHANGELOG.md](CHANGELOG.md)**
-
-Информация о самом свежем релизе и прикреплённых файлах доступна на странице **[Latest Release](https://github.com/Kiryuhak/SmartTube-Vox/releases/latest)**.
-
----
-
-## 💻 Для разработчиков
-
-<details>
-<summary><b>🛠 Сборка из исходников</b></summary>
-
-### Требования
-- **JDK 17** (Eclipse Temurin, OpenJDK 17 или Azul Zulu)
-- **Android SDK** (Build-Tools `30.0.3`, SDK Platform `34`)
-- **Git**
-
-### Сборка Debug APK
-```bash
-./gradlew assembleStvotDebug
-```
-Собранный файл появится в `smarttubetv/build/outputs/apk/stvot/debug/`.
-
-### Сборка Release APK
-Сборка подписанного релизного варианта (при наличии файла `keystore.properties`):
-```bash
-./gradlew assembleStvotRelease
-```
-
-### Параметры сборки
-- **Package ID**: `io.github.kiryuhak.smarttubevot.stable`
-- **Формула VersionCode**: `baseVersionCode * 1000 + votPatch` (строго в диапазоне `1..999` для сохранения монотонности Android).
-</details>
-
-<details>
-<summary><b>⚙️ CI/CD</b></summary>
-
-В проекте настроен автоматизированный конвейер на базе GitHub Actions:
-```text
-Pull Request
-    ↓
-CI (проверка форматирования, изоляции зависимостей)
-    ↓
-Сборка stvotDebug и ststableDebug
-    ↓
-Code Review
-    ↓
-Merge в main
-    ↓
-Публикация тега v<base>-vot.<patch>
-    ↓
-Signed Release (8 этапов валидации)
-    ↓
-GitHub Release
-    ↓
-Встроенный Updater на ТВ
-```
-
-> **Важно**: Изменения из апстрима никогда не вливаются в ветку `main` автоматически без проверки и подтверждения мейнтейнером.
-</details>
-
----
-
-## ❤️ Благодарности
-
-SmartTube VOX существует благодаря работе авторов и сообществ исходных open-source проектов:
-
-- **[SmartTube](https://github.com/yuliskov/SmartTube)** — **Юрий Лисков ([@yuliskov](https://github.com/yuliskov))** и всё сообщество разработчиков оригинального плеера SmartTube ([официальный сайт](https://smarttubeapp.github.io/)) за великолепный и независимый YouTube-клиент для Android TV.
-- **[vsvoice/SmartTube](https://github.com/vsvoice/SmartTube)** — за исследовательскую работу, первоначальную концепцию и адаптацию интеграции голосового перевода в плеер SmartTube.
-- **[voice-over-translation](https://github.com/ilyhalight/voice-over-translation)** — **Илья Лайт ([@ilyhalight](https://github.com/ilyhalight))** за открытую библиотеку закадрового перевода и анализ протоколов голосового сервиса.
-- **[vot-cli](https://github.com/FOSWLY/vot-cli)** и **[vot.js](https://github.com/FOSWLY/vot.js)** — команда **FOSWLY ([@FOSWLY](https://github.com/FOSWLY))** за активное развитие открытых инструментов голосового перевода.
-
-*Указанные проекты и их авторы не несут ответственности за данную сборку и не осуществляют её официальную поддержку. Мы выражаем искреннюю признательность за их вклад в развитие открытого программного обеспечения.*
-
----
-
-> [!IMPORTANT]
-> **SmartTube VOX** является независимой неофициальной производной сборкой (форком). Проект не является официальной версией SmartTube и не является продуктом компании Яндекс или Google LLC. Все названия брендов, сервисов и товарные знаки принадлежат их законным правообладателям.
-
----
-
-## 📄 Лицензия
-
-Исходный код проекта распространяется в соответствии с условиями свободной лицензии **GNU General Public License v3.0 (GPLv3)** и лицензиями используемых upstream-компонентов.
-
-Полный текст лицензии доступен в файле [LICENSE](LICENSE).
-
----
-
-## 🐛 Нашли проблему?
-
-Если у вас возникли сложности в работе приложения или есть идеи по его улучшению:
-- 🐞 **[Создать Issue](https://github.com/Kiryuhak/SmartTube-Vox/issues)** — сообщить об ошибке или сбое.
-- 📦 **[Посмотреть Releases](https://github.com/Kiryuhak/SmartTube-Vox/releases)** — проверить наличие новых сборок.
-- 📝 **[Посмотреть CHANGELOG](CHANGELOG.md)** — ознакомиться с историей изменений.
+Developer build instructions / Инструкции по сборке: [docs/BUILDING.md](docs/BUILDING.md).

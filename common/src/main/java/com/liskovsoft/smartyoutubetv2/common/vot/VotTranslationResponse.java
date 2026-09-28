@@ -14,6 +14,11 @@ public class VotTranslationResponse {
     public int remainingTimeSec;
     public String translationId;
     public String message;
+    /** Null when protobuf field 10 was absent; false is an explicit server value. */
+    public Boolean isLivelyVoice;
+    public Boolean allowToTranslateVideo;
+    public Integer shouldRetry;
+    public Integer unknown3;
 
     public boolean isReady() {
         return status == STATUS_FINISHED || status == STATUS_PART_CONTENT;

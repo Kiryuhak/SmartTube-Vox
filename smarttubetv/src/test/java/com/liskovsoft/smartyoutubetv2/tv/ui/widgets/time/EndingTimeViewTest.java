@@ -22,4 +22,21 @@ public class EndingTimeViewTest {
         assertNull(EndingTimeView.formatEndingTime(null));
         assertNull(EndingTimeView.formatEndingTime(""));
     }
+
+    @Test
+    public void remainingTimeUsesActualPositionAndFormatsHours() {
+        assertEquals("01:01", RemainingTimeFormatter.format(122_000, 61_000, false));
+        assertEquals("00:20", RemainingTimeFormatter.format(122_000, 102_000, false));
+        assertEquals("01:11", RemainingTimeFormatter.format(122_000, 51_000, false));
+        assertEquals("1:01:01", RemainingTimeFormatter.format(3_661_000, 0, false));
+        assertEquals("00:00", RemainingTimeFormatter.format(122_000, 124_000, false));
+    }
+
+    @Test
+    public void remainingTimeHidesLiveAndUnknownDuration() {
+        assertNull(RemainingTimeFormatter.format(122_000, 0, true));
+        assertNull(RemainingTimeFormatter.format(0, 0, false));
+        assertNull(RemainingTimeFormatter.format(-1, 0, false));
+        assertNull(RemainingTimeFormatter.format(Long.MAX_VALUE, 0, false));
+    }
 }

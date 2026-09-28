@@ -28,6 +28,15 @@ final class VotWireWriter {
         writeVarint(value);
     }
 
+    void writeInt32IncludeZero(int fieldNumber, int value) {
+        writeTag(fieldNumber, 0);
+        writeVarint(value);
+    }
+
+    int size() {
+        return mOut.size();
+    }
+
     void writeBool(int fieldNumber, boolean value) {
         if (!value) {
             return;
@@ -54,6 +63,11 @@ final class VotWireWriter {
         writeTag(fieldNumber, 2);
         writeVarint(value.length);
         mOut.write(value, 0, value.length);
+    }
+
+    void writeEmptyBytes(int fieldNumber) {
+        writeTag(fieldNumber, 2);
+        writeVarint(0);
     }
 
     void writeEmbedded(int fieldNumber, byte[] embedded) {

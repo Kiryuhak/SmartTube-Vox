@@ -298,6 +298,15 @@
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|layoutDirection"
             android:screenOrientation="unspecified"/>
 
+        <!-- Internal developer-only test receiver for isolated Yandex VOT backend verification -->
+        <receiver
+            android:name="com.liskovsoft.smartyoutubetv2.tv.vot.YandexVotTestReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT" />
+            </intent-filter>
+        </receiver>
+
         <!-- END Launchers -->
     </application>
 

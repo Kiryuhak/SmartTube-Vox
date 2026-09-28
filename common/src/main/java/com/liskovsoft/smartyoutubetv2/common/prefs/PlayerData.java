@@ -78,6 +78,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     private boolean mIsSpeedPerVideoEnabled;
     private boolean mIsTimeCorrectionEnabled;
     private boolean mIsGlobalEndingTimeEnabled;
+    private TopRightTimeMode mTopRightTimeMode;
     private boolean mIsEndingTimeEnabled;
     private boolean mIsDoubleRefreshRateEnabled;
     private boolean mIsSeekConfirmPlayEnabled;
@@ -204,6 +205,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
 
     public void setGlobalClockEnabled(boolean enable) {
         mIsGlobalClockEnabled = enable;
+        mTopRightTimeMode = TopRightTimeMode.fromLegacy(mIsGlobalClockEnabled, mIsGlobalEndingTimeEnabled);
         persistState();
     }
 
@@ -213,6 +215,18 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
 
     public void setGlobalEndingTimeEnabled(boolean enable) {
         mIsGlobalEndingTimeEnabled = enable;
+        mTopRightTimeMode = TopRightTimeMode.fromLegacy(mIsGlobalClockEnabled, mIsGlobalEndingTimeEnabled);
+        persistState();
+    }
+
+    public TopRightTimeMode getTopRightTimeMode() {
+        return mTopRightTimeMode;
+    }
+
+    public void setTopRightTimeMode(TopRightTimeMode mode) {
+        mTopRightTimeMode = mode;
+        mIsGlobalClockEnabled = mode.showClock;
+        mIsGlobalEndingTimeEnabled = mode.showSecondTime && !mode.showRemaining;
         persistState();
     }
 
@@ -818,6 +832,8 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         mIsGlobalClockEnabled = Helpers.parseBoolean(split, 31, false);
         mIsTimeCorrectionEnabled = Helpers.parseBoolean(split, 32, true);
         mIsGlobalEndingTimeEnabled = Helpers.parseBoolean(split, 33, false);
+        mTopRightTimeMode = TopRightTimeMode.fromStored(Helpers.parseInt(split, 63, -1),
+                mIsGlobalClockEnabled, mIsGlobalEndingTimeEnabled);
         mIsEndingTimeEnabled = Helpers.parseBoolean(split, 34, false);
         mIsDoubleRefreshRateEnabled = Helpers.parseBoolean(split, 35, true);
         mIsSeekConfirmPlayEnabled = Helpers.parseBoolean(split, 36, false);
@@ -884,7 +900,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
                 mIsNumberKeySeekEnabled, mIsSkip24RateEnabled, mAfrPauseMs, mIsLiveChatEnabled, mLastSubtitleFormats, mLastSpeed, mRotationAngle,
                 mZoomPercents, mPlaybackMode, mAudioLanguage, mSubtitleLanguage, mEnabledSubtitlesPerChannel, mIsSubtitlesPerChannelEnabled,
                 mIsSpeedPerChannelEnabled, Helpers.mergeArray(mSpeeds.values().toArray()), mPitch, mIsSkipShortsEnabled, mLastAudioLanguages,
-                mIsVideoFlipEnabled, mIsAudioDelayEnabled
+                mIsVideoFlipEnabled, mIsAudioDelayEnabled, mTopRightTimeMode.id
         ));
     }
 

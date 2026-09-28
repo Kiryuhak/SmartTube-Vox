@@ -65,6 +65,7 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.selector.Restore
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.TopRightTimeMode;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.adapter.VideoGroupObjectAdapter;
@@ -492,7 +493,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         PlayerAdapter playerAdapter = new LeanbackPlayerAdapter(getContext(), mPlayer, UPDATE_DELAY_MS); // NOTE: possible context memory leak
 
         OnActionClickedListener playerActionListener = new PlayerActionListener();
-        mPlayerGlue = new VideoPlayerGlue(getContext(), playerAdapter, playerActionListener); // NOTE: possible context memory leak
+        mPlayerGlue = new VideoPlayerGlue(getContext(), playerAdapter, playerActionListener) {
+            @Override
+            protected void onUpdateProgress() {
+                super.onUpdateProgress();
+                updateTopRightRemainingTime();
+            }
+        }; // NOTE: possible context memory leak
         mPlayerGlue.setHost(new SurfacePlaybackFragmentGlueHost(this));
         mPlayerGlue.setSeekEnabled(true);
         mPlayerGlue.setControlsOverlayAutoHideEnabled(false); // don't show controls on some player events like play/pause/end
@@ -536,7 +543,7 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
         DateTimeView clock = getView().findViewById(R.id.global_time);
         clock.showDate(false);
-        clock.setVisibility(getPlayerData().isGlobalClockEnabled() ? View.VISIBLE : View.GONE);
+        clock.setVisibility(getPlayerData().getTopRightTimeMode().showClock ? View.VISIBLE : View.GONE);
     }
 
     private void initializeGlobalEndingTime() {
@@ -545,7 +552,15 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         }
 
         EndingTimeView endingTime = getView().findViewById(R.id.global_ending_time);
-        endingTime.setVisibility(getPlayerData().isGlobalEndingTimeEnabled() ? View.VISIBLE : View.GONE);
+        endingTime.setVisibility(getPlayerData().getTopRightTimeMode().showSecondTime ? View.VISIBLE : View.GONE);
+        endingTime.update();
+    }
+
+    private void updateTopRightRemainingTime() {
+        if (getView() != null && getPlayerData().getTopRightTimeMode().showRemaining) {
+            EndingTimeView time = getView().findViewById(R.id.global_ending_time);
+            time.update();
+        }
     }
 
     private void initializePixelRatio() {
@@ -634,6 +649,7 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
             MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder();
 
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, getVideo().videoId);
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_TITLE, getVideo().getTitleFull());
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, getVideo().getTitleFull());
             metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, getVideo().getAuthor());

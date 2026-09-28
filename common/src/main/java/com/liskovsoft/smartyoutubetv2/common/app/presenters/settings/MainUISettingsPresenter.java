@@ -15,6 +15,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData.ColorScheme;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
+import com.liskovsoft.smartyoutubetv2.common.prefs.TopRightTimeMode;
 import com.liskovsoft.smartyoutubetv2.common.utils.ClickbaitRemover;
 
 import java.util.ArrayList;
@@ -310,14 +311,6 @@ public class MainUISettingsPresenter extends BasePresenter<Void> {
                 },
                 mGeneralData.isGlobalClockEnabled()));
 
-        options.add(UiOptionItem.from(getContext().getString(R.string.player_corner_clock),
-                option -> mPlayerData.setGlobalClockEnabled(option.isSelected()),
-                mPlayerData.isGlobalClockEnabled()));
-
-        options.add(UiOptionItem.from(getContext().getString(R.string.player_corner_ending_time),
-                option -> mPlayerData.setGlobalEndingTimeEnabled(option.isSelected()),
-                mPlayerData.isGlobalEndingTimeEnabled()));
-
         options.add(UiOptionItem.from(getContext().getString(R.string.channels_old_look),
                 optionItem -> {
                     mMainUIData.setUploadsOldLookEnabled(optionItem.isSelected());
@@ -359,5 +352,23 @@ public class MainUISettingsPresenter extends BasePresenter<Void> {
                 mMainUIData.isUploadsAutoLoadEnabled()));
 
         settingsPresenter.appendCheckedCategory(getContext().getString(R.string.player_other), options);
+        appendTopRightTimeCategory(settingsPresenter);
+    }
+
+    private void appendTopRightTimeCategory(AppDialogPresenter settingsPresenter) {
+        List<OptionItem> options = new ArrayList<>();
+        for (int[] entry : new int[][] {
+                {R.string.player_top_right_current_end, TopRightTimeMode.CURRENT_TIME_AND_END_TIME.id},
+                {R.string.player_top_right_remaining, TopRightTimeMode.REMAINING_TIME.id},
+                {R.string.player_top_right_current_remaining, TopRightTimeMode.CURRENT_TIME_AND_REMAINING_TIME.id},
+                {R.string.player_top_right_off, TopRightTimeMode.OFF.id},
+                {R.string.player_top_right_current_only, TopRightTimeMode.CURRENT_TIME_ONLY.id},
+                {R.string.player_top_right_end_only, TopRightTimeMode.END_TIME_ONLY.id}}) {
+            TopRightTimeMode mode = TopRightTimeMode.fromStored(entry[1], false, false);
+            options.add(UiOptionItem.from(getContext().getString(entry[0]),
+                    option -> mPlayerData.setTopRightTimeMode(mode),
+                    mPlayerData.getTopRightTimeMode() == mode));
+        }
+        settingsPresenter.appendRadioCategory(getContext().getString(R.string.player_top_right_time_display), options);
     }
 }

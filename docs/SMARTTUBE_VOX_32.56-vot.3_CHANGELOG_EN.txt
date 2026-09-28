@@ -1,0 +1,6 @@
+- Improved Yandex voice-over translation.
+- Translation can be prepared for videos without ready voice-over.
+- Better synchronization with pause, seeking, and playback speed.
+- Improved Lively Voice support.
+- Safer fallback and restoration of original audio.
+- Improved stability and handling of network errors.

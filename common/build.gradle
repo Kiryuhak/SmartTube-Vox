@@ -59,7 +59,7 @@ dependencies {
 
     implementation 'androidx.appcompat:appcompat:' + appCompatXVersion
     testImplementation 'junit:junit:' + junitVersion
-    testImplementation 'org.robolectric:robolectric:' + robolectricVersion
+    testImplementation 'org.robolectric:robolectric:4.8.2'
 
     implementation project(':sharedutils')
     implementation project(':fragment-1.1.0')
