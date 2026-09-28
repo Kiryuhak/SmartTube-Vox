@@ -440,7 +440,14 @@ jobs:
               --draft \
               --title "${RELEASE_TITLE:-SmartTube VOX $VERSION_NAME}" \
               --notes-file release_notes.md
-            RELEASE_MATCH=$(bash .github/scripts/find_vox_release.sh)
+            # GitHub's release list can lag briefly behind successful draft creation.
+            RELEASE_MATCH=""
+            for attempt in {1..20}; do
+              RELEASE_MATCH=$(bash .github/scripts/find_vox_release.sh)
+              [ -n "$RELEASE_MATCH" ] && break
+              echo "Ожидание появления draft Release в API ($attempt/20)..."
+              sleep 3
+            done
             IFS=$'\t' read -r RELEASE_ID RELEASE_IS_DRAFT FOUND_TAG <<< "$RELEASE_MATCH"
             if [[ ! "$RELEASE_ID" =~ ^[0-9]+$ ]] || [ "$RELEASE_IS_DRAFT" != "true" ] || [ "$FOUND_TAG" != "$TAG" ]; then
               echo "::error::Созданный draft Release для $TAG не удалось однозначно подтвердить."
