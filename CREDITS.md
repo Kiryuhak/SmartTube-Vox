@@ -2,6 +2,8 @@
 
 This SmartTube integration is based on the **Voice Over Translation** ecosystem and Yandex browser VOT API behavior documented by these open-source projects:
 
+The Android TV player is based on [SmartTube](https://github.com/yuliskov/SmartTube) by [yuliskov](https://github.com/yuliskov) and contributors. [vsvoice/SmartTube](https://github.com/vsvoice/SmartTube) informed the earlier voice-over integration in this fork.
+
 | Project | Author / org | Role |
 |---------|----------------|------|
 | [voice-over-translation](https://github.com/ilyhalight/voice-over-translation) | [ilyhalight](https://github.com/ilyhalight) | Browser extension; UX, audio fallback and API flow reference |
