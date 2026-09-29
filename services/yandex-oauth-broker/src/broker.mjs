@@ -198,13 +198,18 @@ export async function handleRequest(request, env, fetchUpstream = fetch) {
   try {
     upstream = await fetchUpstream(TOKEN_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: form,
-      redirect: 'error',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'SmartTube-VOX/1.0',
+      },
+      body: form.toString(),
+      redirect: 'follow',
       signal: AbortSignal.timeout(10_000),
     });
     if (upstream.status >= 500) return json(502, { state: 'temporary_server_error' });
-  } catch {
+  } catch (err) {
+    console.error('fetchUpstream error:', err?.message || err);
     return json(502, { state: 'network_error' });
   }
   try {
