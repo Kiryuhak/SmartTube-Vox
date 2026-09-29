@@ -30,9 +30,9 @@ function makeGate() {
   return { gate: new RateGate({ storage }), db };
 }
 
-function check(gate, ip, codeHash) {
+function check(gate, ip, codeHash, type = 'device') {
   return gate.fetch(new Request('https://rate-gate.internal/check', {
-    method: 'POST', body: JSON.stringify({ ip, code_hash: codeHash }),
+    method: 'POST', body: JSON.stringify({ ip, code_hash: codeHash, type }),
   }));
 }
 
@@ -52,6 +52,26 @@ test('minimum device polling interval and per-IP budget are enforced', async () 
     assert.equal((await check(gate, '192.0.2.1', 'b'.repeat(64))).status, 429);
     now += 60_000;
     assert.equal((await check(gate, '192.0.2.1', 'b'.repeat(64))).status, 204);
+  } finally {
+    Date.now = oldNow;
+    db.close();
+  }
+});
+
+test('refresh rate limit and per-IP budget are enforced separately', async () => {
+  const { gate, db } = makeGate();
+  const oldNow = Date.now;
+  let now = 2_000_000;
+  Date.now = () => now;
+  try {
+    assert.equal((await check(gate, '192.0.2.1', 'c'.repeat(64), 'refresh')).status, 204);
+    assert.equal((await check(gate, '192.0.2.1', 'c'.repeat(64), 'refresh')).status, 429);
+    now += 5_000;
+    assert.equal((await check(gate, '192.0.2.1', 'c'.repeat(64), 'refresh')).status, 204);
+    for (let i = 0; i < 18; i++) {
+      assert.equal((await check(gate, '192.0.2.1', i.toString(16).padStart(64, '0'), 'refresh')).status, 204);
+    }
+    assert.equal((await check(gate, '192.0.2.1', 'd'.repeat(64), 'refresh')).status, 429);
   } finally {
     Date.now = oldNow;
     db.close();

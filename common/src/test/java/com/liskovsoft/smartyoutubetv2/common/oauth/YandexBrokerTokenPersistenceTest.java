@@ -23,8 +23,8 @@ public class YandexBrokerTokenPersistenceTest {
         assertEquals(VotData.AuthState.UNVERIFIED, data.getAuthState());
         assertTrue(data.isLivelyVoiceEnabled());
 
-        context.getSharedPreferences("vot_data", Context.MODE_PRIVATE).edit()
-                .putLong("yandex_oauth_expires_at", 1).commit();
+        context.getSharedPreferences("vot_auth_secure", Context.MODE_PRIVATE).edit()
+                .putLong("sec_expires_at", 1).commit();
         assertTrue(data.isOAuthTokenExpired());
         assertEquals(VotData.AuthState.REJECTED, data.getAuthState());
         assertFalse(data.isLivelyVoiceEnabled());

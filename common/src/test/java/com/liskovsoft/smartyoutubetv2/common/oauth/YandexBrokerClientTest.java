@@ -68,4 +68,24 @@ public class YandexBrokerClientTest {
         assertEquals(YandexBrokerClient.State.NETWORK_ERROR,
                 client.poll("mock-device-code-0123456789abcdef").state);
     }
+
+    @Test
+    public void testRefreshParsing() {
+        YandexBrokerClient.Result result = YandexBrokerClient.parse(
+                "{\"state\":\"success\",\"access_token\":\"refreshed-access-token\",\"refresh_token\":\"rotated-refresh-token\",\"expires_in\":7200}",
+                200, 0);
+        assertEquals(YandexBrokerClient.State.SUCCESS, result.state);
+        assertEquals("refreshed-access-token", result.accessToken);
+        assertEquals("rotated-refresh-token", result.refreshToken);
+        assertEquals(7200, result.expiresInSeconds);
+        assertTrue(result.isTerminal());
+        assertFalse(result.toString().contains("refreshed-access-token"));
+        assertFalse(result.toString().contains("rotated-refresh-token"));
+
+        // Test invalid_grant error parsing
+        YandexBrokerClient.Result invalidGrant = YandexBrokerClient.parse(
+                "{\"state\":\"invalid_grant\",\"error\":\"invalid_grant\"}", 400, 0);
+        assertEquals(YandexBrokerClient.State.INVALID_GRANT, invalidGrant.state);
+        assertTrue(invalidGrant.isTerminal());
+    }
 }

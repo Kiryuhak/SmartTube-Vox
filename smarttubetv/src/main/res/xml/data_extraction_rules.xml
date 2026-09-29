@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="vot_auth_secure.xml" />
+        <exclude domain="file" path="vot_sec_key.bin" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="vot_auth_secure.xml" />
+        <exclude domain="file" path="vot_sec_key.bin" />
+    </device-transfer>
+</data-extraction-rules>
