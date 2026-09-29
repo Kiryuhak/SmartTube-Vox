@@ -49,12 +49,17 @@ async function run(yandexBody, status = 200, req = request()) {
   return { result, body: await result.json(), upstreamCall };
 }
 
-test('fixed upstream and server-side credentials; response excludes secrets', async () => {
+test('device flow: fixed upstream and credentials; passes through refresh_token when present; response excludes secrets', async () => {
   const { result, body, upstreamCall } = await run({
     access_token: 'access-token', refresh_token: 'refresh-token', expires_in: 3600,
   });
   assert.equal(result.status, 200);
-  assert.deepEqual(body, { state: 'success', access_token: 'access-token', expires_in: 3600 });
+  assert.deepEqual(body, {
+    state: 'success',
+    access_token: 'access-token',
+    refresh_token: 'refresh-token',
+    expires_in: 3600,
+  });
   assert.equal(upstreamCall.upstreamUrl, 'https://oauth.yandex.ru/token');
   assert.equal(upstreamCall.init.method, 'POST');
   const form = new URLSearchParams(upstreamCall.init.body);
@@ -63,8 +68,20 @@ test('fixed upstream and server-side credentials; response excludes secrets', as
   assert.equal(form.get('code'), devicePayload.device_code);
   assert.equal(form.get('grant_type'), 'device_code');
   assert.ok(!JSON.stringify(body).includes('test-secret-never-echo'));
-  assert.ok(!JSON.stringify(body).includes('refresh-token'));
   assert.equal(result.headers.get('Cache-Control'), 'no-store');
+});
+
+test('device flow: success without refresh_token returns access_token only', async () => {
+  const { result, body } = await run({
+    access_token: 'access-token-only', expires_in: 3600,
+  });
+  assert.equal(result.status, 200);
+  assert.deepEqual(body, {
+    state: 'success',
+    access_token: 'access-token-only',
+    expires_in: 3600,
+  });
+  assert.ok(!('refresh_token' in body));
 });
 
 test('Yandex states are normalized without descriptions or raw server data', async () => {

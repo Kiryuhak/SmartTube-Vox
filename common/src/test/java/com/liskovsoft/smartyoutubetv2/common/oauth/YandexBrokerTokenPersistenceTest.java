@@ -13,6 +13,13 @@ import org.robolectric.RuntimeEnvironment;
 
 @RunWith(RobolectricTestRunner.class)
 public class YandexBrokerTokenPersistenceTest {
+    @org.junit.Before
+    public void setUp() {
+        byte[] keyBytes = new byte[32];
+        for (int i = 0; i < 32; i++) keyBytes[i] = (byte) (i + 1);
+        YandexOAuthTokenStore.setTestSecretKey(new javax.crypto.spec.SecretKeySpec(keyBytes, "AES"));
+    }
+
     @Test
     public void brokerTokenPersistsAndExpiryDisablesLively() {
         Context context = RuntimeEnvironment.getApplication();

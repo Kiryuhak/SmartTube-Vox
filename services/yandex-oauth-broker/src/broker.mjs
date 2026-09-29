@@ -52,7 +52,9 @@ function mapYandex(body) {
     if (Number.isSafeInteger(body.expires_in) && body.expires_in > 0) {
       result.expires_in = body.expires_in;
     }
-    // A refresh token is never stored or returned by device token exchange endpoint.
+    if (typeof body.refresh_token === 'string' && body.refresh_token.length > 0) {
+      result.refresh_token = body.refresh_token;
+    }
     return result;
   }
   return { state: 'temporary_server_error' };

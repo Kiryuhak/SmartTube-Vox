@@ -21,6 +21,9 @@ public class YandexOAuthTokenStoreTest {
     @Before
     public void setUp() {
         mContext = RuntimeEnvironment.getApplication();
+        byte[] keyBytes = new byte[32];
+        for (int i = 0; i < 32; i++) keyBytes[i] = (byte) (i + 1);
+        YandexOAuthTokenStore.setTestSecretKey(new javax.crypto.spec.SecretKeySpec(keyBytes, "AES"));
         YandexOAuthTokenStore.resetForTesting();
         VotData.resetForTesting();
         mStore = YandexOAuthTokenStore.instance(mContext);
@@ -67,6 +70,26 @@ public class YandexOAuthTokenStoreTest {
         mStore.updateTokens("new_access", "new_refresh", 7200);
         assertEquals("new_access", mStore.getAccessToken());
         assertEquals("new_refresh", mStore.getRefreshToken());
+    }
+
+    @Test
+    public void testFailClosedWhenKeyUnavailable() {
+        mStore.saveTokens("valid_access", "valid_refresh", 3600);
+        assertEquals("valid_access", mStore.getAccessToken());
+
+        // Simulate KeyStore failure / unavailable key
+        YandexOAuthTokenStore.setTestSecretKey(null);
+        YandexOAuthTokenStore.resetForTesting();
+        YandexOAuthTokenStore unkeyedStore = YandexOAuthTokenStore.instance(mContext);
+
+        // When key is unavailable, must fail closed without crashing or plaintext leakage
+        assertEquals("", unkeyedStore.getAccessToken());
+        assertEquals("", unkeyedStore.getRefreshToken());
+        assertFalse(unkeyedStore.hasAccessToken());
+
+        // Attempting to save without a valid key must abort without writing corrupt data
+        unkeyedStore.saveTokens("new_access", "new_refresh", 3600);
+        assertEquals("", unkeyedStore.getAccessToken());
     }
 
     @Test

@@ -363,6 +363,7 @@ public class YandexDeviceAuthDialog {
                                     break;
                                 case SUCCESS:
                                     onTokenReceived(sessionId, event.result.accessToken,
+                                            event.result.refreshToken,
                                             event.result.expiresInSeconds);
                                     break;
                             }
@@ -376,12 +377,12 @@ public class YandexDeviceAuthDialog {
     }
 
     @MainThread
-    private void onTokenReceived(int sessionId, String token, long expiresInSeconds) {
+    private void onTokenReceived(int sessionId, String token, String refreshToken, long expiresInSeconds) {
         if (!isSessionCurrent(sessionId)) {
             return; // stale callback — не применяем токен
         }
         invalidateSessionAndStopPolling();
-        // Сохраняем токен: setOAuthToken устанавливает UNVERIFIED + включает Lively
+        // Сохраняем токен: setOAuthTokens устанавливает UNVERIFIED + включает Lively
         if (!VotOAuthTokenValidator.isValid(token)) {
             Log.w(TAG, "Yandex OAuth returned an invalid token");
             mStatusView.setText(R.string.vot_device_auth_network_error);
@@ -389,9 +390,9 @@ public class YandexDeviceAuthDialog {
             mRefreshButton.requestFocus();
             return;
         }
-        mVotData.setOAuthToken(token, expiresInSeconds);
+        mVotData.setOAuthTokens(token, refreshToken, expiresInSeconds);
         // token здесь не логируется
-        Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true)");
+        Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true, refreshPresent=%b)", refreshToken != null && !refreshToken.isEmpty());
         mStatusView.setText(R.string.vot_device_auth_success);
         mCodeView.setText("✓");
         mTimerView.setText("");

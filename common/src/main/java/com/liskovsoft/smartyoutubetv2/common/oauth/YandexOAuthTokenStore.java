@@ -79,25 +79,44 @@ public class YandexOAuthTokenStore {
         mPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
+    private static SecretKey sTestSecretKey;
+
+    @VisibleForTesting
+    public static synchronized void setTestSecretKey(@Nullable SecretKey key) {
+        sTestSecretKey = key;
+    }
+
     public synchronized void saveTokens(@Nullable String accessToken, @Nullable String refreshToken, long expiresInSeconds) {
         String normalizedAccess = normalizeToken(accessToken);
         String normalizedRefresh = normalizeToken(refreshToken);
 
-        SharedPreferences.Editor editor = mPrefs.edit();
+        String encAccess = null;
         if (!TextUtils.isEmpty(normalizedAccess)) {
-            String encAccess = encrypt(normalizedAccess);
-            if (encAccess != null) {
-                editor.putString(PREF_ENC_ACCESS_TOKEN, encAccess);
+            encAccess = encrypt(normalizedAccess);
+            if (encAccess == null) {
+                Log.e(TAG, "Failed to encrypt access token; aborting save to maintain consistency");
+                return;
             }
+        }
+
+        String encRefresh = null;
+        if (!TextUtils.isEmpty(normalizedRefresh)) {
+            encRefresh = encrypt(normalizedRefresh);
+            if (encRefresh == null) {
+                Log.e(TAG, "Failed to encrypt refresh token; aborting save to maintain consistency");
+                return;
+            }
+        }
+
+        SharedPreferences.Editor editor = mPrefs.edit();
+        if (encAccess != null) {
+            editor.putString(PREF_ENC_ACCESS_TOKEN, encAccess);
         } else {
             editor.remove(PREF_ENC_ACCESS_TOKEN);
         }
 
-        if (!TextUtils.isEmpty(normalizedRefresh)) {
-            String encRefresh = encrypt(normalizedRefresh);
-            if (encRefresh != null) {
-                editor.putString(PREF_ENC_REFRESH_TOKEN, encRefresh);
-            }
+        if (encRefresh != null) {
+            editor.putString(PREF_ENC_REFRESH_TOKEN, encRefresh);
         } else {
             editor.remove(PREF_ENC_REFRESH_TOKEN);
         }
@@ -121,18 +140,27 @@ public class YandexOAuthTokenStore {
         String normalizedAccess = normalizeToken(accessToken);
         String normalizedRefresh = normalizeToken(refreshToken);
 
-        SharedPreferences.Editor editor = mPrefs.edit();
         String encAccess = encrypt(normalizedAccess);
-        if (encAccess != null) {
-            editor.putString(PREF_ENC_ACCESS_TOKEN, encAccess);
+        if (encAccess == null) {
+            Log.e(TAG, "Failed to encrypt new access token; preserving previous credentials");
+            return;
         }
 
-        // Only replace refresh_token if new one was provided (token rotation)
+        String encRefresh = null;
         if (!TextUtils.isEmpty(normalizedRefresh)) {
-            String encRefresh = encrypt(normalizedRefresh);
-            if (encRefresh != null) {
-                editor.putString(PREF_ENC_REFRESH_TOKEN, encRefresh);
+            encRefresh = encrypt(normalizedRefresh);
+            if (encRefresh == null) {
+                Log.e(TAG, "Failed to encrypt new rotated refresh token; preserving previous credentials");
+                return;
             }
+        }
+
+        SharedPreferences.Editor editor = mPrefs.edit();
+        editor.putString(PREF_ENC_ACCESS_TOKEN, encAccess);
+
+        // Only replace refresh_token if new one was successfully provided and encrypted
+        if (encRefresh != null) {
+            editor.putString(PREF_ENC_REFRESH_TOKEN, encRefresh);
         }
 
         long now = System.currentTimeMillis();
@@ -313,10 +341,13 @@ public class YandexOAuthTokenStore {
 
     @Nullable
     private synchronized SecretKey getOrCreateSecretKey() {
+        if (sTestSecretKey != null) {
+            return sTestSecretKey;
+        }
         if (mCachedKey != null) return mCachedKey;
 
-        // Try AndroidKeyStore first if API >= 23 and not marked failed
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !mKeyStoreFailed) {
+        // API >= 23: ключ хранится через AndroidKeyStore (fail-closed при сбое)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 KeyStore keyStore = KeyStore.getInstance(ANDROID_KEY_STORE);
                 keyStore.load(null);
@@ -340,17 +371,17 @@ public class YandexOAuthTokenStore {
                     return mCachedKey;
                 }
             } catch (Throwable t) {
-                Log.w(TAG, "AndroidKeyStore unavailable (%s), falling back to app-private key", t.getClass().getSimpleName());
-                mKeyStoreFailed = true;
+                Log.e(TAG, "AndroidKeyStore unavailable or failed: %s (fail-closed on API 23+)", t.getClass().getSimpleName());
+                return null;
             }
         }
 
-        // App-private installation key fallback (for API < 23, JVM unit tests, or broken KeyStore ROMs)
+        // API < 23: закрытый ключ приложения для устаревших версий Android (API 21-22)
         try {
             mCachedKey = getOrCreatePrivateFileKey();
             return mCachedKey;
         } catch (Exception e) {
-            Log.e(TAG, "Failed to initialize app-private key: %s", e.getClass().getSimpleName());
+            Log.e(TAG, "Failed to initialize app-private legacy key: %s", e.getClass().getSimpleName());
             return null;
         }
     }
