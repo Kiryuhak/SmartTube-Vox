@@ -1,0 +1,71 @@
+package com.liskovsoft.smartyoutubetv2.common.oauth;
+
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+
+@RunWith(RobolectricTestRunner.class)
+public class YandexBrokerClientTest {
+    @Test
+    public void normalizedStatesHaveExpectedLifetime() {
+        assertFalse(YandexBrokerClient.parse("{\"state\":\"authorization_pending\"}", 200, 0).isTerminal());
+        assertFalse(YandexBrokerClient.parse("{\"state\":\"slow_down\"}", 200, 0).isTerminal());
+        assertFalse(YandexBrokerClient.parse("{\"state\":\"rate_limited\"}", 429, 5).isTerminal());
+        assertEquals(12, YandexBrokerClient.parse("{\"state\":\"rate_limited\"}", 429, 12).retryAfterSeconds);
+        assertTrue(YandexBrokerClient.parse("{\"state\":\"expired_token\"}", 200, 0).isTerminal());
+        assertTrue(YandexBrokerClient.parse("{\"state\":\"invalid_client\"}", 200, 0).isTerminal());
+        assertFalse(YandexBrokerClient.parse("{\"state\":\"network_error\"}", 502, 0).isTerminal());
+    }
+
+    @Test
+    public void successRequiresTokenAndNeverIncludesItInResultString() {
+        YandexBrokerClient.Result result = YandexBrokerClient.parse(
+                "{\"state\":\"success\",\"access_token\":\"test-only-token\",\"expires_in\":3600}", 200, 0);
+        assertEquals(YandexBrokerClient.State.SUCCESS, result.state);
+        assertEquals("test-only-token", result.accessToken);
+        assertEquals(3600, result.expiresInSeconds);
+        assertTrue(result.isTerminal());
+        assertFalse(result.toString().contains("test-only-token"));
+        assertEquals(YandexBrokerClient.State.TEMPORARY_SERVER_ERROR,
+                YandexBrokerClient.parse("{\"state\":\"success\"}", 200, 0).state);
+    }
+
+    @Test
+    public void endpointRejectsNonLocalCleartext() {
+        try {
+            new YandexBrokerClient("http://example.com");
+            fail("Must reject remote HTTP");
+        } catch (IllegalArgumentException expected) {
+            // expected
+        }
+        new YandexBrokerClient("http://127.0.0.1:8787");
+    }
+
+    @Test
+    public void pollPolicySlowsAndBoundsFailures() {
+        YandexBrokerPollPolicy policy = new YandexBrokerPollPolicy(5);
+        assertTrue(policy.accept(YandexBrokerClient.parse("{\"state\":\"authorization_pending\"}", 200, 0)));
+        assertEquals(5, policy.nextIntervalSeconds());
+        policy.accept(YandexBrokerClient.parse("{\"state\":\"slow_down\"}", 200, 0));
+        assertEquals(10, policy.nextIntervalSeconds());
+        policy.accept(YandexBrokerClient.parse("{\"state\":\"rate_limited\"}", 429, 15));
+        assertEquals(15, policy.nextIntervalSeconds());
+        YandexBrokerClient.Result error = YandexBrokerClient.parse("{\"state\":\"network_error\"}", 502, 0);
+        assertTrue(policy.accept(error));
+        assertTrue(policy.accept(error));
+        assertFalse(policy.accept(error));
+    }
+
+    @Test
+    public void cancelledClientDoesNotOpenConnection() {
+        YandexBrokerClient client = new YandexBrokerClient("http://127.0.0.1:8787", url -> {
+            fail("Cancelled request must not open a socket");
+            return null;
+        });
+        client.cancel();
+        assertEquals(YandexBrokerClient.State.NETWORK_ERROR,
+                client.poll("mock-device-code-0123456789abcdef").state);
+    }
+}

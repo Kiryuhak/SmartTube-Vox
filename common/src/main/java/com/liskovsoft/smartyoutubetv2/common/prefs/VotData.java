@@ -10,6 +10,7 @@ import com.liskovsoft.sharedutils.prefs.SharedPreferencesBase;
 public class VotData extends SharedPreferencesBase {
     private static final String PREFS_NAME = "vot_data";
     private static final String OAUTH_TOKEN = "yandex_oauth_token";
+    private static final String OAUTH_EXPIRES_AT = "yandex_oauth_expires_at";
     private static final String LIVELY_VOICE = "use_lively_voice";
     private static final String PREF_ONBOARDING_SHOWN = "yandex_onboarding_shown";
     private static final String PREF_PLAYER_HINT_SHOWN = "vot_player_hint_shown";
@@ -68,8 +69,17 @@ public class VotData extends SharedPreferencesBase {
     }
 
     public void setOAuthToken(String token) {
+        setOAuthToken(token, 0);
+    }
+
+    /** The expiry is supplied by the broker; zero means unknown (manual or SDK token). */
+    public void setOAuthToken(String token, long expiresInSeconds) {
         String normalized = normalizeToken(token);
         putString(OAUTH_TOKEN, normalized);
+        long now = System.currentTimeMillis();
+        long maxSeconds = (Long.MAX_VALUE - now) / 1000;
+        putLong(OAUTH_EXPIRES_AT, !TextUtils.isEmpty(normalized) && expiresInSeconds > 0
+                ? now + Math.min(expiresInSeconds, maxSeconds) * 1000 : 0);
         if (!TextUtils.isEmpty(normalized)) {
             // Новый токен — сбрасываем в UNVERIFIED: он ещё не проверен бэкендом
             setAuthState(AuthState.UNVERIFIED);
@@ -82,6 +92,7 @@ public class VotData extends SharedPreferencesBase {
 
     public void clearOAuthToken() {
         putString(OAUTH_TOKEN, "");
+        putLong(OAUTH_EXPIRES_AT, 0);
         setAuthState(AuthState.ABSENT);
         setLivelyVoiceEnabled(false);
     }
@@ -139,6 +150,9 @@ public class VotData extends SharedPreferencesBase {
         if (!hasOAuthToken()) {
             return AuthState.ABSENT;
         }
+        if (isOAuthTokenExpired()) {
+            return AuthState.REJECTED;
+        }
         String stored = getString(AUTH_STATE, AuthState.UNVERIFIED.name());
         try {
             return AuthState.valueOf(stored);
@@ -152,7 +166,12 @@ public class VotData extends SharedPreferencesBase {
     }
 
     public boolean isLivelyVoiceEnabled() {
-        return hasOAuthToken() && getBoolean(LIVELY_VOICE, true);
+        return hasOAuthToken() && !isOAuthTokenExpired() && getBoolean(LIVELY_VOICE, true);
+    }
+
+    public boolean isOAuthTokenExpired() {
+        long expiry = getLong(OAUTH_EXPIRES_AT, 0);
+        return expiry > 0 && System.currentTimeMillis() >= expiry;
     }
 
     public void setLivelyVoiceEnabled(boolean enabled) {

@@ -28,7 +28,17 @@ android {
     }
 
     buildTypes {
+        debug {
+            // A local HTTPS broker or emulator loopback can be supplied for development.
+            // Release artifacts always ship with Device Flow disabled.
+            def brokerUrl = (project.findProperty('yandexOAuthBrokerUrl') ?: '').toString()
+            if (brokerUrl && !(brokerUrl ==~ /https:\/\/[^\s]+|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/[^\s]*)?/)) {
+                throw new GradleException('yandexOAuthBrokerUrl must be HTTPS or localhost HTTP')
+            }
+            buildConfigField 'String', 'YANDEX_OAUTH_BROKER_URL', '"' + brokerUrl.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        }
         release {
+            buildConfigField 'String', 'YANDEX_OAUTH_BROKER_URL', '""'
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

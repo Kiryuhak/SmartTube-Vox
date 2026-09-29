@@ -25,12 +25,12 @@ import java.nio.charset.StandardCharsets;
  *
  * Endpoints:
  *   POST https://oauth.yandex.com/device/code  — получение device_code + user_code
- *   POST https://oauth.yandex.com/token        — polling для получения access_token
+ *   POST https://oauth.yandex.com/token        — legacy direct polling (not used by the TV dialog)
  *
  * БЕЗОПАСНОСТЬ:
  *   — access_token никогда не логируется
  *   — device_code не логируется (только user_code — публичный по протоколу)
- *   — client_secret отсутствует (Yandex Device Flow не требует secret для public app)
+ *   — client_secret отсутствует в APK; текущему OAuth-приложению для обмена нужен брокер
  */
 public class YandexDeviceCodeClient {
 
@@ -46,14 +46,21 @@ public class YandexDeviceCodeClient {
     }
 
     private final HttpFactory mHttpFactory;
+    private final String mDeviceCodeUrl;
 
     public YandexDeviceCodeClient() {
-        this(url -> (HttpURLConnection) new URL(url).openConnection());
+        this(url -> (HttpURLConnection) new URL(url).openConnection(), DEVICE_CODE_URL);
     }
 
     @VisibleForTesting
     public YandexDeviceCodeClient(@NonNull HttpFactory factory) {
+        this(factory, DEVICE_CODE_URL);
+    }
+
+    @VisibleForTesting
+    public YandexDeviceCodeClient(@NonNull HttpFactory factory, @NonNull String deviceCodeUrl) {
         this.mHttpFactory = factory;
+        this.mDeviceCodeUrl = deviceCodeUrl;
     }
 
     /**
@@ -69,7 +76,7 @@ public class YandexDeviceCodeClient {
         String body = "client_id=" + encode(clientId)
                 + "&scope=" + encode("login:info");
 
-        String json = post(DEVICE_CODE_URL, body);
+        String json = post(mDeviceCodeUrl, body);
         return parseDeviceCodeResponse(json);
     }
 

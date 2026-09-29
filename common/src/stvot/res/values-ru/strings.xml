@@ -32,6 +32,7 @@
     <string name="vot_device_auth_title">Вход в Яндекс ID</string>
     <string name="vot_device_auth_step1">Откройте на телефоне или компьютере:</string>
     <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_mock_url">ЛОКАЛЬНЫЙ MOCK · без входа в Яндекс</string>
     <string name="vot_device_auth_step2">Затем введите этот код:</string>
     <string name="vot_device_auth_timer">Код действителен: %s</string>
     <string name="vot_device_auth_expired">Код истёк. Запросите новый.</string>
@@ -42,6 +43,7 @@
     <string name="vot_device_auth_network_error">Ошибка сети. Проверьте соединение.</string>
     <string name="vot_device_auth_pending">Ожидание подтверждения…</string>
     <string name="vot_device_auth_invalid_client">Ошибка конфигурации клиента Яндекс ID. Используйте ручной ввод токена.</string>
+    <string name="vot_device_auth_broker_unavailable">Автоматический вход в Яндекс пока недоступен. Используйте ручной ввод токена.</string>
 
     <!-- Pulse: Пользовательские статусы перевода -->
     <string name="vot_preparing">Подготовка перевода…</string>
