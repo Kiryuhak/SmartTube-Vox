@@ -292,11 +292,25 @@ public class YandexOAuthTokenStore {
         try {
             SecretKey key = getOrCreateSecretKey();
             if (key == null) return null;
-            byte[] iv = new byte[GCM_IV_LENGTH_BYTES];
-            mRandom.nextBytes(iv);
 
             Cipher cipher = Cipher.getInstance(AES_GCM_NO_PADDING);
-            cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv));
+            try {
+                cipher.init(Cipher.ENCRYPT_MODE, key);
+            } catch (java.security.InvalidKeyException e) {
+                // Some providers (e.g. mock/legacy) may require explicit GCMParameterSpec
+                byte[] manualIv = new byte[GCM_IV_LENGTH_BYTES];
+                mRandom.nextBytes(manualIv);
+                cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, manualIv));
+            }
+
+            byte[] iv = cipher.getIV();
+            if (iv == null || iv.length != GCM_IV_LENGTH_BYTES) {
+                byte[] manualIv = new byte[GCM_IV_LENGTH_BYTES];
+                mRandom.nextBytes(manualIv);
+                cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, manualIv));
+                iv = cipher.getIV() != null ? cipher.getIV() : manualIv;
+            }
+
             byte[] cipherText = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
 
             byte[] combined = new byte[1 + GCM_IV_LENGTH_BYTES + cipherText.length];
