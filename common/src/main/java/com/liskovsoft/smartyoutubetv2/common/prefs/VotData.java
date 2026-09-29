@@ -52,9 +52,12 @@ public class VotData extends SharedPreferencesBase {
 
     @SuppressLint("StaticFieldLeak")
     private static VotData sInstance;
+    private final com.liskovsoft.smartyoutubetv2.common.oauth.YandexOAuthTokenStore mTokenStore;
 
     private VotData(Context context) {
         super(context.getApplicationContext(), PREFS_NAME);
+        mTokenStore = com.liskovsoft.smartyoutubetv2.common.oauth.YandexOAuthTokenStore.instance(context.getApplicationContext());
+        mTokenStore.migrateFromLegacyPrefs(this);
     }
 
     public static VotData instance(Context context) {
@@ -64,8 +67,21 @@ public class VotData extends SharedPreferencesBase {
         return sInstance;
     }
 
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTesting() {
+        sInstance = null;
+    }
+
     public String getOAuthToken() {
-        return getString(OAUTH_TOKEN, "");
+        return mTokenStore.getAccessToken();
+    }
+
+    public String getRefreshToken() {
+        return mTokenStore.getRefreshToken();
+    }
+
+    public boolean hasRefreshToken() {
+        return mTokenStore.hasRefreshToken();
     }
 
     public void setOAuthToken(String token) {
@@ -74,26 +90,20 @@ public class VotData extends SharedPreferencesBase {
 
     /** The expiry is supplied by the broker; zero means unknown (manual or SDK token). */
     public void setOAuthToken(String token, long expiresInSeconds) {
-        String normalized = normalizeToken(token);
-        putString(OAUTH_TOKEN, normalized);
-        long now = System.currentTimeMillis();
-        long maxSeconds = (Long.MAX_VALUE - now) / 1000;
-        putLong(OAUTH_EXPIRES_AT, !TextUtils.isEmpty(normalized) && expiresInSeconds > 0
-                ? now + Math.min(expiresInSeconds, maxSeconds) * 1000 : 0);
-        if (!TextUtils.isEmpty(normalized)) {
-            // Новый токен — сбрасываем в UNVERIFIED: он ещё не проверен бэкендом
-            setAuthState(AuthState.UNVERIFIED);
+        setOAuthTokens(token, null, expiresInSeconds);
+    }
+
+    public void setOAuthTokens(String accessToken, String refreshToken, long expiresInSeconds) {
+        mTokenStore.saveTokens(accessToken, refreshToken, expiresInSeconds);
+        if (mTokenStore.hasAccessToken()) {
             setLivelyVoiceEnabled(true);
         } else {
-            setAuthState(AuthState.ABSENT);
             setLivelyVoiceEnabled(false);
         }
     }
 
     public void clearOAuthToken() {
-        putString(OAUTH_TOKEN, "");
-        putLong(OAUTH_EXPIRES_AT, 0);
-        setAuthState(AuthState.ABSENT);
+        mTokenStore.clear();
         setLivelyVoiceEnabled(false);
     }
 
@@ -104,7 +114,7 @@ public class VotData extends SharedPreferencesBase {
     /**
      * Помечает OAuth-токен как отклонённый бэкендом (HTTP 401).
      *
-     * ВАЖНО: токен НЕ удаляется из SharedPreferences — пользователь может
+     * ВАЖНО: токен НЕ удаляется из защищённого хранилища — пользователь может
      * исправить его или пройти повторную авторизацию через Яндекс ID.
      * Lively Voice выключается до нового подтверждения.
      *
@@ -113,8 +123,8 @@ public class VotData extends SharedPreferencesBase {
      *                      от отклонения нового токена старым откликом.
      */
     public void markOAuthRejected(String rejectedToken) {
-        if (hasOAuthToken() && (rejectedToken == null || Helpers.equals(getOAuthToken(), rejectedToken))) {
-            setAuthState(AuthState.REJECTED);
+        mTokenStore.markRejected(rejectedToken);
+        if (mTokenStore.getAuthState() == AuthState.REJECTED) {
             setLivelyVoiceEnabled(false);
         }
     }
@@ -132,9 +142,7 @@ public class VotData extends SharedPreferencesBase {
      *                       что защищает от подтверждения старым ответом уже заменённого токена.
      */
     public void markOAuthConfirmed(String confirmedToken) {
-        if (hasOAuthToken() && (confirmedToken == null || Helpers.equals(getOAuthToken(), confirmedToken))) {
-            setAuthState(AuthState.CONFIRMED);
-        }
+        mTokenStore.markConfirmed(confirmedToken);
     }
 
     public void markOAuthConfirmed() {
@@ -142,36 +150,33 @@ public class VotData extends SharedPreferencesBase {
     }
 
     public boolean hasOAuthToken() {
-        return !TextUtils.isEmpty(getOAuthToken());
+        return mTokenStore.hasAccessToken();
     }
 
     /** @return текущее состояние авторизации OAuth */
     public AuthState getAuthState() {
-        if (!hasOAuthToken()) {
-            return AuthState.ABSENT;
-        }
-        if (isOAuthTokenExpired()) {
-            return AuthState.REJECTED;
-        }
-        String stored = getString(AUTH_STATE, AuthState.UNVERIFIED.name());
-        try {
-            return AuthState.valueOf(stored);
-        } catch (IllegalArgumentException e) {
-            return AuthState.UNVERIFIED;
-        }
-    }
-
-    private void setAuthState(AuthState state) {
-        putString(AUTH_STATE, state.name());
+        return mTokenStore.getAuthState();
     }
 
     public boolean isLivelyVoiceEnabled() {
-        return hasOAuthToken() && !isOAuthTokenExpired() && getBoolean(LIVELY_VOICE, true);
+        return hasOAuthToken() && (!isOAuthTokenExpired() || hasRefreshToken()) && getBoolean(LIVELY_VOICE, true);
     }
 
     public boolean isOAuthTokenExpired() {
-        long expiry = getLong(OAUTH_EXPIRES_AT, 0);
-        return expiry > 0 && System.currentTimeMillis() >= expiry;
+        return mTokenStore.isExpired();
+    }
+
+    public String getRawLegacyToken() {
+        return getString(OAUTH_TOKEN, "");
+    }
+
+    public long getRawLegacyExpiresAt() {
+        return getLong(OAUTH_EXPIRES_AT, 0);
+    }
+
+    public void clearRawLegacyToken() {
+        putString(OAUTH_TOKEN, "");
+        putLong(OAUTH_EXPIRES_AT, 0);
     }
 
     public void setLivelyVoiceEnabled(boolean enabled) {

@@ -1,5 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.common.oauth;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.json.JSONException;
@@ -25,12 +27,14 @@ public final class YandexBrokerClient {
     public static final class Result {
         public final State state;
         public final String accessToken;
+        public final String refreshToken;
         public final int retryAfterSeconds;
         public final long expiresInSeconds;
 
-        private Result(State state, String accessToken, int retryAfterSeconds, long expiresInSeconds) {
+        private Result(State state, String accessToken, String refreshToken, int retryAfterSeconds, long expiresInSeconds) {
             this.state = state;
             this.accessToken = accessToken;
+            this.refreshToken = refreshToken;
             this.retryAfterSeconds = retryAfterSeconds;
             this.expiresInSeconds = expiresInSeconds;
         }
@@ -47,7 +51,9 @@ public final class YandexBrokerClient {
         HttpURLConnection open(String url) throws IOException;
     }
 
-    private final String endpoint;
+    private final String baseUrl;
+    private final String deviceEndpoint;
+    private final String refreshEndpoint;
     private final ConnectionFactory connectionFactory;
     private volatile HttpURLConnection activeConnection;
     private volatile boolean cancelled;
@@ -57,7 +63,7 @@ public final class YandexBrokerClient {
     }
 
     static Result expired() {
-        return new Result(State.EXPIRED_TOKEN, null, 0, 0);
+        return new Result(State.EXPIRED_TOKEN, null, null, 0, 0);
     }
 
     @VisibleForTesting
@@ -65,17 +71,41 @@ public final class YandexBrokerClient {
         if (!baseUrl.matches("https://[^\\s]+|http://(?:127\\.0\\.0\\.1|localhost)(?::\\d+)?(?:/[^\\s]*)?")) {
             throw new IllegalArgumentException("Invalid broker URL");
         }
-        endpoint = baseUrl.replaceAll("/+$", "") + "/oauth/yandex/device/token";
-        connectionFactory = factory;
+        this.baseUrl = baseUrl.replaceAll("/+$", "");
+        this.deviceEndpoint = this.baseUrl + "/oauth/yandex/device/token";
+        this.refreshEndpoint = this.baseUrl + "/oauth/yandex/refresh";
+        this.connectionFactory = factory;
     }
 
     public Result poll(String deviceCode) {
-        if (cancelled) return new Result(State.NETWORK_ERROR, null, 0, 0);
+        try {
+            JSONObject body = new JSONObject()
+                    .put("device_code", deviceCode)
+                    .put("request_id", UUID.randomUUID().toString());
+            return executePost(deviceEndpoint, body.toString());
+        } catch (JSONException e) {
+            return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+        }
+    }
+
+    public Result refresh(@NonNull String refreshToken) {
+        try {
+            JSONObject body = new JSONObject()
+                    .put("refresh_token", refreshToken)
+                    .put("request_id", UUID.randomUUID().toString());
+            return executePost(refreshEndpoint, body.toString());
+        } catch (JSONException e) {
+            return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+        }
+    }
+
+    private Result executePost(String targetUrl, String jsonBody) {
+        if (cancelled) return new Result(State.NETWORK_ERROR, null, null, 0, 0);
         HttpURLConnection connection = null;
         try {
-            connection = connectionFactory.open(endpoint);
+            connection = connectionFactory.open(targetUrl);
             activeConnection = connection;
-            if (cancelled) return new Result(State.NETWORK_ERROR, null, 0, 0);
+            if (cancelled) return new Result(State.NETWORK_ERROR, null, null, 0, 0);
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setConnectTimeout(10_000);
@@ -83,11 +113,8 @@ public final class YandexBrokerClient {
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Cache-Control", "no-store");
-            byte[] request = new JSONObject()
-                    .put("device_code", deviceCode)
-                    .put("request_id", UUID.randomUUID().toString())
-                    .toString().getBytes(StandardCharsets.UTF_8);
-            if (request.length > 1024) return new Result(State.NETWORK_ERROR, null, 0, 0);
+            byte[] request = jsonBody.getBytes(StandardCharsets.UTF_8);
+            if (request.length > 1024) return new Result(State.NETWORK_ERROR, null, null, 0, 0);
             try (OutputStream out = connection.getOutputStream()) {
                 out.write(request);
             }
@@ -96,8 +123,8 @@ public final class YandexBrokerClient {
             String response = readBounded(in);
             int retry = parseRetryAfter(connection.getHeaderField("Retry-After"));
             return parse(response, status, retry);
-        } catch (IOException | JSONException e) {
-            return new Result(State.NETWORK_ERROR, null, 0, 0);
+        } catch (IOException e) {
+            return new Result(State.NETWORK_ERROR, null, null, 0, 0);
         } finally {
             if (connection != null) connection.disconnect();
             activeConnection = null;
@@ -137,17 +164,18 @@ public final class YandexBrokerClient {
             State state = State.valueOf(rawState.toUpperCase(java.util.Locale.ROOT));
             if (state == State.SUCCESS) {
                 String token = object.optString("access_token", "");
+                String refreshToken = object.has("refresh_token") ? object.optString("refresh_token", null) : null;
                 long expiresIn = object.optLong("expires_in", 0);
                 return httpStatus == 200 && !token.isEmpty()
-                        ? new Result(state, token, 0, Math.max(0, expiresIn))
-                        : new Result(State.TEMPORARY_SERVER_ERROR, null, 0, 0);
+                        ? new Result(state, token, refreshToken, 0, Math.max(0, expiresIn))
+                        : new Result(State.TEMPORARY_SERVER_ERROR, null, null, 0, 0);
             }
             if (state == State.RATE_LIMITED) {
-                return new Result(state, null, Math.max(5, Math.min(60, retryAfter)), 0);
+                return new Result(state, null, null, Math.max(5, Math.min(60, retryAfter)), 0);
             }
-            return new Result(state, null, 0, 0);
+            return new Result(state, null, null, 0, 0);
         } catch (JSONException | IllegalArgumentException e) {
-            return new Result(State.TEMPORARY_SERVER_ERROR, null, 0, 0);
+            return new Result(State.TEMPORARY_SERVER_ERROR, null, null, 0, 0);
         }
     }
 }

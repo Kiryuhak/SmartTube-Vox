@@ -237,11 +237,36 @@ public class VotClient {
 
             VotTranslationResponse response = null;
             int initTransientErrors = 0;
+            boolean authRefreshed = false;
             while (!emitter.isDisposed()) {
                 try {
                     response = requestTranslation(
                             youtubeUrl, durationSec, subsequent || (initTransientErrors > 0), useLively, requestOAuthToken);
                     break;
+                } catch (VotHttpException e) {
+                    if (e.getStatusCode() == 401 && useLively && !authRefreshed && mVotData != null && mVotData.hasRefreshToken()) {
+                        logI("VOT: HTTP 401 on initial request with refresh token available; attempting refresh");
+                        Context ctx = mVotData.getContext();
+                        String refreshedToken = (ctx != null)
+                                ? com.liskovsoft.smartyoutubetv2.common.oauth.YandexOAuthTokenRefresher.refreshSync(ctx)
+                                : null;
+                        if (refreshedToken != null && !refreshedToken.isEmpty()) {
+                            authRefreshed = true;
+                            requestOAuthToken = refreshedToken;
+                            logI("VOT: Token refreshed successfully, retrying initial request once");
+                            continue;
+                        }
+                    }
+                    if (isTransientException(e) && initTransientErrors < MAX_CONSECUTIVE_TRANSIENT_RETRIES && !emitter.isDisposed()) {
+                        initTransientErrors++;
+                        int retryAfter = e.getRetryAfterSec();
+                        int waitDelay = retryAfter > 0 ? Math.min(Math.max(3, retryAfter), 30) : 5;
+                        logW("Transient error on initial VOT request (retry %d/%d in %ds): %s",
+                                initTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, waitDelay, e.getClass().getSimpleName());
+                        sleep(waitDelay, emitter);
+                        continue;
+                    }
+                    throw e;
                 } catch (IOException e) {
                     if (isTransientException(e) && initTransientErrors < MAX_CONSECUTIVE_TRANSIENT_RETRIES && !emitter.isDisposed()) {
                         initTransientErrors++;
@@ -281,6 +306,36 @@ public class VotClient {
                     response = requestTranslation(
                             youtubeUrl, durationSec, true, useLively, requestOAuthToken);
                     consecutiveTransientErrors = 0;
+                } catch (VotHttpException e) {
+                    if (e.getStatusCode() == 401 && useLively && !authRefreshed && mVotData != null && mVotData.hasRefreshToken()) {
+                        logI("VOT: HTTP 401 during poll with refresh token available; attempting refresh");
+                        Context ctx = mVotData.getContext();
+                        String refreshedToken = (ctx != null)
+                                ? com.liskovsoft.smartyoutubetv2.common.oauth.YandexOAuthTokenRefresher.refreshSync(ctx)
+                                : null;
+                        if (refreshedToken != null && !refreshedToken.isEmpty()) {
+                            authRefreshed = true;
+                            requestOAuthToken = refreshedToken;
+                            logI("VOT: Token refreshed successfully during poll, retrying poll request once");
+                            response = requestTranslation(
+                                    youtubeUrl, durationSec, true, useLively, requestOAuthToken);
+                            consecutiveTransientErrors = 0;
+                        } else {
+                            throw e;
+                        }
+                    } else if (isTransientException(e)) {
+                        consecutiveTransientErrors++;
+                        int retryAfter = e.getRetryAfterSec();
+                        logW("Transient error during VOT poll attempt %d (retry %d/%d, retryAfter=%ds): %s",
+                                i + 1, consecutiveTransientErrors, MAX_CONSECUTIVE_TRANSIENT_RETRIES, retryAfter, e.getClass().getSimpleName());
+                        if (consecutiveTransientErrors <= MAX_CONSECUTIVE_TRANSIENT_RETRIES && !emitter.isDisposed()) {
+                            waitSec = retryAfter > 0 ? Math.min(Math.max(3, retryAfter), 30) : 5;
+                            continue;
+                        }
+                        throw e;
+                    } else {
+                        throw e;
+                    }
                 } catch (IOException e) {
                     if (isTransientException(e)) {
                         consecutiveTransientErrors++;
