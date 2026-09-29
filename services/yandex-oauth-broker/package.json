@@ -1,0 +1,8 @@
+{
+  "name": "smarttube-vox-yandex-oauth-broker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

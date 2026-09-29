@@ -1,0 +1,13 @@
+{
+  "name": "smarttube-vox-yandex-oauth-broker",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-09-29",
+  "durable_objects": {
+    "bindings": [
+      { "name": "RATE_GATE", "class_name": "RateGate" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RateGate"] }
+  ]
+}

@@ -32,6 +32,7 @@
     <string name="vot_device_auth_title">Sign in to Yandex ID</string>
     <string name="vot_device_auth_step1">Open on your phone or computer:</string>
     <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_mock_url">LOCAL MOCK · no Yandex sign-in</string>
     <string name="vot_device_auth_step2">Then enter this code:</string>
     <string name="vot_device_auth_timer">Code valid: %s</string>
     <string name="vot_device_auth_expired">Code expired. Request a new one.</string>
@@ -42,6 +43,7 @@
     <string name="vot_device_auth_network_error">Network error. Check your connection.</string>
     <string name="vot_device_auth_pending">Waiting for confirmation…</string>
     <string name="vot_device_auth_invalid_client">Yandex ID client configuration error. Please enter token manually.</string>
+    <string name="vot_device_auth_broker_unavailable">Automatic Yandex sign-in is not available yet. Use manual token entry.</string>
 
 
     <!-- Pulse: Translation UX statuses -->

@@ -336,20 +336,20 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         Context ctx = getContext();
         if (ctx == null) return;
 
-        if (VotOnboardingHelper.isAndroidTv(ctx) && ctx instanceof android.app.Activity) {
-            com.liskovsoft.smartyoutubetv2.common.oauth.YandexDeviceAuthDialog
-                    .show((android.app.Activity) ctx);
-        } else {
-            Intent intent = new Intent();
-            intent.setClassName(
-                    ctx,
-                    "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
-            );
-            try {
-                ctx.startActivity(intent);
-            } catch (Exception e) {
-                MessageHelpers.showMessage(ctx, R.string.vot_auth_unavailable);
-            }
+        if (VotOnboardingHelper.isAndroidTv(ctx)
+                && com.liskovsoft.smartyoutubetv2.common.oauth.YandexBrokerConfig.mode()
+                != com.liskovsoft.smartyoutubetv2.common.oauth.YandexBrokerConfig.Mode.BROKER) {
+            MessageHelpers.showMessage(ctx, R.string.vot_device_auth_broker_unavailable);
+            return;
+        }
+
+        // Own Activity puts the Device Flow dialog above the settings Activity.
+        Intent intent = new Intent();
+        intent.setClassName(ctx, "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity");
+        try {
+            ctx.startActivity(intent);
+        } catch (Exception e) {
+            MessageHelpers.showMessage(ctx, R.string.vot_auth_unavailable);
         }
     }
 

@@ -856,6 +856,7 @@
     <string name="vot_device_auth_title" translatable="false"></string>
     <string name="vot_device_auth_step1" translatable="false"></string>
     <string name="vot_device_auth_url" translatable="false"></string>
+    <string name="vot_device_auth_mock_url" translatable="false"></string>
     <string name="vot_device_auth_step2" translatable="false"></string>
     <string name="vot_device_auth_timer" translatable="false">%s</string>
     <string name="vot_device_auth_expired" translatable="false"></string>
@@ -866,6 +867,7 @@
     <string name="vot_device_auth_network_error" translatable="false"></string>
     <string name="vot_device_auth_pending" translatable="false"></string>
     <string name="vot_device_auth_invalid_client" translatable="false"></string>
+    <string name="vot_device_auth_broker_unavailable" translatable="false"></string>
     <string name="vot_player_button_switch" translatable="false"></string>
     <string name="vot_player_button_switch_desc" translatable="false"></string>
     <string name="vot_player_hud_hint" translatable="false"></string>
