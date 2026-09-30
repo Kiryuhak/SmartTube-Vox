@@ -102,4 +102,49 @@ class VoxDownloadStorageTest {
         assertTrue(deleted)
         assertFalse(trackFile.exists())
     }
+
+    @Test(expected = VoxDownloadException::class)
+    fun testPathTraversalProtectionSlash() {
+        storage.getJobDir("../evil_dir")
+    }
+
+    @Test(expected = VoxDownloadException::class)
+    fun testPathTraversalProtectionBackslash() {
+        storage.getJobDir("..\\evil_dir")
+    }
+
+    @Test(expected = VoxDownloadException::class)
+    fun testPathTraversalProtectionColon() {
+        storage.getJobDir("C:evil_dir")
+    }
+
+    @Test(expected = VoxDownloadException::class)
+    fun testPathTraversalProtectionNullByte() {
+        storage.getJobDir("evil\u0000dir")
+    }
+
+    @Test
+    fun testVideoTitleSafetyWithTraversalCharacters() {
+        // Заголовок видео с кавычками, слешами, путями не должен влиять на имя директории
+        val maliciousTitle = "../../etc/passwd: CON <malicious> \u0000"
+        val req = VoxDownloadRequest(
+            downloadId = "safe-download-id-999",
+            videoId = "UF8uR6Z6KLc",
+            videoTitle = maliciousTitle
+        )
+        storage.saveJobMetadata(
+            req,
+            VoxDownloadState.IDLE,
+            VoxTrackProgress(VoxDownloadTrack.VIDEO),
+            VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO),
+            VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO)
+        )
+
+        val loaded = storage.loadJobMetadata("safe-download-id-999")
+        assertNotNull(loaded)
+        assertEquals(maliciousTitle, loaded!!.request.videoTitle)
+        val jobDir = storage.getJobDir("safe-download-id-999")
+        assertTrue(jobDir.path.endsWith("safe-download-id-999"))
+    }
 }
+

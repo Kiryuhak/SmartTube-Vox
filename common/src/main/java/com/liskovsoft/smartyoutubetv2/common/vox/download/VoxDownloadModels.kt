@@ -137,6 +137,7 @@ data class VoxDownloadProgress(
 enum class VoxDownloadErrorCode {
     AUTH_REQUIRED,
     INSUFFICIENT_STORAGE,
+    STORAGE_ERROR,
     URL_EXPIRED,
     NETWORK_ERROR,
     STREAM_UNAVAILABLE,

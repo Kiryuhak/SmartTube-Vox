@@ -144,6 +144,49 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             } else {
                 Log.w(TAG, "DOWNLOAD_PROBE_STATUS: Job not found for id=" + downloadId);
             }
+        } else if ("testDownloadCancel".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context);
+                coordinator.cancelDownload(downloadId);
+                Log.i(TAG, "DOWNLOAD_PROBE_CANCEL_REQUESTED: id=" + downloadId);
+            }
+        } else if ("testDownloadPause".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context);
+                coordinator.pauseDownload(downloadId);
+                Log.i(TAG, "DOWNLOAD_PROBE_PAUSE_REQUESTED: id=" + downloadId);
+            }
+        } else if ("testDownloadResume".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context);
+                coordinator.resumeDownload(downloadId, new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadListener() {
+                    @Override
+                    public void onStateChanged(com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadProgress progress) {
+                        Log.i(TAG, "DOWNLOAD_PROBE: state=" + progress.getState()
+                                + " totalBytes=" + progress.getTotalBytesDownloaded());
+                    }
+
+                    @Override
+                    public void onProgressUpdated(com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadProgress progress) {
+                        Log.i(TAG, "DOWNLOAD_PROBE_PROGRESS: state=" + progress.getState()
+                                + " videoBytes=" + progress.getVideo().getBytesDownloaded()
+                                + " origAudioBytes=" + progress.getOriginalAudio().getBytesDownloaded()
+                                + " transAudioBytes=" + progress.getTranslatedAudio().getBytesDownloaded());
+                    }
+
+                    @Override
+                    public void onError(String id, com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadErrorCode code, String message) {
+                        Log.e(TAG, "DOWNLOAD_PROBE_ERROR: id=" + id + " code=" + code + " msg=" + message);
+                    }
+                });
+                Log.i(TAG, "DOWNLOAD_PROBE_RESUME_REQUESTED: id=" + downloadId);
+            }
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }

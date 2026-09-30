@@ -274,6 +274,13 @@ class VoxDownloadCoordinator(
                     }
                 )
 
+                if (!targetFile.exists() || targetFile.length() <= 0L) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.STORAGE_ERROR,
+                        "Video track file is missing or empty after download"
+                    )
+                }
+
                 job.updateTrackProgress(
                     VoxDownloadTrack.VIDEO,
                     targetFile.length(),
@@ -312,6 +319,13 @@ class VoxDownloadCoordinator(
                         streamResolver.resolveOriginalAudio(job.request.videoId).url
                     }
                 )
+
+                if (!targetFile.exists() || targetFile.length() <= 0L) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.STORAGE_ERROR,
+                        "Original audio track file is missing or empty after download"
+                    )
+                }
 
                 job.updateTrackProgress(
                     VoxDownloadTrack.ORIGINAL_AUDIO,
@@ -363,6 +377,13 @@ class VoxDownloadCoordinator(
                     }
                 )
 
+                if (!targetFile.exists() || targetFile.length() <= 0L) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.STORAGE_ERROR,
+                        "Translated audio track file is missing or empty after download"
+                    )
+                }
+
                 job.updateTrackProgress(
                     VoxDownloadTrack.TRANSLATED_AUDIO,
                     targetFile.length(),
@@ -374,7 +395,22 @@ class VoxDownloadCoordinator(
 
             if (isStale(job, expectedGen)) return
 
-            // 6. Все потоки скачаны. Финальное техническое состояние Patch #4: READY_FOR_MUX
+            // 6. Проверка инварианта: все 3 файла должны существовать и иметь ненулевой размер
+            val videoFile = storage.getTrackFile(downloadId, VoxDownloadTrack.VIDEO)
+            val origAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO)
+            val transAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)
+
+            if (!videoFile.exists() || videoFile.length() <= 0L ||
+                !origAudioFile.exists() || origAudioFile.length() <= 0L ||
+                !transAudioFile.exists() || transAudioFile.length() <= 0L
+            ) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.STORAGE_ERROR,
+                    "Incomplete tracks detected before READY_FOR_MUX (video=${videoFile.length()}B, origAudio=${origAudioFile.length()}B, transAudio=${transAudioFile.length()}B)"
+                )
+            }
+
+            // Финальное техническое состояние Patch #4: READY_FOR_MUX
             job.updateState(VoxDownloadState.READY_FOR_MUX)
             repository.persistJob(job)
             notifyStateChange(job)

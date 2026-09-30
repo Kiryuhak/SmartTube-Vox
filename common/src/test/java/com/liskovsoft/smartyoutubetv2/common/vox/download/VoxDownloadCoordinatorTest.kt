@@ -197,4 +197,37 @@ class VoxDownloadCoordinatorTest {
         assertEquals(VoxDownloadState.CANCELLED, job.state)
         assertFalse("Partial track file must be cleaned on cancel", vFile.exists())
     }
+
+    @Test
+    fun testSingleActiveJobQueue() {
+        val reqA = VoxDownloadRequest(downloadId = "job-A", videoId = "videoA", videoTitle = "Title A")
+        val reqB = VoxDownloadRequest(downloadId = "job-B", videoId = "videoB", videoTitle = "Title B")
+
+        coordinator.startDownload(reqA)
+        coordinator.startDownload(reqB)
+
+        val jobB = coordinator.getJob("job-B")
+        assertNotNull(jobB)
+        // jobB не должно стартовать параллельно, пока jobA выполняется
+        assertTrue(jobB!!.state == VoxDownloadState.PAUSED || jobB.state == VoxDownloadState.IDLE)
+    }
+
+    @Test
+    fun testLivelyRequiresAuth() {
+        val unauthResolver = DefaultVoxTranslationResolver(
+            oauthTokenProvider = { null },
+            isLivelyAuthorized = { false }
+        )
+
+        try {
+            unauthResolver.resolveTranslation(
+                videoId = "testVideo",
+                mode = VoxTranslationMode.LIVELY
+            )
+            org.junit.Assert.fail("Expected AUTH_REQUIRED exception")
+        } catch (e: VoxDownloadException) {
+            assertEquals(VoxDownloadErrorCode.AUTH_REQUIRED, e.code)
+        }
+    }
 }
+

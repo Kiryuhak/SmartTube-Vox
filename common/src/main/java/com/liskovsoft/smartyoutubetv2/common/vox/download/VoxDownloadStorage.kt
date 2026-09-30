@@ -42,10 +42,37 @@ class VoxDownloadStorage(private val context: Context) {
     }
 
     /**
+     * Валидирует downloadId на отсутствие недопустимых символов и path traversal последовательностей.
+     */
+    fun requireValidDownloadId(downloadId: String) {
+        if (downloadId.isBlank() ||
+            downloadId.contains("..") ||
+            downloadId.contains("/") ||
+            downloadId.contains("\\") ||
+            downloadId.contains(":") ||
+            downloadId.contains("\u0000") ||
+            !downloadId.matches(Regex("^[a-zA-Z0-9_\\-\\.]+$"))
+        ) {
+            throw VoxDownloadException(
+                VoxDownloadErrorCode.STORAGE_ERROR,
+                "Invalid or unsafe downloadId: $downloadId"
+            )
+        }
+    }
+
+    /**
      * Возвращает изолированную директорию конкретного задания.
      */
     fun getJobDir(downloadId: String): File {
-        val dir = File(baseDir, downloadId)
+        requireValidDownloadId(downloadId)
+        val dir = File(baseDir, downloadId).canonicalFile
+        val baseCanonical = baseDir.canonicalFile
+        if (!dir.path.startsWith(baseCanonical.path)) {
+            throw VoxDownloadException(
+                VoxDownloadErrorCode.STORAGE_ERROR,
+                "Path traversal detected in downloadId: $downloadId"
+            )
+        }
         if (!dir.exists()) {
             dir.mkdirs()
         }
