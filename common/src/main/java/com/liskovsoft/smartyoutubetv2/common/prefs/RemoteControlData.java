@@ -19,6 +19,7 @@ public class RemoteControlData extends DataChangeBase {
     private boolean mIsRemoteHistoryDisabled;
     private Video mLastVideo;
     private boolean mIsConnectedBefore;
+    private boolean mIsExternalLaunchEnabled;
 
     private RemoteControlData(Context context) {
         mContext = context;
@@ -89,6 +90,15 @@ public class RemoteControlData extends DataChangeBase {
         return mIsConnectedBefore;
     }
 
+    public void enableExternalLaunch(boolean enable) {
+        mIsExternalLaunchEnabled = enable;
+        persistState();
+    }
+
+    public boolean isExternalLaunchEnabled() {
+        return mIsExternalLaunchEnabled;
+    }
+
     private void restoreState() {
         String data = mAppPrefs.getData(DEVICE_LINK_DATA);
 
@@ -102,12 +112,13 @@ public class RemoteControlData extends DataChangeBase {
         mIsRemoteHistoryDisabled = Helpers.parseBoolean(split, 5, false);
         mLastVideo = Helpers.parseItem(split, 6, Video::fromString);
         mIsConnectedBefore = Helpers.parseBoolean(split, 7, false);
+        mIsExternalLaunchEnabled = Helpers.parseBoolean(split, 8, false);
     }
 
     private void persistState() {
         mAppPrefs.setData(DEVICE_LINK_DATA, Helpers.mergeData(
                 null, null, mIsDeviceLinkEnabled, mIsFinishOnDisconnectEnabled, mIsConnectMessagesEnabled,
-                mIsRemoteHistoryDisabled, mLastVideo, mIsConnectedBefore
+                mIsRemoteHistoryDisabled, mLastVideo, mIsConnectedBefore, mIsExternalLaunchEnabled
         ));
 
         onDataChange();

@@ -288,6 +288,8 @@
     <string name="live_now_row_name">Сейчас в эфире</string>
     <string name="run_in_background">Фоновое воспроизведение</string>
     <string name="settings_remote_control">Дистанционное управление</string>
+    <string name="settings_external_launch">Внешний запуск видео</string>
+    <string name="settings_external_launch_desc">Разрешить устройствам в локальной сети запускать видео в SmartTube VOX</string>
     <string name="background_service_started">Фоновый сервис запущен</string>
     <string name="dialog_add_to">Добавить в %s</string>
     <string name="dialog_remove_from">Удалить из %s</string>

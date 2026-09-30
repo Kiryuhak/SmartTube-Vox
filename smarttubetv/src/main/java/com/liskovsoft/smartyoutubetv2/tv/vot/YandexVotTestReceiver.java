@@ -42,6 +42,14 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         } else if ("disableNewBackend".equalsIgnoreCase(action) || "forceOldBackend".equalsIgnoreCase(action)) {
             VoiceTranslateController.setNewYandexBackendEnabled(false);
             Log.i(TAG, "New Yandex VOT backend DISABLED for user flow (forced OLD override)");
+        } else if ("enableDial".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.prefs.RemoteControlData.instance(context).enableExternalLaunch(true);
+            com.liskovsoft.smartyoutubetv2.common.vox.external.VoxExternalLaunchManager.instance(context).syncWithSettings();
+            Log.i(TAG, "DIAL External Launch ENABLED via test broadcast");
+        } else if ("disableDial".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.prefs.RemoteControlData.instance(context).enableExternalLaunch(false);
+            com.liskovsoft.smartyoutubetv2.common.vox.external.VoxExternalLaunchManager.instance(context).syncWithSettings();
+            Log.i(TAG, "DIAL External Launch DISABLED via test broadcast");
         } else if ("startTranslation".equalsIgnoreCase(action)) {
             VoiceTranslateController controller = VoiceTranslateController.instance();
             if (controller != null) {

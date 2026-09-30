@@ -251,6 +251,8 @@ public class Utils {
             return;
         }
 
+        com.liskovsoft.smartyoutubetv2.common.vox.external.VoxExternalLaunchManager.instance(context).syncWithSettings();
+
         if (RemoteControlData.instance(context).isDeviceLinkEnabled()) {
             // Service that prevents the app from destroying
             startService(context, RemoteControlService.class);
