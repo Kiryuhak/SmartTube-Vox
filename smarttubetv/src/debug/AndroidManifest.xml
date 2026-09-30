@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Internal developer-only test receiver for isolated Yandex VOT backend verification (debug only) -->
+        <receiver
+            android:name="com.liskovsoft.smartyoutubetv2.tv.vot.YandexVotTestReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>
