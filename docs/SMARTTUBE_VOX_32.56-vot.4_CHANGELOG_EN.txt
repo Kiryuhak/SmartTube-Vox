@@ -1,0 +1,6 @@
+- Added Yandex ID authorization via screen code for Lively Voice.
+- Secure authorization persistence across app restarts.
+- Smooth second-by-second countdown timer for translation preparation.
+- Automatic playback synchronization when translation preparation is delayed.
+- Improved translation stability during pause, seek, and video switching.
+- Fixed stale translation session leaks and restored original volume handling.
