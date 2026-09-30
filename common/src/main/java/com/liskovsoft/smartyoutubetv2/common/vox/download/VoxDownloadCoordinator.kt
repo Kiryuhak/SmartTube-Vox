@@ -594,7 +594,13 @@ class VoxDownloadCoordinator(
                 val pubUri = publisher.publish(
                     outputFile = outputFile,
                     videoTitle = job.request.videoTitle,
-                    isCancelled = job.isCancelledFlag
+                    isCancelled = job.isCancelledFlag,
+                    onProgress = { bytesCopied, totalBytes, percent ->
+                        if (!isStale(job, expectedGen)) {
+                            job.updateMuxProgress(bytesCopied, totalBytes, percent)
+                            notifyProgress(job)
+                        }
+                    }
                 )
 
                 if (isStale(job, expectedGen)) return

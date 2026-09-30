@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:icon="@mipmap/ic_stvot"
@@ -20,5 +22,9 @@
             android:name="com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity"
             android:theme="@style/Theme.AppCompat.NoActionBar"
             android:exported="false" />
+        <service
+            android:name="com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

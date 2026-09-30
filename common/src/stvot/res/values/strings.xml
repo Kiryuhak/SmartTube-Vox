@@ -132,4 +132,11 @@
     <string name="vox_download_error_parse">Failed to prepare video file</string>
     <string name="vox_download_error_network">Network error</string>
     <string name="vox_download_error_unknown">Failed to download video</string>
+    <string name="vox_download_channel_name">SmartTube VOX — Downloads</string>
+    <string name="vox_download_channel_desc">Notifications for voice translation video downloads</string>
+    <string name="vox_download_notification_title">Downloading video</string>
+    <string name="vox_download_notification_cancel">Cancel</string>
+    <string name="vox_download_notification_open">Open</string>
+    <string name="vox_download_notification_failed">Failed to download video</string>
+    <string name="vox_download_notification_completed">Video saved</string>
 </resources>
