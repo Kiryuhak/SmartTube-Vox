@@ -23,6 +23,7 @@ class VoxMediaExtractorSource(
     private val extractor: MediaExtractor = MediaExtractor()
     private val selectedTrackIndex: Int
     override val trackInfo: VoxMuxTrackInfo
+    override val sourceSizeBytes: Long = if (mediaFile.exists()) mediaFile.length() else 0L
     private val buffer: ByteBuffer
 
     init {

@@ -135,5 +135,7 @@ data class VoxMuxResult(
  */
 interface VoxSampleSource : AutoCloseable {
     val trackInfo: VoxMuxTrackInfo
+    val sourceSizeBytes: Long
+        get() = 0L
     fun readNextSample(): VoxMuxSample?
 }

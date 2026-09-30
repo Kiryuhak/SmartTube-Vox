@@ -143,6 +143,50 @@ class VoxMatroskaMuxerTest {
         // Проверяем наличие строки matroska в заголовке
         val headerStr = String(bytes, Charsets.ISO_8859_1)
         assertTrue("Header must contain 'matroska' DocType", headerStr.contains("matroska"))
+
+        // Проверяем, что длительность была рассчитана и пропатчена (> 0)
+        assertTrue("Duration must be > 0", result.durationMs > 0)
+        assertEquals(966L, result.durationMs) // max timestamp 966ms
+    }
+
+    @Test
+    fun testMuxProgressReaches100Percent() {
+        val videoTrack = VoxMuxTrackInfo(
+            trackNumber = 1,
+            trackUid = 1001L,
+            trackType = VoxMuxTrackType.VIDEO,
+            codec = VoxMuxCodec.AVC,
+            mimeType = "video/avc",
+            name = "Видео",
+            language = "und",
+            isDefault = true,
+            width = 640,
+            height = 360
+        )
+        val videoSamples = (0 until 20).map { i ->
+            VoxMuxSample(
+                trackNumber = 1,
+                presentationTimeUs = i * 33333L,
+                durationUs = 33333L,
+                isKeyFrame = (i == 0),
+                data = byteArrayOf(0, 0, 0, 4, 0x65, 0x88.toByte(), 0x84.toByte(), 0)
+            )
+        }
+        val sources = listOf(MockSampleSource(videoTrack, videoSamples))
+        val outputFile = File(workDir, "progress_test.mkv")
+        val muxer = VoxMatroskaMuxer()
+        val recordedPercents = mutableListOf<Int>()
+
+        muxer.mux(
+            sources = sources,
+            outputFile = outputFile,
+            progressListener = { p ->
+                recordedPercents.add(p.percent)
+            }
+        )
+
+        assertTrue("Should have recorded progress events", recordedPercents.isNotEmpty())
+        assertTrue("Progress should reach 100%", recordedPercents.last() == 100)
     }
 
     @Test

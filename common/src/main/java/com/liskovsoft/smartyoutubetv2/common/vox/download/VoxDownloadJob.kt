@@ -38,6 +38,18 @@ class VoxDownloadJob(
         private set
 
     @Volatile
+    var muxBytesProcessed: Long = 0L
+        private set
+
+    @Volatile
+    var muxTotalBytes: Long = 0L
+        private set
+
+    @Volatile
+    var muxPercent: Int = 0
+        private set
+
+    @Volatile
     var errorCode: VoxDownloadErrorCode? = initialErrorCode
         private set
 
@@ -70,6 +82,12 @@ class VoxDownloadJob(
         }
     }
 
+    fun updateMuxProgress(bytesProcessed: Long, totalBytes: Long, percent: Int) {
+        muxBytesProcessed = bytesProcessed
+        muxTotalBytes = totalBytes
+        muxPercent = percent
+    }
+
     fun getSnapshot(): VoxDownloadProgress {
         return VoxDownloadProgress(
             downloadId = downloadId,
@@ -77,6 +95,9 @@ class VoxDownloadJob(
             video = videoProgress,
             originalAudio = originalAudioProgress,
             translatedAudio = translatedAudioProgress,
+            muxBytesProcessed = muxBytesProcessed,
+            muxTotalBytes = muxTotalBytes,
+            muxPercent = muxPercent,
             errorMessage = errorMessage,
             errorCode = errorCode
         )

@@ -103,7 +103,7 @@ class VoxMatroskaMuxer {
 
         val cues = mutableListOf<CueEntry>()
 
-        var totalInputBytes = 0L
+        val totalInputBytes = sources.sumOf { it.sourceSizeBytes }.coerceAtLeast(1L)
         var totalBytesProcessed = 0L
         var videoSamplesCount = 0L
         var origAudioSamplesCount = 0L
@@ -113,6 +113,7 @@ class VoxMatroskaMuxer {
         var segmentPayloadOffset: Long
         var infoOffset: Long
         var tracksOffset: Long
+        var durationPayloadFileOffset: Long
 
         val fos = FileOutputStream(tmpOutputFile)
         val bos = BufferedOutputStream(fos, 256 * 1024)
@@ -147,17 +148,32 @@ class VoxMatroskaMuxer {
             bos.write(seekHeadPlaceholder)
             bos.flush()
 
-            // 4. Info Element
+            // 4. Info Element с фиксацией точного смещения Duration
             infoOffset = fos.channel.position() - segmentPayloadOffset
-            writer.writeMaster(ID_INFO) { info ->
-                info.writeUInt(ID_TIMESTAMP_SCALE, TIMESTAMP_SCALE_NS)
-                info.writeString(ID_MUXING_APP, "SmartTube VOX")
-                info.writeString(ID_WRITING_APP, "SmartTube VOX")
-                if (!videoTitle.isNullOrBlank()) {
-                    info.writeString(ID_TITLE, videoTitle)
-                }
-                info.writeFloat(ID_DURATION, 0.0) // Будет пропатчено в конце
+            val infoBos = ByteArrayOutputStream()
+            val infoElemWriter = VoxEbmlWriter(infoBos)
+            infoElemWriter.writeUInt(ID_TIMESTAMP_SCALE, TIMESTAMP_SCALE_NS)
+            infoElemWriter.writeString(ID_MUXING_APP, "SmartTube VOX")
+            infoElemWriter.writeString(ID_WRITING_APP, "SmartTube VOX")
+            if (!videoTitle.isNullOrBlank()) {
+                infoElemWriter.writeString(ID_TITLE, videoTitle)
             }
+            val durationStartInInfo = infoBos.size()
+            infoElemWriter.writeFloat(ID_DURATION, 0.0) // 2 байта ID (0x44, 0x89) + 1 байт VINT size (0x88) + 8 байт Float
+            val durationPayloadOffsetInInfo = durationStartInInfo + 3
+
+            val infoPayloadBytes = infoBos.toByteArray()
+            val infoHeaderBos = ByteArrayOutputStream()
+            val infoHeaderWriter = VoxEbmlWriter(infoHeaderBos)
+            infoHeaderWriter.writeElementId(ID_INFO)
+            infoHeaderWriter.writeElementSize(infoPayloadBytes.size.toLong())
+            val infoHeaderBytes = infoHeaderBos.toByteArray()
+
+            val infoFileStartPos = fos.channel.position()
+            durationPayloadFileOffset = infoFileStartPos + infoHeaderBytes.size + durationPayloadOffsetInInfo
+
+            bos.write(infoHeaderBytes)
+            bos.write(infoPayloadBytes)
             bos.flush()
 
             // 5. Tracks Element
@@ -309,12 +325,13 @@ class VoxMatroskaMuxer {
                 }
 
                 totalBytesProcessed += sample.size
+                val currentPercent = ((totalBytesProcessed * 100L) / totalInputBytes).toInt().coerceIn(0, 100)
 
                 progressListener?.invoke(
                     VoxMuxProgress(
                         bytesProcessed = totalBytesProcessed,
                         totalInputBytes = totalInputBytes,
-                        percent = 0
+                        percent = currentPercent
                     )
                 )
 
@@ -345,6 +362,9 @@ class VoxMatroskaMuxer {
             fos.close()
 
             // 8. Патчим SeekHead и Duration в начале файла с помощью RandomAccessFile
+            val sourceDurationMs = sources.map { it.trackInfo.durationUs / 1000L }.maxOrNull() ?: 0L
+            val finalDurationMs = maxOf(maxTimestampMs, sourceDurationMs)
+
             val raf = RandomAccessFile(tmpOutputFile, "rw")
             try {
                 // Формируем настоящий SeekHead
@@ -382,6 +402,14 @@ class VoxMatroskaMuxer {
                         }
                     }
                 }
+
+                // Патчим длительность в Info
+                if (durationPayloadFileOffset > 0 && finalDurationMs > 0) {
+                    raf.seek(durationPayloadFileOffset)
+                    raf.writeDouble(finalDurationMs.toDouble())
+                }
+
+                raf.fd.sync()
             } finally {
                 raf.close()
             }
@@ -396,7 +424,7 @@ class VoxMatroskaMuxer {
 
             return VoxMuxResult(
                 outputFile = outputFile,
-                durationMs = maxTimestampMs,
+                durationMs = finalDurationMs,
                 videoSamplesCount = videoSamplesCount,
                 origAudioSamplesCount = origAudioSamplesCount,
                 transAudioSamplesCount = transAudioSamplesCount,

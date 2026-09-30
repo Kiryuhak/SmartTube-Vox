@@ -504,10 +504,14 @@ class VoxDownloadCoordinator(
 
         val sources = mutableListOf<com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxSampleSource>()
         try {
+            val vUid = java.util.concurrent.ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)
+            val oUid = java.util.concurrent.ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)
+            val tUid = java.util.concurrent.ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)
+
             val vSource = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMediaExtractorSource(
                 mediaFile = videoFile,
                 assignedTrackNumber = 1,
-                assignedTrackUid = 1L,
+                assignedTrackUid = vUid,
                 trackType = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxTrackType.VIDEO,
                 trackName = "Видео",
                 language = "und",
@@ -518,22 +522,22 @@ class VoxDownloadCoordinator(
             val oSource = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMediaExtractorSource(
                 mediaFile = origAudioFile,
                 assignedTrackNumber = 2,
-                assignedTrackUid = 2L,
+                assignedTrackUid = oUid,
                 trackType = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxTrackType.AUDIO_ORIGINAL,
                 trackName = "Оригинал",
                 language = "und",
-                isDefaultTrack = true
+                isDefaultTrack = false
             )
             sources.add(oSource)
 
             val tSource = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMediaExtractorSource(
                 mediaFile = transAudioFile,
                 assignedTrackNumber = 3,
-                assignedTrackUid = 3L,
+                assignedTrackUid = tUid,
                 trackType = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxTrackType.AUDIO_TRANSLATED,
                 trackName = "Перевод",
                 language = "rus",
-                isDefaultTrack = false
+                isDefaultTrack = true
             )
             sources.add(tSource)
 
@@ -542,11 +546,21 @@ class VoxDownloadCoordinator(
                 sources = sources,
                 outputFile = outputFile,
                 videoTitle = job.request.videoTitle,
-                isCancelled = job.isCancelledFlag
+                isCancelled = job.isCancelledFlag,
+                progressListener = { muxProgress ->
+                    if (!isStale(job, expectedGen)) {
+                        job.updateMuxProgress(muxProgress.bytesProcessed, muxProgress.totalInputBytes, muxProgress.percent)
+                        notifyProgress(job)
+                    }
+                }
             )
 
             if (isStale(job, expectedGen)) return
 
+            // Валидация созданного MKV перед присвоением MUXED
+            validateOutputFile(outputFile)
+
+            job.updateMuxProgress(result.totalBytesWritten, result.totalBytesWritten, 100)
             job.updateState(VoxDownloadState.MUXED)
             repository.persistJob(job)
             notifyStateChange(job)
@@ -557,6 +571,49 @@ class VoxDownloadCoordinator(
                 repository.persistJob(job)
                 notifyStateChange(job)
             }
+        }
+    }
+
+    private fun validateOutputFile(outputFile: File) {
+        if (!outputFile.exists() || outputFile.length() <= 0L) {
+            throw VoxDownloadException(
+                VoxDownloadErrorCode.STORAGE_ERROR,
+                "Output MKV file does not exist or is empty: ${outputFile.absolutePath}"
+            )
+        }
+        val extractor = android.media.MediaExtractor()
+        try {
+            extractor.setDataSource(outputFile.absolutePath)
+            val numTracks = extractor.trackCount
+            if (numTracks < 3) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.MEDIA_PARSE_ERROR,
+                    "Output MKV has only $numTracks tracks, expected at least 3"
+                )
+            }
+            var hasVideo = false
+            var audioCount = 0
+            for (i in 0 until numTracks) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("video/")) hasVideo = true
+                if (mime.startsWith("audio/")) audioCount++
+            }
+            if (!hasVideo || audioCount < 2) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.MEDIA_PARSE_ERROR,
+                    "Output MKV missing required streams (hasVideo=$hasVideo, audioTracks=$audioCount)"
+                )
+            }
+        } catch (e: VoxDownloadException) {
+            throw e
+        } catch (e: Exception) {
+            throw VoxDownloadException(
+                VoxDownloadErrorCode.MEDIA_PARSE_ERROR,
+                "Failed to validate output MKV file: ${e.message}"
+            )
+        } finally {
+            try { extractor.release() } catch (ignored: Exception) {}
         }
     }
 

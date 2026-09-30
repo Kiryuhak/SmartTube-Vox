@@ -111,6 +111,9 @@ data class VoxDownloadProgress(
     val video: VoxTrackProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO),
     val originalAudio: VoxTrackProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO),
     val translatedAudio: VoxTrackProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO),
+    val muxBytesProcessed: Long = 0L,
+    val muxTotalBytes: Long = 0L,
+    val muxPercent: Int = 0,
     val errorMessage: String? = null,
     val errorCode: VoxDownloadErrorCode? = null
 ) {
@@ -127,6 +130,12 @@ data class VoxDownloadProgress(
 
     val overallPercent: Int?
         get() {
+            if (state == VoxDownloadState.MUXING) {
+                return muxPercent
+            }
+            if (state == VoxDownloadState.MUXED) {
+                return 100
+            }
             val expected = totalBytesExpected ?: return null
             if (expected <= 0) return null
             return ((totalBytesDownloaded * 100) / expected).toInt().coerceIn(0, 100)
@@ -145,6 +154,8 @@ enum class VoxDownloadErrorCode {
     STREAM_UNAVAILABLE,
     TRANSLATION_UNAVAILABLE,
     INVALID_URL,
+    UNSUPPORTED_CODEC,
+    MEDIA_PARSE_ERROR,
     CANCELLED,
     UNKNOWN
 }

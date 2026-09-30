@@ -192,18 +192,27 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             if (downloadId == null || downloadId.isEmpty()) {
                 downloadId = "patch4-live-final";
             }
+            boolean force = intent.getBooleanExtra("force", false);
             com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
                     com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job = coordinator.getJob(downloadId);
+            if (job != null && (force || job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.MUXED)) {
+                job.updateState(com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.READY_FOR_MUX, null, null);
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage storage =
+                        new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage(context);
+                java.io.File out = storage.getOutputFile(downloadId);
+                if (out.exists()) out.delete();
+            }
             final String finalDownloadId = downloadId;
             boolean started = coordinator.muxDownload(downloadId, new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadListener() {
                 @Override
                 public void onStateChanged(com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadProgress progress) {
-                    Log.i(TAG, "MUX_PROBE: state=" + progress.getState() + " totalBytes=" + progress.getTotalBytesDownloaded());
+                    Log.i(TAG, "MUX_PROBE: state=" + progress.getState() + " totalBytes=" + progress.getTotalBytesDownloaded() + " muxPercent=" + progress.getMuxPercent());
                 }
 
                 @Override
                 public void onProgressUpdated(com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadProgress progress) {
-                    Log.i(TAG, "MUX_PROBE_PROGRESS: state=" + progress.getState());
+                    Log.i(TAG, "MUX_PROBE_PROGRESS: state=" + progress.getState() + " muxPercent=" + progress.getMuxPercent() + " bytes=" + progress.getMuxBytesProcessed() + "/" + progress.getMuxTotalBytes());
                 }
 
                 @Override
@@ -279,7 +288,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                         }
                         extractor.release();
 
-                        // Поэлементная выборка по трекам (single pass probe)
+                        // Полная выборка по всем трекам (full sample scan без искусственных ограничений)
                         android.media.MediaExtractor trkExtractor = new android.media.MediaExtractor();
                         trkExtractor.setDataSource(mkvFile.getAbsolutePath());
                         for (int t = 0; t < numTracks; t++) {
@@ -288,22 +297,43 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                         long[] firstPts = new long[]{-1, -1, -1};
                         long[] lastPts = new long[]{-1, -1, -1};
                         int[] sampleCounts = new int[numTracks];
-                        int total = 0;
-                        while (trkExtractor.getSampleTrackIndex() >= 0 && total < 1500) {
+                        java.util.TreeMap<Long, Long>[] ptsMaps = new java.util.TreeMap[numTracks];
+                        for (int t = 0; t < numTracks; t++) {
+                            ptsMaps[t] = new java.util.TreeMap<Long, Long>();
+                        }
+
+                        while (trkExtractor.getSampleTrackIndex() >= 0) {
                             int trk = trkExtractor.getSampleTrackIndex();
                             long pts = trkExtractor.getSampleTime();
                             if (trk >= 0 && trk < numTracks) {
                                 if (firstPts[trk] < 0) firstPts[trk] = pts;
                                 lastPts[trk] = pts;
                                 sampleCounts[trk]++;
+                                if (ptsMaps[trk].isEmpty() || (pts - ptsMaps[trk].lastKey() >= 200_000L)) {
+                                    ptsMaps[trk].put(pts, pts);
+                                }
                             }
-                            total++;
                             trkExtractor.advance();
                         }
                         for (int t = 0; t < numTracks; t++) {
-                            Log.i(TAG, "MKV_MEDIA_TRACK_SAMPLES: track=" + t + " firstPtsUs=" + firstPts[t] + " lastPtsUs=" + lastPts[t] + " scannedSamples=" + sampleCounts[t]);
+                            Log.i(TAG, "MKV_MEDIA_TRACK_SAMPLES: track=" + t + " firstPtsUs=" + firstPts[t] + " lastPtsUs=" + lastPts[t] + " sampleCount=" + sampleCounts[t]);
                         }
                         trkExtractor.release();
+
+                        // Измерение синхронизации (Sync measurement) на 0s, 30s, 60s, near end
+                        long[] syncTargets = new long[]{0L, 30_000_000L, 60_000_000L, Math.max(0L, lastPts[0] - 5_000_000L)};
+                        for (long targetUs : syncTargets) {
+                            Long vPts = ptsMaps[0].ceilingKey(targetUs);
+                            Long oPts = numTracks > 1 ? ptsMaps[1].ceilingKey(targetUs) : null;
+                            Long tPts = numTracks > 2 ? ptsMaps[2].ceilingKey(targetUs) : null;
+                            long v = vPts != null ? vPts : -1L;
+                            long o = oPts != null ? oPts : -1L;
+                            long tr = tPts != null ? tPts : -1L;
+                            long origDeltaMs = (o >= 0 && v >= 0) ? (o - v) / 1000L : 0L;
+                            long transDeltaMs = (tr >= 0 && v >= 0) ? (tr - v) / 1000L : 0L;
+                            Log.i(TAG, "SYNC_MEASUREMENT: targetUs=" + targetUs + " vPtsUs=" + v + " oPtsUs=" + o + " tPtsUs=" + tr
+                                    + " origDeltaMs=" + origDeltaMs + " transDeltaMs=" + transDeltaMs);
+                        }
 
                         // Тест перемотки (Seek test)
                         android.media.MediaExtractor seekExtractor = new android.media.MediaExtractor();
@@ -315,8 +345,10 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                         long seek60Pts = seekExtractor.getSampleTime();
                         seekExtractor.seekTo(10_000_000L, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC);
                         long seekBackPts = seekExtractor.getSampleTime();
+                        seekExtractor.seekTo(Math.max(0L, lastPts[0] - 3_000_000L), android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+                        long seekEndPts = seekExtractor.getSampleTime();
 
-                        Log.i(TAG, "MKV_SEEK_PROBE: seek30sPtsUs=" + seek30Pts + " seek60sPtsUs=" + seek60Pts + " seekBackPtsUs=" + seekBackPts);
+                        Log.i(TAG, "MKV_SEEK_PROBE: seek30sPtsUs=" + seek30Pts + " seek60sPtsUs=" + seek60Pts + " seekBackPtsUs=" + seekBackPts + " seekEndPtsUs=" + seekEndPts);
                         seekExtractor.release();
                     } catch (Exception e) {
                         Log.e(TAG, "MKV_MEDIA_PROBE_EXCEPTION: " + e.getMessage(), e);
@@ -338,15 +370,141 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     }
 
                     try {
-                        com.google.android.exoplayer2.SimpleExoPlayer player =
-                                com.google.android.exoplayer2.ExoPlayerFactory.newSimpleInstance(context);
+                        final com.google.android.exoplayer2.trackselection.DefaultTrackSelector trackSelector =
+                                new com.google.android.exoplayer2.trackselection.DefaultTrackSelector();
+                        final com.google.android.exoplayer2.SimpleExoPlayer player =
+                                com.google.android.exoplayer2.ExoPlayerFactory.newSimpleInstance(context, trackSelector);
+
                         com.google.android.exoplayer2.source.MediaSource mediaSource =
                                 new com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(
                                         new com.google.android.exoplayer2.upstream.DefaultDataSourceFactory(context, "SmartTube"),
                                         new com.google.android.exoplayer2.extractor.DefaultExtractorsFactory()
                                 ).createMediaSource(android.net.Uri.fromFile(mkvFile));
 
+                        final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+
                         player.addListener(new com.google.android.exoplayer2.Player.EventListener() {
+                            private boolean startedTesting = false;
+
+                            @Override
+                            public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
+                                Log.i(TAG, "EXOPLAYER_STATE_CHANGED: playWhenReady=" + playWhenReady + " state=" + playbackState);
+                                if (playbackState == com.google.android.exoplayer2.Player.STATE_READY && !startedTesting) {
+                                    startedTesting = true;
+                                    Log.i(TAG, "EXOPLAYER_STATE_READY: durationMs=" + player.getDuration() + " currentPos=" + player.getCurrentPosition());
+
+                                    // Stage 1: Play initial 4s
+                                    handler.postDelayed(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            long pos1 = player.getCurrentPosition();
+                                            Log.i(TAG, "EXOPLAYER_PLAY_PASS: initialPlayPos=" + pos1 + " duration=" + player.getDuration());
+
+                                            // Stage 2: Switch to Original Audio (und)
+                                            com.google.android.exoplayer2.trackselection.DefaultTrackSelector.ParametersBuilder b1 =
+                                                    trackSelector.buildUponParameters();
+                                            b1.setPreferredAudioLanguage("und");
+                                            trackSelector.setParameters(b1);
+
+                                            handler.postDelayed(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    long posOrig = player.getCurrentPosition();
+                                                    Log.i(TAG, "EXOPLAYER_SELECT_ORIGINAL_PASS: pos=" + posOrig + " lang=und");
+
+                                                    // Stage 3: Switch to Translated Audio (ru)
+                                                    com.google.android.exoplayer2.trackselection.DefaultTrackSelector.ParametersBuilder b2 =
+                                                            trackSelector.buildUponParameters();
+                                                    b2.setPreferredAudioLanguage("ru");
+                                                    trackSelector.setParameters(b2);
+
+                                                    handler.postDelayed(new Runnable() {
+                                                        @Override
+                                                        public void run() {
+                                                            long posTrans = player.getCurrentPosition();
+                                                            Log.i(TAG, "EXOPLAYER_SWITCH_TRANSLATION_PASS: pos=" + posTrans + " lang=ru");
+
+                                                            // Stage 4: Second track cycle (und -> ru)
+                                                            com.google.android.exoplayer2.trackselection.DefaultTrackSelector.ParametersBuilder b3 =
+                                                                    trackSelector.buildUponParameters();
+                                                            b3.setPreferredAudioLanguage("und");
+                                                            trackSelector.setParameters(b3);
+
+                                                            handler.postDelayed(new Runnable() {
+                                                                @Override
+                                                                public void run() {
+                                                                    com.google.android.exoplayer2.trackselection.DefaultTrackSelector.ParametersBuilder b4 =
+                                                                            trackSelector.buildUponParameters();
+                                                                    b4.setPreferredAudioLanguage("ru");
+                                                                    trackSelector.setParameters(b4);
+                                                                    Log.i(TAG, "EXOPLAYER_TRACK_SWITCH_CYCLE_PASS: pos=" + player.getCurrentPosition());
+
+                                                                    // Stage 5: Seek testing
+                                                                    player.seekTo(30000);
+                                                                    handler.postDelayed(new Runnable() {
+                                                                        @Override
+                                                                        public void run() {
+                                                                            Log.i(TAG, "EXOPLAYER_SEEK_30S_PASS: pos=" + player.getCurrentPosition());
+                                                                            player.seekTo(60000);
+
+                                                                            handler.postDelayed(new Runnable() {
+                                                                                @Override
+                                                                                public void run() {
+                                                                                    Log.i(TAG, "EXOPLAYER_SEEK_60S_PASS: pos=" + player.getCurrentPosition());
+                                                                                    player.seekTo(10000);
+
+                                                                                    handler.postDelayed(new Runnable() {
+                                                                                        @Override
+                                                                                        public void run() {
+                                                                                            Log.i(TAG, "EXOPLAYER_SEEK_BACK_PASS: pos=" + player.getCurrentPosition());
+
+                                                                                            // Stage 6: Pause / Resume
+                                                                                            player.setPlayWhenReady(false);
+                                                                                            final long pausedPos = player.getCurrentPosition();
+
+                                                                                            handler.postDelayed(new Runnable() {
+                                                                                                @Override
+                                                                                                public void run() {
+                                                                                                    long stillPausedPos = player.getCurrentPosition();
+                                                                                                    boolean isStable = Math.abs(stillPausedPos - pausedPos) < 200;
+                                                                                                    Log.i(TAG, "EXOPLAYER_PAUSE_PASS: stable=" + isStable + " pos=" + stillPausedPos);
+
+                                                                                                    player.setPlayWhenReady(true);
+                                                                                                    handler.postDelayed(new Runnable() {
+                                                                                                        @Override
+                                                                                                        public void run() {
+                                                                                                            long resumedPos = player.getCurrentPosition();
+                                                                                                            Log.i(TAG, "EXOPLAYER_RESUME_PASS: pos=" + resumedPos);
+
+                                                                                                            // Stage 7: Seek near end and await EOS
+                                                                                                            long dur = player.getDuration();
+                                                                                                            if (dur > 5000) {
+                                                                                                                player.seekTo(dur - 2000);
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }, 2500);
+                                                                                                }
+                                                                                            }, 2000);
+                                                                                        }
+                                                                                    }, 1500);
+                                                                                }
+                                                                            }, 1500);
+                                                                        }
+                                                                    }, 1500);
+                                                                }
+                                                            }, 1500);
+                                                        }
+                                                    }, 3000);
+                                                }
+                                            }, 3000);
+                                        }
+                                    }, 4000);
+                                } else if (playbackState == com.google.android.exoplayer2.Player.STATE_ENDED) {
+                                    Log.i(TAG, "EXOPLAYER_EOS_PASS: reached end of stream successfully at pos=" + player.getCurrentPosition());
+                                    player.release();
+                                }
+                            }
+
                             @Override
                             public void onTracksChanged(com.google.android.exoplayer2.source.TrackGroupArray trackGroups, com.google.android.exoplayer2.trackselection.TrackSelectionArray trackSelections) {
                                 Log.i(TAG, "EXOPLAYER_PROBE_TRACKS: trackGroupsCount=" + trackGroups.length);
@@ -357,14 +515,6 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                                         Log.i(TAG, "EXOPLAYER_TRACK: group=" + g + " track=" + t + " mime=" + f.sampleMimeType + " label=" + f.label + " lang=" + f.language);
                                     }
                                 }
-                                // Тест перемотки в ExoPlayer
-                                player.seekTo(30000);
-                                Log.i(TAG, "EXOPLAYER_SEEK_30S: target=30000 pos=" + player.getCurrentPosition());
-                                player.seekTo(60000);
-                                Log.i(TAG, "EXOPLAYER_SEEK_60S: target=60000 pos=" + player.getCurrentPosition());
-                                player.seekTo(10000);
-                                Log.i(TAG, "EXOPLAYER_SEEK_BACK: target=10000 pos=" + player.getCurrentPosition());
-                                player.release();
                             }
 
                             @Override
@@ -375,7 +525,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                         });
 
                         player.prepare(mediaSource);
-                        player.setPlayWhenReady(false);
+                        player.setPlayWhenReady(true);
                     } catch (Exception e) {
                         Log.e(TAG, "EXOPLAYER_PROBE_EXCEPTION: " + e.getMessage(), e);
                     }
