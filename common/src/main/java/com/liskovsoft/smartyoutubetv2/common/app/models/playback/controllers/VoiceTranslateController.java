@@ -77,6 +77,9 @@ public class VoiceTranslateController extends BasePlayerController {
     public static final int MAX_TRANSLATION_RETRIES = 3;
     private static final int[] RETRY_BACKOFF_SEC = {5, 10, 15};
 
+    private static final long MAX_REWIND_START_POSITION_MS = 15000L;
+    private static final long MIN_REWIND_ELAPSED_DELTA_MS = 3000L;
+
     public enum TrackSwitchState {
         IDLE,
         WAITING_CONFIRMATION,
@@ -113,6 +116,9 @@ public class VoiceTranslateController extends BasePlayerController {
     private int mRetrySecondsRemaining;
     private int mTranslationSessionId;
     private long mLastSyncSeekTimestamp;
+    private long mRequestStartPositionMs;
+    private boolean mRequestWasAutoTranslate;
+    private boolean mUserSeekedDuringPreparation;
 
     private static volatile boolean sUseNewYandexBackend = true;
     private static volatile VoiceTranslateController sInstance;
@@ -386,6 +392,9 @@ public class VoiceTranslateController extends BasePlayerController {
         mPendingToastShown = false;
         mPendingVideoUrl = null;
         mCurrentVideoId = item != null ? item.videoId : null;
+        mRequestStartPositionMs = 0;
+        mRequestWasAutoTranslate = false;
+        mUserSeekedDuringPreparation = false;
 
         if (mUserArmed) {
             mArmed = true;
@@ -487,6 +496,10 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onSeekEnd() {
+        if (mState == STATE_PENDING) {
+            mUserSeekedDuringPreparation = true;
+            Log.i(TAG, "VOT user seeked during preparation, disabling auto-rewind on ready");
+        }
         if (mIsNewBackendActive && mYandexPlaybackAdapter != null && getPlayer() != null) {
             long targetPos = getPlayer().getPositionMs();
             mLastSyncSeekTimestamp = System.currentTimeMillis();
@@ -837,8 +850,16 @@ public class VoiceTranslateController extends BasePlayerController {
         mCurrentVideoId = videoId;
         mRequestStartTimestamp = SystemClock.elapsedRealtime();
         mLastBackendPendingTimestamp = mRequestStartTimestamp;
+        mProgressTimer.start(mRequestStartTimestamp);
+
+        mRequestStartPositionMs = getPlayer() != null ? Math.max(0L, getPlayer().getPositionMs()) : 0L;
+        mRequestWasAutoTranslate = !mUserArmed;
+        mUserSeekedDuringPreparation = false;
 
         setState(STATE_PENDING);
+
+        Utils.removeCallbacks(mProgressTickRunnable);
+        Utils.postDelayed(mProgressTickRunnable, PROGRESS_TICK_INTERVAL_MS);
 
         if (mUserArmed && progressOverlay() != null) {
             progressOverlay().showPreparing(getActivity());
@@ -938,6 +959,9 @@ public class VoiceTranslateController extends BasePlayerController {
             mRequestStartTimestamp = now;
             mLastBackendPendingTimestamp = mRequestStartTimestamp;
             mProgressTimer.start(mRequestStartTimestamp);
+            mRequestStartPositionMs = getPlayer() != null ? Math.max(0L, getPlayer().getPositionMs()) : 0L;
+            mRequestWasAutoTranslate = !mUserArmed;
+            mUserSeekedDuringPreparation = false;
         } else {
             if (mRequestStartTimestamp == 0) {
                 mRequestStartTimestamp = now;
@@ -983,6 +1007,8 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void stopNewYandexBackend() {
         mNewBackendGenerationId = 0;
+        Utils.removeCallbacks(mProgressTickRunnable);
+        mProgressTimer.clear();
         if (mYandexOrchestrator != null) {
             mYandexOrchestrator.cancel();
         }
@@ -1045,6 +1071,11 @@ public class VoiceTranslateController extends BasePlayerController {
             public boolean isMainVideoPlaying() {
                 return getPlayer() != null && getPlayer().isPlaying();
             }
+
+            @Override
+            public long determineInitialPlaybackPosition() {
+                return VoiceTranslateController.this.determineInitialPlaybackPosition();
+            }
         };
     }
 
@@ -1072,34 +1103,39 @@ public class VoiceTranslateController extends BasePlayerController {
             case WAITING:
                 setState(STATE_PENDING);
                 int remainingSec = state.getRemainingSeconds();
-                if (remainingSec > 0) {
-                    if (getPlayer() != null) {
-                        getPlayer().updateVoiceTranslatePendingEta(remainingSec);
-                    }
-                    if (mUserArmed && progressOverlay() != null) {
-                        progressOverlay().showWaitingWithEta(getActivity(), VotProgressTimer.formatMmSs(remainingSec));
-                    }
-                } else if (mUserArmed && progressOverlay() != null) {
-                    progressOverlay().showPreparing(getActivity());
-                }
+                mPendingEtaSec = remainingSec;
+                mLastBackendPendingTimestamp = SystemClock.elapsedRealtime();
+                mProgressTimer.reconcileEta(remainingSec, mLastBackendPendingTimestamp);
+                Utils.removeCallbacks(mProgressTickRunnable);
+                mProgressTickRunnable.run();
                 break;
             case AUDIO_REQUIRED:
                 YandexVotLog.i(TAG, "VOT NEW backend: AUDIO_REQUIRED received (upload_part=" + (state.getCurrentPart() >= 0 ? (state.getCurrentPart() + 1) + "/" + state.getTotalParts() : "pending") + ")");
                 setState(STATE_PENDING);
+                mLastBackendPendingTimestamp = SystemClock.elapsedRealtime();
                 if (mUserArmed && progressOverlay() != null) {
                     progressOverlay().showPreparing(getActivity());
                 }
                 break;
             case READY:
                 YandexVotLog.i(TAG, "VOT NEW backend READY (audio_url_present=" + (state.getAudioUrl() != null) + ")");
+                Utils.removeCallbacks(mProgressTickRunnable);
+                Utils.removeCallbacks(mRetryCountdownRunnable);
+                mTranslationRetryCount = 0;
+                mRetrySecondsRemaining = 0;
+                mProgressTimer.clear();
                 if (mYandexPlaybackAdapter != null) {
                     mYandexPlaybackAdapter.onStateChanged(state);
                 }
                 break;
             case ERROR:
+                Utils.removeCallbacks(mProgressTickRunnable);
+                mProgressTimer.clear();
                 handleNewBackendError(state.getGenerationId(), state.getErrorMessage(), false);
                 break;
             case CANCELLED:
+                Utils.removeCallbacks(mProgressTickRunnable);
+                mProgressTimer.clear();
                 stopNewYandexBackend();
                 break;
             case IDLE:
@@ -1420,7 +1456,7 @@ public class VoiceTranslateController extends BasePlayerController {
                     return;
                 }
 
-                long targetPositionMs = getPlayer().getPositionMs();
+                long targetPositionMs = determineInitialPlaybackPosition();
                 Log.i(TAG, "VOT_AUDIO session=" + sessionId + " initial_seek_target target_position=" + targetPositionMs);
 
                 if (targetPositionMs <= 200) {
@@ -1564,6 +1600,26 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     }
 
+    public long determineInitialPlaybackPosition() {
+        if (getPlayer() == null) {
+            return 0L;
+        }
+        long currentMainPos = getPlayer().getPositionMs();
+        boolean shouldRewind = !mUserSeekedDuringPreparation
+                && (mRequestWasAutoTranslate || mRequestStartPositionMs <= MAX_REWIND_START_POSITION_MS);
+        long deltaMs = currentMainPos - mRequestStartPositionMs;
+
+        if (shouldRewind && deltaMs > MIN_REWIND_ELAPSED_DELTA_MS) {
+            Log.i(TAG, "VOT late translation ready: rewinding main video to request start position ("
+                    + mRequestStartPositionMs + "ms, was at " + currentMainPos + "ms, delta=" + deltaMs + "ms)");
+            getPlayer().setPositionMs(mRequestStartPositionMs);
+            return mRequestStartPositionMs;
+        } else {
+            Log.i(TAG, "VOT translation ready: starting at current position (" + currentMainPos + "ms)");
+            return currentMainPos;
+        }
+    }
+
     private void disarm() {
         if (mProgressOverlay != null) {
             mProgressOverlay.dismissImmediately();
@@ -1602,6 +1658,9 @@ public class VoiceTranslateController extends BasePlayerController {
         mPendingEtaSec = 0;
         mPendingToastShown = false;
         mPendingVideoUrl = null;
+        mRequestStartPositionMs = 0;
+        mRequestWasAutoTranslate = false;
+        mUserSeekedDuringPreparation = false;
     }
 
     private void disarmWithMessage(int msgResId) {

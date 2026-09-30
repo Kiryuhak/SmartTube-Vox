@@ -52,6 +52,9 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         float getTranslationVolume();
         long getCurrentVideoPositionMs();
         boolean isMainVideoPlaying();
+        default long determineInitialPlaybackPosition() {
+            return getCurrentVideoPositionMs();
+        }
     }
 
     public interface PlaybackStateListener {
@@ -228,7 +231,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                         isPrepared = true;
                         YandexVotLog.i(TAG, "generation=" + generationId + " prepared");
 
-                        long targetPosMs = duckingBridge.getCurrentVideoPositionMs();
+                        long targetPosMs = duckingBridge.determineInitialPlaybackPosition();
                         if (targetPosMs <= INITIAL_SYNC_TOLERANCE_MS) {
                             onInitialSyncCompleteLocked(generationId, player);
                         } else {

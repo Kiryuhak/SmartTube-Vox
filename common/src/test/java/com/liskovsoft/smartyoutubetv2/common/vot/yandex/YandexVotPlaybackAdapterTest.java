@@ -383,4 +383,60 @@ public class YandexVotPlaybackAdapterTest {
         assertFalse(adapter.isPlaying());
         assertFalse(fakeDucking.ducked);
     }
+
+    @Test
+    public void test13_InitialSyncUsesDeterminedPlaybackPosition() {
+        fakeDucking.currentVideoPositionMs = 45000L;
+        final AtomicLong customTarget = new AtomicLong(5000L);
+
+        YandexVotPlaybackAdapter customAdapter = new YandexVotPlaybackAdapter(
+                () -> {
+                    fakePlayer = new FakeAudioPlayer();
+                    return fakePlayer;
+                },
+                new YandexVotPlaybackAdapter.AudioDuckingBridge() {
+                    @Override
+                    public void duckOriginalAudio() {
+                        fakeDucking.duckOriginalAudio();
+                    }
+
+                    @Override
+                    public void restoreOriginalAudio() {
+                        fakeDucking.restoreOriginalAudio();
+                    }
+
+                    @Override
+                    public float getTranslationVolume() {
+                        return 1.0f;
+                    }
+
+                    @Override
+                    public long getCurrentVideoPositionMs() {
+                        return 45000L;
+                    }
+
+                    @Override
+                    public boolean isMainVideoPlaying() {
+                        return true;
+                    }
+
+                    @Override
+                    public long determineInitialPlaybackPosition() {
+                        return customTarget.get();
+                    }
+                }
+        );
+
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        customAdapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+
+        // Must seek to 5000L (the determined position), not 45000L
+        assertEquals(5000L, fakePlayer.positionMs);
+        fakePlayer.callback.onSeekProcessed();
+        assertTrue(customAdapter.isPlaying());
+    }
 }
