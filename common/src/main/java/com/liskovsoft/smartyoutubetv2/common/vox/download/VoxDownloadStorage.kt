@@ -17,6 +17,8 @@ class VoxDownloadStorage(private val context: Context) {
     companion object {
         private const val DOWNLOADS_DIR = "vox-downloads"
         private const val JOB_METADATA_FILE = "job.json"
+        private const val OUTPUT_MEDIA_FILE = "output.mkv"
+        private const val TMP_OUTPUT_MEDIA_FILE = "output.mkv.tmp"
         private const val MIN_SAFETY_MARGIN_BYTES = 25 * 1024 * 1024L // 25 MB safety margin
     }
 
@@ -84,6 +86,20 @@ class VoxDownloadStorage(private val context: Context) {
      */
     fun getTrackFile(downloadId: String, track: VoxDownloadTrack): File {
         return File(getJobDir(downloadId), track.fileName)
+    }
+
+    /**
+     * Возвращает дескриптор итогового файла MKV.
+     */
+    fun getOutputFile(downloadId: String): File {
+        return File(getJobDir(downloadId), OUTPUT_MEDIA_FILE)
+    }
+
+    /**
+     * Возвращает дескриптор временного файла MKV в процессе мультиплексирования.
+     */
+    fun getTmpOutputFile(downloadId: String): File {
+        return File(getJobDir(downloadId), TMP_OUTPUT_MEDIA_FILE)
     }
 
     /**

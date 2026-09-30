@@ -92,12 +92,14 @@ enum class VoxDownloadState {
     DOWNLOADING_ORIGINAL_AUDIO,
     DOWNLOADING_TRANSLATED_AUDIO,
     READY_FOR_MUX,
+    MUXING,
+    MUXED,
     PAUSED,
     FAILED,
     CANCELLED;
 
     val isTerminal: Boolean
-        get() = this == READY_FOR_MUX || this == FAILED || this == CANCELLED
+        get() = this == MUXED || this == FAILED || this == CANCELLED
 }
 
 /**

@@ -26,13 +26,33 @@ class VoxDownloadRepository(
 
             // Если задание не завершилось (не READY_FOR_MUX) и не было отменено,
             // восстанавливаем его в состоянии PAUSED
-            val restoredState = if (stored.state == VoxDownloadState.READY_FOR_MUX ||
-                stored.state == VoxDownloadState.CANCELLED ||
-                stored.state == VoxDownloadState.FAILED
-            ) {
-                stored.state
-            } else {
-                VoxDownloadState.PAUSED
+            val restoredState = when (stored.state) {
+                VoxDownloadState.MUXED -> {
+                    if (storage.getOutputFile(id).exists()) {
+                        VoxDownloadState.MUXED
+                    } else {
+                        VoxDownloadState.READY_FOR_MUX
+                    }
+                }
+                VoxDownloadState.MUXING -> {
+                    // Удаляем недописанный временный файл мультиплексирования
+                    val tmpMkv = storage.getTmpOutputFile(id)
+                    if (tmpMkv.exists()) {
+                        tmpMkv.delete()
+                    }
+                    val v = storage.getTrackFile(id, VoxDownloadTrack.VIDEO)
+                    val o = storage.getTrackFile(id, VoxDownloadTrack.ORIGINAL_AUDIO)
+                    val t = storage.getTrackFile(id, VoxDownloadTrack.TRANSLATED_AUDIO)
+                    if (v.exists() && v.length() > 0 && o.exists() && o.length() > 0 && t.exists() && t.length() > 0) {
+                        VoxDownloadState.READY_FOR_MUX
+                    } else {
+                        VoxDownloadState.PAUSED
+                    }
+                }
+                VoxDownloadState.READY_FOR_MUX,
+                VoxDownloadState.CANCELLED,
+                VoxDownloadState.FAILED -> stored.state
+                else -> VoxDownloadState.PAUSED
             }
 
             val job = VoxDownloadJob(
