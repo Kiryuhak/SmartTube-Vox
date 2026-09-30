@@ -246,9 +246,17 @@ public class Utils {
         return activity != null && !activity.isDestroyed() && !activity.isFinishing();
     }
 
+    public static boolean isStvotFlavor() {
+        return Helpers.equals(com.liskovsoft.smartyoutubetv2.common.BuildConfig.FLAVOR, "stvot");
+    }
+
     public static void updateRemoteControlService(Context context) {
         if (context == null || VERSION.SDK_INT <= 19) { // Eltex NPE fix
             return;
+        }
+
+        if (isStvotFlavor()) {
+            com.liskovsoft.smartyoutubetv2.common.vox.external.VoxExternalLaunchManager.instance(context).syncWithSettings();
         }
 
         if (RemoteControlData.instance(context).isDeviceLinkEnabled()) {
