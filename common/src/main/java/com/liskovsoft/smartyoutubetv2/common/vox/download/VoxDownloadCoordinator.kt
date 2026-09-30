@@ -26,6 +26,7 @@ class VoxDownloadCoordinator(
     private val streamResolver: VoxStreamResolver = DefaultVoxStreamResolver(),
     private val translationResolver: VoxTranslationResolver = DefaultVoxTranslationResolver(),
     private val downloader: VoxSegmentDownloader = VoxSegmentDownloader(storage = storage),
+    private val publisher: VoxDownloadPublisher? = null,
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
 ) {
 
@@ -48,9 +49,11 @@ class VoxDownloadCoordinator(
                     val appContext = context.applicationContext
                     val stor = VoxDownloadStorage(appContext)
                     val repo = VoxDownloadRepository(stor)
+                    val pub = VoxMediaStorePublisher(appContext)
                     VoxDownloadCoordinator(
                         storage = stor,
-                        repository = repo
+                        repository = repo,
+                        publisher = pub
                     ).also { instance = it }
                 }
             }
@@ -200,9 +203,15 @@ class VoxDownloadCoordinator(
     }
 
     /**
-     * Полностью удаляет задание и его директорию.
+     * Полностью удаляет задание, его директорию и опубликованный файл (если есть).
      */
     fun deleteDownload(downloadId: String): Boolean {
+        val job = repository.getJob(downloadId)
+        if (job != null && !job.publishedUri.isNullOrBlank()) {
+            try {
+                publisher?.deletePublishedFile(job.publishedUri)
+            } catch (ignored: Exception) {}
+        }
         cancelDownload(downloadId)
         listeners.remove(downloadId)
         return repository.deleteJob(downloadId)
@@ -211,6 +220,14 @@ class VoxDownloadCoordinator(
     fun getJob(downloadId: String): VoxDownloadJob? = repository.getJob(downloadId)
 
     fun getAllJobs(): List<VoxDownloadJob> = repository.getAllJobs()
+
+    fun findCompletedJob(videoId: String): VoxDownloadJob? = repository.findCompletedJobByVideoId(videoId)
+
+    fun findActiveJob(videoId: String): VoxDownloadJob? = repository.findActiveJobByVideoId(videoId)
+
+    fun isPublishedFileAvailable(job: VoxDownloadJob): Boolean {
+        return publisher?.isPublishedFileAvailable(job.publishedUri) ?: false
+    }
 
     fun isJobActive(downloadId: String): Boolean = activeJobId == downloadId
 
@@ -565,6 +582,37 @@ class VoxDownloadCoordinator(
             repository.persistJob(job)
             notifyStateChange(job)
             VoxLog.d(TAG, "Download job $downloadId successfully multiplexed into MKV: ${result.outputFile.absolutePath} (${result.totalBytesWritten} bytes, duration=${result.durationMs}ms)")
+
+            // Публикация в MediaStore
+            if (publisher != null) {
+                if (isStale(job, expectedGen)) return
+                job.updateState(VoxDownloadState.PUBLISHING)
+                repository.persistJob(job)
+                notifyStateChange(job)
+                VoxLog.d(TAG, "Download job $downloadId starting MediaStore publication")
+
+                val pubUri = publisher.publish(
+                    outputFile = outputFile,
+                    videoTitle = job.request.videoTitle,
+                    isCancelled = job.isCancelledFlag
+                )
+
+                if (isStale(job, expectedGen)) return
+
+                job.publishedUri = pubUri.toString()
+                job.updateState(VoxDownloadState.COMPLETED)
+
+                // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
+                storage.cleanInternalSourcesAfterPublication(downloadId)
+
+                repository.persistJob(job)
+                notifyStateChange(job)
+                VoxLog.d(TAG, "Download job $downloadId published successfully to MediaStore: $pubUri")
+            } else {
+                job.updateState(VoxDownloadState.COMPLETED)
+                repository.persistJob(job)
+                notifyStateChange(job)
+            }
         } catch (e: InterruptedException) {
             if (job.isCancelled()) {
                 job.updateState(VoxDownloadState.CANCELLED)

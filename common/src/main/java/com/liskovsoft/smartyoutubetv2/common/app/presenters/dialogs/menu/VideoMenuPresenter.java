@@ -190,6 +190,8 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
             }
         }
 
+        appendDownloadWithTranslationButton();
+
         if (!mDialogPresenter.isEmpty()) {
             String title = mVideo != null ? mVideo.getTitle() : null;
             // No need to add author because: 1) This could be a channel card. 2) This info isn't so important.
@@ -211,10 +213,28 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
             }
         }
 
+        appendDownloadWithTranslationButton();
+
         if (!mDialogPresenter.isEmpty()) {
             String title = mVideo != null ? mVideo.getTitle() : null;
             mDialogPresenter.showDialog(title);
         }
+    }
+
+    private void appendDownloadWithTranslationButton() {
+        if (mVideo == null || !mVideo.hasVideo() || mVideo.isPlaylistAsChannel() || mVideo.isLive || mVideo.isUpcoming) {
+            return;
+        }
+
+        mDialogPresenter.appendSingleButton(
+                UiOptionItem.from(
+                        getContext().getString(R.string.vox_download_action),
+                        optionItem -> {
+                            mDialogPresenter.closeDialog();
+                            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadDialogHelper.onDownloadActionClicked(getContext(), mVideo);
+                        }
+                )
+        );
     }
 
     private void appendAddToWatchLaterButton() {

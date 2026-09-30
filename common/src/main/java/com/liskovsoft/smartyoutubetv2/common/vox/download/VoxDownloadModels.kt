@@ -94,12 +94,14 @@ enum class VoxDownloadState {
     READY_FOR_MUX,
     MUXING,
     MUXED,
+    PUBLISHING,
+    COMPLETED,
     PAUSED,
     FAILED,
     CANCELLED;
 
     val isTerminal: Boolean
-        get() = this == MUXED || this == FAILED || this == CANCELLED
+        get() = this == COMPLETED || this == FAILED || this == CANCELLED
 }
 
 /**
@@ -114,6 +116,8 @@ data class VoxDownloadProgress(
     val muxBytesProcessed: Long = 0L,
     val muxTotalBytes: Long = 0L,
     val muxPercent: Int = 0,
+    val publishedUri: String? = null,
+    val publishedFilePath: String? = null,
     val errorMessage: String? = null,
     val errorCode: VoxDownloadErrorCode? = null
 ) {
@@ -133,7 +137,10 @@ data class VoxDownloadProgress(
             if (state == VoxDownloadState.MUXING) {
                 return muxPercent
             }
-            if (state == VoxDownloadState.MUXED) {
+            if (state == VoxDownloadState.PUBLISHING) {
+                return 99
+            }
+            if (state == VoxDownloadState.MUXED || state == VoxDownloadState.COMPLETED) {
                 return 100
             }
             val expected = totalBytesExpected ?: return null

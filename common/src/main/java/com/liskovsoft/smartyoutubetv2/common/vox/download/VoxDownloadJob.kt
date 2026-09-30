@@ -13,7 +13,9 @@ class VoxDownloadJob(
     initialOriginalAudio: VoxTrackProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO),
     initialTranslatedAudio: VoxTrackProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO),
     initialErrorCode: VoxDownloadErrorCode? = null,
-    initialErrorMessage: String? = null
+    initialErrorMessage: String? = null,
+    initialPublishedUri: String? = null,
+    initialPublishedFilePath: String? = null
 ) {
     val downloadId: String get() = request.downloadId
 
@@ -48,6 +50,12 @@ class VoxDownloadJob(
     @Volatile
     var muxPercent: Int = 0
         private set
+
+    @Volatile
+    var publishedUri: String? = initialPublishedUri
+
+    @Volatile
+    var publishedFilePath: String? = initialPublishedFilePath
 
     @Volatile
     var errorCode: VoxDownloadErrorCode? = initialErrorCode
@@ -98,6 +106,8 @@ class VoxDownloadJob(
             muxBytesProcessed = muxBytesProcessed,
             muxTotalBytes = muxTotalBytes,
             muxPercent = muxPercent,
+            publishedUri = publishedUri,
+            publishedFilePath = publishedFilePath,
             errorMessage = errorMessage,
             errorCode = errorCode
         )

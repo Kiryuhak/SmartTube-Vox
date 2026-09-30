@@ -253,6 +253,13 @@ public class VideoLoaderController extends BasePlayerController {
 
         // Fix no progress on next video (the engine may still buffering a bit)
         //getPlayer().showProgressBar(true);
+        if (video.isLocal && video.mediaUrl != null) {
+            getPlayer().openUrlList(java.util.Collections.singletonList(video.mediaUrl));
+            getPlayer().setTitle(video.getTitle());
+            getPlayer().showProgressBar(false);
+            return;
+        }
+
         Utils.post(mShowProgressBar);
         disposeActions();
 

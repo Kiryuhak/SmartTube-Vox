@@ -683,7 +683,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void tryApplyAutoTranslate(boolean fromTrackChange) {
-        if (getPlayer() == null || getPlayer().getVideo() == null) {
+        if (getPlayer() == null || getPlayer().getVideo() == null || getPlayer().getVideo().isLocal) {
             return;
         }
         String videoId = getPlayer().getVideo().videoId;

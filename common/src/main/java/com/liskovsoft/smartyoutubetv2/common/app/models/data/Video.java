@@ -88,6 +88,8 @@ public final class Video {
     public boolean fromQueue;
     public boolean fromCrashRestorer;
     public boolean isPending;
+    public String mediaUrl;
+    public boolean isLocal;
     public boolean finishOnEnded;
     public boolean incognito;
     public String likeCount;
@@ -835,6 +837,8 @@ public final class Video {
         video.nextMediaItem = nextMediaItem;
         video.shuffleMediaItem = shuffleMediaItem;
         video.durationMs = durationMs;
+        video.mediaUrl = mediaUrl;
+        video.isLocal = isLocal;
 
         if (getGroup() != null) {
             video.setGroup(getGroup().copy()); // Needed for proper multi row fragments sync (row id == group id)
