@@ -42,6 +42,18 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         } else if ("disableNewBackend".equalsIgnoreCase(action) || "forceOldBackend".equalsIgnoreCase(action)) {
             VoiceTranslateController.setNewYandexBackendEnabled(false);
             Log.i(TAG, "New Yandex VOT backend DISABLED for user flow (forced OLD override)");
+        } else if ("startTranslation".equalsIgnoreCase(action)) {
+            VoiceTranslateController controller = VoiceTranslateController.instance();
+            if (controller != null) {
+                controller.onButtonClicked(com.liskovsoft.smartyoutubetv2.common.R.id.action_voice_translate, VoiceTranslateController.BTN_OFF);
+                Log.i(TAG, "Triggered start translation via diagnostic broadcast");
+            }
+        } else if ("stopTranslation".equalsIgnoreCase(action)) {
+            VoiceTranslateController controller = VoiceTranslateController.instance();
+            if (controller != null) {
+                controller.onButtonClicked(com.liskovsoft.smartyoutubetv2.common.R.id.action_voice_translate, VoiceTranslateController.BTN_ON);
+                Log.i(TAG, "Triggered stop translation via diagnostic broadcast");
+            }
         } else if ("status".equalsIgnoreCase(action)) {
             handleStatus();
         } else {
