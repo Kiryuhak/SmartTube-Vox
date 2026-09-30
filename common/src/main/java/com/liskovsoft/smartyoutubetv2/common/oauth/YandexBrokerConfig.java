@@ -9,7 +9,7 @@ public final class YandexBrokerConfig {
     private YandexBrokerConfig() {}
 
     public static Mode mode() {
-        return BuildConfig.DEBUG && !BuildConfig.YANDEX_OAUTH_BROKER_URL.isEmpty()
+        return BuildConfig.YANDEX_OAUTH_BROKER_URL != null && !BuildConfig.YANDEX_OAUTH_BROKER_URL.isEmpty()
                 ? Mode.BROKER : Mode.DISABLED;
     }
 
