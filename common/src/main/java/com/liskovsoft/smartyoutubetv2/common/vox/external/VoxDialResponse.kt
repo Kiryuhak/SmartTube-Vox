@@ -8,15 +8,25 @@ import java.nio.charset.StandardCharsets
  */
 object VoxDialResponse {
 
+    fun escapeXml(text: String?): String {
+        if (text == null) return ""
+        return text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
+    }
+
     fun buildDeviceDescriptionXml(
         deviceIdentity: VoxDeviceIdentity,
         serverBaseUrl: String
     ): String {
-        val friendlyName = deviceIdentity.getFriendlyName()
-        val manufacturer = deviceIdentity.getManufacturer()
-        val modelName = deviceIdentity.getModelName()
-        val modelNumber = deviceIdentity.getModelNumber()
-        val udn = deviceIdentity.getUdn()
+        val friendlyName = escapeXml(deviceIdentity.getFriendlyName())
+        val manufacturer = escapeXml(deviceIdentity.getManufacturer())
+        val modelName = escapeXml(deviceIdentity.getModelName())
+        val modelNumber = escapeXml(deviceIdentity.getModelNumber())
+        val udn = escapeXml(deviceIdentity.getUdn())
+        val escapedBaseUrl = escapeXml(serverBaseUrl)
 
         return """<?xml version="1.0" encoding="utf-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
@@ -31,7 +41,7 @@ object VoxDialResponse {
         <modelName>$modelName</modelName>
         <modelNumber>$modelNumber</modelNumber>
         <UDN>$udn</UDN>
-        <presentationURL>$serverBaseUrl</presentationURL>
+        <presentationURL>$escapedBaseUrl</presentationURL>
         <serviceList>
             <service>
                 <serviceType>urn:dial-multiscreen-org:service:dial:1</serviceType>
@@ -71,7 +81,7 @@ object VoxDialResponse {
         headerBuilder.append("Connection: close\r\n")
         headerBuilder.append("Access-Control-Allow-Origin: *\r\n")
         headerBuilder.append("Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n")
-        headerBuilder.append("Access-Control-Allow-Headers: Content-Type, Authorization\r\n")
+        headerBuilder.append("Access-Control-Allow-Headers: Content-Type\r\n")
 
         for ((key, value) in additionalHeaders) {
             headerBuilder.append("$key: $value\r\n")

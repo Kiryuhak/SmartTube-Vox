@@ -11,13 +11,14 @@ data class VoxHttpRequest(
     val path: String,
     val queryString: String = "",
     val headers: Map<String, String> = emptyMap(),
-    val body: String = ""
+    val body: String = "",
+    val isPayloadTooLarge: Boolean = false
 )
 
 object VoxDialRequestParser {
 
-    private const val MAX_HEADER_SIZE = 8192
-    private const val MAX_BODY_SIZE = 65536 // 64 KB
+    const val MAX_HEADER_SIZE = 8192
+    const val MAX_BODY_SIZE = 65536 // 64 KB
     private val VALID_METHODS = setOf("GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS")
 
     /**
@@ -30,13 +31,16 @@ object VoxDialRequestParser {
         if (lines.isEmpty() || lines[0].isBlank()) return null
 
         val requestLineParts = lines[0].split(" ")
-        if (requestLineParts.size < 2) return null
+        if (requestLineParts.size != 3) return null
 
         val method = requestLineParts[0].uppercase()
         if (method !in VALID_METHODS) return null
 
         val rawUri = requestLineParts[1]
         if (!rawUri.startsWith("/")) return null
+
+        val httpVersion = requestLineParts[2].uppercase()
+        if (!httpVersion.startsWith("HTTP/1.")) return null
 
         val uriParts = rawUri.split("?", limit = 2)
         val path = uriParts[0]
@@ -54,17 +58,30 @@ object VoxDialRequestParser {
             }
         }
 
+        var isPayloadTooLarge = false
         var body = ""
-        val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
-        if (contentLength in 1..MAX_BODY_SIZE) {
-            val bodyBytes = ByteArray(contentLength)
-            var totalRead = 0
-            while (totalRead < contentLength) {
-                val read = input.read(bodyBytes, totalRead, contentLength - totalRead)
-                if (read < 0) break
-                totalRead += read
+        val clHeader = headers["content-length"]
+        if (clHeader != null) {
+            val contentLength = clHeader.toIntOrNull()
+            if (contentLength == null || contentLength < 0) {
+                // Невалидный или отрицательный Content-Length
+                return null
             }
-            body = String(bodyBytes, 0, totalRead, StandardCharsets.UTF_8)
+            if (contentLength > MAX_BODY_SIZE) {
+                isPayloadTooLarge = true
+            } else if (contentLength > 0) {
+                val bodyBytes = ByteArray(contentLength)
+                var totalRead = 0
+                while (totalRead < contentLength) {
+                    val read = input.read(bodyBytes, totalRead, contentLength - totalRead)
+                    if (read < 0) {
+                        // Поток завершился до вычитывания заявленного Content-Length (усеченное тело)
+                        return null
+                    }
+                    totalRead += read
+                }
+                body = String(bodyBytes, 0, totalRead, StandardCharsets.UTF_8)
+            }
         }
 
         return VoxHttpRequest(
@@ -72,20 +89,13 @@ object VoxDialRequestParser {
             path = path,
             queryString = queryString,
             headers = headers,
-            body = body
+            body = body,
+            isPayloadTooLarge = isPayloadTooLarge
         )
     }
 
     /**
      * Извлекает параметры видео (videoId, playlistId, timeMs) из DIAL POST body или queryString.
-     * 
-     * Поддерживаемые форматы body/query:
-     * - `v=dQw4w9WgXcQ`
-     * - `v=dQw4w9WgXcQ&t=120`
-     * - `pairingCode=...&v=dQw4w9WgXcQ`
-     * - `list=PL...&v=...`
-     * - Прямой video ID: `dQw4w9WgXcQ`
-     * - URL: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
      */
     fun extractVideoParameters(request: VoxHttpRequest, clientIp: String): VoxExternalVideoRequest? {
         val payload = if (request.body.isNotBlank()) request.body else request.queryString
@@ -97,7 +107,6 @@ object VoxDialRequestParser {
         var playlistId: String? = null
         var timeMs: Long = -1L
 
-        // Попытка парсинга key=value пар
         val pairs = decoded.split("&")
         for (pair in pairs) {
             val kv = pair.split("=", limit = 2)
@@ -125,7 +134,6 @@ object VoxDialRequestParser {
             }
         }
 
-        // Если не удалось извлечь по парам ключ-значение, проверяем regex
         if (videoId == null) {
             videoId = VoxExternalLaunchValidator.extractVideoId(decoded)
         }
@@ -146,11 +154,11 @@ object VoxDialRequestParser {
     private fun readHeaderBytes(input: InputStream): ByteArray? {
         val buffer = ByteArray(MAX_HEADER_SIZE)
         var totalRead = 0
+        var terminated = false
 
         while (totalRead < MAX_HEADER_SIZE) {
             val b = input.read()
             if (b < 0) {
-                if (totalRead == 0) return null
                 break
             }
             buffer[totalRead++] = b.toByte()
@@ -162,8 +170,13 @@ object VoxDialRequestParser {
                 buffer[totalRead - 2] == '\r'.code.toByte() &&
                 buffer[totalRead - 1] == '\n'.code.toByte()
             ) {
+                terminated = true
                 break
             }
+        }
+
+        if (!terminated || totalRead == 0) {
+            return null
         }
 
         val result = ByteArray(totalRead)

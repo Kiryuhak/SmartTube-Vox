@@ -154,6 +154,12 @@ class VoxDialServer(
                 return
             }
 
+            if (request.isPayloadTooLarge) {
+                VoxLog.w(TAG, "Request payload too large from $clientIp")
+                VoxDialResponse.sendSimpleResponse(output, 413, "Payload Too Large", "Payload Too Large")
+                return
+            }
+
             val localIp = socket.localAddress?.hostAddress ?: "127.0.0.1"
             val serverBaseUrl = "http://$localIp:$boundPort"
             val appUrlHeader = "$serverBaseUrl/apps/"

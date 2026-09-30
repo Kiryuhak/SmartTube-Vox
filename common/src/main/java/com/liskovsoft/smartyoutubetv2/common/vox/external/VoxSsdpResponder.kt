@@ -99,9 +99,9 @@ class VoxSsdpResponder(
                 }
 
                 val data = String(packet.data, packet.offset, packet.length, StandardCharsets.UTF_8)
-                if (isSSDPDiscovery(data)) {
-                    val st = extractSearchTarget(data) ?: DIAL_ST
-                    if (isTargetMatch(st)) {
+                if (VoxSsdpProtocol.isDiscoveryRequest(data)) {
+                    val st = VoxSsdpProtocol.extractSearchTarget(data) ?: VoxSsdpProtocol.DIAL_ST
+                    if (VoxSsdpProtocol.isSupportedSearchTarget(st)) {
                         sendSsdpResponse(packet.address, packet.port, st)
                     }
                 }
@@ -114,50 +114,13 @@ class VoxSsdpResponder(
         VoxLog.i(TAG, "SSDP listener loop finished")
     }
 
-    private fun isSSDPDiscovery(data: String): Boolean {
-        val upper = data.uppercase()
-        return upper.startsWith("M-SEARCH") && upper.contains("MAN: \"SSDP:DISCOVER\"")
-    }
-
-    private fun extractSearchTarget(data: String): String? {
-        val lines = data.split("\r\n")
-        for (line in lines) {
-            if (line.uppercase().startsWith("ST:")) {
-                return line.substring(3).trim()
-            }
-        }
-        return null
-    }
-
-    private fun isTargetMatch(st: String): Boolean {
-        val lower = st.lowercase()
-        return lower == "ssdp:all" ||
-                lower == "upnp:rootdevice" ||
-                lower == DIAL_ST.lowercase() ||
-                lower.startsWith("urn:dial-multiscreen-org:service:dial") ||
-                lower.startsWith("urn:dial-multiscreen-org:device:dial")
-    }
-
     private fun sendSsdpResponse(targetAddress: InetAddress, targetPort: Int, requestedSt: String) {
         val httpPort = httpPortProvider()
         if (httpPort <= 0) return
 
         val localIp = findBestLocalIpForTarget(targetAddress)
-        val locationUrl = "http://$localIp:$httpPort/dd.xml"
         val udn = deviceIdentity.getUdn()
-        val effectiveSt = if (requestedSt.equals("ssdp:all", ignoreCase = true)) DIAL_ST else requestedSt
-        val usn = "$udn::$effectiveSt"
-
-        val response = "HTTP/1.1 200 OK\r\n" +
-                "CACHE-CONTROL: max-age=1800\r\n" +
-                "EXT:\r\n" +
-                "LOCATION: $locationUrl\r\n" +
-                "SERVER: Android/1.0 UPnP/1.0 SmartTube-VOX/5.0\r\n" +
-                "ST: $effectiveSt\r\n" +
-                "USN: $usn\r\n" +
-                "BOOTID.UPNP.ORG: 1\r\n" +
-                "CONFIGID.UPNP.ORG: 1\r\n" +
-                "\r\n"
+        val response = VoxSsdpProtocol.buildResponse(localIp, httpPort, udn, requestedSt)
 
         try {
             val responseBytes = response.toByteArray(StandardCharsets.UTF_8)
@@ -165,7 +128,7 @@ class VoxSsdpResponder(
             DatagramSocket().use { unicastSocket ->
                 unicastSocket.send(sendPacket)
             }
-            VoxLog.d(TAG, "Sent SSDP response to $targetAddress:$targetPort -> $locationUrl")
+            VoxLog.d(TAG, "Sent SSDP response to $targetAddress:$targetPort (ST: $requestedSt)")
         } catch (e: Exception) {
             VoxLog.w(TAG, "Failed to send SSDP unicast response: ${e.message}")
         }

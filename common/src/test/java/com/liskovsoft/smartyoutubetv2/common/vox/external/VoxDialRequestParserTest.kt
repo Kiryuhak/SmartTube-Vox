@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.vox.external
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
@@ -76,6 +77,73 @@ class VoxDialRequestParserTest {
         val rawHttp = "PATCH /apps/YouTube HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
         val req = VoxDialRequestParser.parse(ByteArrayInputStream(rawHttp.toByteArray(StandardCharsets.UTF_8)))
         assertNull(req)
+    }
+
+    @Test
+    fun testParseMalformedRequestLine() {
+        val incomplete = "GET /dd.xml\r\nHost: 127.0.0.1\r\n\r\n"
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(incomplete.toByteArray(StandardCharsets.UTF_8))))
+
+        val extraParts = "GET /dd.xml HTTP/1.1 EXTRA\r\nHost: 127.0.0.1\r\n\r\n"
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(extraParts.toByteArray(StandardCharsets.UTF_8))))
+
+        val invalidProtocol = "GET /dd.xml FTP/1.0\r\nHost: 127.0.0.1\r\n\r\n"
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(invalidProtocol.toByteArray(StandardCharsets.UTF_8))))
+    }
+
+    @Test
+    fun testParseOversizedContentLength() {
+        val rawHttp = "POST /apps/YouTube HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\n" +
+                "Content-Length: 100000\r\n" +
+                "\r\n"
+
+        val req = VoxDialRequestParser.parse(ByteArrayInputStream(rawHttp.toByteArray(StandardCharsets.UTF_8)))
+        assertNotNull(req)
+        assertTrue(req!!.isPayloadTooLarge)
+    }
+
+    @Test
+    fun testParseNegativeContentLength() {
+        val rawHttp = "POST /apps/YouTube HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\n" +
+                "Content-Length: -5\r\n" +
+                "\r\n"
+
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(rawHttp.toByteArray(StandardCharsets.UTF_8))))
+    }
+
+    @Test
+    fun testParseInvalidNumericContentLength() {
+        val rawHttp = "POST /apps/YouTube HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\n" +
+                "Content-Length: abc\r\n" +
+                "\r\n"
+
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(rawHttp.toByteArray(StandardCharsets.UTF_8))))
+    }
+
+    @Test
+    fun testParseTruncatedBody() {
+        val rawHttp = "POST /apps/YouTube HTTP/1.1\r\n" +
+                "Host: 127.0.0.1\r\n" +
+                "Content-Length: 50\r\n" +
+                "\r\n" +
+                "short_body"
+
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(rawHttp.toByteArray(StandardCharsets.UTF_8))))
+    }
+
+    @Test
+    fun testParseUnterminatedHeader() {
+        val rawHttp = "GET /dd.xml HTTP/1.1\r\nHost: 127.0.0.1"
+        assertNull(VoxDialRequestParser.parse(ByteArrayInputStream(rawHttp.toByteArray(StandardCharsets.UTF_8))))
+    }
+
+    @Test
+    fun testXmlEscaping() {
+        assertEquals("&lt;device&gt;&amp;&quot;&apos;", VoxDialResponse.escapeXml("<device>&\"'"))
+        assertEquals("", VoxDialResponse.escapeXml(null))
     }
 
     @Test
