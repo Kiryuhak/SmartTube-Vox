@@ -106,6 +106,17 @@ public class TrackSelectorUtil {
     }
 
     private static String buildLanguageString(Format format) {
+        if (!TextUtils.isEmpty(format.label)) {
+            return format.label;
+        }
+        if (MimeTypes.isAudio(format.sampleMimeType)) {
+            if ("rus".equalsIgnoreCase(format.language) || "ru".equalsIgnoreCase(format.language)) {
+                return "Перевод";
+            }
+            if ("und".equalsIgnoreCase(format.language)) {
+                return "Оригинал";
+            }
+        }
         return TextUtils.isEmpty(format.language) || "und".equals(format.language) ? "" : SubtitleTrack.trimIfAuto(format.language);
     }
 

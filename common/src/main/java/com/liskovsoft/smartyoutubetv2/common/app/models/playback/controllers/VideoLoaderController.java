@@ -246,6 +246,14 @@ public class VideoLoaderController extends BasePlayerController {
         }
     }
 
+    private boolean isValidLocalPlayback(Video video) {
+        if (video == null || !video.isLocal || video.mediaUrl == null) {
+            return false;
+        }
+        String url = video.mediaUrl.trim();
+        return url.startsWith("content://") || url.startsWith("file://");
+    }
+
     private void loadFormatInfo(Video video) {
         if (getPlayer() == null) {
             return;
@@ -253,6 +261,13 @@ public class VideoLoaderController extends BasePlayerController {
 
         // Fix no progress on next video (the engine may still buffering a bit)
         //getPlayer().showProgressBar(true);
+        if (isValidLocalPlayback(video)) {
+            getPlayer().openUrlList(java.util.Collections.singletonList(video.mediaUrl));
+            getPlayer().setTitle(video.getTitle());
+            getPlayer().showProgressBar(false);
+            return;
+        }
+
         Utils.post(mShowProgressBar);
         disposeActions();
 

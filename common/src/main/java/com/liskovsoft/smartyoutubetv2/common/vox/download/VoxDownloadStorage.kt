@@ -122,7 +122,9 @@ class VoxDownloadStorage(private val context: Context) {
         originalAudioProgress: VoxTrackProgress,
         translatedAudioProgress: VoxTrackProgress,
         errorCode: VoxDownloadErrorCode? = null,
-        errorMessage: String? = null
+        errorMessage: String? = null,
+        publishedUri: String? = null,
+        publishedFilePath: String? = null
     ) {
         val jobDir = getJobDir(request.downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
@@ -140,6 +142,12 @@ class VoxDownloadStorage(private val context: Context) {
             }
             if (errorMessage != null) {
                 put("errorMessage", errorMessage)
+            }
+            if (publishedUri != null) {
+                put("publishedUri", publishedUri)
+            }
+            if (publishedFilePath != null) {
+                put("publishedFilePath", publishedFilePath)
             }
 
             put("video", JSONObject().apply {
@@ -232,11 +240,16 @@ class VoxDownloadStorage(private val context: Context) {
             val tTotal = if (transObj != null && transObj.has("total")) transObj.getLong("total") else null
             val tState = parseTrackState(transObj?.optString("state"), tBytes, tTotal)
 
+            val rawPublishedUri = if (json.has("publishedUri")) json.getString("publishedUri") else null
+            val rawPublishedFilePath = if (json.has("publishedFilePath")) json.getString("publishedFilePath") else null
+
             StoredJobData(
                 request = req,
                 state = state,
                 errorCode = errorCode,
                 errorMessage = errorMessage,
+                publishedUri = rawPublishedUri,
+                publishedFilePath = rawPublishedFilePath,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
                 translatedAudioProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, tBytes, tTotal, tState)
@@ -256,6 +269,31 @@ class VoxDownloadStorage(private val context: Context) {
             VoxTrackState.IN_PROGRESS
         } else {
             VoxTrackState.PENDING
+        }
+    }
+
+    /**
+     * Очищает внутренние временные .part файлы и локальную копию output.mkv после успешной публикации.
+     * Сохраняет job.json с метаданными и publishedUri.
+     */
+    fun cleanInternalSourcesAfterPublication(downloadId: String) {
+        try {
+            for (track in VoxDownloadTrack.values()) {
+                val file = getTrackFile(downloadId, track)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+            val outputMkv = getOutputFile(downloadId)
+            if (outputMkv.exists()) {
+                outputMkv.delete()
+            }
+            val tmpMkv = getTmpOutputFile(downloadId)
+            if (tmpMkv.exists()) {
+                tmpMkv.delete()
+            }
+        } catch (e: Exception) {
+            // Игнорируем ошибки очистки
         }
     }
 
@@ -320,6 +358,8 @@ data class StoredJobData(
     val state: VoxDownloadState,
     val errorCode: VoxDownloadErrorCode?,
     val errorMessage: String?,
+    val publishedUri: String? = null,
+    val publishedFilePath: String? = null,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,
     val translatedAudioProgress: VoxTrackProgress

@@ -24,9 +24,25 @@ class VoxDownloadRepository(
         for (id in jobIds) {
             val stored = storage.loadJobMetadata(id) ?: continue
 
-            // Если задание не завершилось (не READY_FOR_MUX) и не было отменено,
+            // Если задание не завершилось (не COMPLETED/READY_FOR_MUX) и не было отменено,
             // восстанавливаем его в состоянии PAUSED
             val restoredState = when (stored.state) {
+                VoxDownloadState.COMPLETED -> {
+                    if (stored.publishedUri != null) {
+                        VoxDownloadState.COMPLETED
+                    } else if (storage.getOutputFile(id).exists()) {
+                        VoxDownloadState.MUXED
+                    } else {
+                        VoxDownloadState.PAUSED
+                    }
+                }
+                VoxDownloadState.PUBLISHING -> {
+                    if (storage.getOutputFile(id).exists()) {
+                        VoxDownloadState.MUXED
+                    } else {
+                        VoxDownloadState.READY_FOR_MUX
+                    }
+                }
                 VoxDownloadState.MUXED -> {
                     if (storage.getOutputFile(id).exists()) {
                         VoxDownloadState.MUXED
@@ -62,7 +78,9 @@ class VoxDownloadRepository(
                 initialOriginalAudio = stored.originalAudioProgress,
                 initialTranslatedAudio = stored.translatedAudioProgress,
                 initialErrorCode = stored.errorCode,
-                initialErrorMessage = stored.errorMessage
+                initialErrorMessage = stored.errorMessage,
+                initialPublishedUri = stored.publishedUri,
+                initialPublishedFilePath = stored.publishedFilePath
             )
             jobs[id] = job
         }
@@ -71,6 +89,23 @@ class VoxDownloadRepository(
     fun getJob(downloadId: String): VoxDownloadJob? = jobs[downloadId]
 
     fun getAllJobs(): List<VoxDownloadJob> = jobs.values.toList().sortedByDescending { it.request.createdAt }
+
+    fun findJobByVideoId(videoId: String): VoxDownloadJob? {
+        return jobs.values.firstOrNull { it.request.videoId == videoId }
+    }
+
+    fun findCompletedJobByVideoId(videoId: String): VoxDownloadJob? {
+        return jobs.values.firstOrNull { it.request.videoId == videoId && it.state == VoxDownloadState.COMPLETED && !it.publishedUri.isNullOrBlank() }
+    }
+
+    fun findActiveJobByVideoId(videoId: String): VoxDownloadJob? {
+        return jobs.values.firstOrNull {
+            it.request.videoId == videoId &&
+            it.state != VoxDownloadState.COMPLETED &&
+            it.state != VoxDownloadState.FAILED &&
+            it.state != VoxDownloadState.CANCELLED
+        }
+    }
 
     fun addOrUpdateJob(job: VoxDownloadJob) {
         jobs[job.downloadId] = job
@@ -85,7 +120,9 @@ class VoxDownloadRepository(
             originalAudioProgress = job.originalAudioProgress,
             translatedAudioProgress = job.translatedAudioProgress,
             errorCode = job.errorCode,
-            errorMessage = job.errorMessage
+            errorMessage = job.errorMessage,
+            publishedUri = job.publishedUri,
+            publishedFilePath = job.publishedFilePath
         )
     }
 

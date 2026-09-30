@@ -531,6 +531,59 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     }
                 }
             });
+        } else if ("testPublishDownload".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId == null || downloadId.isEmpty()) {
+                downloadId = "patch4-live-final";
+            }
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                    com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job = coordinator.getJob(downloadId);
+            if (job != null) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxMediaStorePublisher publisher =
+                        new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxMediaStorePublisher(context);
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage storage =
+                        new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage(context);
+                java.io.File mkv = storage.getOutputFile(downloadId);
+                if (mkv.exists() && mkv.length() > 0) {
+                    try {
+                        android.net.Uri uri = publisher.publish(mkv, job.getRequest().getVideoTitle(), new java.util.concurrent.atomic.AtomicBoolean(false));
+                        job.setPublishedUri(uri.toString());
+                        job.updateState(com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED, null, null);
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadRepository repo =
+                                new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadRepository(storage);
+                        repo.persistJob(job);
+                        storage.cleanInternalSourcesAfterPublication(downloadId);
+                        Log.i(TAG, "PUBLISH_PROBE_SUCCESS: uri=" + uri + " available=" + publisher.isPublishedFileAvailable(uri.toString()));
+                    } catch (Exception e) {
+                        Log.e(TAG, "PUBLISH_PROBE_ERROR: " + e.getMessage(), e);
+                    }
+                } else {
+                    Log.w(TAG, "PUBLISH_PROBE_FAIL: internal MKV missing: " + mkv.getAbsolutePath());
+                }
+            } else {
+                Log.w(TAG, "PUBLISH_PROBE_FAIL: job not found: " + downloadId);
+            }
+        } else if ("testLocalPlayback".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId == null || downloadId.isEmpty()) {
+                downloadId = "patch4-live-final";
+            }
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                    com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job = coordinator.getJob(downloadId);
+            if (job != null) {
+                android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                h.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxLocalPlayerHelper.playJob(context, job);
+                        Log.i(TAG, "LOCAL_PLAYBACK_OPENED: job=" + job.getDownloadId() + " uri=" + job.getPublishedUri());
+                    }
+                });
+            } else {
+                Log.w(TAG, "LOCAL_PLAYBACK_FAIL: job not found: " + downloadId);
+            }
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }

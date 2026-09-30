@@ -92,4 +92,45 @@
     <string name="reset_dialog_cancel">Отмена</string>
     <string name="reset_dialog_confirm">Сбросить всё</string>
     <string name="reset_dialog_failed">Не удалось сбросить данные приложения</string>
+
+    <!-- VOX 5: Скачивание видео с переводом -->
+    <string name="action_download_with_translation">Скачать с переводом</string>
+    <string name="vox_download_action">Скачать с переводом</string>
+    <string name="vox_download_retry">Повторить</string>
+    <string name="vox_download_title">Скачать с переводом</string>
+    <string name="vox_download_quality_category">Качество видео</string>
+    <string name="vox_download_translation_category">Режим перевода</string>
+    <string name="vox_download_translation_standard">Обычный перевод</string>
+    <string name="vox_download_translation_lively">Живой голос (Lively)</string>
+    <string name="vox_download_auth_required">Требуется вход в Яндекс</string>
+    <string name="vox_download_tracks_info">Аудиодорожки: Оригинал, Перевод</string>
+    <string name="vox_download_start_button">Начать скачивание</string>
+    <string name="vox_download_already_downloaded">Видео уже скачано</string>
+    <string name="vox_download_already_active">Видео уже загружается</string>
+    <string name="vox_download_open_local">Открыть</string>
+    <string name="vox_download_redownload">Скачать ещё раз</string>
+    <string name="vox_download_delete">Удалить</string>
+    <string name="vox_download_cancel_job">Отменить загрузку</string>
+    <string name="vox_download_cancel_confirm">Отменить загрузку?</string>
+    <string name="vox_download_close">Закрыть</string>
+    <string name="vox_download_completed_toast">Видео сохранено</string>
+    <string name="vox_download_live_unsupported">Скачивание прямых трансляций пока не поддерживается</string>
+    <string name="vox_download_stage_prep_trans">Подготовка перевода</string>
+    <string name="vox_download_stage_resolving">Подготовка загрузки</string>
+    <string name="vox_download_stage_video">Загрузка видео</string>
+    <string name="vox_download_stage_orig_audio">Загрузка оригинального звука</string>
+    <string name="vox_download_stage_trans_audio">Загрузка перевода</string>
+    <string name="vox_download_stage_muxing">Упаковка файла</string>
+    <string name="vox_download_stage_publishing">Сохранение файла</string>
+    <string name="vox_download_stage_completed">Готово</string>
+    <string name="vox_download_stage_failed">Ошибка</string>
+    <string name="vox_download_stage_cancelled">Отменено</string>
+    <string name="vox_download_error_auth">Требуется вход в Яндекс</string>
+    <string name="vox_download_error_storage">Недостаточно свободного места</string>
+    <string name="vox_download_error_stream">Не удалось получить видеопоток</string>
+    <string name="vox_download_error_trans">Перевод для этого видео недоступен</string>
+    <string name="vox_download_error_codec">Этот формат пока не поддерживается</string>
+    <string name="vox_download_error_parse">Не удалось подготовить видеофайл</string>
+    <string name="vox_download_error_network">Ошибка сети</string>
+    <string name="vox_download_error_unknown">Не удалось скачать видео</string>
 </resources>
