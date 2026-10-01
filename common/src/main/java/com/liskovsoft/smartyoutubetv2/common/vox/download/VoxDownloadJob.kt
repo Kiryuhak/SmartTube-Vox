@@ -15,7 +15,8 @@ class VoxDownloadJob(
     initialErrorCode: VoxDownloadErrorCode? = null,
     initialErrorMessage: String? = null,
     initialPublishedUri: String? = null,
-    initialPublishedFilePath: String? = null
+    initialPublishedFilePath: String? = null,
+    initialActualVideoHeight: Int = 0
 ) {
     val downloadId: String get() = request.downloadId
 
@@ -68,6 +69,9 @@ class VoxDownloadJob(
 
     @Volatile
     var publishedFilePath: String? = initialPublishedFilePath
+
+    @Volatile
+    var actualVideoHeight: Int = initialActualVideoHeight
 
     @Volatile
     var errorCode: VoxDownloadErrorCode? = initialErrorCode

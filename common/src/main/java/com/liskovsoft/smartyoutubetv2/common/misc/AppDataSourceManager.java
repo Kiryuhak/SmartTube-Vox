@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.SubtitleSet
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem.VideoPreset;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper;
+import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,6 +80,8 @@ public class AppDataSourceManager {
         }
 
         if (VotOnboardingHelper.isStvot(context)) {
+            settingItems.add(new SettingsItem(
+                    "Загрузки VOX", () -> VoxDownloadManager.show(context), R.drawable.settings_app));
             settingItems.add(new SettingsItem(
                     context.getString(R.string.settings_reset), () -> ResetSettingsPresenter.instance(context).show(), R.drawable.settings_reset));
         }

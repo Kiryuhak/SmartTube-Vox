@@ -137,6 +137,16 @@ public class AppDialogPresenter extends BasePresenter<AppDialogView> {
         setupTimeout();
     }
 
+    /** Обновляет открытый диалог без добавления ещё одного экрана в BACK-стек. */
+    public void refreshDialog(CharSequence dialogTitle) {
+        mTitle = dialogTitle;
+        backupData();
+        resetData();
+        if (getView() != null) {
+            getView().refresh(mBackupCategories, mBackupTitle, mBackupIsTransparent, mBackupIsOverlay, mBackupId);
+        }
+    }
+
     public void closeDialog() {
         if (getView() != null) {
             getView().finish();

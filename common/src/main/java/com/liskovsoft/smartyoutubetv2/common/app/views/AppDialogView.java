@@ -6,6 +6,7 @@ import java.util.List;
 
 public interface AppDialogView {
     void show(List<OptionCategory> categories, CharSequence title, boolean isExpandable, boolean isTransparent, boolean isOverlay, int id);
+    void refresh(List<OptionCategory> categories, CharSequence title, boolean isTransparent, boolean isOverlay, int id);
     void finish();
     void goBack();
     void clearBackstack();
