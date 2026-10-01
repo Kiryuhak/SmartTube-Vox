@@ -90,7 +90,9 @@ class DefaultVoxStreamResolver(
         val formatInfo = fetchFormatInfo(videoId)
         val formats = collectAllFormats(formatInfo)
 
-        val audioFormat = VotMediaFormatSelector.selectBestAudioFormat(formats)
+        // Для скачивания в MKV отдаем предпочтение audio/mp4 (AAC), чтобы MediaExtractor гарантированно получил csd-0 (AudioSpecificConfig)
+        val audioFormat = selectBestMuxAudioFormat(formats)
+            ?: VotMediaFormatSelector.selectBestAudioFormat(formats)
             ?: formats.firstOrNull { f ->
                 val mime = f.mimeType?.lowercase(Locale.US) ?: ""
                 mime.startsWith("audio/") && !f.url.isNullOrBlank()
@@ -119,6 +121,21 @@ class DefaultVoxStreamResolver(
             contentLength = clen,
             supportsRange = true
         )
+    }
+
+    private fun selectBestMuxAudioFormat(formats: List<MediaFormat>): MediaFormat? {
+        val candidates = formats.filter { f ->
+            val mime = f.mimeType?.lowercase(Locale.US) ?: ""
+            mime.startsWith("audio/") && (mime.contains("mp4") || mime.contains("mp4a") || mime.contains("aac")) && !f.url.isNullOrBlank()
+        }
+        if (candidates.isEmpty()) return null
+
+        // Исключаем дублированные русские дорожки, если есть оригиналы
+        val nonRussian = candidates.filter { !VotMediaFormatSelector.isRussianFormat(it) && !VotMediaFormatSelector.isDubbedFormat(it) }
+        val pool = if (nonRussian.isNotEmpty()) nonRussian else candidates
+
+        // Сортируем по максимальному битрейту для лучшего качества звука в MKV
+        return pool.maxByOrNull { VotMediaFormatSelector.parseBitrate(it.bitrate).let { b -> if (b == 999_999_999) 0 else b } }
     }
 
     private fun fetchFormatInfo(videoId: String): MediaItemFormatInfo {
@@ -158,16 +175,39 @@ class DefaultVoxStreamResolver(
     ): MediaFormat? {
         val maxRes = preference.maxResolution
 
-        // Сортируем: сначала те, чья высота <= maxRes (по убыванию высоты), затем остальные
-        val matching = candidates
+        fun isAvc(f: MediaFormat): Boolean {
+            val mime = f.mimeType?.lowercase(Locale.US) ?: ""
+            return mime.contains("avc") || mime.contains("h264") || mime.contains("mp4v") || mime.contains("mp4")
+        }
+
+        // 1. Предпочитаем AVC/H.264 форматы, чья высота <= maxRes (по убыванию высоты)
+        val avcMatching = candidates
+            .filter { isAvc(it) && it.height in 1..maxRes }
+            .sortedByDescending { it.height }
+
+        if (avcMatching.isNotEmpty()) {
+            return avcMatching.first()
+        }
+
+        // 2. Любые другие видеоформаты, чья высота <= maxRes (по убыванию высоты)
+        val anyMatching = candidates
             .filter { it.height in 1..maxRes }
             .sortedByDescending { it.height }
 
-        if (matching.isNotEmpty()) {
-            return matching.first()
+        if (anyMatching.isNotEmpty()) {
+            return anyMatching.first()
         }
 
-        // Если все форматы выше maxRes, берем наименьший из доступных
+        // 3. Если все форматы выше maxRes, берем AVC с наименьшей высотой
+        val higherAvc = candidates
+            .filter { isAvc(it) && it.height > maxRes }
+            .sortedBy { it.height }
+
+        if (higherAvc.isNotEmpty()) {
+            return higherAvc.first()
+        }
+
+        // 4. Иначе берем наименьший из доступных форматов выше maxRes
         val higher = candidates
             .filter { it.height > maxRes }
             .sortedBy { it.height }
@@ -176,7 +216,7 @@ class DefaultVoxStreamResolver(
             return higher.first()
         }
 
-        // Если высота не указана явно (например progressive mp4), берем первый доступный
+        // 5. Если высота не указана явно (например progressive mp4), берем первый доступный
         return candidates.firstOrNull()
     }
 
