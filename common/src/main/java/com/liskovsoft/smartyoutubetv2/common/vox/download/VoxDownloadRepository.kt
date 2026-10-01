@@ -80,7 +80,8 @@ class VoxDownloadRepository(
                 initialErrorCode = stored.errorCode,
                 initialErrorMessage = stored.errorMessage,
                 initialPublishedUri = stored.publishedUri,
-                initialPublishedFilePath = stored.publishedFilePath
+                initialPublishedFilePath = stored.publishedFilePath,
+                initialActualVideoHeight = stored.actualVideoHeight
             )
             jobs[id] = job
         }
@@ -122,7 +123,8 @@ class VoxDownloadRepository(
             errorCode = job.errorCode,
             errorMessage = job.errorMessage,
             publishedUri = job.publishedUri,
-            publishedFilePath = job.publishedFilePath
+            publishedFilePath = job.publishedFilePath,
+            actualVideoHeight = job.actualVideoHeight
         )
     }
 

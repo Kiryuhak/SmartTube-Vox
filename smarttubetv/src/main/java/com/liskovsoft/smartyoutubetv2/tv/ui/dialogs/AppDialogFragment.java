@@ -146,6 +146,19 @@ public class AppDialogFragment extends LeanbackSettingsFragment implements AppDi
     }
 
     @Override
+    public void refresh(List<OptionCategory> categories, CharSequence title, boolean isTransparent, boolean isOverlay, int id) {
+        if (!Utils.checkActivity(getActivity()) || getChildFragmentManager() == null) {
+            return;
+        }
+        mIsOverlay = isOverlay;
+        mId = id;
+        AppPreferenceFragment fragment = buildPreferenceFragment(categories, title);
+        getChildFragmentManager().beginTransaction()
+                .replace(R.id.settings_preference_fragment_container, fragment, PREFERENCE_FRAGMENT_TAG)
+                .commitAllowingStateLoss();
+    }
+
+    @Override
     public boolean onPreferenceDisplayDialog(@Nullable PreferenceFragment caller, @NonNull Preference pref) {
         // Fix: IllegalStateException: Activity has been destroyed
         // Possible fix: Unable to add window -- token android.os.BinderProxy is not valid; is your activity running?

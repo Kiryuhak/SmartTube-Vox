@@ -206,11 +206,12 @@ class VoxDownloadCoordinator(
      * Полностью удаляет задание, его директорию и опубликованный файл (если есть).
      */
     fun deleteDownload(downloadId: String): Boolean {
-        val job = repository.getJob(downloadId)
-        if (job != null && !job.publishedUri.isNullOrBlank()) {
-            try {
-                publisher?.deletePublishedFile(job.publishedUri)
-            } catch (ignored: Exception) {}
+        val job = repository.getJob(downloadId) ?: return false
+        if (isJobActive(downloadId) || VoxDownloadServicePolicy.isActiveState(job.state)) return false
+        if (!job.publishedUri.isNullOrBlank()) {
+            val removed = try { publisher?.deletePublishedFile(job.publishedUri) ?: false }
+                catch (ignored: Exception) { false }
+            if (!removed && isPublishedFileAvailable(job)) return false
         }
         cancelDownload(downloadId)
         listeners.remove(downloadId)
@@ -290,6 +291,10 @@ class VoxDownloadCoordinator(
             val videoStream = if (job.videoProgress.state != VoxTrackState.COMPLETED) {
                 streamResolver.resolveVideoStream(job.request.videoId, job.request.qualityPreference)
             } else null
+            if (videoStream != null && videoStream.height > 0) {
+                job.actualVideoHeight = videoStream.height
+                repository.persistJob(job)
+            }
 
             val originalAudioStream = if (job.originalAudioProgress.state != VoxTrackState.COMPLETED) {
                 streamResolver.resolveOriginalAudio(job.request.videoId)
