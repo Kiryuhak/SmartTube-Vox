@@ -104,7 +104,29 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     Log.e(TAG, "DOWNLOAD_PROBE_ERROR: id=" + id + " code=" + code + " msg=" + message);
                 }
             });
-            Log.i(TAG, "DOWNLOAD_PROBE_STARTED: downloadId=" + downloadId + " videoId=" + videoId);
+            boolean startService = intent.getBooleanExtra("startService", true);
+            if (startService) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.start(context, downloadId);
+            }
+            Log.i(TAG, "DOWNLOAD_PROBE_STARTED: downloadId=" + downloadId + " videoId=" + videoId + " startService=" + startService);
+        } else if ("testStartServiceOnly".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.start(context, downloadId);
+                Log.i(TAG, "DOWNLOAD_SERVICE_START_ONLY: id=" + downloadId);
+            }
+        } else if ("testResumeService".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.resume(context, downloadId);
+                Log.i(TAG, "DOWNLOAD_SERVICE_RESUME: id=" + downloadId);
+            }
+        } else if ("testCancelService".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.cancel(context, downloadId);
+                Log.i(TAG, "DOWNLOAD_SERVICE_CANCEL_REQUESTED: id=" + downloadId);
+            }
         } else if ("testDownloadStatus".equalsIgnoreCase(action)) {
             String downloadId = intent.getStringExtra("downloadId");
             if (downloadId == null || downloadId.isEmpty()) {

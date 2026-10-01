@@ -183,13 +183,14 @@ object VoxDownloadDialogHelper {
         )
 
         val downloadId = coordinator.startDownload(request)
+        VoxDownloadService.start(context, downloadId)
         showProgressDialog(context, downloadId)
     }
 
     fun showProgressDialog(context: Context, downloadId: String) {
         val presenter = AppDialogPresenter.instance(context)
         val coordinator = VoxDownloadCoordinator.instance(context)
-        val initialJob = coordinator.getJob(downloadId) ?: return
+        if (coordinator.getJob(downloadId) == null) return
 
         val listenerRef = AtomicReference<VoxDownloadListener>()
         var renderDialogFunc: (() -> Unit)? = null
@@ -221,11 +222,12 @@ object VoxDownloadDialogHelper {
                         context.getString(R.string.vox_download_close),
                         { _ -> presenter.closeDialog() }
                     ))
-                } else if (currentJob.state == VoxDownloadState.FAILED) {
+                } else if (currentJob.state == VoxDownloadState.FAILED || currentJob.state == VoxDownloadState.CANCELLED) {
                     options.add(UiOptionItem.from(
                         context.getString(R.string.vox_download_retry),
                         { _ ->
-                            coordinator.startDownload(currentJob.request)
+                            val id = coordinator.startDownload(currentJob.request)
+                            VoxDownloadService.start(context, id)
                             renderDialogFunc?.invoke()
                         }
                     ))
@@ -241,7 +243,7 @@ object VoxDownloadDialogHelper {
                                 context,
                                 context.getString(R.string.vox_download_cancel_confirm),
                                 {
-                                    coordinator.cancelDownload(downloadId)
+                                    VoxDownloadService.cancel(context, downloadId)
                                     presenter.closeDialog()
                                 }
                             )

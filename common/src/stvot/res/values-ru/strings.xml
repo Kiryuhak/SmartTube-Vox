@@ -133,4 +133,11 @@
     <string name="vox_download_error_parse">Не удалось подготовить видеофайл</string>
     <string name="vox_download_error_network">Ошибка сети</string>
     <string name="vox_download_error_unknown">Не удалось скачать видео</string>
+    <string name="vox_download_channel_name">SmartTube VOX — Загрузки</string>
+    <string name="vox_download_channel_desc">Уведомления о процессе скачивания видео с переводом</string>
+    <string name="vox_download_notification_title">Скачивание видео</string>
+    <string name="vox_download_notification_cancel">Отменить</string>
+    <string name="vox_download_notification_open">Открыть</string>
+    <string name="vox_download_notification_failed">Не удалось скачать видео</string>
+    <string name="vox_download_notification_completed">Видео сохранено</string>
 </resources>

@@ -27,8 +27,15 @@ interface VoxDownloadPublisher {
     fun publish(
         outputFile: File,
         videoTitle: String,
-        isCancelled: AtomicBoolean = AtomicBoolean(false)
+        isCancelled: AtomicBoolean = AtomicBoolean(false),
+        onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)? = null
     ): Uri
+
+    fun publish(
+        outputFile: File,
+        videoTitle: String,
+        isCancelled: AtomicBoolean
+    ): Uri = publish(outputFile, videoTitle, isCancelled, null)
 
     /**
      * Проверяет, доступен ли и существует ли ранее опубликованный файл по Uri.
@@ -109,7 +116,8 @@ class VoxMediaStorePublisher(
     override fun publish(
         outputFile: File,
         videoTitle: String,
-        isCancelled: AtomicBoolean
+        isCancelled: AtomicBoolean,
+        onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
     ): Uri {
         if (!outputFile.exists() || outputFile.length() <= 0L) {
             throw VoxDownloadException(
@@ -121,9 +129,9 @@ class VoxMediaStorePublisher(
         val resolver = context.contentResolver
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return publishScopedStorage(resolver, outputFile, videoTitle, isCancelled)
+            return publishScopedStorage(resolver, outputFile, videoTitle, isCancelled, onProgress)
         } else {
-            return publishLegacyStorage(outputFile, videoTitle, isCancelled)
+            return publishLegacyStorage(outputFile, videoTitle, isCancelled, onProgress)
         }
     }
 
@@ -132,7 +140,8 @@ class VoxMediaStorePublisher(
         resolver: ContentResolver,
         outputFile: File,
         videoTitle: String,
-        isCancelled: AtomicBoolean
+        isCancelled: AtomicBoolean,
+        onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
     ): Uri {
         var duplicateIndex = 1
         var candidateName = buildFilename(videoTitle, duplicateIndex)
@@ -158,6 +167,9 @@ class VoxMediaStorePublisher(
                 "Failed to create MediaStore entry for $candidateName"
             )
 
+        val totalBytes = outputFile.length()
+        var totalCopied = 0L
+
         try {
             resolver.openOutputStream(itemUri, "w")?.use { outStream ->
                 FileInputStream(outputFile).use { inStream ->
@@ -168,6 +180,11 @@ class VoxMediaStorePublisher(
                             throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Publish cancelled by user")
                         }
                         outStream.write(buffer, 0, bytesRead)
+                        totalCopied += bytesRead
+                        if (totalBytes > 0L) {
+                            val pct = ((totalCopied * 100) / totalBytes).toInt().coerceIn(0, 100)
+                            onProgress?.invoke(totalCopied, totalBytes, pct)
+                        }
                     }
                     outStream.flush()
                 }
@@ -205,7 +222,8 @@ class VoxMediaStorePublisher(
     private fun publishLegacyStorage(
         outputFile: File,
         videoTitle: String,
-        isCancelled: AtomicBoolean
+        isCancelled: AtomicBoolean,
+        onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
     ): Uri {
         val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
         val targetDir = File(moviesDir, "SmartTube VOX")
@@ -222,6 +240,8 @@ class VoxMediaStorePublisher(
         }
 
         val tmpCandidate = File(targetDir, "${candidateFile.name}.tmp")
+        val totalBytes = outputFile.length()
+        var totalCopied = 0L
         try {
             FileOutputStream(tmpCandidate).use { outStream ->
                 FileInputStream(outputFile).use { inStream ->
@@ -232,6 +252,11 @@ class VoxMediaStorePublisher(
                             throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Publish cancelled by user")
                         }
                         outStream.write(buffer, 0, bytesRead)
+                        totalCopied += bytesRead
+                        if (totalBytes > 0L) {
+                            val pct = ((totalCopied * 100) / totalBytes).toInt().coerceIn(0, 100)
+                            onProgress?.invoke(totalCopied, totalBytes, pct)
+                        }
                     }
                     outStream.flush()
                 }

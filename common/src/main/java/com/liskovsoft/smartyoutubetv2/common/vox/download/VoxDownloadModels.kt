@@ -116,6 +116,9 @@ data class VoxDownloadProgress(
     val muxBytesProcessed: Long = 0L,
     val muxTotalBytes: Long = 0L,
     val muxPercent: Int = 0,
+    val publishBytesProcessed: Long = 0L,
+    val publishTotalBytes: Long = 0L,
+    val publishPercent: Int = 0,
     val publishedUri: String? = null,
     val publishedFilePath: String? = null,
     val errorMessage: String? = null,
@@ -138,7 +141,7 @@ data class VoxDownloadProgress(
                 return muxPercent
             }
             if (state == VoxDownloadState.PUBLISHING) {
-                return 99
+                return if (publishPercent > 0) publishPercent.coerceIn(0, 99) else 99
             }
             if (state == VoxDownloadState.MUXED || state == VoxDownloadState.COMPLETED) {
                 return 100
