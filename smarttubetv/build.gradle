@@ -140,7 +140,7 @@ android {
             targetSdkVersion project.properties.compileSdkVersion
             matchingFallbacks = ['ststable']
 
-            def votSuffix = project.findProperty("votVersionSuffix") ?: "-vot.4"
+            def votSuffix = project.findProperty("votVersionSuffix") ?: "-vot.5"
             def customVersionName = project.findProperty("votVersionName")
             def customVersionCode = project.findProperty("votVersionCode")
 
