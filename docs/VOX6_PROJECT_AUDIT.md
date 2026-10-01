@@ -244,13 +244,17 @@
 
 ## Что исправлено в Patch #3
 
-1. **Медиа-кодеки VP9/Opus**: Завершена архитектурная поддержка кодеков VP9 и Opus для скачивания и мультиплексирования. Подробности — в `VOX6_MEDIA_CODECS.md`.
-2. **CodecPrivate для Opus**: Реализована логика синтеза Matroska OpusHead `CodecPrivate` в `VoxMediaExtractorSource`.
-3. **Безопасность конфигурации**: Установлено ограничение (Fallback only), по умолчанию для скачивания по-прежнему приоритезируются AVC и AAC во избежание несовместимости с устаревшими ТВ.
+1. **Медиа-кодеки VP9/Opus — CONFIRMED**: Завершена реальная E2E-проверка кодеков VP9 и Opus. Загрузка → мультиплексирование → воспроизведение через ExoPlayer подтверждены на эмуляторе Vox-TV-14 (Android 14 / API 34). Подробности — в `VOX6_MEDIA_CODECS.md`.
+2. **CodecPrivate для Opus**: Реализована логика синтеза Matroska OpusHead `CodecPrivate` в `VoxMediaExtractorSource`. Исправлена ошибка конвертации csd-1: Android MediaExtractor отдаёт задержку в **наносекундах**, конвертация `preSkipSamples = (delayNs * sampleRate) / 1_000_000_000L` подтверждена корректной (312 сэмплов при 48 кГц).
+3. **Unit-тесты OpusHead**: Написан полный Robolectric-тест `VoxOpusCodecPrivateTest` (корректный стерео/моно, отклонение многоканального, ограничение preSkip, конвертация csd-1 в наносекундах).
+4. **Безопасность конфигурации**: `YandexVotTestReceiver` — `exported="false"`. Диагностика доступна только через SplashActivity forwarding при `BuildConfig.DEBUG`.
+5. **Базовый сценарий (AVC+AAC) — CONFIRMED**: Загрузка без overrides тоже прошла E2E. Seek 30s/60s работает.
+6. **Политика по умолчанию**: VP9/Opus остаются opt-in через `VoxCodecTestOverrides`. По умолчанию AVC/AAC для максимальной совместимости с устаревшими TV.
 
 ---
 
 ## Что перенесено на следующие Patch
 
-- **Patch #4**: Расширенная совместимость YouTube и полировка DIAL / LAN интеграции.
-- **Patch #5**: Финальное сквозное регрессионное тестирование на физическом ТВ.
+- **Patch #4**: Расширенная совместимость YouTube, полировка UI, физический TV acceptance.
+- **Patch #5**: Финальное сквозное регрессионное тестирование.
+

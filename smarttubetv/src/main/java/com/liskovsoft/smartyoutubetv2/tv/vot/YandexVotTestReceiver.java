@@ -386,9 +386,22 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage storage =
                             new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage(context);
                     java.io.File mkvFile = storage.getOutputFile(downloadId);
-                    if (!mkvFile.exists()) {
-                        Log.e(TAG, "EXOPLAYER_PROBE_ERROR: File not found: " + mkvFile.getAbsolutePath());
-                        return;
+                    android.net.Uri uri = null;
+                    try {
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.StoredJobData jobData = storage.loadJobMetadata(downloadId);
+                        if (jobData != null && jobData.getPublishedUri() != null && !jobData.getPublishedUri().isEmpty()) {
+                            uri = android.net.Uri.parse(jobData.getPublishedUri());
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "Could not lookup mediastore uri: " + e);
+                    }
+                    if (uri == null) {
+                        if (mkvFile.exists()) {
+                            uri = android.net.Uri.fromFile(mkvFile);
+                        } else {
+                            Log.e(TAG, "EXOPLAYER_PROBE_ERROR: File not found: " + mkvFile.getAbsolutePath() + " and no MediaStore URI");
+                            return;
+                        }
                     }
 
                     try {
@@ -401,7 +414,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                                 new com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(
                                         new com.google.android.exoplayer2.upstream.DefaultDataSourceFactory(context, "SmartTube"),
                                         new com.google.android.exoplayer2.extractor.DefaultExtractorsFactory()
-                                ).createMediaSource(android.net.Uri.fromFile(mkvFile));
+                                ).createMediaSource(uri);
 
                         final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
 

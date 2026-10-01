@@ -172,14 +172,18 @@ class VoxMediaExtractorSource(
                 }
                 VoxMuxCodec.OPUS -> {
                     val csd0 = getCsdBytes(format, "csd-0")
-                    if (csd0 != null && csd0.size >= 8 && String(csd0, 0, 8, Charsets.US_ASCII) == "OpusHead") {
+                    if (csd0 != null && csd0.size >= 19 && String(csd0, 0, 8, Charsets.US_ASCII) == "OpusHead") {
                         csd0
                     } else {
                         val channels = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2
                         val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 48000
-                        val preSkip = getCsdBytes(format, "csd-1")?.let {
-                            if (it.size == 8) ByteBuffer.wrap(it).order(java.nio.ByteOrder.nativeOrder()).long.toInt() else 312
-                        } ?: 312
+                        val csd1 = getCsdBytes(format, "csd-1")
+                        val preSkip = if (csd1 != null && csd1.size == 8) {
+                            val codecDelayNs = ByteBuffer.wrap(csd1).order(java.nio.ByteOrder.nativeOrder()).long
+                            ((codecDelayNs * 48000) / 1000000000L).toInt()
+                        } else {
+                            312
+                        }
                         buildOpusHead(channels, preSkip, sampleRate)
                     }
                 }
@@ -188,12 +192,20 @@ class VoxMediaExtractorSource(
         }
 
         fun buildOpusHead(channels: Int, preSkip: Int, inputSampleRate: Int): ByteArray {
+            if (channels > 2) {
+                throw IllegalArgumentException("Opus channels > 2 requires mapping family > 0, which is currently unsupported.")
+            }
+            if (inputSampleRate <= 0) {
+                throw IllegalArgumentException("Invalid Opus sample rate: $inputSampleRate")
+            }
+            val clampedPreSkip = if (preSkip < 0) 0 else if (preSkip > 48000) 48000 else preSkip
+
             val bos = ByteArrayOutputStream(19)
             bos.write("OpusHead".toByteArray(Charsets.US_ASCII))
             bos.write(1) // version
             bos.write(channels)
-            bos.write(preSkip and 0xFF) // pre-skip (little endian)
-            bos.write((preSkip shr 8) and 0xFF)
+            bos.write(clampedPreSkip and 0xFF) // pre-skip (little endian)
+            bos.write((clampedPreSkip shr 8) and 0xFF)
             bos.write(inputSampleRate and 0xFF) // sample rate (little endian)
             bos.write((inputSampleRate shr 8) and 0xFF)
             bos.write((inputSampleRate shr 16) and 0xFF)
