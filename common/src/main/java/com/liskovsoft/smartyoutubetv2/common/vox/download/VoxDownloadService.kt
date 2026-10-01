@@ -33,6 +33,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
         const val NOTIFICATION_ID_FAILED = 55003
 
         const val ACTION_START_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.START_DOWNLOAD"
+        const val ACTION_RESUME_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.RESUME_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.CANCEL_DOWNLOAD"
         const val ACTION_STOP_SERVICE = "com.liskovsoft.smartyoutubetv2.action.STOP_DOWNLOAD_SERVICE"
         const val EXTRA_DOWNLOAD_ID = "extra_download_id"
@@ -51,6 +52,23 @@ class VoxDownloadService : Service(), VoxDownloadListener {
                 }
             } catch (e: Exception) {
                 VoxLog.e(TAG, "Failed to start VoxDownloadService: ${e.message}")
+            }
+        }
+
+        @JvmStatic
+        fun resume(context: Context, downloadId: String) {
+            val intent = Intent(context, VoxDownloadService::class.java).apply {
+                action = ACTION_RESUME_DOWNLOAD
+                putExtra(EXTRA_DOWNLOAD_ID, downloadId)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(context, intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                VoxLog.e(TAG, "Failed to resume VoxDownloadService: ${e.message}")
             }
         }
 
@@ -103,27 +121,47 @@ class VoxDownloadService : Service(), VoxDownloadListener {
 
         when (action) {
             ACTION_START_DOWNLOAD -> {
-                if (!downloadId.isNullOrBlank() && isValidDownloadId(downloadId)) {
-                    currentDownloadId = downloadId
-                    val job = coordinator.getJob(downloadId)
+                if (VoxDownloadServicePolicy.isValidDownloadId(downloadId)) {
+                    val job = coordinator.getJob(downloadId!!)
                     if (job != null) {
+                        currentDownloadId = downloadId
                         val initialNotification = buildProgressNotification(job.getSnapshot())
                         startForegroundCompat(NOTIFICATION_ID_PROGRESS, initialNotification)
-                        if (!coordinator.isJobActive(downloadId) && job.state != VoxDownloadState.COMPLETED) {
+                        val isAlreadyActive = coordinator.isJobActive(downloadId)
+                        if (VoxDownloadServicePolicy.shouldAutoResumeOnStart(job.state, isAlreadyActive)) {
+                            coordinator.resumeDownload(downloadId)
+                        } else if (!isAlreadyActive && VoxDownloadServicePolicy.isTerminalState(job.state)) {
+                            checkActiveWorkOrStop()
+                        }
+                    } else {
+                        VoxLog.w(TAG, "ACTION_START_DOWNLOAD received for unknown job: $downloadId")
+                        checkActiveWorkOrStop()
+                    }
+                } else {
+                    checkActiveWorkOrStop()
+                }
+            }
+            ACTION_RESUME_DOWNLOAD -> {
+                if (VoxDownloadServicePolicy.isValidDownloadId(downloadId)) {
+                    val job = coordinator.getJob(downloadId!!)
+                    if (job != null) {
+                        currentDownloadId = downloadId
+                        val initialNotification = buildProgressNotification(job.getSnapshot())
+                        startForegroundCompat(NOTIFICATION_ID_PROGRESS, initialNotification)
+                        val isAlreadyActive = coordinator.isJobActive(downloadId)
+                        if (VoxDownloadServicePolicy.shouldResumeOnExplicitResume(job.state, isAlreadyActive)) {
                             coordinator.resumeDownload(downloadId)
                         }
                     } else {
-                        // Показываем базовое уведомление перед проверкой
-                        val fallback = buildFallbackNotification()
-                        startForegroundCompat(NOTIFICATION_ID_PROGRESS, fallback)
+                        checkActiveWorkOrStop()
                     }
                 } else {
                     checkActiveWorkOrStop()
                 }
             }
             ACTION_CANCEL_DOWNLOAD -> {
-                if (!downloadId.isNullOrBlank() && isValidDownloadId(downloadId)) {
-                    coordinator.cancelDownload(downloadId)
+                if (VoxDownloadServicePolicy.isValidDownloadId(downloadId)) {
+                    coordinator.cancelDownload(downloadId!!)
                 }
                 checkActiveWorkOrStop()
             }
@@ -140,21 +178,21 @@ class VoxDownloadService : Service(), VoxDownloadListener {
     }
 
     private fun startForegroundCompat(id: Int, notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(id, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(id, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(id, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(id, notification)
+            }
+        } catch (e: Exception) {
+            VoxLog.e(TAG, "Failed to start foreground notification: ${e.message}")
         }
     }
 
     private fun checkActiveWorkOrStop() {
         val jobs = coordinator.getAllJobs()
         val active = jobs.firstOrNull {
-            it.state != VoxDownloadState.COMPLETED &&
-            it.state != VoxDownloadState.FAILED &&
-            it.state != VoxDownloadState.CANCELLED &&
-            it.state != VoxDownloadState.PAUSED &&
-            it.state != VoxDownloadState.IDLE
+            VoxDownloadServicePolicy.isActiveState(it.state) || coordinator.isJobActive(it.downloadId)
         }
 
         if (active != null) {
@@ -162,6 +200,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
             val notification = buildProgressNotification(active.getSnapshot())
             startForegroundCompat(NOTIFICATION_ID_PROGRESS, notification)
         } else {
+            currentDownloadId = null
             stopForegroundSafely()
             stopSelf()
         }
@@ -234,16 +273,6 @@ class VoxDownloadService : Service(), VoxDownloadListener {
         return builder.build()
     }
 
-    private fun buildFallbackNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(getString(R.string.vox_download_notification_title))
-            .setProgress(0, 0, true)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-    }
-
     private fun getStageDescription(progress: VoxDownloadProgress): String {
         val pct = progress.overallPercent
         val pctSuffix = if (pct != null && pct in 0..100) " ($pct%)" else ""
@@ -314,55 +343,55 @@ class VoxDownloadService : Service(), VoxDownloadListener {
         }
     }
 
-    private fun isValidDownloadId(downloadId: String): Boolean {
-        return downloadId.matches(Regex("^[a-zA-Z0-9_-]{1,64}$"))
-    }
-
     override fun onStateChanged(progress: VoxDownloadProgress) {
-        when (progress.state) {
-            VoxDownloadState.COMPLETED -> {
-                stopForegroundSafely()
+        val isTargetJob = currentDownloadId == null || progress.downloadId == currentDownloadId
+
+        if (isTargetJob) {
+            when (progress.state) {
+                VoxDownloadState.COMPLETED -> {
+                    showCompletedNotification(progress)
+                    checkActiveWorkOrStop()
+                }
+                VoxDownloadState.FAILED -> {
+                    showFailedNotification(progress)
+                    checkActiveWorkOrStop()
+                }
+                VoxDownloadState.CANCELLED -> {
+                    checkActiveWorkOrStop()
+                }
+                VoxDownloadState.PAUSED -> {
+                    checkActiveWorkOrStop()
+                }
+                else -> {
+                    currentDownloadId = progress.downloadId
+                    val notification = buildProgressNotification(progress)
+                    notificationManager?.notify(NOTIFICATION_ID_PROGRESS, notification)
+                }
+            }
+        } else {
+            // Stale or secondary job event
+            if (progress.state == VoxDownloadState.COMPLETED) {
                 showCompletedNotification(progress)
-                stopSelf()
-            }
-            VoxDownloadState.FAILED -> {
-                stopForegroundSafely()
+            } else if (progress.state == VoxDownloadState.FAILED) {
                 showFailedNotification(progress)
-                stopSelf()
-            }
-            VoxDownloadState.CANCELLED -> {
-                stopForegroundSafely()
-                stopSelf()
-            }
-            VoxDownloadState.PAUSED -> {
-                stopForegroundSafely()
-                stopSelf()
-            }
-            else -> {
-                val notification = buildProgressNotification(progress)
-                notificationManager?.notify(NOTIFICATION_ID_PROGRESS, notification)
             }
         }
     }
 
     override fun onProgressUpdated(progress: VoxDownloadProgress) {
-        if (progress.state != VoxDownloadState.COMPLETED &&
-            progress.state != VoxDownloadState.FAILED &&
-            progress.state != VoxDownloadState.CANCELLED &&
-            progress.state != VoxDownloadState.PAUSED &&
-            progress.state != VoxDownloadState.IDLE
-        ) {
+        if (progress.downloadId == currentDownloadId && VoxDownloadServicePolicy.isActiveState(progress.state)) {
             val notification = buildProgressNotification(progress)
             notificationManager?.notify(NOTIFICATION_ID_PROGRESS, notification)
         }
     }
 
     override fun onError(downloadId: String, errorCode: VoxDownloadErrorCode, message: String) {
-        val job = coordinator.getJob(downloadId)
-        if (job != null) {
-            showFailedNotification(job.getSnapshot())
+        if (downloadId == currentDownloadId) {
+            val job = coordinator.getJob(downloadId)
+            if (job != null) {
+                showFailedNotification(job.getSnapshot())
+            }
+            checkActiveWorkOrStop()
         }
-        stopForegroundSafely()
-        stopSelf()
     }
 }

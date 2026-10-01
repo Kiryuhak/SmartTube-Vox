@@ -109,6 +109,18 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                 com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.start(context, downloadId);
             }
             Log.i(TAG, "DOWNLOAD_PROBE_STARTED: downloadId=" + downloadId + " videoId=" + videoId + " startService=" + startService);
+        } else if ("testStartServiceOnly".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.start(context, downloadId);
+                Log.i(TAG, "DOWNLOAD_SERVICE_START_ONLY: id=" + downloadId);
+            }
+        } else if ("testResumeService".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null && !downloadId.isEmpty()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.resume(context, downloadId);
+                Log.i(TAG, "DOWNLOAD_SERVICE_RESUME: id=" + downloadId);
+            }
         } else if ("testCancelService".equalsIgnoreCase(action)) {
             String downloadId = intent.getStringExtra("downloadId");
             if (downloadId != null && !downloadId.isEmpty()) {

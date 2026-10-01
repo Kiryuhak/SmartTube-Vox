@@ -6,36 +6,118 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 class VoxDownloadServiceTest {
 
     @Test
-    fun testValidDownloadIdFormat() {
+    fun testValidDownloadIdFormatViaPolicy() {
         val validIds = listOf(
             "dQw4w9WgXcQ_12345",
             "test-download-id",
             "video_abc-123_456",
-            "123456789"
+            "123456789",
+            "a",
+            "a".repeat(64)
         )
         val invalidIds = listOf(
             "../etc/passwd",
+            "../bad",
             "download id with spaces",
             "id;rm -rf /",
             "",
+            "   ",
+            null,
             "a".repeat(65)
         )
 
-        val idRegex = Regex("^[a-zA-Z0-9_-]{1,64}$")
-
         for (id in validIds) {
-            assertTrue("Expected valid: $id", id.matches(idRegex))
+            assertTrue("Expected valid: $id", VoxDownloadServicePolicy.isValidDownloadId(id))
         }
 
         for (id in invalidIds) {
-            assertFalse("Expected invalid: $id", id.matches(idRegex))
+            assertFalse("Expected invalid: $id", VoxDownloadServicePolicy.isValidDownloadId(id))
         }
+    }
+
+    @Test
+    fun testActiveAndTerminalStateClassificationViaPolicy() {
+        val activeStates = listOf(
+            VoxDownloadState.PREPARING_TRANSLATION,
+            VoxDownloadState.RESOLVING_STREAMS,
+            VoxDownloadState.DOWNLOADING_VIDEO,
+            VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
+            VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
+            VoxDownloadState.READY_FOR_MUX,
+            VoxDownloadState.MUXING,
+            VoxDownloadState.MUXED,
+            VoxDownloadState.PUBLISHING
+        )
+
+        val nonActiveStates = listOf(
+            VoxDownloadState.IDLE,
+            VoxDownloadState.PAUSED,
+            VoxDownloadState.COMPLETED,
+            VoxDownloadState.FAILED,
+            VoxDownloadState.CANCELLED
+        )
+
+        for (state in activeStates) {
+            assertTrue("Expected active for $state", VoxDownloadServicePolicy.isActiveState(state))
+            assertFalse("Expected non-terminal for $state", VoxDownloadServicePolicy.isTerminalState(state))
+        }
+
+        for (state in nonActiveStates) {
+            assertFalse("Expected inactive for $state", VoxDownloadServicePolicy.isActiveState(state))
+        }
+
+        assertTrue(VoxDownloadServicePolicy.isTerminalState(VoxDownloadState.COMPLETED))
+        assertTrue(VoxDownloadServicePolicy.isTerminalState(VoxDownloadState.FAILED))
+        assertTrue(VoxDownloadServicePolicy.isTerminalState(VoxDownloadState.CANCELLED))
+        assertFalse(VoxDownloadServicePolicy.isTerminalState(VoxDownloadState.PAUSED))
+        assertFalse(VoxDownloadServicePolicy.isTerminalState(VoxDownloadState.IDLE))
+    }
+
+    @Test
+    fun testAutoResumePolicyOnGenericStart() {
+        // IDLE: allowed to start
+        assertTrue(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.IDLE, isAlreadyActive = false))
+
+        // In-flight states: allowed to recover if not already active
+        assertTrue(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.DOWNLOADING_VIDEO, isAlreadyActive = false))
+        assertTrue(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.MUXING, isAlreadyActive = false))
+
+        // If already active: false (observe only, no double start)
+        assertFalse(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.DOWNLOADING_VIDEO, isAlreadyActive = true))
+
+        // PAUSED: must NOT auto-resume on generic START
+        assertFalse(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.PAUSED, isAlreadyActive = false))
+
+        // FAILED: must NOT auto-resume on generic START
+        assertFalse(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.FAILED, isAlreadyActive = false))
+
+        // CANCELLED: must NOT auto-resume on generic START
+        assertFalse(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.CANCELLED, isAlreadyActive = false))
+
+        // COMPLETED: must NOT auto-resume on generic START
+        assertFalse(VoxDownloadServicePolicy.shouldAutoResumeOnStart(VoxDownloadState.COMPLETED, isAlreadyActive = false))
+    }
+
+    @Test
+    fun testExplicitResumePolicy() {
+        // PAUSED: allowed on explicit resume
+        assertTrue(VoxDownloadServicePolicy.shouldResumeOnExplicitResume(VoxDownloadState.PAUSED, isAlreadyActive = false))
+
+        // Inactive / IDLE: allowed
+        assertTrue(VoxDownloadServicePolicy.shouldResumeOnExplicitResume(VoxDownloadState.IDLE, isAlreadyActive = false))
+
+        // Already active: false
+        assertFalse(VoxDownloadServicePolicy.shouldResumeOnExplicitResume(VoxDownloadState.PAUSED, isAlreadyActive = true))
+
+        // Terminal states: forbidden
+        assertFalse(VoxDownloadServicePolicy.shouldResumeOnExplicitResume(VoxDownloadState.FAILED, isAlreadyActive = false))
+        assertFalse(VoxDownloadServicePolicy.shouldResumeOnExplicitResume(VoxDownloadState.CANCELLED, isAlreadyActive = false))
+        assertFalse(VoxDownloadServicePolicy.shouldResumeOnExplicitResume(VoxDownloadState.COMPLETED, isAlreadyActive = false))
     }
 
     @Test
@@ -81,46 +163,10 @@ class VoxDownloadServiceTest {
         assertEquals(50, job.getSnapshot().overallPercent)
 
         job.updateState(VoxDownloadState.PUBLISHING)
-        job.updateMuxProgress(800, 1000, 80)
-        assertEquals(99, job.getSnapshot().overallPercent)
+        job.updatePublishProgress(800, 1000, 80)
+        assertEquals(80, job.getSnapshot().overallPercent)
 
         job.updateState(VoxDownloadState.COMPLETED)
         assertEquals(100, job.getSnapshot().overallPercent)
-    }
-
-    @Test
-    fun testTerminalStatesStopCondition() {
-        val terminalStates = listOf(
-            VoxDownloadState.COMPLETED,
-            VoxDownloadState.FAILED,
-            VoxDownloadState.CANCELLED,
-            VoxDownloadState.PAUSED
-        )
-
-        for (state in terminalStates) {
-            val isStopping = state == VoxDownloadState.COMPLETED ||
-                    state == VoxDownloadState.FAILED ||
-                    state == VoxDownloadState.CANCELLED ||
-                    state == VoxDownloadState.PAUSED
-            assertTrue("Expected stop for $state", isStopping)
-        }
-
-        val activeStates = listOf(
-            VoxDownloadState.PREPARING_TRANSLATION,
-            VoxDownloadState.RESOLVING_STREAMS,
-            VoxDownloadState.DOWNLOADING_VIDEO,
-            VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
-            VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
-            VoxDownloadState.MUXING,
-            VoxDownloadState.PUBLISHING
-        )
-
-        for (state in activeStates) {
-            val isStopping = state == VoxDownloadState.COMPLETED ||
-                    state == VoxDownloadState.FAILED ||
-                    state == VoxDownloadState.CANCELLED ||
-                    state == VoxDownloadState.PAUSED
-            assertFalse("Expected active for $state", isStopping)
-        }
     }
 }

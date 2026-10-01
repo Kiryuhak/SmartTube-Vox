@@ -52,6 +52,18 @@ class VoxDownloadJob(
         private set
 
     @Volatile
+    var publishBytesProcessed: Long = 0L
+        private set
+
+    @Volatile
+    var publishTotalBytes: Long = 0L
+        private set
+
+    @Volatile
+    var publishPercent: Int = 0
+        private set
+
+    @Volatile
     var publishedUri: String? = initialPublishedUri
 
     @Volatile
@@ -96,6 +108,12 @@ class VoxDownloadJob(
         muxPercent = percent
     }
 
+    fun updatePublishProgress(bytesProcessed: Long, totalBytes: Long, percent: Int) {
+        publishBytesProcessed = bytesProcessed
+        publishTotalBytes = totalBytes
+        publishPercent = percent
+    }
+
     fun getSnapshot(): VoxDownloadProgress {
         return VoxDownloadProgress(
             downloadId = downloadId,
@@ -106,6 +124,9 @@ class VoxDownloadJob(
             muxBytesProcessed = muxBytesProcessed,
             muxTotalBytes = muxTotalBytes,
             muxPercent = muxPercent,
+            publishBytesProcessed = publishBytesProcessed,
+            publishTotalBytes = publishTotalBytes,
+            publishPercent = publishPercent,
             publishedUri = publishedUri,
             publishedFilePath = publishedFilePath,
             errorMessage = errorMessage,

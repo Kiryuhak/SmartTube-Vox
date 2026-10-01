@@ -597,7 +597,7 @@ class VoxDownloadCoordinator(
                     isCancelled = job.isCancelledFlag,
                     onProgress = { bytesCopied, totalBytes, percent ->
                         if (!isStale(job, expectedGen)) {
-                            job.updateMuxProgress(bytesCopied, totalBytes, percent)
+                            job.updatePublishProgress(bytesCopied, totalBytes, percent)
                             notifyProgress(job)
                         }
                     }
