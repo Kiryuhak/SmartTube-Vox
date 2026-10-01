@@ -606,6 +606,11 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             } else {
                 Log.w(TAG, "LOCAL_PLAYBACK_FAIL: job not found: " + downloadId);
             }
+        } else if ("testForceVP9Opus".equalsIgnoreCase(action)) {
+            boolean enable = intent.getBooleanExtra("enable", true);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxCodecTestOverrides.INSTANCE.setForceVp9Video(enable);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxCodecTestOverrides.INSTANCE.setForceOpusAudio(enable);
+            Log.i(TAG, "CODEC_TEST_OVERRIDES: VP9/Opus forced=" + enable);
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }

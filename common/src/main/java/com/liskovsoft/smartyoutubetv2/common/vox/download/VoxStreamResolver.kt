@@ -124,9 +124,14 @@ class DefaultVoxStreamResolver(
     }
 
     private fun selectBestMuxAudioFormat(formats: List<MediaFormat>): MediaFormat? {
+        val isOpus = { f: MediaFormat -> (f.mimeType?.lowercase(Locale.US) ?: "").contains("opus") }
         val candidates = formats.filter { f ->
             val mime = f.mimeType?.lowercase(Locale.US) ?: ""
-            mime.startsWith("audio/") && (mime.contains("mp4") || mime.contains("mp4a") || mime.contains("aac")) && !f.url.isNullOrBlank()
+            if (VoxCodecTestOverrides.forceOpusAudio) {
+                mime.startsWith("audio/") && isOpus(f) && !f.url.isNullOrBlank()
+            } else {
+                mime.startsWith("audio/") && (mime.contains("mp4") || mime.contains("mp4a") || mime.contains("aac")) && !f.url.isNullOrBlank()
+            }
         }
         if (candidates.isEmpty()) return null
 
@@ -178,6 +183,18 @@ class DefaultVoxStreamResolver(
         fun isAvc(f: MediaFormat): Boolean {
             val mime = f.mimeType?.lowercase(Locale.US) ?: ""
             return mime.contains("avc") || mime.contains("h264") || mime.contains("mp4v") || mime.contains("mp4")
+        }
+
+        fun isVp9(f: MediaFormat): Boolean {
+            val mime = f.mimeType?.lowercase(Locale.US) ?: ""
+            return mime.contains("vp9") || mime.contains("vp09")
+        }
+
+        if (VoxCodecTestOverrides.forceVp9Video) {
+            val vp9Matching = candidates
+                .filter { isVp9(it) && it.height in 1..maxRes }
+                .sortedByDescending { it.height }
+            if (vp9Matching.isNotEmpty()) return vp9Matching.first()
         }
 
         // 1. Предпочитаем AVC/H.264 форматы, чья высота <= maxRes (по убыванию высоты)

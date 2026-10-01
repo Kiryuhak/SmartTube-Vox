@@ -170,8 +170,38 @@ class VoxMediaExtractorSource(
                 VoxMuxCodec.AAC -> {
                     getCsdBytes(format, "csd-0")
                 }
+                VoxMuxCodec.OPUS -> {
+                    val csd0 = getCsdBytes(format, "csd-0")
+                    if (csd0 != null && csd0.size >= 8 && String(csd0, 0, 8, Charsets.US_ASCII) == "OpusHead") {
+                        csd0
+                    } else {
+                        val channels = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 2
+                        val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else 48000
+                        val preSkip = getCsdBytes(format, "csd-1")?.let {
+                            if (it.size == 8) ByteBuffer.wrap(it).order(java.nio.ByteOrder.nativeOrder()).long.toInt() else 312
+                        } ?: 312
+                        buildOpusHead(channels, preSkip, sampleRate)
+                    }
+                }
                 else -> null
             }
+        }
+
+        fun buildOpusHead(channels: Int, preSkip: Int, inputSampleRate: Int): ByteArray {
+            val bos = ByteArrayOutputStream(19)
+            bos.write("OpusHead".toByteArray(Charsets.US_ASCII))
+            bos.write(1) // version
+            bos.write(channels)
+            bos.write(preSkip and 0xFF) // pre-skip (little endian)
+            bos.write((preSkip shr 8) and 0xFF)
+            bos.write(inputSampleRate and 0xFF) // sample rate (little endian)
+            bos.write((inputSampleRate shr 8) and 0xFF)
+            bos.write((inputSampleRate shr 16) and 0xFF)
+            bos.write((inputSampleRate shr 24) and 0xFF)
+            bos.write(0) // output gain
+            bos.write(0)
+            bos.write(0) // channel mapping family
+            return bos.toByteArray()
         }
 
         private fun getCsdBytes(format: MediaFormat, key: String): ByteArray? {
