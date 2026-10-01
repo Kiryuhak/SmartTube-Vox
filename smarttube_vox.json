@@ -2,23 +2,23 @@
   "package": {
     "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk"
   },
-  "32.56-vot.4": {
-    "versionCode": 2446004,
+  "32.56-vot.5": {
+    "versionCode": 2446005,
     "changelog": [
-      "Added Yandex ID authorization via screen code for Lively Voice.",
-      "Secure authorization persistence across app restarts.",
-      "Smooth second-by-second countdown timer for translation preparation.",
-      "Automatic playback synchronization when translation preparation is delayed.",
-      "Improved translation stability during pause, seek, and video switching.",
-      "Fixed stale translation session leaks and restored original volume handling."
+      "Download videos with voiceover translation directly from the player menu.",
+      "Save complete Matroska (MKV) files with original and translated audio tracks.",
+      "Background downloading with system notifications and cancellation support.",
+      "Offline local playback of downloaded videos without internet connection.",
+      "External video launch over local network via DIAL interface.",
+      "Seamless track switching, seek, pause, and process restart recovery."
     ],
     "changelog_ru": [
-      "Автоматический вход в Яндекс ID по коду на экране для «Живого голоса».",
-      "Безопасное сохранение авторизации между запусками приложения.",
-      "Плавный и непрерывный секундный отсчёт таймера ожидания перевода.",
-      "Автоматическая синхронизация и перемотка к началу видео при задержке готовности перевода.",
-      "Улучшена стабильность перевода при паузе, перемотке, смене роликов и повторных запросах аудио.",
-      "Устранено продолжение старых сессий перевода и исправлено восстановление громкости."
+      "Скачивание видео с закадровым переводом прямо из меню плеера.",
+      "Сохранение готовых MKV-файлов с оригинальной и переведённой аудиодорожками.",
+      "Фоновое скачивание с системным уведомлением и возможностью отмены.",
+      "Локальное воспроизведение скачанных видео без подключения к интернету.",
+      "Внешний запуск видео по локальной сети через DIAL-интерфейс.",
+      "Удобное переключение аудиодорожек, перемотка, пауза и восстановление задач после перезапуска."
     ]
   }
 }
