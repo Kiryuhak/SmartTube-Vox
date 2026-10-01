@@ -193,12 +193,19 @@ object VoxDownloadDialogHelper {
         if (coordinator.getJob(downloadId) == null) return
 
         val listenerRef = AtomicReference<VoxDownloadListener>()
-        var renderDialogFunc: (() -> Unit)? = null
+        var isShowing = true
+        lateinit var renderDialogFunc: () -> Unit
+
+        val cleanupListener = {
+            isShowing = false
+            listenerRef.get()?.let { coordinator.removeListener(downloadId, it) }
+        }
 
         renderDialogFunc = {
-            val currentJob = coordinator.getJob(downloadId)
-            if (currentJob != null) {
-                val progress = currentJob.getSnapshot()
+            if (isShowing) {
+                val currentJob = coordinator.getJob(downloadId)
+                if (currentJob != null) {
+                    val progress = currentJob.getSnapshot()
                 val stageTitle = getStageTitle(context, progress)
                 val percent = progress.overallPercent
 
@@ -214,13 +221,17 @@ object VoxDownloadDialogHelper {
                     options.add(UiOptionItem.from(
                         context.getString(R.string.vox_download_open_local),
                         { _ ->
+                            cleanupListener()
                             presenter.closeDialog()
                             VoxLocalPlayerHelper.playJob(context, currentJob)
                         }
                     ))
                     options.add(UiOptionItem.from(
                         context.getString(R.string.vox_download_close),
-                        { _ -> presenter.closeDialog() }
+                        { _ ->
+                            cleanupListener()
+                            presenter.closeDialog()
+                        }
                     ))
                 } else if (currentJob.state == VoxDownloadState.FAILED || currentJob.state == VoxDownloadState.CANCELLED) {
                     options.add(UiOptionItem.from(
@@ -228,12 +239,15 @@ object VoxDownloadDialogHelper {
                         { _ ->
                             val id = coordinator.startDownload(currentJob.request)
                             VoxDownloadService.start(context, id)
-                            renderDialogFunc?.invoke()
+                            renderDialogFunc()
                         }
                     ))
                     options.add(UiOptionItem.from(
                         context.getString(R.string.vox_download_close),
-                        { _ -> presenter.closeDialog() }
+                        { _ ->
+                            cleanupListener()
+                            presenter.closeDialog()
+                        }
                     ))
                 } else {
                     options.add(UiOptionItem.from(
@@ -243,6 +257,7 @@ object VoxDownloadDialogHelper {
                                 context,
                                 context.getString(R.string.vox_download_cancel_confirm),
                                 {
+                                    cleanupListener()
                                     VoxDownloadService.cancel(context, downloadId)
                                     presenter.closeDialog()
                                 }
@@ -251,46 +266,57 @@ object VoxDownloadDialogHelper {
                     ))
                     options.add(UiOptionItem.from(
                         context.getString(R.string.vox_download_close),
-                        { _ -> presenter.closeDialog() }
+                        { _ ->
+                            cleanupListener()
+                            presenter.closeDialog()
+                        }
                     ))
                 }
 
                 presenter.appendRadioCategory(displayTitle, options)
-                presenter.showDialog(currentJob.request.videoTitle)
+                presenter.showDialog(currentJob.request.videoTitle, Runnable {
+                    cleanupListener()
+                })
             }
         }
-
-        val listener = object : VoxDownloadListener {
-            override fun onProgressUpdated(progress: VoxDownloadProgress) {
-                mainHandler.post {
-                    renderDialogFunc?.invoke()
-                }
-            }
-
-            override fun onStateChanged(progress: VoxDownloadProgress) {
-                mainHandler.post {
-                    if (progress.state == VoxDownloadState.COMPLETED) {
-                        MessageHelpers.showMessage(context, R.string.vox_download_completed_toast)
-                        listenerRef.get()?.let { coordinator.removeListener(downloadId, it) }
-                    }
-                    renderDialogFunc?.invoke()
-                }
-            }
-
-            override fun onError(downloadId: String, errorCode: VoxDownloadErrorCode, message: String) {
-                mainHandler.post {
-                    val msg = getErrorMessage(context, errorCode)
-                    MessageHelpers.showMessage(context, msg)
-                    renderDialogFunc?.invoke()
-                }
-            }
-        }
-
-        listenerRef.set(listener)
-        coordinator.addListener(downloadId, listener)
-
-        renderDialogFunc.invoke()
     }
+
+    val listener = object : VoxDownloadListener {
+        override fun onProgressUpdated(progress: VoxDownloadProgress) {
+            if (!isShowing) return
+            mainHandler.post {
+                renderDialogFunc()
+            }
+        }
+
+        override fun onStateChanged(progress: VoxDownloadProgress) {
+            mainHandler.post {
+                if (progress.state == VoxDownloadState.COMPLETED) {
+                    MessageHelpers.showMessage(context, R.string.vox_download_completed_toast)
+                    cleanupListener()
+                }
+                if (isShowing) {
+                    renderDialogFunc()
+                }
+            }
+        }
+
+        override fun onError(downloadId: String, errorCode: VoxDownloadErrorCode, message: String) {
+            mainHandler.post {
+                val msg = getErrorMessage(context, errorCode)
+                MessageHelpers.showMessage(context, msg)
+                if (isShowing) {
+                    renderDialogFunc()
+                }
+            }
+        }
+    }
+
+    listenerRef.set(listener)
+    coordinator.addListener(downloadId, listener)
+
+    renderDialogFunc()
+}
 
     private fun getStageTitle(context: Context, progress: VoxDownloadProgress): String {
         return when (progress.state) {

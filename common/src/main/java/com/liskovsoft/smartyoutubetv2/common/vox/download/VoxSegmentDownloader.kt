@@ -51,8 +51,8 @@ class VoxSegmentDownloader(
         urlProvider: (() -> String)? = null
     ) {
         var currentUrl = initialUrl
-        var retryCount = 0
-        var backoffMs = INITIAL_BACKOFF_MS
+        var attempt = 0
+        val retryPolicy = VoxYouTubeRetryPolicy()
 
         while (true) {
             if (isCancelled()) {
@@ -74,60 +74,40 @@ class VoxSegmentDownloader(
                 )
                 // Успешно завершено
                 return
-            } catch (e: VoxDownloadException) {
-                when (e.code) {
-                    VoxDownloadErrorCode.CANCELLED,
-                    VoxDownloadErrorCode.INSUFFICIENT_STORAGE,
-                    VoxDownloadErrorCode.INVALID_URL -> {
-                        // Терминальные ошибки, не требующие повторов
-                        throw e
-                    }
-                    VoxDownloadErrorCode.URL_EXPIRED -> {
-                        // Истекла подпись URL (403/410) -> пытаемся обновить URL через urlProvider
-                        if (urlProvider != null && retryCount < MAX_RETRIES) {
-                            retryCount++
-                            currentUrl = urlProvider()
-                            continue
-                        } else {
-                            throw e
-                        }
-                    }
-                    VoxDownloadErrorCode.NETWORK_ERROR -> {
-                        if (retryCount < MAX_RETRIES) {
-                            retryCount++
-                            sleepWithCancel(backoffMs, isCancelled)
-                            backoffMs *= 2
-                            continue
-                        } else {
-                            throw e
-                        }
-                    }
-                    else -> {
-                        if (retryCount < MAX_RETRIES) {
-                            retryCount++
-                            sleepWithCancel(backoffMs, isCancelled)
-                            backoffMs *= 2
-                            continue
-                        } else {
-                            throw e
-                        }
-                    }
-                }
             } catch (e: Exception) {
                 if (isCancelled()) {
                     throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Download cancelled", e)
                 }
-                if (retryCount < MAX_RETRIES) {
-                    retryCount++
-                    sleepWithCancel(backoffMs, isCancelled)
-                    backoffMs *= 2
-                    continue
-                } else {
-                    throw VoxDownloadException(
-                        VoxDownloadErrorCode.NETWORK_ERROR,
-                        "Network error during download: ${e.message}",
-                        e
-                    )
+
+                val category = retryPolicy.classifyError(e)
+                val decision = retryPolicy.evaluate(
+                    category = category,
+                    currentAttempt = attempt,
+                    hasUrlRefreshProvider = (urlProvider != null)
+                )
+
+                when (decision) {
+                    is VoxRetryDecision.RefreshUrlAndRetry -> {
+                        attempt++
+                        currentUrl = urlProvider!!.invoke()
+                        continue
+                    }
+                    is VoxRetryDecision.Retry -> {
+                        attempt = decision.attempt
+                        sleepWithCancel(decision.delayMs, isCancelled)
+                        continue
+                    }
+                    is VoxRetryDecision.Fatal -> {
+                        if (e is VoxDownloadException) {
+                            throw e
+                        } else {
+                            throw VoxDownloadException(
+                                VoxDownloadErrorCode.NETWORK_ERROR,
+                                "Download failed ($category): ${e.message}",
+                                e
+                            )
+                        }
+                    }
                 }
             }
         }
