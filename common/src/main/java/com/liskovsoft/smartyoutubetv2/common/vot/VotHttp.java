@@ -24,11 +24,7 @@ public class VotHttp {
     public static final int WRITE_TIMEOUT_SEC = 20;
 
     public VotHttp() {
-        this(new OkHttpClient.Builder()
-                .connectTimeout(CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .readTimeout(READ_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .writeTimeout(WRITE_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .build());
+        this(com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.getVotHttpClient());
     }
 
     VotHttp(OkHttpClient client) {

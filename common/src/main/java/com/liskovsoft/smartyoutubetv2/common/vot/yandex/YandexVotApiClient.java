@@ -361,7 +361,7 @@ public class YandexVotApiClient {
         String requestUrl = getApiUrl(path);
         YandexVotLog.d(TAG, "VOT sendApiRequest: method=" + method + " endpoint=" + path);
 
-        HttpURLConnection connection = (HttpURLConnection) new URL(requestUrl).openConnection();
+        HttpURLConnection connection = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(requestUrl);
         try {
             connection.setRequestMethod(method);
             for (Map.Entry<String, String> header : yandexHeaders.entrySet()) {
@@ -444,7 +444,7 @@ public class YandexVotApiClient {
             String requestUrl = getApiUrl(path);
             YandexVotLog.d(TAG, "VOT createSession");
 
-            HttpURLConnection connection = (HttpURLConnection) new URL(requestUrl).openConnection();
+            HttpURLConnection connection = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(requestUrl);
             try {
                 connection.setRequestMethod("POST");
                 for (Map.Entry<String, String> header : yandexHeaders.entrySet()) {
@@ -506,7 +506,7 @@ public class YandexVotApiClient {
         if (token.equals(lastValidatedToken)) return tokenIsValid;
         try {
             String url = "https://login.yandex.ru/info?format=json";
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+            HttpURLConnection conn = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(url);
             try {
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Authorization", "OAuth " + token);
@@ -612,7 +612,7 @@ public class YandexVotApiClient {
         String requestUrl = getApiUrl(path);
         byte[] payloadBytes = jsonBody.getBytes(StandardCharsets.UTF_8);
 
-        HttpURLConnection connection = (HttpURLConnection) new URL(requestUrl).openConnection();
+        HttpURLConnection connection = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(requestUrl);
         try {
             connection.setRequestMethod(method);
             for (Map.Entry<String, String> header : yandexHeaders.entrySet()) {

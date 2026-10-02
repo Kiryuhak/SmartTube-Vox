@@ -25,7 +25,11 @@ class VoxDownloadCoordinator(
     private val repository: VoxDownloadRepository,
     private val streamResolver: VoxStreamResolver = DefaultVoxStreamResolver(),
     private val translationResolver: VoxTranslationResolver = DefaultVoxTranslationResolver(),
-    private val downloader: VoxSegmentDownloader = VoxSegmentDownloader(storage = storage),
+    private val downloader: VoxSegmentDownloader = VoxSegmentDownloader(
+        httpClient = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.createDirectMediaDownloadClient(),
+        storage = storage
+    ),
+    private val translationDownloader: VoxSegmentDownloader = downloader,
     private val publisher: VoxDownloadPublisher? = null,
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
 ) {
@@ -50,9 +54,19 @@ class VoxDownloadCoordinator(
                     val stor = VoxDownloadStorage(appContext)
                     val repo = VoxDownloadRepository(stor)
                     val pub = VoxMediaStorePublisher(appContext)
+                    val directDownloader = VoxSegmentDownloader(
+                        httpClient = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.createDirectMediaDownloadClient(),
+                        storage = stor
+                    )
+                    val transDownloader = VoxSegmentDownloader(
+                        httpClient = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.createTranslationDownloadClient(appContext),
+                        storage = stor
+                    )
                     VoxDownloadCoordinator(
                         storage = stor,
                         repository = repo,
+                        downloader = directDownloader,
+                        translationDownloader = transDownloader,
                         publisher = pub
                     ).also { instance = it }
                 }
@@ -414,7 +428,7 @@ class VoxDownloadCoordinator(
                     ).url
 
                 val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)
-                downloader.download(
+                translationDownloader.download(
                     initialUrl = translationUrl,
                     targetFile = targetFile,
                     isCancelled = { isStale(job, expectedGen) },
