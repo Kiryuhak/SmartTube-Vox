@@ -63,15 +63,29 @@ class VoxExternalLaunchValidatorTest {
 
     @Test
     fun testParseTimeToMs() {
+        // Standard cases
         assertEquals(120_000L, VoxExternalLaunchValidator.parseTimeToMs("120"))
         assertEquals(120_000L, VoxExternalLaunchValidator.parseTimeToMs("120s"))
         assertEquals(135_000L, VoxExternalLaunchValidator.parseTimeToMs("2m15s"))
         assertEquals(3_723_000L, VoxExternalLaunchValidator.parseTimeToMs("1h2m3s"))
         assertEquals(12_345L, VoxExternalLaunchValidator.parseTimeToMs("12345ms"))
+
+        // t=0 must be VALID (start of video)
+        assertEquals(0L, VoxExternalLaunchValidator.parseTimeToMs("0"))
+        assertEquals(0L, VoxExternalLaunchValidator.parseTimeToMs("0s"))
+
+        // Invalid / edge cases
         assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs(""))
         assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs(null))
         assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs("invalid"))
+        assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs("-10"))
+        assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs("-1s"))
+        // Overflow guard: > 24h = unrealistic for YouTube
+        assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs("99999"))
+        // Negative ms suffix
+        assertEquals(-1L, VoxExternalLaunchValidator.parseTimeToMs("-500ms"))
     }
+
 
     @Test
     fun testExtractVideoId() {

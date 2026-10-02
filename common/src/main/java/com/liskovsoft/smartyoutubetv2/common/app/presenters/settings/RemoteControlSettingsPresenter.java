@@ -139,11 +139,21 @@ public class RemoteControlSettingsPresenter extends BasePresenter<Void> {
             options.add(UiOptionItem.from(getContext().getString(R.string.settings_external_launch),
                     getContext().getString(R.string.settings_external_launch_desc),
                     option -> {
-                        mRemoteControlData.enableExternalLaunch(option.isSelected());
-                        com.liskovsoft.smartyoutubetv2.common.vox.external.VoxExternalLaunchManager.instance(getContext()).syncWithSettings();
+                        boolean selected = option.isSelected();
+                        mRemoteControlData.enableExternalLaunch(selected);
+                        boolean success = com.liskovsoft.smartyoutubetv2.common.vox.external.VoxExternalLaunchManager.instance(getContext()).syncWithSettings();
+                        if (selected && !success) {
+                            mRemoteControlData.enableExternalLaunch(false);
+                            if (option instanceof UiOptionItem) {
+                                ((UiOptionItem) option).onSelect(false);
+                            }
+                            MessageHelpers.showMessage(getContext(), R.string.settings_external_launch_start_failed);
+                        }
                     },
                     mRemoteControlData.isExternalLaunchEnabled()));
         }
+
+
         options.add(UiOptionItem.from(getContext().getString(R.string.disable_remote_history),
                 option -> mRemoteControlData.disableRemoteHistory(option.isSelected()),
                 mRemoteControlData.isRemoteHistoryDisabled()));
