@@ -2,23 +2,35 @@
   "package": {
     "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk"
   },
-  "32.56-vot.5": {
-    "versionCode": 2446005,
+  "32.56-vot.6": {
+    "versionCode": 2446006,
     "changelog": [
-      "Download videos with voiceover translation directly from the player menu.",
-      "Save complete Matroska (MKV) files with original and translated audio tracks.",
-      "Background downloading with system notifications and cancellation support.",
-      "Offline local playback of downloaded videos without internet connection.",
-      "External video launch over local network via DIAL interface.",
-      "Seamless track switching, seek, pause, and process restart recovery."
+      "Added VOX download manager for browsing and managing downloaded videos.",
+      "Added support for downloading videos with VP9 and original Opus audio on compatible devices.",
+      "Added convenient management of saved videos: open, resume, repeat, cancel, and delete.",
+      "Improved download compatibility with YouTube changes and transient network errors.",
+      "Improved selection of suitable quality and format during download.",
+      "Improved recovery of downloads after app restart.",
+      "Improved external video launch over local network via DIAL interface.",
+      "Improved DIAL server duplicate request handling and video start from timestamp.",
+      "Fixed retry and recovery errors during transient network failures.",
+      "Fixed potential issues with VP9 and Opus processing in local MKVs.",
+      "Fixed listener leaks and duplicate download progress dialogs.",
+      "Fixed DIAL server state errors and invalid request processing."
     ],
     "changelog_ru": [
-      "Скачивание видео с закадровым переводом прямо из меню плеера.",
-      "Сохранение готовых MKV-файлов с оригинальной и переведённой аудиодорожками.",
-      "Фоновое скачивание с системным уведомлением и возможностью отмены.",
-      "Локальное воспроизведение скачанных видео без подключения к интернету.",
-      "Внешний запуск видео по локальной сети через DIAL-интерфейс.",
-      "Удобное переключение аудиодорожек, перемотка, пауза и восстановление задач после перезапуска."
+      "Менеджер загрузок VOX для просмотра и управления скачанными видео.",
+      "Поддержка скачивания видео с VP9 и оригинального звука в Opus на совместимых устройствах.",
+      "Более удобное управление сохранёнными видео: открытие, продолжение, повтор, отмена и удаление.",
+      "Совместимость скачивания с изменениями YouTube и временными сетевыми ошибками.",
+      "Выбор подходящего качества и формата при скачивании.",
+      "Восстановление загрузок после перезапуска приложения.",
+      "Работа внешнего запуска видео по локальной сети.",
+      "Обработка повторных команд DIAL и запуска видео с временной позиции.",
+      "Ошибки повторных запросов и восстановления загрузок при временных сбоях сети.",
+      "Возможные проблемы с обработкой VP9 и Opus в локальных MKV.",
+      "Утечки слушателей и повторное открытие окна прогресса загрузки.",
+      "Ошибки состояний DIAL-сервера и обработки некорректных запросов."
     ]
   }
 }
