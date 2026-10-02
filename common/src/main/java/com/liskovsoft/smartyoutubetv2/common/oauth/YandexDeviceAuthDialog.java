@@ -391,6 +391,13 @@ public class YandexDeviceAuthDialog {
             return;
         }
         mVotData.setOAuthTokens(token, refreshToken, expiresInSeconds);
+        if (!mVotData.hasOAuthToken()) {
+            Log.e(TAG, "Failed to persist OAuth token to secure store");
+            mStatusView.setText(R.string.vot_device_auth_network_error);
+            mRefreshButton.setEnabled(true);
+            mRefreshButton.requestFocus();
+            return;
+        }
         // token здесь не логируется
         Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true, refreshPresent=%b)", refreshToken != null && !refreshToken.isEmpty());
         mStatusView.setText(R.string.vot_device_auth_success);
