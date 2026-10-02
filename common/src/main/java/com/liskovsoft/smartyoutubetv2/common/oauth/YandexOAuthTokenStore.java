@@ -294,24 +294,28 @@ public class YandexOAuthTokenStore {
             if (key == null) return null;
 
             Cipher cipher = Cipher.getInstance(AES_GCM_NO_PADDING);
-            try {
-                cipher.init(Cipher.ENCRYPT_MODE, key);
-            } catch (java.security.InvalidKeyException e) {
-                // Some providers (e.g. mock/legacy) may require explicit GCMParameterSpec
-                byte[] manualIv = new byte[GCM_IV_LENGTH_BYTES];
-                mRandom.nextBytes(manualIv);
-                cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, manualIv));
-            }
+            byte[] iv;
 
-            byte[] iv = cipher.getIV();
-            if (iv == null || iv.length != GCM_IV_LENGTH_BYTES) {
-                byte[] manualIv = new byte[GCM_IV_LENGTH_BYTES];
-                mRandom.nextBytes(manualIv);
-                cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, manualIv));
-                iv = cipher.getIV() != null ? cipher.getIV() : manualIv;
+            if (key.getEncoded() != null) {
+                // Software / fallback key: supply random IV explicitly
+                iv = new byte[GCM_IV_LENGTH_BYTES];
+                mRandom.nextBytes(iv);
+                cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv));
+            } else {
+                // AndroidKeyStore key: Keystore generates IV automatically (caller-provided IVs not permitted)
+                cipher.init(Cipher.ENCRYPT_MODE, key);
+                iv = cipher.getIV();
             }
 
             byte[] cipherText = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
+            if (iv == null) {
+                iv = cipher.getIV();
+            }
+
+            if (iv == null || iv.length != GCM_IV_LENGTH_BYTES) {
+                Log.e(TAG, "Invalid or missing GCM IV produced by cipher");
+                return null;
+            }
 
             byte[] combined = new byte[1 + GCM_IV_LENGTH_BYTES + cipherText.length];
             combined[0] = FORMAT_VERSION;
@@ -360,8 +364,8 @@ public class YandexOAuthTokenStore {
         }
         if (mCachedKey != null) return mCachedKey;
 
-        // API >= 23: ключ хранится через AndroidKeyStore (fail-closed при сбое)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        // API >= 23: ключ хранится через AndroidKeyStore
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !mKeyStoreFailed) {
             try {
                 KeyStore keyStore = KeyStore.getInstance(ANDROID_KEY_STORE);
                 keyStore.load(null);
@@ -385,23 +389,30 @@ public class YandexOAuthTokenStore {
                     return mCachedKey;
                 }
             } catch (Throwable t) {
-                Log.e(TAG, "AndroidKeyStore unavailable or failed: %s (fail-closed on API 23+)", t.getClass().getSimpleName());
-                return null;
+                mKeyStoreFailed = true;
+                Log.w(TAG, "AndroidKeyStore unavailable or failed: %s, falling back to app-private key", t.getClass().getSimpleName());
             }
         }
 
-        // API < 23: закрытый ключ приложения для устаревших версий Android (API 21-22)
+        // Fallback or API < 23: закрытый ключ приложения
         try {
             mCachedKey = getOrCreatePrivateFileKey();
             return mCachedKey;
         } catch (Exception e) {
-            Log.e(TAG, "Failed to initialize app-private legacy key: %s", e.getClass().getSimpleName());
+            Log.e(TAG, "Failed to initialize app-private key: %s", e.getClass().getSimpleName());
             return null;
         }
     }
 
     private SecretKey getOrCreatePrivateFileKey() throws IOException {
-        File keyFile = new File(mContext.getFilesDir(), "vot_sec_key.bin");
+        if (mContext == null) {
+            throw new IOException("Context is null");
+        }
+        File filesDir = mContext.getFilesDir();
+        if (filesDir == null) {
+            throw new IOException("Files directory is null");
+        }
+        File keyFile = new File(filesDir, "vot_sec_key.bin");
         if (keyFile.exists() && keyFile.length() == 32) {
             byte[] keyBytes = new byte[32];
             try (FileInputStream in = new FileInputStream(keyFile)) {

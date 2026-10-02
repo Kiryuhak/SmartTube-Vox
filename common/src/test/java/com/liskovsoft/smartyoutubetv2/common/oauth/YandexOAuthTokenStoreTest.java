@@ -73,23 +73,52 @@ public class YandexOAuthTokenStoreTest {
     }
 
     @Test
-    public void testFailClosedWhenKeyUnavailable() {
+    public void testFallbackToFileKeyWhenKeyStoreUnavailable() {
+        // Reset test key so getOrCreateSecretKey falls back to getOrCreatePrivateFileKey
+        YandexOAuthTokenStore.setTestSecretKey(null);
+        YandexOAuthTokenStore.resetForTesting();
+        YandexOAuthTokenStore fileKeyStore = YandexOAuthTokenStore.instance(mContext);
+        fileKeyStore.clear();
+
+        String testAccess = "y0_fallback_access_token_123";
+        String testRefresh = "1:fallback_refresh_token_456";
+
+        fileKeyStore.saveTokens(testAccess, testRefresh, 3600);
+
+        assertEquals(testAccess, fileKeyStore.getAccessToken());
+        assertEquals(testRefresh, fileKeyStore.getRefreshToken());
+        assertTrue(fileKeyStore.hasAccessToken());
+        assertTrue(fileKeyStore.hasRefreshToken());
+
+        // Verify that private key file exists in files directory
+        java.io.File keyFile = new java.io.File(mContext.getFilesDir(), "vot_sec_key.bin");
+        assertTrue(keyFile.exists());
+        assertEquals(32, keyFile.length());
+
+        // Verify across instance reload
+        YandexOAuthTokenStore.resetForTesting();
+        YandexOAuthTokenStore reloadedStore = YandexOAuthTokenStore.instance(mContext);
+        assertEquals(testAccess, reloadedStore.getAccessToken());
+        assertEquals(testRefresh, reloadedStore.getRefreshToken());
+    }
+
+    @Test
+    public void testDecryptionFailsSafeOnKeyMismatch() {
+        // Save token with test key
         mStore.saveTokens("valid_access", "valid_refresh", 3600);
         assertEquals("valid_access", mStore.getAccessToken());
 
-        // Simulate KeyStore failure / unavailable key
-        YandexOAuthTokenStore.setTestSecretKey(null);
+        // Switch to a completely different test key
+        byte[] otherKeyBytes = new byte[32];
+        for (int i = 0; i < 32; i++) otherKeyBytes[i] = (byte) (i + 99);
+        YandexOAuthTokenStore.setTestSecretKey(new javax.crypto.spec.SecretKeySpec(otherKeyBytes, "AES"));
         YandexOAuthTokenStore.resetForTesting();
-        YandexOAuthTokenStore unkeyedStore = YandexOAuthTokenStore.instance(mContext);
+        YandexOAuthTokenStore otherStore = YandexOAuthTokenStore.instance(mContext);
 
-        // When key is unavailable, must fail closed without crashing or plaintext leakage
-        assertEquals("", unkeyedStore.getAccessToken());
-        assertEquals("", unkeyedStore.getRefreshToken());
-        assertFalse(unkeyedStore.hasAccessToken());
-
-        // Attempting to save without a valid key must abort without writing corrupt data
-        unkeyedStore.saveTokens("new_access", "new_refresh", 3600);
-        assertEquals("", unkeyedStore.getAccessToken());
+        // When key doesn't match, GCM auth tag fails; must fail safe, clear corrupt entry, and return ""
+        assertEquals("", otherStore.getAccessToken());
+        assertEquals("", otherStore.getRefreshToken());
+        assertFalse(otherStore.hasAccessToken());
     }
 
     @Test
@@ -99,6 +128,15 @@ public class YandexOAuthTokenStoreTest {
         rawPrefs.edit().putString("sec_access_token", "invalid_base64_payload!@#$").commit();
 
         // Must fail closed without crashing
+        assertEquals("", mStore.getAccessToken());
+        assertFalse(mStore.hasAccessToken());
+
+        // Store invalid format version
+        byte[] badVersionPayload = new byte[1 + 12 + 16 + 10];
+        badVersionPayload[0] = 99; // invalid version
+        String badVersionBase64 = android.util.Base64.encodeToString(badVersionPayload, android.util.Base64.NO_WRAP);
+        rawPrefs.edit().putString("sec_access_token", badVersionBase64).commit();
+
         assertEquals("", mStore.getAccessToken());
         assertFalse(mStore.hasAccessToken());
     }
