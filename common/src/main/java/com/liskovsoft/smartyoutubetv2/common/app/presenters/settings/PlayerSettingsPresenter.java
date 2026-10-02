@@ -267,34 +267,31 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         VotData.AuthState state = mVotData.getAuthState();
         String statusText = authStateToStatusString(state);
 
-        settingsPresenter.appendSingleButton(UiOptionItem.from(
-                getContext().getString(R.string.vot_device_auth_title),
-                statusText,
-                optionItem -> {
-                    if (state == VotData.AuthState.ABSENT || state == VotData.AuthState.REJECTED) {
-                        startYandexOAuth();
-                    }
-                }
-        ));
-
-        if (state == VotData.AuthState.REJECTED) {
+        if (state == VotData.AuthState.ABSENT) {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_relogin),
+                    getContext().getString(R.string.vot_yandex_login),
+                    statusText,
                     optionItem -> startYandexOAuth()
             ));
+        } else if (state == VotData.AuthState.REJECTED) {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_logout),
-                    optionItem -> performYandexLogout()
+                    getContext().getString(R.string.vot_yandex_relogin),
+                    statusText,
+                    optionItem -> startYandexOAuth()
             ));
-        } else if (mVotData.hasOAuthToken()) {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
                     getContext().getString(R.string.vot_yandex_logout),
                     optionItem -> performYandexLogout()
             ));
         } else {
             settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_login),
-                    optionItem -> startYandexOAuth()
+                    getContext().getString(R.string.vot_device_auth_title),
+                    statusText,
+                    null
+            ));
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_logout),
+                    optionItem -> performYandexLogout()
             ));
         }
 
@@ -372,6 +369,7 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         intent.setClassName(ctx, "com.liskovsoft.smartyoutubetv2.tv.ui.oauth.YandexOAuthActivity");
         try {
             ctx.startActivity(intent);
+            AppDialogPresenter.instance(ctx).closeDialog();
         } catch (Exception e) {
             MessageHelpers.showMessage(ctx, R.string.vot_auth_unavailable);
         }
