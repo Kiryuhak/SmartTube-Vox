@@ -17,6 +17,27 @@
         android:id="@+id/preview_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
+    <TextView
+        android:visibility="gone"
+        android:id="@+id/quality_badge"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="@dimen/lb_basic_card_info_badge_margin"
+        android:layout_marginTop="@dimen/lb_basic_card_info_badge_margin"
+        android:background="@drawable/badge_rounded_bg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:textSize="@dimen/card_badge_text_size"
+        android:textColor="@color/white"
+        android:textStyle="bold"
+        style="@style/TextAppearance.Leanback.ImageCardView.Content" />
     <LinearLayout
                     android:id="@+id/clip_info"
                     android:layout_width="match_parent"

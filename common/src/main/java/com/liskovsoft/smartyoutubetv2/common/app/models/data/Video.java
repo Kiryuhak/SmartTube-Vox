@@ -847,6 +847,10 @@ public final class Video {
         return video;
     }
 
+    public void setDurationMs(long durationMs) {
+        this.durationMs = durationMs;
+    }
+
     private MediaItem findNextVideo(MediaItemMetadata metadata) {
         if (metadata == null) {
             return null;

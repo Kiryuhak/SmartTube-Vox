@@ -338,6 +338,22 @@ public class VotData extends SharedPreferencesBase {
         com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
     }
 
+    public static final String VOT_POST_WATCH_ACTION = "vot_post_watch_action";
+    public static final int POST_WATCH_DO_NOTHING = 0;
+    public static final int POST_WATCH_OFFER_DELETE = 1;
+
+    public boolean isDeleteAfterWatchingEnabled() {
+        return getPostWatchAction() == POST_WATCH_OFFER_DELETE;
+    }
+
+    public int getPostWatchAction() {
+        return getInt(VOT_POST_WATCH_ACTION, POST_WATCH_DO_NOTHING);
+    }
+
+    public void setPostWatchAction(int action) {
+        putInt(VOT_POST_WATCH_ACTION, action);
+    }
+
     private static String normalizeToken(String token) {
         if (token == null) {
             return "";

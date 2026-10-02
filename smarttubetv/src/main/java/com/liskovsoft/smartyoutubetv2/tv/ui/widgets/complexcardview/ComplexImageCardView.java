@@ -79,6 +79,12 @@ public class ComplexImageCardView extends ImageCardView {
         }
     }
 
+    public void setQualityBadge(String text) {
+        if (mIsBadgeEnabled && mComplexImageView != null) {
+            mComplexImageView.setQualityBadge(text);
+        }
+    }
+
     public void setBadgeColor(int color) {
         mComplexImageView.setBadgeColor(color);
     }

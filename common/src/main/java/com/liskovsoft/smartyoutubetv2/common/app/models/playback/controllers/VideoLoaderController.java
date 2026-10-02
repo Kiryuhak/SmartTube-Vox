@@ -20,9 +20,14 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.BasePlayerContr
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.manager.PlayerConstants;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.VideoActionPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
+
+import java.util.ArrayList;
+import java.util.List;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
@@ -99,7 +104,7 @@ public class VideoLoaderController extends BasePlayerController {
         if (getPlayer() == null) {
             return;
         }
-        
+
         loadVideo(Helpers.firstNonNull(mPendingVideo, getVideo()));
         getPlayer().setButtonState(R.id.action_repeat, getPlayerData().getPlaybackMode());
         mPendingVideo = null;
@@ -115,7 +120,7 @@ public class VideoLoaderController extends BasePlayerController {
         if (getPlayer() == null) {
             return;
         }
-        
+
         getPlayer().setButtonState(R.id.action_repeat, video.finishOnEnded ? PlayerConstants.PLAYBACK_MODE_CLOSE : getPlayerData().getPlaybackMode());
         // Can't set title at this point
         //checkSleepTimer();
@@ -173,6 +178,10 @@ public class VideoLoaderController extends BasePlayerController {
     public void onPlayEnd() {
         if (getPlayer() == null) {
             return;
+        }
+
+        if (getVideo() != null && getVideo().isLocal) {
+            checkOfferDeleteWatched(getVideo());
         }
 
         // Stop the playback if the user is browsing options or reading comments
@@ -513,7 +522,7 @@ public class VideoLoaderController extends BasePlayerController {
         if (getPlayer() == null || getVideo() == null) {
             return;
         }
-        
+
         VideoGroup group = getVideo().getGroup(); // Get the VideoGroup (playlist)
 
         if (group != null && !group.isEmpty() && getVideo().belongsToSamePlaylistGroup()) {
@@ -654,5 +663,39 @@ public class VideoLoaderController extends BasePlayerController {
         if (getPlayer().getDurationMs() - getPlayer().getPositionMs() < 50_000) {
             MediaServiceManager.instance().loadFormatInfo(mSuggestionsController.getNext(), formatInfo -> {});
         }
+    }
+
+    private void checkOfferDeleteWatched(Video video) {
+        if (getContext() == null || video == null || video.videoId == null || !video.isLocal) {
+            return;
+        }
+
+        if (!com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(getContext()) ||
+                !com.liskovsoft.smartyoutubetv2.common.prefs.VotData.instance(getContext()).isDeleteAfterWatchingEnabled()) {
+            return;
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext());
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job = coordinator.findCompletedJob(video.videoId);
+        if (job == null) {
+            return;
+        }
+
+        long fileSize = coordinator.getStorage().getPublishedFileSize(job.getPublishedUri());
+        String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(fileSize);
+        String prompt = getContext().getString(R.string.vox_download_post_watch_prompt, sizeStr);
+
+        List<OptionItem> options = new ArrayList<>();
+        options.add(UiOptionItem.from(getContext().getString(R.string.vox_download_post_watch_delete), optionItem -> {
+            coordinator.deleteDownload(job.getDownloadId());
+            getAppDialogPresenter().closeDialog();
+        }));
+        options.add(UiOptionItem.from(getContext().getString(R.string.vox_download_post_watch_keep), optionItem -> {
+            getAppDialogPresenter().closeDialog();
+        }));
+
+        getAppDialogPresenter().appendStringsCategory(prompt, options);
+        getAppDialogPresenter().showDialog(prompt);
     }
 }

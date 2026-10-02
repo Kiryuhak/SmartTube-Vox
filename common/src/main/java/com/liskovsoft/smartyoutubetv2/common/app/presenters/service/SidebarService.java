@@ -249,6 +249,9 @@ public class SidebarService implements ProfileChangeListener {
         mDefaultSections.put(R.string.header_channels, MediaGroup.TYPE_CHANNEL_UPLOADS);
         mDefaultSections.put(R.string.header_subscriptions, MediaGroup.TYPE_SUBSCRIPTIONS);
         mDefaultSections.put(R.string.header_history, MediaGroup.TYPE_HISTORY);
+        if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
+            mDefaultSections.put(R.string.header_downloaded_videos, com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED);
+        }
         mDefaultSections.put(R.string.header_blocked_channels, MediaGroup.TYPE_BLOCKED_CHANNELS);
         mDefaultSections.put(R.string.header_playlists, MediaGroup.TYPE_USER_PLAYLISTS);
         mDefaultSections.put(R.string.my_videos, MediaGroup.TYPE_MY_VIDEOS);
@@ -304,6 +307,10 @@ public class SidebarService implements ProfileChangeListener {
 
         // Backward compatibility
         enableSection(MediaGroup.TYPE_SETTINGS, true);
+
+        if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext) && !isSectionPinned(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED)) {
+            enableSection(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED, true);
+        }
 
         cleanupPinnedItems();
     }
