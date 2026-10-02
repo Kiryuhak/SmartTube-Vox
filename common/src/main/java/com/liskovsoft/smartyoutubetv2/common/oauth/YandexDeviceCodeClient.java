@@ -49,7 +49,7 @@ public class YandexDeviceCodeClient {
     private final String mDeviceCodeUrl;
 
     public YandexDeviceCodeClient() {
-        this(url -> (HttpURLConnection) new URL(url).openConnection(), DEVICE_CODE_URL);
+        this(url -> com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(url), DEVICE_CODE_URL);
     }
 
     @VisibleForTesting

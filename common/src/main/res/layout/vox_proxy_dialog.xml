@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_proxy_config"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/vox_proxy_description"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/vox_proxy_desc"
+        android:textColor="@color/dialog_text_color"
+        android:textSize="13sp"
+        android:paddingBottom="10dp" />
+
+    <CheckBox
+        android:id="@+id/vox_proxy_enable_checkbox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/vox_proxy_enable"
+        android:textColor="@color/dialog_text_color"
+        android:buttonTint="@color/dialog_text_color"
+        android:paddingBottom="8dp" />
+
+    <TextView
+        android:id="@+id/vox_proxy_type_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/vox_proxy_type"
+        android:textColor="@color/dialog_text_color"
+        android:textSize="14sp"
+        android:paddingTop="6dp"
+        android:paddingBottom="4dp" />
+
+    <RadioGroup
+        android:id="@+id/vox_proxy_type_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="8dp">
+
+        <RadioButton
+            android:id="@+id/vox_proxy_type_http"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:text="HTTP"
+            android:textColor="@color/dialog_text_color"
+            android:buttonTint="@color/dialog_text_color" />
+
+        <RadioButton
+            android:id="@+id/vox_proxy_type_socks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SOCKS5"
+            android:textColor="@color/dialog_text_color"
+            android:buttonTint="@color/dialog_text_color" />
+    </RadioGroup>
+
+    <EditText
+        android:id="@+id/vox_proxy_host"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:hint="@string/vox_proxy_host"
+        android:imeOptions="actionNext"
+        android:inputType="textUri"
+        android:textColor="@color/dialog_text_color"
+        android:textCursorDrawable="@null"
+        android:backgroundTint="@color/dialog_text_color"
+        android:textColorHint="@color/white_50" />
+
+    <EditText
+        android:id="@+id/vox_proxy_port"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:hint="@string/vox_proxy_port"
+        android:imeOptions="actionNext"
+        android:inputType="number"
+        android:textColor="@color/dialog_text_color"
+        android:textCursorDrawable="@null"
+        android:backgroundTint="@color/dialog_text_color"
+        android:textColorHint="@color/white_50" />
+
+    <EditText
+        android:id="@+id/vox_proxy_username"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:hint="@string/vox_proxy_username"
+        android:imeOptions="actionNext"
+        android:inputType="textPersonName"
+        android:textColor="@color/dialog_text_color"
+        android:textCursorDrawable="@null"
+        android:backgroundTint="@color/dialog_text_color"
+        android:textColorHint="@color/white_50" />
+
+    <EditText
+        android:id="@+id/vox_proxy_password"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:autofillHints=""
+        android:hint="@string/vox_proxy_password"
+        android:imeOptions="actionDone"
+        android:inputType="textPassword"
+        android:textColor="@color/dialog_text_color"
+        android:textCursorDrawable="@null"
+        android:backgroundTint="@color/dialog_text_color"
+        android:textColorHint="@color/white_50" />
+
+    <TextView
+        android:id="@+id/vox_proxy_status_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:lines="3"
+        android:textColor="@color/dialog_text_color"
+        android:textSize="12sp" />
+</LinearLayout>

@@ -303,6 +303,14 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 optionItem -> showVotTokenDialog()
         ));
 
+        settingsPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.vox_proxy_title),
+                mVotData.getVoxProxyConfig().toDisplayString(),
+                optionItem -> com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyDialog.show(getContext(), config -> {
+                    AppDialogPresenter.instance(getContext()).closeDialog();
+                })
+        ));
+
         settingsPresenter.appendRadioCategory(
                 getContext().getString(R.string.vot_original_volume),
                 AppDialogUtil.createVotOriginalVolumeCategory(getContext()).options);

@@ -19,6 +19,12 @@ public class VotData extends SharedPreferencesBase {
     private static final String AUTO_TRANSLATE = "auto_translate_enabled";
     private static final String PREFER_YOUTUBE_AUTO_DUB = "prefer_youtube_auto_dub";
     private static final String AUTH_STATE = "yandex_auth_state";
+    private static final String VOX_PROXY_ENABLED = "vox_proxy_enabled";
+    private static final String VOX_PROXY_TYPE = "vox_proxy_type";
+    private static final String VOX_PROXY_HOST = "vox_proxy_host";
+    private static final String VOX_PROXY_PORT = "vox_proxy_port";
+    private static final String VOX_PROXY_USERNAME = "vox_proxy_username";
+    private static final String VOX_PROXY_PASSWORD = "vox_proxy_password";
     private static final int DEFAULT_ORIGINAL_VOLUME_PERCENT = 5;
     private static final int DEFAULT_TRANSLATION_VOLUME_PERCENT = 100;
 
@@ -61,7 +67,7 @@ public class VotData extends SharedPreferencesBase {
     }
 
     public static VotData instance(Context context) {
-        if (sInstance == null) {
+        if (sInstance == null && context != null) {
             sInstance = new VotData(context);
         }
         return sInstance;
@@ -239,6 +245,97 @@ public class VotData extends SharedPreferencesBase {
 
     public float getTranslationVolumeMultiplier() {
         return getTranslationVolumePercent() / 100f;
+    }
+
+    public boolean isVoxProxyEnabled() {
+        return getBoolean(VOX_PROXY_ENABLED, false);
+    }
+
+    public void setVoxProxyEnabled(boolean enabled) {
+        putBoolean(VOX_PROXY_ENABLED, enabled);
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
+    }
+
+    public com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig.Type getVoxProxyType() {
+        String typeStr = getString(VOX_PROXY_TYPE, com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig.Type.HTTP.name());
+        try {
+            return com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig.Type.valueOf(typeStr);
+        } catch (Exception e) {
+            return com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig.Type.HTTP;
+        }
+    }
+
+    public void setVoxProxyType(com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig.Type type) {
+        putString(VOX_PROXY_TYPE, type != null ? type.name() : com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig.Type.HTTP.name());
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
+    }
+
+    public String getVoxProxyHost() {
+        return getString(VOX_PROXY_HOST, "");
+    }
+
+    public void setVoxProxyHost(String host) {
+        putString(VOX_PROXY_HOST, host != null ? host.trim() : "");
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
+    }
+
+    public int getVoxProxyPort() {
+        return getInt(VOX_PROXY_PORT, 8080);
+    }
+
+    public void setVoxProxyPort(int port) {
+        putInt(VOX_PROXY_PORT, port);
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
+    }
+
+    public String getVoxProxyUsername() {
+        return getString(VOX_PROXY_USERNAME, "");
+    }
+
+    public void setVoxProxyUsername(String username) {
+        putString(VOX_PROXY_USERNAME, username != null ? username.trim() : "");
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
+    }
+
+    public String getVoxProxyPassword() {
+        return getString(VOX_PROXY_PASSWORD, "");
+    }
+
+    public void setVoxProxyPassword(String password) {
+        putString(VOX_PROXY_PASSWORD, password != null ? password : "");
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
+    }
+
+    public com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig getVoxProxyConfig() {
+        return new com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig(
+                isVoxProxyEnabled(),
+                getVoxProxyType(),
+                getVoxProxyHost(),
+                getVoxProxyPort(),
+                getVoxProxyUsername(),
+                getVoxProxyPassword()
+        );
+    }
+
+    public void setVoxProxyConfig(com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyConfig config) {
+        if (config == null || !config.isEnabled()) {
+            setVoxProxyEnabled(false);
+            if (config != null) {
+                setVoxProxyType(config.getType());
+                setVoxProxyHost(config.getHost());
+                setVoxProxyPort(config.getPort());
+                setVoxProxyUsername(config.getUsername());
+                setVoxProxyPassword(config.getPassword());
+            }
+        } else {
+            setVoxProxyType(config.getType());
+            setVoxProxyHost(config.getHost());
+            setVoxProxyPort(config.getPort());
+            setVoxProxyUsername(config.getUsername());
+            setVoxProxyPassword(config.getPassword());
+            setVoxProxyEnabled(config.isEnabled());
+        }
+        com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.invalidateCache();
     }
 
     private static String normalizeToken(String token) {

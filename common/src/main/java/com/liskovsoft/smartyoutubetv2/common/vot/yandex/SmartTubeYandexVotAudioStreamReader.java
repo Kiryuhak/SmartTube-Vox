@@ -45,18 +45,7 @@ public class SmartTubeYandexVotAudioStreamReader implements YandexVotAudioStream
     }
 
     private static OkHttpClient getDefaultClient() {
-        if (sDefaultClient == null) {
-            synchronized (SmartTubeYandexVotAudioStreamReader.class) {
-                if (sDefaultClient == null) {
-                    sDefaultClient = new OkHttpClient.Builder()
-                            .connectTimeout(15, TimeUnit.SECONDS)
-                            .readTimeout(30, TimeUnit.SECONDS)
-                            .writeTimeout(30, TimeUnit.SECONDS)
-                            .build();
-                }
-            }
-        }
-        return sDefaultClient;
+        return com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.getYandexAudioHttpClient();
     }
 
     public void cancel() {

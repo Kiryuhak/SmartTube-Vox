@@ -54,6 +54,7 @@ out1.txt
 deps.txt
 logcat.txt
 /releases
+/release/
 /files
 /misc
 /other
