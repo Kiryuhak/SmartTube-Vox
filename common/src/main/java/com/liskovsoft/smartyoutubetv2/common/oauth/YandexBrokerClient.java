@@ -59,7 +59,7 @@ public final class YandexBrokerClient {
     private volatile boolean cancelled;
 
     public YandexBrokerClient(String baseUrl) {
-        this(baseUrl, url -> (HttpURLConnection) new URL(url).openConnection());
+        this(baseUrl, url -> com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(url));
     }
 
     static Result expired() {

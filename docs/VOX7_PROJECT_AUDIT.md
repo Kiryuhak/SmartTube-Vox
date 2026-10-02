@@ -3,9 +3,29 @@
 ## Статус спринта
 
 - **Поколение**: VOX 7
-- **Текущий патч**: Patch #2 (Интерфейс скачивания, библиотека загрузок, бейджи качества)
+- **Текущий патч**: Patch #3 (Сохранение авторизации Яндекс ID и шифрование токенов)
 - **Статус патча**: Готов к проверке и мерджу
 - **Дата релиза спринта**: 2026-10-16
+
+---
+
+## 3. Сохранение авторизации Яндекс ID и отказоустойчивое шифрование (Patch #3)
+
+- **Проблема**: После прохождения Device Code авторизации (`ya.ru/device`) статус оставался «Не авторизован» из-за исключения `AndroidKeyStore` (`InvalidAlgorithmParameterException: Caller-provided IV but use of caller-provided IVs not permitted`) и отсутствия fallback-ключа на API 23+.
+- **Решение**:
+  - Исправлена инициализация AES-GCM шифрования: для `AndroidKeyStore` IV генерируется аппаратно и извлекается через `cipher.getIV()`, без передачи внешнего `GCMParameterSpec` при шифровании.
+  - Добавлен автоматический fallback на 256-битный закрытый AES-ключ приложения (`vot_sec_key.bin`) при сбоях или недоступности `AndroidKeyStore`.
+  - В диалоге `YandexDeviceAuthDialog` добавлена верификация успешности сохранения токена в `VotData` перед закрытием.
+  - Подключен селективный VOX-прокси в `YandexBrokerClient` через `VoxHttpClientFactory`.
+  - Очищен интерфейс `PlayerSettingsPresenter`: устранены дублирующиеся кнопки авторизации и обеспечено закрытие диалога настроек при открытии OAuth.
+- **Статус**: DONE
+- **Файлы изменений**:
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/oauth/YandexOAuthTokenStore.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/oauth/YandexBrokerClient.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/oauth/YandexDeviceAuthDialog.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/PlayerSettingsPresenter.java`
+  - `common/src/test/java/com/liskovsoft/smartyoutubetv2/common/oauth/YandexOAuthTokenStoreTest.java`
+  - `docs/VOX7_YANDEX_AUTH.md`
 
 ---
 
