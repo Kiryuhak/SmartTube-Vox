@@ -104,8 +104,17 @@ class VoxDownloadRepository(
             it.request.videoId == videoId &&
             it.state != VoxDownloadState.COMPLETED &&
             it.state != VoxDownloadState.FAILED &&
+            it.state != VoxDownloadState.PAUSED &&
             it.state != VoxDownloadState.CANCELLED
         }
+    }
+
+    fun findPausedJobByVideoId(videoId: String): VoxDownloadJob? {
+        return jobs.values.firstOrNull { it.request.videoId == videoId && it.state == VoxDownloadState.PAUSED }
+    }
+
+    fun findFailedJobByVideoId(videoId: String): VoxDownloadJob? {
+        return jobs.values.firstOrNull { it.request.videoId == videoId && (it.state == VoxDownloadState.FAILED || it.state == VoxDownloadState.CANCELLED) }
     }
 
     fun addOrUpdateJob(job: VoxDownloadJob) {

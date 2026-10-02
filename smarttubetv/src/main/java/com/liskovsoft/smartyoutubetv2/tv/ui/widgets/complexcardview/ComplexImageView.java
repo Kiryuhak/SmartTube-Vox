@@ -29,6 +29,7 @@ public class ComplexImageView extends RelativeLayout {
     private FrameLayout mPreviewContainer;
     private ProgressBar mProgressBar;
     private TextView mBadgeText;
+    private TextView mQualityBadge;
     private ViewGroup mProgressContainer;
     private int mPreviewWidth;
     private int mPreviewHeight;
@@ -56,6 +57,7 @@ public class ComplexImageView extends RelativeLayout {
         inflate(getContext(), R.layout.text_badge_image_view, this);
         mMainImage = findViewById(R.id.main_image);
         mBadgeText = findViewById(R.id.extra_text_badge);
+        mQualityBadge = findViewById(R.id.quality_badge);
         mProgressBar = findViewById(R.id.clip_progress);
         mProgressContainer = findViewById(R.id.clip_info);
         mPreviewContainer = findViewById(R.id.preview_container);
@@ -101,6 +103,18 @@ public class ComplexImageView extends RelativeLayout {
             mBadgeText.setVisibility(View.VISIBLE);
         } else {
             mBadgeText.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    public void setQualityBadge(String text) {
+        if (mQualityBadge == null) {
+            return;
+        }
+        if (text != null && !text.isEmpty()) {
+            mQualityBadge.setText(text);
+            mQualityBadge.setVisibility(View.VISIBLE);
+        } else {
+            mQualityBadge.setVisibility(View.GONE);
         }
     }
 

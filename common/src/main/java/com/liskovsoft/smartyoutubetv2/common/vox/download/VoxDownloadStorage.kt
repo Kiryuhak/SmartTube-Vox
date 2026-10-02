@@ -344,6 +344,26 @@ class VoxDownloadStorage(private val context: Context) {
     }
 
     /**
+     * Возвращает размер опубликованного файла в байтах.
+     */
+    fun getPublishedFileSize(uriString: String?): Long {
+        if (uriString.isNullOrBlank()) return 0L
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            if ("file".equals(uri.scheme, ignoreCase = true)) {
+                val file = uri.path?.let { File(it) }
+                if (file != null && file.exists()) file.length() else 0L
+            } else {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    pfd.statSize.coerceAtLeast(0L)
+                } ?: 0L
+            }
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    /**
      * Удаляет изолированную директорию задания и все ее файлы.
      */
     fun deleteJobDir(downloadId: String): Boolean {

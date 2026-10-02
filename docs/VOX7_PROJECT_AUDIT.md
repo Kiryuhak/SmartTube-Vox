@@ -3,8 +3,37 @@
 ## Статус спринта
 
 - **Поколение**: VOX 7
-- **Текущий патч**: Patch #1 (Изолированный прокси для VOX / Яндекс перевода)
-- **Статус патча**: В разработке / Готов к проверке
+- **Текущий патч**: Patch #2 (Интерфейс скачивания, библиотека загрузок, бейджи качества)
+- **Статус патча**: Готов к проверке и мерджу
+- **Дата релиза спринта**: 2026-10-16
+
+---
+
+## 2. Библиотека скачанных видео и интерфейс загрузок (Patch #2)
+
+- **Проблема**: Загрузки в VOX 5 работали в фоне, но на TV не было удобного раздела для просмотра всех скачанных материалов, контроля свободного места на диске и простого управления воспроизведением/удалением.
+- **Решение**:
+  - Создан раздел «Скачанные видео» в основном боковом меню приложения.
+  - Кнопка «Скачать» в контекстном меню видео стала адаптивной к текущему состоянию загрузки.
+  - Реализованы карточки скачанных материалов с отображением статуса, размера, качества и режима озвучки.
+  - Поддержано управление с пульта (D-Pad): воспроизведение по клику, меню действий и массовое удаление по долгому нажатию.
+  - Добавлена настройка предложения удаления видео после окончания просмотра.
+  - Реализованы бейджи качества (4K, 2K, FHD, HD, SD) на карточках видео.
+- **Статус**: DONE
+- **Файлы изменений**:
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/BrowsePresenter.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/service/SidebarService.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/dialogs/menu/VideoMenuPresenter.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/vox/badge/VoxBadgeHelper.kt`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/vox/download/VoxDownloadCoordinator.kt`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/vox/download/VoxDownloadDialogHelper.kt`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/vox/download/VoxDownloadStorage.kt`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/VotData.java`
+  - `smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/presenter/VideoCardPresenter.java`
+  - `smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageCardView.java`
+  - `smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/widgets/complexcardview/ComplexImageView.java`
+  - `docs/VOX7_DOWNLOAD_LIBRARY_UI.md`
 
 ---
 

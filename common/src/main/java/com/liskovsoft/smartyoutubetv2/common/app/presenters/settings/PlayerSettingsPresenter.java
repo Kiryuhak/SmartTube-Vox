@@ -318,6 +318,22 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 getContext().getString(R.string.vot_translation_volume),
                 AppDialogUtil.createVotTranslationVolumeCategory(getContext()).options);
 
+        List<OptionItem> postWatchOptions = new ArrayList<>();
+        postWatchOptions.add(UiOptionItem.from(
+                getContext().getString(R.string.vox_download_post_watch_setting_none),
+                optionItem -> mVotData.setPostWatchAction(VotData.POST_WATCH_DO_NOTHING),
+                mVotData.getPostWatchAction() == VotData.POST_WATCH_DO_NOTHING
+        ));
+        postWatchOptions.add(UiOptionItem.from(
+                getContext().getString(R.string.vox_download_post_watch_setting_prompt),
+                optionItem -> mVotData.setPostWatchAction(VotData.POST_WATCH_OFFER_DELETE),
+                mVotData.getPostWatchAction() == VotData.POST_WATCH_OFFER_DELETE
+        ));
+        settingsPresenter.appendRadioCategory(
+                getContext().getString(R.string.vox_download_post_watch_setting),
+                postWatchOptions
+        );
+
         settingsPresenter.showDialog(getContext().getString(R.string.vot_settings_category));
     }
 

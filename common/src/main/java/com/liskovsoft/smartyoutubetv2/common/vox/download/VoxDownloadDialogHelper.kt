@@ -100,6 +100,7 @@ object VoxDownloadDialogHelper {
         presenter.showDialog(title)
     }
 
+    @JvmStatic
     fun showDownloadOptionsDialog(context: Context, video: Video) {
         val presenter = AppDialogPresenter.instance(context)
         val votData = VotData.instance(context)
@@ -174,6 +175,28 @@ object VoxDownloadDialogHelper {
         mode: VoxTranslationMode
     ) {
         val coordinator = VoxDownloadCoordinator.instance(context)
+        val storage = VoxDownloadStorage(context.applicationContext)
+        val availableBytes = storage.getAvailableBytes()
+
+        if (availableBytes < 300L * 1024L * 1024L) {
+            val stats = VoxDownloadStorageStats.collect(context.applicationContext, storage, coordinator.getAllJobs())
+            val usedStr = VoxDownloadUiMapper.formatSize(stats.usedBytes)
+            val presenter = AppDialogPresenter.instance(context)
+            val warningTitle = context.getString(R.string.vox_download_storage_low_warning)
+            val desc = context.getString(R.string.vox_download_storage_low_desc, usedStr)
+            val options = mutableListOf<OptionItem>()
+            options.add(UiOptionItem.from(context.getString(R.string.header_downloaded_videos), { _ ->
+                presenter.closeDialog()
+                VoxDownloadManager.show(context)
+            }))
+            options.add(UiOptionItem.from(context.getString(R.string.cancel_dialog), { _ ->
+                presenter.closeDialog()
+            }))
+            presenter.appendStringsCategory(desc, options)
+            presenter.showDialog(warningTitle)
+            return
+        }
+
         val title = video.title ?: "Video_${video.videoId}"
         val request = VoxDownloadRequest(
             videoId = video.videoId,
@@ -187,6 +210,7 @@ object VoxDownloadDialogHelper {
         showProgressDialog(context, downloadId)
     }
 
+    @JvmStatic
     fun showProgressDialog(context: Context, downloadId: String) {
         val presenter = AppDialogPresenter.instance(context)
         if (presenter.isDialogShown) {

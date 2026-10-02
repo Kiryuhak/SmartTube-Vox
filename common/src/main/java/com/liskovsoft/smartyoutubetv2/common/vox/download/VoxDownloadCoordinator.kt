@@ -21,7 +21,7 @@ interface VoxDownloadListener {
  * Главный координатор процесса скачивания видео с переводом VOX 5.
  */
 class VoxDownloadCoordinator(
-    private val storage: VoxDownloadStorage,
+    val storage: VoxDownloadStorage,
     private val repository: VoxDownloadRepository,
     private val streamResolver: VoxStreamResolver = DefaultVoxStreamResolver(),
     private val translationResolver: VoxTranslationResolver = DefaultVoxTranslationResolver(),
@@ -106,6 +106,7 @@ class VoxDownloadCoordinator(
      * Запускает новое задание скачивания.
      */
     @Synchronized
+    @JvmOverloads
     fun startDownload(request: VoxDownloadRequest, listener: VoxDownloadListener? = null): String {
         if (listener != null) {
             addListener(request.downloadId, listener)
@@ -131,6 +132,7 @@ class VoxDownloadCoordinator(
      * Возобновляет приостановленное или прерванное задание.
      */
     @Synchronized
+    @JvmOverloads
     fun resumeDownload(downloadId: String, listener: VoxDownloadListener? = null): Boolean {
         if (listener != null) {
             addListener(downloadId, listener)
@@ -238,7 +240,13 @@ class VoxDownloadCoordinator(
 
     fun findCompletedJob(videoId: String): VoxDownloadJob? = repository.findCompletedJobByVideoId(videoId)
 
+    fun findJobByVideoId(videoId: String): VoxDownloadJob? = repository.findJobByVideoId(videoId)
+
     fun findActiveJob(videoId: String): VoxDownloadJob? = repository.findActiveJobByVideoId(videoId)
+
+    fun findPausedJob(videoId: String): VoxDownloadJob? = repository.findPausedJobByVideoId(videoId)
+
+    fun findFailedJob(videoId: String): VoxDownloadJob? = repository.findFailedJobByVideoId(videoId)
 
     fun isPublishedFileAvailable(job: VoxDownloadJob): Boolean {
         return publisher?.isPublishedFileAvailable(job.publishedUri) ?: false

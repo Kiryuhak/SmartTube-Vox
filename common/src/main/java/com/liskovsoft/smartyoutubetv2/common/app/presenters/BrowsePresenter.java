@@ -27,6 +27,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.errors.PasswordError;
 import com.liskovsoft.smartyoutubetv2.common.app.models.errors.SignInError;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.service.VideoStateService;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.service.VideoStateService.State;
+import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.VideoActionPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.ChannelUploadsMenuPresenter;
@@ -61,6 +62,7 @@ import io.reactivex.disposables.Disposable;
 
 public class BrowsePresenter extends BasePresenter<BrowseView> implements SectionPresenter, VideoGroupPresenter, AccountChangeListener {
     private static final String TAG = BrowsePresenter.class.getSimpleName();
+    public static final int TYPE_DOWNLOADED = 23;
     @SuppressLint("StaticFieldLeak")
     private static BrowsePresenter sInstance;
     private final List<BrowseSection> mSections;
@@ -207,6 +209,9 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         mSectionsMapping.put(MediaGroup.TYPE_CHANNEL_UPLOADS, new BrowseSection(MediaGroup.TYPE_CHANNEL_UPLOADS, getContext().getString(R.string.header_channels), uploadsType, R.drawable.icon_channels, false));
         mSectionsMapping.put(MediaGroup.TYPE_SUBSCRIPTIONS, new BrowseSection(MediaGroup.TYPE_SUBSCRIPTIONS, getContext().getString(R.string.header_subscriptions), BrowseSection.TYPE_GRID, R.drawable.icon_subscriptions, false));
         mSectionsMapping.put(MediaGroup.TYPE_HISTORY, new BrowseSection(MediaGroup.TYPE_HISTORY, getContext().getString(R.string.header_history), BrowseSection.TYPE_GRID, R.drawable.icon_history, true));
+        if (VotOnboardingHelper.isStvot(getContext())) {
+            mSectionsMapping.put(TYPE_DOWNLOADED, new BrowseSection(TYPE_DOWNLOADED, getContext().getString(R.string.header_downloaded_videos), BrowseSection.TYPE_GRID, R.drawable.icon_download, false));
+        }
         mSectionsMapping.put(MediaGroup.TYPE_BLOCKED_CHANNELS,
                 new BrowseSection(MediaGroup.TYPE_BLOCKED_CHANNELS, getContext().getString(R.string.header_blocked_channels), BrowseSection.TYPE_GRID, R.drawable.icon_blocked_channels, false));
         mSectionsMapping.put(MediaGroup.TYPE_USER_PLAYLISTS, new BrowseSection(MediaGroup.TYPE_USER_PLAYLISTS, getContext().getString(R.string.header_playlists), BrowseSection.TYPE_ROW, R.drawable.icon_playlist, false));
@@ -275,6 +280,69 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     private void initLocalGridMapping() {
         mLocalGridMappings.put(MediaGroup.TYPE_PLAYBACK_QUEUE, () -> Playlist.instance().getAllReversed());
         mLocalGridMappings.put(MediaGroup.TYPE_BLOCKED_CHANNELS, this::getBlockedChannels);
+        if (VotOnboardingHelper.isStvot(getContext())) {
+            mLocalGridMappings.put(TYPE_DOWNLOADED, this::getDownloadedVideos);
+        }
+    }
+
+    private List<Video> getDownloadedVideos() {
+        if (!VotOnboardingHelper.isStvot(getContext())) {
+            return Collections.emptyList();
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext());
+        List<com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob> jobs =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.sorted(coordinator.getAllJobs());
+
+        List<Video> videos = new ArrayList<>();
+
+        for (com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job : jobs) {
+            boolean isMissing = job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED
+                    && !coordinator.isPublishedFileAvailable(job);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadListItem item =
+                    com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.toItem(job, isMissing);
+
+            Video video = new Video();
+            video.id = job.getDownloadId().hashCode();
+            video.videoId = job.getRequest().getVideoId();
+            video.title = job.getRequest().getVideoTitle();
+            video.cardImageUrl = "https://i.ytimg.com/vi/" + job.getRequest().getVideoId() + "/hqdefault.jpg";
+            video.badge = item.getActualQuality() != null ? item.getActualQuality() : job.getRequest().getQualityPreference().getLabel();
+            video.isLocal = true;
+            video.mediaUrl = job.getPublishedUri();
+            video.setDurationMs(0);
+
+            String detail;
+            if (isMissing) {
+                detail = "Файл удалён";
+            } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED) {
+                long fileSize = coordinator.getStorage().getPublishedFileSize(job.getPublishedUri());
+                String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(fileSize);
+                detail = (item.getActualQuality() != null ? item.getActualQuality() + " · " : "") + sizeStr + " · " + item.getTranslationMode();
+            } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.FAILED) {
+                detail = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.error(job.getErrorCode());
+            } else if (item.getPercent() != null) {
+                detail = item.getStage() + " · " + item.getPercent() + "%";
+            } else {
+                detail = item.getStage();
+            }
+
+            video.secondTitle = detail;
+            video.author = detail;
+            videos.add(video);
+        }
+
+        if (videos.isEmpty()) {
+            Video empty = new Video();
+            empty.id = -1001;
+            empty.title = getContext().getString(R.string.vox_download_empty_title);
+            empty.secondTitle = getContext().getString(R.string.vox_download_empty_hint);
+            empty.isLocal = false;
+            videos.add(empty);
+        }
+
+        return videos;
     }
 
     private List<Video> getBlockedChannels() {
@@ -442,6 +510,11 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             return;
         }
 
+        if (isDownloadedSection()) {
+            onDownloadedItemClicked(item);
+            return;
+        }
+
         // Check that channels new look enabled and we're on the first columnAdd commentMore actions
         if (belongsToChannelUploadsMultiGrid(item)) {
             if (getMainUIData().isUploadsAutoLoadEnabled()) {
@@ -457,6 +530,11 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     @Override
     public void onVideoItemLongClicked(Video item) {
         if (getContext() == null) {
+            return;
+        }
+
+        if (isDownloadedSection()) {
+            showDownloadedItemActions(item);
             return;
         }
 
@@ -483,6 +561,206 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
                 }
             });
         }
+    }
+
+    public boolean isDownloadedSection() {
+        return mCurrentSection != null && mCurrentSection.getId() == TYPE_DOWNLOADED;
+    }
+
+    private void onDownloadedItemClicked(Video item) {
+        if (item == null || getContext() == null) {
+            return;
+        }
+
+        if (item.getId() == -1001) {
+            MessageHelpers.showMessage(getContext(), R.string.vox_download_empty_hint);
+            return;
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext());
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job =
+                item.videoId != null ? coordinator.findCompletedJob(item.videoId) : null;
+
+        if (job != null && coordinator.isPublishedFileAvailable(job)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxLocalPlayerHelper.playJob(getContext(), job);
+        } else {
+            showDownloadedItemActions(item);
+        }
+    }
+
+    private void showDownloadedItemActions(Video item) {
+        if (item == null || getContext() == null) {
+            return;
+        }
+
+        if (item.getId() == -1001) {
+            MessageHelpers.showMessage(getContext(), R.string.vox_download_empty_hint);
+            return;
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext());
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job =
+                item.videoId != null ? coordinator.findJobByVideoId(item.videoId) : null;
+
+        if (job == null) {
+            refresh(false);
+            return;
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter presenter =
+                com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter.instance(getContext());
+        List<com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem> options = new ArrayList<>();
+
+        boolean isMissing = job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED
+                && !coordinator.isPublishedFileAvailable(job);
+
+        if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED && !isMissing) {
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_open_local),
+                    opt -> {
+                        presenter.closeDialog();
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxLocalPlayerHelper.playJob(getContext(), job);
+                    }
+            ));
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_redownload),
+                    opt -> {
+                        presenter.closeDialog();
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadDialogHelper.showDownloadOptionsDialog(getContext(), item);
+                    }
+            ));
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_delete),
+                    opt -> confirmDeleteDownload(job.getDownloadId(), item.getTitle())
+            ));
+        } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.PAUSED) {
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_state_paused),
+                    opt -> {
+                        presenter.closeDialog();
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.resume(getContext(), job.getDownloadId());
+                        refresh(false);
+                    }
+            ));
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_delete),
+                    opt -> confirmDeleteDownload(job.getDownloadId(), item.getTitle())
+            ));
+        } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.FAILED
+                || job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.CANCELLED) {
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_retry),
+                    opt -> {
+                        presenter.closeDialog();
+                        coordinator.deleteDownload(job.getDownloadId());
+                        String newId = coordinator.startDownload(new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadRequest(
+                                java.util.UUID.randomUUID().toString(),
+                                job.getRequest().getVideoId(),
+                                job.getRequest().getVideoTitle(),
+                                job.getRequest().getQualityPreference(),
+                                job.getRequest().getTranslationMode(),
+                                System.currentTimeMillis()
+                        ));
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.start(getContext(), newId);
+                        refresh(false);
+                    }
+            ));
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_delete),
+                    opt -> {
+                        coordinator.deleteDownload(job.getDownloadId());
+                        presenter.closeDialog();
+                        refresh(false);
+                    }
+            ));
+        } else {
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_stage_resolving),
+                    opt -> {
+                        presenter.closeDialog();
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadDialogHelper.showProgressDialog(getContext(), job.getDownloadId());
+                    }
+            ));
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_cancel_job),
+                    opt -> {
+                        presenter.closeDialog();
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.cancel(getContext(), job.getDownloadId());
+                        refresh(false);
+                    }
+            ));
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorageSummary stats =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorageStats.INSTANCE.collect(
+                        getContext().getApplicationContext(),
+                        new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage(getContext().getApplicationContext()),
+                        coordinator.getAllJobs()
+                );
+        String storageText = getContext().getString(R.string.vox_download_storage_summary,
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(stats.getUsedBytes()),
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(stats.getFreeBytes()));
+        options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(storageText, opt -> {}));
+
+        List<com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob> allJobs = coordinator.getAllJobs();
+        if (allJobs.size() > 1) {
+            options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                    getContext().getString(R.string.vox_download_delete_all),
+                    opt -> confirmDeleteAllDownloads(allJobs.size(), stats.getUsedBytes())
+            ));
+        }
+
+        presenter.appendStringsCategory(item.getTitle(), options);
+        presenter.showDialog(item.getTitle());
+    }
+
+    private void confirmDeleteDownload(String downloadId, String title) {
+        com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter presenter =
+                com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter.instance(getContext());
+        List<com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem> options = new ArrayList<>();
+        options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                getContext().getString(R.string.vox_download_delete),
+                opt -> {
+                    com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext()).deleteDownload(downloadId);
+                    presenter.closeDialog();
+                    refresh(false);
+                }
+        ));
+        options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                getContext().getString(R.string.cancel_dialog),
+                opt -> presenter.closeDialog()
+        ));
+        String dialogTitle = getContext().getString(R.string.vox_download_delete_confirm_title);
+        presenter.appendStringsCategory(dialogTitle, options);
+        presenter.showDialog(dialogTitle);
+    }
+
+    private void confirmDeleteAllDownloads(int count, long usedBytes) {
+        com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter presenter =
+                com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter.instance(getContext());
+        List<com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem> options = new ArrayList<>();
+        String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(usedBytes);
+        options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                getContext().getString(R.string.vox_download_delete),
+                opt -> {
+                    com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext());
+                    for (com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job : coordinator.getAllJobs()) {
+                        coordinator.deleteDownload(job.getDownloadId());
+                    }
+                    presenter.closeDialog();
+                    refresh(false);
+                }
+        ));
+        options.add(com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                getContext().getString(R.string.cancel_dialog),
+                opt -> presenter.closeDialog()
+        ));
+        String dialogTitle = getContext().getString(R.string.vox_download_delete_all_confirm, count, sizeStr);
+        presenter.appendStringsCategory(dialogTitle, options);
+        presenter.showDialog(dialogTitle);
     }
 
     @Override
@@ -1041,7 +1319,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
                 "news", // Top news
                 "NBA TV", // Sports
                 "The Life of a Showgirl", // Taylor Swift ADS
-                "FIFA", // Sports (FIFA World Cup 2026™)
+                "FIFA", // Sports (FIFA World Cup 2026в„ў)
                 "FORMULA 1" // Sports (FORMULA 1 BRITISH GRAND PRIX)
         ) || Helpers.equalsAny(
                 value.getTitle(),

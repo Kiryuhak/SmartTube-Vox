@@ -137,6 +137,7 @@ public class VideoCardPresenter extends LongClickPresenter {
         );
         cardView.setBadgeColor(video.hasNewContent || video.isLive || video.isUpcoming ?
                 ContextCompat.getColor(context, R.color.dark_red) : ContextCompat.getColor(context, R.color.black));
+        cardView.setQualityBadge(com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video));
 
         if (mCardPreviewType != MainUIData.CARD_PREVIEW_DISABLED) {
             cardView.setPreview(video);
@@ -181,6 +182,7 @@ public class VideoCardPresenter extends LongClickPresenter {
 
         // Remove references to images so that the garbage collector can free up memory.
         cardView.setBadgeImage(null);
+        cardView.setQualityBadge(null);
         cardView.setMainImage(null);
 
         // Cleanup Glide resources. https://chatgpt.com/share/682120c5-e428-8010-b848-371b2dec0cd5

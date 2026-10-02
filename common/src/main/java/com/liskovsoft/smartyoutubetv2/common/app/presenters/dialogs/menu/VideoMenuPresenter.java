@@ -222,13 +222,38 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
     }
 
     private void appendDownloadWithTranslationButton() {
+        if (!com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(getContext())) {
+            return;
+        }
+
         if (mVideo == null || !mVideo.hasVideo() || mVideo.isPlaylistAsChannel() || mVideo.isLive || mVideo.isUpcoming) {
             return;
         }
 
+        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator coordinator =
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(getContext());
+
+        String buttonTitle = getContext().getString(R.string.vox_download_action);
+        if (mVideo.videoId != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob activeJob = coordinator.findActiveJob(mVideo.videoId);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob completedJob = coordinator.findCompletedJob(mVideo.videoId);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob pausedJob = coordinator.findPausedJob(mVideo.videoId);
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob failedJob = coordinator.findFailedJob(mVideo.videoId);
+
+            if (activeJob != null) {
+                buttonTitle = getContext().getString(R.string.vox_download_state_downloading);
+            } else if (pausedJob != null) {
+                buttonTitle = getContext().getString(R.string.vox_download_state_paused);
+            } else if (completedJob != null && coordinator.isPublishedFileAvailable(completedJob)) {
+                buttonTitle = getContext().getString(R.string.vox_download_state_completed);
+            } else if (failedJob != null) {
+                buttonTitle = getContext().getString(R.string.vox_download_state_failed);
+            }
+        }
+
         mDialogPresenter.appendSingleButton(
                 UiOptionItem.from(
-                        getContext().getString(R.string.vox_download_action),
+                        buttonTitle,
                         optionItem -> {
                             mDialogPresenter.closeDialog();
                             com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadDialogHelper.onDownloadActionClicked(getContext(), mVideo);
