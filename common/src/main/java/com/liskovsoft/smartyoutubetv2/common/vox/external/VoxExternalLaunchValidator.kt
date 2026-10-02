@@ -129,30 +129,37 @@ object VoxExternalLaunchValidator {
         if (timeStr.isNullOrBlank()) return -1L
         val clean = timeStr.trim().lowercase()
 
+        // Handle explicit millisecond suffix (e.g. "12345ms")
         if (clean.endsWith("ms")) {
             val numStr = clean.removeSuffix("ms")
-            return numStr.toLongOrNull() ?: -1L
+            val v = numStr.toLongOrNull() ?: return -1L
+            return if (v >= 0) v else -1L
         }
 
+        // Pure integer = seconds (YouTube standard ?t=120, t=0 is valid = start of video)
         val pureDigits = clean.toLongOrNull()
         if (pureDigits != null) {
-            // По умолчанию секунды (YouTube standard ?t=120)
+            if (pureDigits < 0) return -1L
+            // Overflow guard: more than 24 hours is unrealistic for a YouTube video
+            if (pureDigits > 86400L) return -1L
             return pureDigits * 1000L
         }
 
+        // Compound format: Xh Ym Zs (e.g. 1h2m3s, 2m15s, 45s)
         val matcher = TIME_STRING_PATTERN.matcher(clean)
         if (matcher.matches()) {
             val hours = matcher.group(1)?.toLongOrNull() ?: 0L
             val minutes = matcher.group(2)?.toLongOrNull() ?: 0L
             val seconds = matcher.group(3)?.toLongOrNull() ?: 0L
             val totalSeconds = hours * 3600L + minutes * 60L + seconds
-            if (totalSeconds > 0) {
+            if (totalSeconds >= 0) {
                 return totalSeconds * 1000L
             }
         }
 
         return -1L
     }
+
 
     /**
      * Безопасное URL-декодирование строки.

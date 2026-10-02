@@ -25,7 +25,10 @@ class VoxDialServer(
     companion object {
         private val TAG = VoxDialServer::class.java.simpleName
         private const val SOCKET_TIMEOUT_MS = 5000
-        private const val MAX_PORT_ATTEMPTS = 10
+        // DIAL protocol expects a fixed, advertised port. Do NOT hop to next port
+        // automatically — the SSDP response would advertise the wrong port.
+        // Limit worker threads: DIAL is a local LAN protocol, 4 concurrent workers is plenty.
+        private const val MAX_WORKER_THREADS = 4
     }
 
     private var serverSocket: ServerSocket? = null
@@ -39,7 +42,7 @@ class VoxDialServer(
             return true
         }
 
-        var port = preferredPort
+        val port = preferredPort
         var bound = false
 
         if (port == 0) {
@@ -55,20 +58,17 @@ class VoxDialServer(
                 VoxLog.e(TAG, "Failed to bind to dynamic port: ${e.message}")
             }
         } else {
-            for (i in 0 until MAX_PORT_ATTEMPTS) {
-                try {
-                    val s = ServerSocket().apply {
-                        reuseAddress = true
-                        bind(InetSocketAddress(port))
-                    }
-                    serverSocket = s
-                    boundPort = s.localPort
-                    bound = true
-                    break
-                } catch (e: IOException) {
-                    VoxLog.w(TAG, "Port $port is in use, trying next port: ${e.message}")
-                    port++
+            try {
+                val s = ServerSocket().apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(port))
                 }
+                serverSocket = s
+                boundPort = s.localPort
+                bound = true
+            } catch (e: IOException) {
+                VoxLog.e(TAG, "Port $port is already in use or cannot be bound: ${e.message}. " +
+                    "DIAL requires a fixed port — cannot switch to another port.")
             }
         }
 
@@ -78,7 +78,7 @@ class VoxDialServer(
         }
 
         isRunning.set(true)
-        executor = Executors.newCachedThreadPool { r ->
+        executor = Executors.newFixedThreadPool(MAX_WORKER_THREADS) { r ->
             val t = Thread(r, "VoxDialWorker-${boundPort}")
             t.isDaemon = true
             t
@@ -195,7 +195,8 @@ class VoxDialServer(
                             VoxDialResponse.sendSimpleResponse(output, 500, "Internal Server Error", "Could not start video")
                         }
                     } else {
-                        VoxLog.w(TAG, "Failed to parse video parameters from DIAL POST: body='${request.body}', query='${request.queryString}'")
+                        VoxLog.w(TAG, "Failed to parse video parameters from DIAL POST from $clientIp (body length=${request.body.length}, query length=${request.queryString.length})")
+
                         VoxDialResponse.sendSimpleResponse(output, 400, "Bad Request", "Missing or invalid video ID")
                     }
                 }

@@ -289,7 +289,8 @@
     <string name="run_in_background">Background playback</string>
     <string name="settings_remote_control">Remote control</string>
     <string name="settings_external_launch">External video launch</string>
-    <string name="settings_external_launch_desc">Allow local network devices to launch videos in SmartTube VOX</string>
+    <string name="settings_external_launch_desc">Allow other devices on the local network to launch videos on this TV. Works only within the local network.</string>
+    <string name="settings_external_launch_start_failed">Failed to enable external video launch</string>
     <string name="background_service_started">Background service started</string>
     <string name="dialog_add_to">Add to %s</string>
     <string name="dialog_remove_from">Remove from %s</string>
