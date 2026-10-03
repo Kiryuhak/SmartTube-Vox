@@ -129,15 +129,21 @@ public class VideoCardPresenter extends LongClickPresenter {
         cardView.setContentText(video.getSecondTitle());
         // Count progress that very close to zero. E.g. when user closed video immediately.
         cardView.setProgress(video.percentWatched > 0 && video.percentWatched < 1 ? 1 : Math.round(video.percentWatched));
-        cardView.setBadgeText(
-                video.hasNewContent ? context.getString(R.string.badge_new_content) :
+        String qualityBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video);
+        cardView.setQualityBadge(qualityBadge);
+
+        String badgeText = video.hasNewContent ? context.getString(R.string.badge_new_content) :
                 video.isLive ? context.getString(R.string.badge_live) :
                 video.isShorts ? context.getString(R.string.header_shorts).toUpperCase() :
-                video.badge
-        );
+                video.badge;
+
+        if (qualityBadge != null && badgeText != null && com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.isQualityText(badgeText)) {
+            badgeText = null;
+        }
+
+        cardView.setBadgeText(badgeText);
         cardView.setBadgeColor(video.hasNewContent || video.isLive || video.isUpcoming ?
                 ContextCompat.getColor(context, R.color.dark_red) : ContextCompat.getColor(context, R.color.black));
-        cardView.setQualityBadge(com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video));
 
         if (mCardPreviewType != MainUIData.CARD_PREVIEW_DISABLED) {
             cardView.setPreview(video);

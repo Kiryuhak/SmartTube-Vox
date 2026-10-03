@@ -13,15 +13,18 @@ import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadErrorCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob;
 import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadListener;
 import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadProgress;
+import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadProgressFormatter;
+import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState;
 
 /**
  * Manages the Player HUD Download action button state and interaction.
- * Synchronizes with {@link VoxDownloadCoordinator} to reflect download state (download/in-progress/completed).
+ * Synchronizes with {@link VoxDownloadCoordinator} to reflect download state (download/in-progress/completed/failed).
  */
 public class VoxDownloadPlayerController extends BasePlayerController implements VoxDownloadListener {
     public static final int STATE_DOWNLOAD = 0;
     public static final int STATE_PROGRESS = 1;
     public static final int STATE_COMPLETED = 2;
+    public static final int STATE_FAILED = 3;
 
     private static final int ACTION_DOWNLOAD = R.id.action_download;
     private boolean mIsListenerRegistered = false;
@@ -57,17 +60,17 @@ public class VoxDownloadPlayerController extends BasePlayerController implements
 
     @Override
     public void onStateChanged(@NonNull VoxDownloadProgress progress) {
-        postUpdateState();
+        postUpdateState(progress);
     }
 
     @Override
     public void onProgressUpdated(@NonNull VoxDownloadProgress progress) {
-        // Intentionally lightweight: progress percentage is shown in dialogs/notifications
+        postUpdateState(progress);
     }
 
     @Override
     public void onError(@NonNull String downloadId, @NonNull VoxDownloadErrorCode errorCode, @NonNull String message) {
-        postUpdateState();
+        postUpdateState(null);
     }
 
     private void registerCoordinatorListener() {
@@ -90,11 +93,15 @@ public class VoxDownloadPlayerController extends BasePlayerController implements
         }
     }
 
-    private void postUpdateState() {
-        Utils.post(this::updateDownloadButtonState);
+    private void postUpdateState(@Nullable VoxDownloadProgress progress) {
+        Utils.post(() -> updateDownloadButtonState(progress));
     }
 
     public void updateDownloadButtonState() {
+        updateDownloadButtonState(null);
+    }
+
+    public void updateDownloadButtonState(@Nullable VoxDownloadProgress liveProgress) {
         if (getPlayer() == null || getContext() == null) {
             return;
         }
@@ -102,26 +109,45 @@ public class VoxDownloadPlayerController extends BasePlayerController implements
         Video video = getVideo();
         if (video == null || video.videoId == null || video.videoId.isEmpty()) {
             getPlayer().setButtonState(ACTION_DOWNLOAD, STATE_DOWNLOAD);
+            getPlayer().updateDownloadProgress(STATE_DOWNLOAD, "Скачать");
             return;
         }
 
         try {
             VoxDownloadCoordinator coordinator = VoxDownloadCoordinator.instance(getContext());
+
+            // 1. Active job lookup for current video
             VoxDownloadJob activeJob = coordinator.findActiveJob(video.videoId);
             if (activeJob != null) {
+                Integer percent = activeJob.getSnapshot().getOverallPercent();
+                String label = VoxDownloadProgressFormatter.formatHudLabel(activeJob.getState(), percent);
                 getPlayer().setButtonState(ACTION_DOWNLOAD, STATE_PROGRESS);
+                getPlayer().updateDownloadProgress(STATE_PROGRESS, label);
                 return;
             }
 
+            // 2. Completed job lookup
             VoxDownloadJob completedJob = coordinator.findCompletedJob(video.videoId);
             if (completedJob != null && coordinator.isPublishedFileAvailable(completedJob)) {
                 getPlayer().setButtonState(ACTION_DOWNLOAD, STATE_COMPLETED);
+                getPlayer().updateDownloadProgress(STATE_COMPLETED, "Скачано");
                 return;
             }
 
+            // 3. Failed job lookup
+            VoxDownloadJob failedJob = coordinator.findFailedJob(video.videoId);
+            if (failedJob != null) {
+                getPlayer().setButtonState(ACTION_DOWNLOAD, STATE_FAILED);
+                getPlayer().updateDownloadProgress(STATE_FAILED, "Ошибка загрузки");
+                return;
+            }
+
+            // 4. Idle state
             getPlayer().setButtonState(ACTION_DOWNLOAD, STATE_DOWNLOAD);
+            getPlayer().updateDownloadProgress(STATE_DOWNLOAD, "Скачать");
         } catch (Exception e) {
             getPlayer().setButtonState(ACTION_DOWNLOAD, STATE_DOWNLOAD);
+            getPlayer().updateDownloadProgress(STATE_DOWNLOAD, "Скачать");
         }
     }
 }
