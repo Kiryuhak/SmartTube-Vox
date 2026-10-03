@@ -44,8 +44,15 @@ public class VoxDiagnosticsSanitizationTest {
         assertFalse(report.contains("refresh_token"));
         assertFalse(report.contains("Bearer"));
         assertFalse(report.contains("password"));
+        assertFalse(report.contains("proxy_password"));
         assertFalse(report.contains("cookie"));
+        assertFalse(report.contains("Cookie:"));
+        assertFalse(report.contains("session="));
         assertFalse(report.contains("client_secret"));
+        assertFalse(report.contains("signature="));
+        assertFalse(report.contains("token="));
+        assertFalse(report.contains("BEGIN PRIVATE KEY"));
+        assertFalse(report.contains("BEGIN RSA PRIVATE KEY"));
 
         assertTrue(report.contains("SmartTube VOX — Диагностика"));
         assertTrue(report.contains("Xiaomi"));

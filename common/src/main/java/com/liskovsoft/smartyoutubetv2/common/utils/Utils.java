@@ -92,6 +92,12 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.RemoteControlData;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxAudioCodecPreference;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCodecPolicy;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCodecPolicyMode;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityManager;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxDeviceProfile;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxVideoCodecPreference;
 import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 
 import java.io.IOException;
@@ -839,7 +845,37 @@ public class Utils {
         return stateService.isEmpty();
     }
 
-    public static boolean isPresetSupported(VideoPreset preset) {
+    public static boolean isPresetSupported(Context context, VideoPreset preset) {
+        if (preset == null) {
+            return true;
+        }
+
+        if (context != null) {
+            try {
+                VoxCompatibilityManager manager = VoxCompatibilityManager.instance(context);
+                VoxCodecPolicy policy = manager.getCodecPolicy();
+                VoxDeviceProfile profile = manager.getDeviceProfile(false);
+
+                if (policy.getMaxQualityHeight() > 0 && preset.getHeight() > policy.getMaxQualityHeight()) {
+                    return false;
+                }
+
+                if (preset.isAV1Preset()) {
+                    if (policy.getMode() == VoxCodecPolicyMode.MAX_COMPATIBILITY) {
+                        return false;
+                    }
+                    if (policy.getPreferredVideoCodec() != VoxVideoCodecPreference.AV1 && !profile.isVideoCodecSupported("av1")) {
+                        return false;
+                    }
+                } else if (preset.isVP9Preset()) {
+                    if (policy.getPreferredVideoCodec() != VoxVideoCodecPreference.VP9 && !profile.isVideoCodecSupported("vp9")) {
+                        return false;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
         if (preset.isVP9Preset() && !DeviceHelpers.isVP9ResolutionSupported(preset.getHeight())) {
             return false;
         }
@@ -851,7 +887,59 @@ public class Utils {
         return true;
     }
 
-    public static boolean isFormatSupported(MediaTrack mediaTrack) {
+    public static boolean isPresetSupported(VideoPreset preset) {
+        return isPresetSupported(null, preset);
+    }
+
+    public static boolean isFormatSupported(Context context, MediaTrack mediaTrack) {
+        if (mediaTrack == null || mediaTrack.format == null) {
+            return true;
+        }
+
+        if (context != null) {
+            try {
+                VoxCompatibilityManager manager = VoxCompatibilityManager.instance(context);
+                VoxCodecPolicy policy = manager.getCodecPolicy();
+                VoxDeviceProfile profile = manager.getDeviceProfile(false);
+
+                if (policy.getMaxQualityHeight() > 0 && TrackSelectorUtil.getRealHeight(mediaTrack.format) > policy.getMaxQualityHeight()) {
+                    return false;
+                }
+
+                if (mediaTrack.isAV1Codec()) {
+                    if (policy.getMode() == VoxCodecPolicyMode.MAX_COMPATIBILITY) {
+                        return false;
+                    }
+                    if (policy.getPreferredVideoCodec() != VoxVideoCodecPreference.AV1 && !profile.isVideoCodecSupported("av1")) {
+                        return false;
+                    }
+                } else if (mediaTrack.isVP9Codec()) {
+                    if (policy.getPreferredVideoCodec() != VoxVideoCodecPreference.VP9 && !profile.isVideoCodecSupported("vp9")) {
+                        return false;
+                    }
+                }
+
+                String codec = TrackSelectorUtil.extractCodec(mediaTrack.format);
+                if (codec != null) {
+                    String lower = codec.toLowerCase();
+                    if (lower.contains("eac3") || lower.contains("ec-3")) {
+                        boolean dec = profile.isAudioDecodeSupported("eac3");
+                        boolean pt = profile.isAudioPassthroughSupported("eac3") && policy.getPassthroughEnabled();
+                        if (!dec && !pt && policy.getPreferredAudioCodec() != VoxAudioCodecPreference.EAC3) {
+                            return false;
+                        }
+                    } else if (lower.contains("ac3") || lower.contains("ac-3")) {
+                        boolean dec = profile.isAudioDecodeSupported("ac3");
+                        boolean pt = profile.isAudioPassthroughSupported("ac3") && policy.getPassthroughEnabled();
+                        if (!dec && !pt && policy.getPreferredAudioCodec() != VoxAudioCodecPreference.AC3) {
+                            return false;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
         if (mediaTrack.isVP9Codec() && !DeviceHelpers.isVP9ResolutionSupported(TrackSelectorUtil.getRealHeight(mediaTrack.format))) {
             return false;
         }
@@ -860,13 +948,11 @@ public class Utils {
             return false;
         }
 
-        // There's a bug. The player hangs at the black screen.
-        // opus and others audio codecs require hardware acceleration
-        //if (mediaTrack instanceof AudioTrack && !mediaTrack.isMP4ACodec() && !Helpers.isVP9Supported()) {
-        //    return false;
-        //}
-
         return true;
+    }
+
+    public static boolean isFormatSupported(MediaTrack mediaTrack) {
+        return isFormatSupported(null, mediaTrack);
     }
 
     public static void enableScreensaver(Context activity, boolean enable) {

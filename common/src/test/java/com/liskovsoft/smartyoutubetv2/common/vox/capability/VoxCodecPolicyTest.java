@@ -140,4 +140,32 @@ public class VoxCodecPolicyTest {
         VoxCodecSelectionResult<String> result = policy.selectAudioCodec(available, mOlderTvProfile);
         assertEquals("aac", result.getSelected());
     }
+
+    @Test
+    public void testUnknownCapabilityNotTreatedAsGuaranteedSupported() {
+        Map<String, VideoCodecCapability> unknownVideo = new HashMap<>();
+        unknownVideo.put("av1", new VideoCodecCapability("av1", TriStateCapability.UNKNOWN, false, 0, 0, 0));
+        unknownVideo.put("vp9", new VideoCodecCapability("vp9", TriStateCapability.SUPPORTED, true, 3840, 2160, 60));
+        unknownVideo.put("avc", new VideoCodecCapability("avc", TriStateCapability.SUPPORTED, true, 1920, 1080, 60));
+
+        VoxDeviceProfile unknownProfile = new VoxDeviceProfile(1, VoxPlatform.ANDROID_TV, "Unknown", "Device", "Android", "12", unknownVideo, new HashMap<>(), new DisplayCapability(), new AudioOutputCapability(), 0L);
+
+        VoxCodecPolicy policy = new VoxCodecPolicy(VoxCodecPolicyMode.AUTO, 0, VoxVideoCodecPreference.AUTO, VoxAudioCodecPreference.AUTO, true);
+        VoxCodecSelectionResult<String> result = policy.selectVideoCodec(Arrays.asList("av1", "vp9", "avc"), unknownProfile);
+
+        // AV1 is UNKNOWN, VP9 is SUPPORTED -> AUTO must pick VP9, not UNKNOWN AV1
+        assertEquals("vp9", result.getSelected());
+    }
+
+    @Test
+    public void testEac3PassthroughOnlyReportsWarning() {
+        // mNoAv1Profile has EAC3 decode=UNSUPPORTED, passthrough=SUPPORTED
+        VoxCodecPolicy policy = new VoxCodecPolicy(VoxCodecPolicyMode.AUTO, 0, VoxVideoCodecPreference.AUTO, VoxAudioCodecPreference.AUTO, true);
+        List<String> available = Arrays.asList("eac3", "ac3", "opus", "aac");
+
+        VoxCodecSelectionResult<String> result = policy.selectAudioCodec(available, mNoAv1Profile);
+        assertEquals("eac3", result.getSelected());
+        assertNotNull(result.getWarning());
+        assertTrue(result.getWarning().contains("EAC3"));
+    }
 }
