@@ -989,7 +989,15 @@
     <string name="vox_compatibility_mode_max_quality">Maximum quality</string>
     <string name="vox_compatibility_mode_max_compatibility">Maximum compatibility</string>
     <string name="vox_compatibility_mode_custom">Custom</string>
-    <string name="vox_compatibility_rescan">Rescan device</string>
+    <string name="vox_compatibility_rescan">Rescan device capabilities</string>
+    <string name="vox_compatibility_auto_tune">Automatic tuning</string>
+    <string name="vox_compatibility_auto_tune_summary">VOX has selected recommended settings for this device.</string>
+    <string name="vox_compatibility_auto_tune_applied">Recommended settings applied</string>
+    <string name="vox_compatibility_auto_tune_apply">Apply</string>
+    <string name="vox_compatibility_view_details">View details</string>
+    <string name="vox_compatibility_risk_warning_title">Compatibility Warning</string>
+    <string name="vox_compatibility_risk_continue">Continue</string>
+    <string name="vox_compatibility_risk_revert">Revert to recommended</string>
     <string name="vox_compatibility_diagnostics">Compatibility diagnostics</string>
     <string name="vox_compatibility_max_quality">Maximum quality</string>
     <string name="vox_compatibility_preferred_video">Preferred video codec</string>

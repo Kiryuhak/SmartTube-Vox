@@ -71,7 +71,7 @@ public class VoxCompatibilityManagerTest {
         assertTrue(report.contains("SmartTube VOX — Диагностика совместимости"));
         assertTrue(report.contains("ВИДЕОДЕКОДЕРЫ"));
         assertTrue(report.contains("АУДИОДЕКОДЕРЫ"));
-        assertTrue(report.contains("РЕКОМЕНДАЦИЯ VOX ДЛЯ УСТРОЙСТВА"));
+        assertTrue(report.contains("РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ VOX"));
 
         // Verify report contains no secrets
         assertFalse(report.contains("access_token"));

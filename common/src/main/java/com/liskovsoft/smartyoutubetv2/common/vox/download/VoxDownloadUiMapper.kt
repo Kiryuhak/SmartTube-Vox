@@ -1,7 +1,5 @@
 package com.liskovsoft.smartyoutubetv2.common.vox.download
 
-import java.util.Locale
-
 /** Небольшая модель списка: источником состояния остаётся VoxDownloadRepository. */
 data class VoxDownloadListItem(
     val downloadId: String,
@@ -10,6 +8,8 @@ data class VoxDownloadListItem(
     val state: VoxDownloadState,
     val stage: String,
     val percent: Int?,
+    val downloadedBytes: Long,
+    val totalBytes: Long?,
     val actualQuality: String?,
     val translationMode: String,
     val publishedUri: String?,
@@ -32,29 +32,24 @@ object VoxDownloadUiMapper {
             .thenBy { it.downloadId })
 
     fun stage(state: VoxDownloadState): String = when (state) {
+        VoxDownloadState.IDLE -> "В очереди"
         VoxDownloadState.PREPARING_TRANSLATION -> "Подготовка перевода"
         VoxDownloadState.RESOLVING_STREAMS -> "Подготовка загрузки"
         VoxDownloadState.DOWNLOADING_VIDEO -> "Загрузка видео"
         VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO -> "Загрузка оригинального звука"
         VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> "Загрузка перевода"
-        VoxDownloadState.READY_FOR_MUX, VoxDownloadState.MUXING -> "Упаковка файла"
-        VoxDownloadState.MUXED, VoxDownloadState.PUBLISHING -> "Сохранение файла"
-        VoxDownloadState.COMPLETED -> "Готово"
+        VoxDownloadState.READY_FOR_MUX,
+        VoxDownloadState.MUXING -> "Обработка…"
+        VoxDownloadState.MUXED,
+        VoxDownloadState.PUBLISHING -> "Сохранение…"
+        VoxDownloadState.COMPLETED -> "Скачано"
         VoxDownloadState.PAUSED -> "Приостановлено"
-        VoxDownloadState.FAILED -> "Ошибка"
+        VoxDownloadState.FAILED -> "Ошибка загрузки"
         VoxDownloadState.CANCELLED -> "Отменено"
-        VoxDownloadState.IDLE -> "Ожидание загрузки"
     }
 
-    fun error(code: VoxDownloadErrorCode?): String = when (code) {
-        VoxDownloadErrorCode.AUTH_REQUIRED -> "Для видео требуется вход"
-        VoxDownloadErrorCode.INSUFFICIENT_STORAGE, VoxDownloadErrorCode.STORAGE_ERROR -> "Недостаточно свободного места"
-        VoxDownloadErrorCode.URL_EXPIRED, VoxDownloadErrorCode.NETWORK_ERROR -> "Ошибка сети. Попробуйте позже"
-        VoxDownloadErrorCode.STREAM_UNAVAILABLE -> "Видео недоступно"
-        VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE -> "Перевод недоступен"
-        VoxDownloadErrorCode.UNSUPPORTED_CODEC -> "Этот формат пока не поддерживается"
-        VoxDownloadErrorCode.MEDIA_PARSE_ERROR -> "Не удалось подготовить видеофайл"
-        else -> "Не удалось скачать видео"
+    fun error(code: VoxDownloadErrorCode?): String {
+        return VoxDownloadFailureClassifier.getUserMessage(code)
     }
 
     fun mode(mode: VoxTranslationMode): String = when (mode) {
@@ -70,13 +65,7 @@ object VoxDownloadUiMapper {
     }
 
     fun formatSize(bytes: Long): String {
-        val safe = bytes.coerceAtLeast(0L).toDouble()
-        val unit = 1024.0
-        return when {
-            safe >= unit * unit * unit -> String.format(Locale("ru"), "%.1f ГБ", safe / (unit * unit * unit))
-            safe >= unit * unit -> String.format(Locale("ru"), "%.1f МБ", safe / (unit * unit))
-            else -> String.format(Locale("ru"), "%.0f КБ", safe / unit)
-        }
+        return VoxDownloadSizeFormatter.formatBytes(bytes)
     }
 
     fun toItem(job: VoxDownloadJob, missingFile: Boolean): VoxDownloadListItem {
@@ -88,9 +77,20 @@ object VoxDownloadUiMapper {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> snapshot.overallPercent
             else -> null
         }
-        return VoxDownloadListItem(job.downloadId, job.request.videoId, job.request.videoTitle,
-            job.state, stage(job.state), realPercent,
-            job.actualVideoHeight.takeIf { it > 0 }?.let { "${it}p" },
-            mode(job.request.translationMode), job.publishedUri, job.request.createdAt, missingFile)
+        return VoxDownloadListItem(
+            downloadId = job.downloadId,
+            videoId = job.request.videoId,
+            title = job.request.videoTitle,
+            state = job.state,
+            stage = stage(job.state),
+            percent = realPercent,
+            downloadedBytes = snapshot.totalBytesDownloaded,
+            totalBytes = snapshot.totalBytesExpected,
+            actualQuality = job.actualVideoHeight.takeIf { it > 0 }?.let { "${it}p" },
+            translationMode = mode(job.request.translationMode),
+            publishedUri = job.publishedUri,
+            createdAt = job.request.createdAt,
+            missingFile = missingFile
+        )
     }
 }
