@@ -342,6 +342,14 @@ public class VotData extends SharedPreferencesBase {
     public static final int POST_WATCH_DO_NOTHING = 0;
     public static final int POST_WATCH_OFFER_DELETE = 1;
 
+    private static final String VOX_DEVICE_PROFILE_JSON = "vox_device_profile_json";
+    private static final String VOX_CODEC_POLICY_MODE = "vox_codec_policy_mode";
+    private static final String VOX_MAX_QUALITY_HEIGHT = "vox_max_quality_height";
+    private static final String VOX_PREFERRED_VIDEO_CODEC = "vox_preferred_video_codec";
+    private static final String VOX_PREFERRED_AUDIO_CODEC = "vox_preferred_audio_codec";
+    private static final String VOX_PASSTHROUGH_ENABLED = "vox_passthrough_enabled";
+    private static final String VOX_COMPATIBILITY_SCAN_COMPLETED = "vox_compatibility_scan_completed";
+
     public boolean isDeleteAfterWatchingEnabled() {
         return getPostWatchAction() == POST_WATCH_OFFER_DELETE;
     }
@@ -352,6 +360,66 @@ public class VotData extends SharedPreferencesBase {
 
     public void setPostWatchAction(int action) {
         putInt(VOT_POST_WATCH_ACTION, action);
+    }
+
+    public String getCachedDeviceProfile() {
+        return getString(VOX_DEVICE_PROFILE_JSON, "");
+    }
+
+    public void setCachedDeviceProfile(String json) {
+        putString(VOX_DEVICE_PROFILE_JSON, json != null ? json : "");
+    }
+
+    public void clearCachedDeviceProfile() {
+        putString(VOX_DEVICE_PROFILE_JSON, "");
+    }
+
+    public String getCodecPolicyMode() {
+        return getString(VOX_CODEC_POLICY_MODE, "auto");
+    }
+
+    public void setCodecPolicyMode(String mode) {
+        putString(VOX_CODEC_POLICY_MODE, mode != null ? mode : "auto");
+    }
+
+    public int getMaxQualityHeight() {
+        return getInt(VOX_MAX_QUALITY_HEIGHT, 0);
+    }
+
+    public void setMaxQualityHeight(int height) {
+        putInt(VOX_MAX_QUALITY_HEIGHT, height);
+    }
+
+    public String getPreferredVideoCodec() {
+        return getString(VOX_PREFERRED_VIDEO_CODEC, "auto");
+    }
+
+    public void setPreferredVideoCodec(String codec) {
+        putString(VOX_PREFERRED_VIDEO_CODEC, codec != null ? codec : "auto");
+    }
+
+    public String getPreferredAudioCodec() {
+        return getString(VOX_PREFERRED_AUDIO_CODEC, "auto");
+    }
+
+    public void setPreferredAudioCodec(String codec) {
+        putString(VOX_PREFERRED_AUDIO_CODEC, codec != null ? codec : "auto");
+    }
+
+    public boolean isPassthroughEnabled() {
+        return getBoolean(VOX_PASSTHROUGH_ENABLED, true);
+    }
+
+    public void setPassthroughEnabled(boolean enabled) {
+        putBoolean(VOX_PASSTHROUGH_ENABLED, enabled);
+    }
+
+    public boolean isCompatibilityScanCompleted() {
+        return getBoolean(VOX_COMPATIBILITY_SCAN_COMPLETED, false);
+    }
+
+    public void setCompatibilityScanCompleted(boolean completed) {
+        putBoolean(VOX_COMPATIBILITY_SCAN_COMPLETED, completed);
     }
 
     private static String normalizeToken(String token) {

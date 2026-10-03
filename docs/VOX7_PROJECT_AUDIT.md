@@ -3,9 +3,36 @@
 ## Статус спринта
 
 - **Поколение**: VOX 7
-- **Текущий патч**: Patch #8 (Консолидированные отзывы форума: загрузки, кнопка плеера, режимы чата, аудио AC3/EAC3, надёжность перевода)
-- **Статус патча**: Готов к PR (VOX7_PATCH8_FORUM_FEEDBACK_READY)
+- **Текущий патч**: Patch #9 (Единая платформа Android TV + Samsung Tizen, профили возможностей устройств, политика кодеков, диагностика)
+- **Статус патча**: Готов к PR (VOX7_UNIFIED_FOUNDATION_READY)
 - **Дата релиза спринта**: 2026-10-16
+
+---
+
+## 9. Единая платформа Android TV + Samsung Tizen (Patch #9)
+
+- **Контекст**: Объединение SmartTube VOX для Android TV / Google TV и Samsung Tizen в единый репозиторий и продуктовый ряд.
+- **Решение**:
+  - Разработана кроссплатформенная трисостоятельная модель аппаратных возможностей (`vox-device-profile-v1`, `TriStateCapability`, `VoxDeviceProfile`).
+  - Реализованы политики выбора кодеков (`AUTO`, `MAX_QUALITY`, `MAX_COMPATIBILITY`, `CUSTOM`) в `VoxCodecPolicy`.
+  - Для Android TV реализовано автосканирование возможностей устройства (`MediaCodecList`, `AudioTrack`, `DisplayManager`), диалог первого запуска и пункт настроек «Совместимость устройства» (`VoxCompatibilitySettingsPresenter`).
+  - Добавлен генератор очищенных отчётов диагностики совместимости (`VoxDiagnosticsPresenter`, маскирование чувствительных данных).
+  - Создана независимая clean-room основа веб-приложения Samsung Tizen (`tizen/`) с поддержкой D-Pad навигации, оверлея VOX, синхронизации перевода (допуск 150 мс), диалогов диагностики и тестов.
+  - Подготовлен инструмент сборки пакета `build-wgt.js` с прозрачной обработкой отсутствия локального Tizen CLI (`TIZEN_WGT_NOT_RUN_TOOLCHAIN_MISSING`).
+  - Полностью сохранены все существующие функции VOX 7: загрузки (HUD, боковое меню, настройки), бейджи качества, чат и надёжность перевода VOT.
+  - Написана подробная архитектурная документация в `docs/VOX7_UNIFIED_PLATFORM_ARCHITECTURE.md`.
+- **Статус**: DONE
+- **Файлы изменений**:
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/vox/capability/*`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/VoxCompatibilitySettingsPresenter.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/presenters/settings/VoxDiagnosticsPresenter.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/utils/VoxCompatibilityOnboardingHelper.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/misc/AppDataSourceManager.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/VotData.java`
+  - `common/src/main/res/values/strings.xml`, `common/src/main/res/values-ru/strings.xml`
+  - `tizen/*`
+  - `docs/VOX7_UNIFIED_PLATFORM_ARCHITECTURE.md`
+  - `docs/VOX7_PROJECT_AUDIT.md`
 
 ---
 

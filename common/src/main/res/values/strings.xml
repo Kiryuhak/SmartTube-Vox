@@ -975,4 +975,29 @@
     <string name="reset_dialog_cancel" translatable="false"></string>
     <string name="reset_dialog_confirm" translatable="false"></string>
     <string name="reset_dialog_failed" translatable="false"></string>
+
+    <!-- VOX Device Compatibility -->
+    <string name="settings_device_compatibility">Device Compatibility</string>
+    <string name="vox_compatibility_title">VOX Compatibility Check</string>
+    <string name="vox_compatibility_message">SmartTube VOX can automatically select video and audio formats best suited for your device.</string>
+    <string name="vox_compatibility_btn_auto">Check automatically</string>
+    <string name="vox_compatibility_btn_manual">Configure manually</string>
+    <string name="vox_compatibility_btn_later">Later</string>
+    <string name="vox_compatibility_scan_completed_title">Compatibility Check Completed</string>
+    <string name="vox_compatibility_mode">Compatibility Mode</string>
+    <string name="vox_compatibility_mode_auto">Automatic</string>
+    <string name="vox_compatibility_mode_max_quality">Maximum quality</string>
+    <string name="vox_compatibility_mode_max_compatibility">Maximum compatibility</string>
+    <string name="vox_compatibility_mode_custom">Custom</string>
+    <string name="vox_compatibility_rescan">Rescan device</string>
+    <string name="vox_compatibility_diagnostics">Compatibility diagnostics</string>
+    <string name="vox_compatibility_max_quality">Maximum quality</string>
+    <string name="vox_compatibility_preferred_video">Preferred video codec</string>
+    <string name="vox_compatibility_preferred_audio">Preferred audio codec</string>
+    <string name="vox_compatibility_passthrough">Audio Passthrough</string>
+    <string name="vox_compatibility_reset">Reset compatibility settings</string>
+    <string name="vox_compatibility_reset_done">Compatibility settings reset</string>
+    <string name="vox_compatibility_unsupported_warning">Format is not declared as supported by this device. Playback may not work.</string>
+    <string name="vox_diagnostics_copy">Copy diagnostics</string>
+    <string name="vox_diagnostics_copied">Diagnostics copied to clipboard</string>
 </resources>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartTube VOX — Samsung Tizen</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="vox-app-container">
+    <header class="vox-app-header">
+      <h1 class="vox-title">SmartTube VOX</h1>
+      <span class="vox-badge" id="platformBadge">Samsung Tizen</span>
+    </header>
+
+    <main class="vox-main-content">
+      <nav class="vox-sidebar">
+        <button class="vox-btn vox-btn-primary" id="btnNavHome" tabindex="1">Главная</button>
+        <button class="vox-btn" id="btnNavDownloads" tabindex="2">Скачанные видео</button>
+        <button class="vox-btn" id="btnNavCompatibility" tabindex="3">Совместимость</button>
+        <button class="vox-btn" id="btnNavDiagnostics" tabindex="4">Диагностика</button>
+      </nav>
+
+      <section class="vox-preview-area">
+        <div class="vox-player-mock">
+          <h2>Видеоплеер (Эмуляция Tizen)</h2>
+          <p id="currentVideoStatus">Текущее видео: dQw4w9WgXcQ (VOX Ready)</p>
+          <div style="margin-top: 24px;" id="voxPlayerControlsContainer"></div>
+        </div>
+
+        <div class="vox-status-bar" id="statusBar">
+          Готов к воспроизведению. Управление: стрелки пульта / клавиатуры, Enter — выбор, Back/Escape — назад.
+        </div>
+      </section>
+    </main>
+
+    <div id="modalContainer"></div>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>

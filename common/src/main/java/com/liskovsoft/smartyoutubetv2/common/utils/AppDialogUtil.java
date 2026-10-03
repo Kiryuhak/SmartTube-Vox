@@ -288,7 +288,7 @@ public class AppDialogUtil {
         boolean isAllFormatsUnlocked = playerTweaksData.isAllFormatsUnlocked();
 
         for (VideoPreset preset : presets) {
-            if (!isAllFormatsUnlocked && !Utils.isPresetSupported(preset)) {
+            if (!isAllFormatsUnlocked && !Utils.isPresetSupported(context, preset)) {
                 continue;
             }
 
