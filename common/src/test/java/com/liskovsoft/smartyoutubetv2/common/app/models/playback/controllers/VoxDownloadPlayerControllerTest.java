@@ -12,6 +12,7 @@ public class VoxDownloadPlayerControllerTest {
         assertEquals(0, VoxDownloadPlayerController.STATE_DOWNLOAD);
         assertEquals(1, VoxDownloadPlayerController.STATE_PROGRESS);
         assertEquals(2, VoxDownloadPlayerController.STATE_COMPLETED);
+        assertEquals(3, VoxDownloadPlayerController.STATE_FAILED);
     }
 
     @Test

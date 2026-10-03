@@ -1347,6 +1347,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     }
 
     @Override
+    public void updateDownloadProgress(int buttonState, String progressText) {
+        if (mPlayerGlue != null) {
+            mPlayerGlue.updateDownloadProgress(buttonState, progressText);
+        }
+    }
+
+    @Override
     public void setChannelIcon(String iconUrl) {
         if (mPlayerGlue != null) {
             mPlayerGlue.setChannelIcon(iconUrl);

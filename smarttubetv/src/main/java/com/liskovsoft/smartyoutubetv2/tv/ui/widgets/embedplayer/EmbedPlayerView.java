@@ -630,4 +630,9 @@ public class EmbedPlayerView extends PlayerView implements PlaybackView {
 	public void updateVoiceTranslatePendingEta(int remainingTimeSec) {
     // VOT ETA is not displayed in the embedded player.
 	}
+
+	@Override
+	public void updateDownloadProgress(int buttonState, String progressText) {
+    // Download progress is not displayed in the embedded player.
+	}
 }

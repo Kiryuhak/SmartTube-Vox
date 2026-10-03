@@ -11,13 +11,15 @@ import com.liskovsoft.smartyoutubetv2.tv.R;
 /**
  * Player HUD Action for VOX Download.
  * INDEX_DOWNLOAD = 0: "Скачать" / idle
- * INDEX_PROGRESS = 1: "Загрузка идёт" / in-progress
+ * INDEX_PROGRESS = 1: "Загрузка 37%" / in-progress
  * INDEX_COMPLETED = 2: "Скачано" / completed
+ * INDEX_FAILED = 3: "Ошибка загрузки" / failed
  */
 public class DownloadAction extends MultiAction {
     public static final int INDEX_DOWNLOAD = 0;
     public static final int INDEX_PROGRESS = 1;
     public static final int INDEX_COMPLETED = 2;
+    public static final int INDEX_FAILED = 3;
 
     private final Context mContext;
     private final String[] mLabels;
@@ -28,6 +30,7 @@ public class DownloadAction extends MultiAction {
 
         int highlightColor = ActionHelpers.getIconHighlightColor(context);
         int orangeAccent = 0xFFFFA726; // Material Orange / Amber accent for progress state
+        int errorAccent = 0xFFE53935;  // Red accent for error state
 
         BitmapDrawable idleDrawable = ActionHelpers.getBitmapDrawable(context, R.drawable.action_download);
         BitmapDrawable rawPending = ActionHelpers.getBitmapDrawable(context, R.drawable.action_download_pending);
@@ -36,17 +39,21 @@ public class DownloadAction extends MultiAction {
         BitmapDrawable completedDrawable = idleDrawable == null ? null
                 : new BitmapDrawable(context.getResources(),
                 ActionHelpers.createBitmap(idleDrawable.getBitmap(), highlightColor));
+        BitmapDrawable failedDrawable = rawPending == null ? idleDrawable
+                : ActionHelpers.createDrawable(context, rawPending, errorAccent);
 
-        Drawable[] drawables = new Drawable[3];
+        Drawable[] drawables = new Drawable[4];
         drawables[INDEX_DOWNLOAD] = idleDrawable;
         drawables[INDEX_PROGRESS] = progressDrawable;
         drawables[INDEX_COMPLETED] = completedDrawable;
+        drawables[INDEX_FAILED] = failedDrawable;
         setDrawables(drawables);
 
-        mLabels = new String[3];
+        mLabels = new String[4];
         mLabels[INDEX_DOWNLOAD] = context.getString(com.liskovsoft.smartyoutubetv2.common.R.string.vox_download_action);
         mLabels[INDEX_PROGRESS] = context.getString(com.liskovsoft.smartyoutubetv2.common.R.string.vox_download_stage_video);
         mLabels[INDEX_COMPLETED] = context.getString(com.liskovsoft.smartyoutubetv2.common.R.string.vox_download_stage_completed);
+        mLabels[INDEX_FAILED] = "Ошибка загрузки";
         setLabels(mLabels);
         setIndex(INDEX_DOWNLOAD);
     }

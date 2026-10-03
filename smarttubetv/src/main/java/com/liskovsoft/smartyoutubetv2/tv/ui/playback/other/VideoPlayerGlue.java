@@ -333,6 +333,19 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         invalidateUi(votAction);
     }
 
+    public void updateDownloadProgress(int buttonState, String progressText) {
+        Action action = mActions.get(R.id.action_download);
+        if (!(action instanceof DownloadAction)) {
+            return;
+        }
+        DownloadAction downloadAction = (DownloadAction) action;
+        if (progressText != null) {
+            downloadAction.updateProgressLabel(progressText);
+        }
+        setActionIndex(downloadAction, buttonState);
+        invalidateUi(downloadAction);
+    }
+
     public void setChannelIcon(String iconUrl) {
         ChannelAction channelAction = (ChannelAction) mActions.get(R.id.action_channel);
 

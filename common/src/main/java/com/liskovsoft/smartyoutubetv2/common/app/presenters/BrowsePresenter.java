@@ -316,16 +316,21 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             String detail;
             if (isMissing) {
                 detail = "Файл удалён";
+                video.percentWatched = 0;
             } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED) {
                 long fileSize = coordinator.getStorage().getPublishedFileSize(job.getPublishedUri());
                 String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(fileSize);
                 detail = (item.getActualQuality() != null ? item.getActualQuality() + " · " : "") + sizeStr + " · " + item.getTranslationMode();
+                video.percentWatched = 0;
             } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.FAILED) {
                 detail = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.error(job.getErrorCode());
+                video.percentWatched = 0;
             } else if (item.getPercent() != null) {
                 detail = item.getStage() + " · " + item.getPercent() + "%";
+                video.percentWatched = item.getPercent();
             } else {
                 detail = item.getStage();
+                video.percentWatched = 1;
             }
 
             video.secondTitle = detail;
