@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.liskovsoft.sharedutils.helpers.MessageHelpers
+import com.liskovsoft.smartyoutubetv2.common.R
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem
@@ -38,8 +39,8 @@ object VoxDownloadManager {
 
         fun open() {
             coordinator.addGlobalListener(this)
-            presenter.appendSingleButton(UiOptionItem.from("Загрузка списка…", { _ -> }))
-            presenter.showDialog("Загрузки VOX", finish)
+            presenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.header_downloaded_videos), { _ -> }))
+            presenter.showDialog(context.getString(R.string.header_downloaded_videos), finish)
             refresh()
         }
 
@@ -74,8 +75,8 @@ object VoxDownloadManager {
             lastSignature = signature
             val groups = listOf(0 to "Скачиваются", 1 to "Приостановлены", 2 to "Ошибки", 3 to "Готово", 4 to "Отменено")
             if (items.isEmpty()) {
-                presenter.appendSingleButton(UiOptionItem.from("Скачанных видео пока нет", { _ -> }))
-                presenter.appendSingleButton(UiOptionItem.from("Скачивание можно запустить из меню плеера", { _ -> }))
+                presenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.vox_download_empty_title), { _ -> }))
+                presenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.vox_download_empty_hint), { _ -> }))
             } else {
                 for ((group, heading) in groups) {
                     val groupItems = items.filter { VoxDownloadUiMapper.group(it.state) == group }
@@ -97,7 +98,7 @@ object VoxDownloadManager {
             presenter.appendSingleButton(UiOptionItem.from(
                 "Занято загрузками: ${VoxDownloadUiMapper.formatSize(stats.usedBytes)} · Свободно: ${VoxDownloadUiMapper.formatSize(stats.freeBytes)}",
                 { _ -> }))
-            presenter.refreshDialog("Загрузки VOX")
+            presenter.refreshDialog(context.getString(R.string.header_downloaded_videos))
         }
 
         private fun showActions(item: VoxDownloadListItem) {

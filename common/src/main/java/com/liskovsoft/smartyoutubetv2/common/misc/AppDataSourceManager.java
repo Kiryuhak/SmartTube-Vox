@@ -81,7 +81,7 @@ public class AppDataSourceManager {
 
         if (VotOnboardingHelper.isStvot(context)) {
             settingItems.add(new SettingsItem(
-                    "Загрузки VOX", () -> VoxDownloadManager.show(context), R.drawable.settings_app));
+                    context.getString(R.string.header_downloaded_videos), () -> VoxDownloadManager.show(context), R.drawable.icon_download));
             settingItems.add(new SettingsItem(
                     context.getString(R.string.settings_reset), () -> ResetSettingsPresenter.instance(context).show(), R.drawable.settings_reset));
         }

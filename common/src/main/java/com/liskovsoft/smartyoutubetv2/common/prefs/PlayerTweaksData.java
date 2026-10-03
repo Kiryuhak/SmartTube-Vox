@@ -45,11 +45,12 @@ public class PlayerTweaksData implements ProfileChangeListener {
     public static final int PLAYER_BUTTON_AFR = 1 << 26;
     public static final int PLAYER_BUTTON_VIDEO_FLIP = 1 << 27;
     public static final int PLAYER_BUTTON_VOICE_TRANSLATE = 1 << 28;
+    public static final int PLAYER_BUTTON_DOWNLOAD = 1 << 29;
     public static final int PLAYER_BUTTON_DEFAULT = PLAYER_BUTTON_SEARCH | PLAYER_BUTTON_PIP | PLAYER_BUTTON_SCREEN_DIMMING | PLAYER_BUTTON_VIDEO_SPEED |
             PLAYER_BUTTON_VIDEO_STATS | PLAYER_BUTTON_OPEN_CHANNEL | PLAYER_BUTTON_SUBTITLES | PLAYER_BUTTON_SUBSCRIBE |
             PLAYER_BUTTON_LIKE | PLAYER_BUTTON_DISLIKE | PLAYER_BUTTON_ADD_TO_PLAYLIST | PLAYER_BUTTON_PLAY_PAUSE |
             PLAYER_BUTTON_REPEAT_MODE | PLAYER_BUTTON_NEXT | PLAYER_BUTTON_PREVIOUS | PLAYER_BUTTON_HIGH_QUALITY |
-            PLAYER_BUTTON_VIDEO_INFO | PLAYER_BUTTON_CHAT | PLAYER_BUTTON_VOICE_TRANSLATE;
+            PLAYER_BUTTON_VIDEO_INFO | PLAYER_BUTTON_CHAT | PLAYER_BUTTON_VOICE_TRANSLATE | PLAYER_BUTTON_DOWNLOAD;
     public static final int DNS_TYPE_SYSTEM = GlobalPreferences.DNS_TYPE_SYSTEM;
     public static final int DNS_TYPE_IPV4 = GlobalPreferences.DNS_TYPE_IPV4;
     public static final int DNS_TYPE_GOOGLE = GlobalPreferences.DNS_TYPE_GOOGLE;
@@ -282,12 +283,21 @@ public class PlayerTweaksData implements ProfileChangeListener {
                 return true;
             }
         }
+        if (menuItems == PLAYER_BUTTON_DOWNLOAD && VotOnboardingHelper.isStvot(mPrefs.getContext())) {
+            if (!mPrefs.getBoolean("vox_download_button_configured", false)) {
+                // In VOX, Download button is enabled by default on clean installs and upgrades
+                return true;
+            }
+        }
         return (mPlayerButtons & menuItems) == menuItems;
     }
 
     public void setPlayerButtonEnabled(int playerButtons) {
         if ((playerButtons & PLAYER_BUTTON_VOICE_TRANSLATE) != 0) {
             mPrefs.putBoolean("vot_button_configured", true);
+        }
+        if ((playerButtons & PLAYER_BUTTON_DOWNLOAD) != 0) {
+            mPrefs.putBoolean("vox_download_button_configured", true);
         }
         mPlayerButtons |= playerButtons;
         persistData();
@@ -296,6 +306,9 @@ public class PlayerTweaksData implements ProfileChangeListener {
     public void setPlayerButtonDisabled(int playerButtons) {
         if ((playerButtons & PLAYER_BUTTON_VOICE_TRANSLATE) != 0) {
             mPrefs.putBoolean("vot_button_configured", true);
+        }
+        if ((playerButtons & PLAYER_BUTTON_DOWNLOAD) != 0) {
+            mPrefs.putBoolean("vox_download_button_configured", true);
         }
         mPlayerButtons &= ~playerButtons;
         persistData();

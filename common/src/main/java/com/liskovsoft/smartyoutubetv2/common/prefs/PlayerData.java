@@ -90,7 +90,10 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     private boolean mIsNumberKeySeekEnabled;
     private boolean mIsSkip24RateEnabled;
     private boolean mIsSkipShortsEnabled;
+    public static final int CHAT_MODE_TOP = 0;
+    public static final int CHAT_MODE_LIVE = 1;
     private boolean mIsLiveChatEnabled;
+    private int mLiveChatMode = CHAT_MODE_TOP;
     private List<FormatItem> mLastSubtitleFormats;
     private List<String> mEnabledSubtitlesPerChannel;
     private boolean mIsSubtitlesPerChannelEnabled;
@@ -724,6 +727,15 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         persistState();
     }
 
+    public int getLiveChatMode() {
+        return mLiveChatMode;
+    }
+
+    public void setLiveChatMode(int mode) {
+        mLiveChatMode = mode;
+        persistState();
+    }
+
     public FormatItem getDefaultAudioFormat() {
         // Android 4 (probably some others) doesn't support opus (ac3 will be reverted to opus)
         // Note, 5.1 mp4a doesn't work in 5.1 mode
@@ -863,6 +875,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         mLastAudioLanguages = Helpers.parseStrList(split, 60);
         mIsVideoFlipEnabled = Helpers.parseBoolean(split, 61, false);
         mIsAudioDelayEnabled = Helpers.parseBoolean(split, 62, false);
+        mLiveChatMode = Helpers.parseInt(split, 64, CHAT_MODE_TOP);
 
         if (speeds != null) {
             for (String speedSpec : speeds) {
@@ -900,7 +913,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
                 mIsNumberKeySeekEnabled, mIsSkip24RateEnabled, mAfrPauseMs, mIsLiveChatEnabled, mLastSubtitleFormats, mLastSpeed, mRotationAngle,
                 mZoomPercents, mPlaybackMode, mAudioLanguage, mSubtitleLanguage, mEnabledSubtitlesPerChannel, mIsSubtitlesPerChannelEnabled,
                 mIsSpeedPerChannelEnabled, Helpers.mergeArray(mSpeeds.values().toArray()), mPitch, mIsSkipShortsEnabled, mLastAudioLanguages,
-                mIsVideoFlipEnabled, mIsAudioDelayEnabled, mTopRightTimeMode.id
+                mIsVideoFlipEnabled, mIsAudioDelayEnabled, mTopRightTimeMode.id, mLiveChatMode
         ));
     }
 

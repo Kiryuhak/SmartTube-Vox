@@ -660,6 +660,9 @@
     <string name="repeat_mode_shuffle">Shuffle any playlist</string>
     <string name="chat_left">Left</string>
     <string name="chat_right">Right</string>
+    <string name="chat_mode_title">Chat Mode</string>
+    <string name="chat_mode_top">Top chat</string>
+    <string name="chat_mode_all">Live chat</string>
     <string name="card_real_thumbnails">Replace thumbnails with a frame from the video</string>
     <string name="card_content">Where to grab card thumbnails</string>
     <string name="thumb_quality_default">Default</string>

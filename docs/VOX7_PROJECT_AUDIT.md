@@ -3,9 +3,35 @@
 ## Статус спринта
 
 - **Поколение**: VOX 7
-- **Текущий патч**: Patch #6 (Длительное стресс-тестирование на эмуляторе)
-- **Статус патча**: Стабилен на эмуляторе (VOX7_PATCH6_STABLE_ON_EMULATOR)
+- **Текущий патч**: Patch #8 (Консолидированные отзывы форума: загрузки, кнопка плеера, режимы чата, аудио AC3/EAC3, надёжность перевода)
+- **Статус патча**: Готов к PR (VOX7_PATCH8_FORUM_FEEDBACK_READY)
 - **Дата релиза спринта**: 2026-10-16
+
+---
+
+## 8. Консолидированные отзывы форума (Patch #8)
+
+- **Контекст**: Реализация предложений и устранение дефектов из обратной связи пользователей форума по 4 подсистемам (загрузки, кнопка HUD, чат, аудио, перевод).
+- **Решение**:
+  - Улучшена обнаруживаемость раздела загрузок (плитка в настройках, закрепление в боковом меню, понятное пустое состояние).
+  - В оверлей плеера добавлена кнопка «Скачать» (`VideoPlayerGlue`, `DownloadAction`, `VoxDownloadPlayerController`, настройка `PLAYER_BUTTON_DOWNLOAD`).
+  - Расширено распознавание кодеков AC3 (`ac-3`, `ac3`), EAC3 (`ec-3`, `eac3`), Opus и AAC в `TrackSelectorUtil`.
+  - Исправлен сбой перевода («работает только ~10% видео») путём автоопределения исходного языка речи (устранена принудительная подстановка `"en"`).
+  - Улучшена классификация и локализация ошибок перевода через `VotErrorCategory`.
+  - Добавлено переключение режимов онлайн-чата («Интересные сообщения» / «Все сообщения») в `ChatController` и `PlayerData`.
+  - Добавлены юнит-тесты и пройдено тестирование на эмуляторе Android TV (API 34).
+- **Статус**: DONE
+- **Файлы изменений**:
+  - `smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/actions/DownloadAction.java`
+  - `smarttubetv/src/main/java/com/liskovsoft/smartyoutubetv2/tv/ui/playback/other/VideoPlayerGlue.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VoxDownloadPlayerController.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VoiceTranslateController.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ChatController.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/selector/TrackSelectorUtil.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/PlayerData.java`
+  - `common/src/main/java/com/liskovsoft/smartyoutubetv2/common/prefs/PlayerTweaksData.java`
+  - `docs/VOX7_FORUM_FEEDBACK.md`
+  - `docs/VOX7_PROJECT_AUDIT.md`
 
 ---
 

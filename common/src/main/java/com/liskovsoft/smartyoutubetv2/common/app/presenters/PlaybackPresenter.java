@@ -20,6 +20,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.Sug
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoLoaderController;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoStateController;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoxDownloadPlayerController;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotShadowController;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.listener.PlayerEventListener;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.listener.ViewEventListener;
@@ -70,6 +71,7 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
         mEventListeners.add(new CommentsController());
         mEventListeners.add(new VoiceTranslateController());
         mEventListeners.add(new YandexVotShadowController());
+        mEventListeners.add(new VoxDownloadPlayerController());
     }
 
     public static PlaybackPresenter instance(Context context) {

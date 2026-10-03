@@ -654,6 +654,9 @@
     <string name="repeat_mode_shuffle">Перемешать любой плейлист</string>
     <string name="chat_left">Слева</string>
     <string name="chat_right">Справа</string>
+    <string name="chat_mode_title">Режим чата</string>
+    <string name="chat_mode_top">Интересные сообщения</string>
+    <string name="chat_mode_all">Все сообщения</string>
     <string name="card_real_thumbnails">Заменить миниатюры кадром из видео</string>
     <string name="card_content">Откуда брать миниатюры карточек</string>
     <string name="thumb_quality_default">По умолчанию</string>
