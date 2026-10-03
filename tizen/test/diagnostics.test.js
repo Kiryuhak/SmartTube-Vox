@@ -35,6 +35,13 @@ function run() {
   assert.ok(report.includes('QN90B'));
   assert.ok(report.includes('3840x2160'));
 
+  // Verify JSON schema
+  const reportJson = diag.generateReportJson(profile, policy);
+  assert.strictEqual(reportJson.schema, 'vox-diagnostic-report-v1');
+  assert.strictEqual(reportJson.appVersion, '32.56-vox.7-dev');
+  assert.strictEqual(reportJson.appVersionCode, 2446007);
+  assert.strictEqual(reportJson.manufacturer, 'Samsung');
+
   // Verify sanitization
   assert.strictEqual(report.includes('access_token'), false);
   assert.strictEqual(report.includes('refresh_token'), false);

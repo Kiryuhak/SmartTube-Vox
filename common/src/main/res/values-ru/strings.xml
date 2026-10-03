@@ -930,4 +930,11 @@
     <string name="vox_compatibility_unsupported_warning">Формат не заявлен как поддерживаемый устройством. Воспроизведение может не работать.</string>
     <string name="vox_diagnostics_copy">Скопировать диагностику</string>
     <string name="vox_diagnostics_copied">Диагностика скопирована в буфер обмена</string>
+    <string name="vox_diagnostics_view">Посмотреть отчёт</string>
+    <string name="vox_diagnostics_send">Отправить разработчику</string>
+    <string name="vox_diagnostics_send_consent_title">Отправка анонимного отчёта</string>
+    <string name="vox_diagnostics_send_consent_desc">Отправить анонимный отчёт о совместимости разработчикам SmartTube VOX?\n\nОтчёт содержит только технические параметры декодеров, дисплея и модели устройства. Отчёт НЕ содержит персональных данных, паролей или токенов авторизации.</string>
+    <string name="vox_diagnostics_send_confirm">Отправить</string>
+    <string name="vox_diagnostics_sent_success">Отчёт успешно отправлен (ID: %s)</string>
+    <string name="vox_diagnostics_send_failed">Не удалось отправить отчёт: %s</string>
 </resources>

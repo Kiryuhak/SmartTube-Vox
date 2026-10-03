@@ -81,7 +81,8 @@ class VoxDownloadRepository(
                 initialErrorMessage = stored.errorMessage,
                 initialPublishedUri = stored.publishedUri,
                 initialPublishedFilePath = stored.publishedFilePath,
-                initialActualVideoHeight = stored.actualVideoHeight
+                initialActualVideoHeight = stored.actualVideoHeight,
+                translationState = stored.translationState
             )
             jobs[id] = job
         }
@@ -133,7 +134,8 @@ class VoxDownloadRepository(
             errorMessage = job.errorMessage,
             publishedUri = job.publishedUri,
             publishedFilePath = job.publishedFilePath,
-            actualVideoHeight = job.actualVideoHeight
+            actualVideoHeight = job.actualVideoHeight,
+            translationState = job.translationState
         )
     }
 

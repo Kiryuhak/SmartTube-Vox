@@ -16,7 +16,8 @@ class VoxDownloadJob(
     initialErrorMessage: String? = null,
     initialPublishedUri: String? = null,
     initialPublishedFilePath: String? = null,
-    initialActualVideoHeight: Int = 0
+    initialActualVideoHeight: Int = 0,
+    val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
 ) {
     val downloadId: String get() = request.downloadId
 
@@ -131,6 +132,7 @@ class VoxDownloadJob(
             publishBytesProcessed = publishBytesProcessed,
             publishTotalBytes = publishTotalBytes,
             publishPercent = publishPercent,
+            translationState = translationState,
             publishedUri = publishedUri,
             publishedFilePath = publishedFilePath,
             errorMessage = errorMessage,

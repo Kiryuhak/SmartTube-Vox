@@ -21,6 +21,7 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.SimpleTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.tv.R;
@@ -194,11 +195,14 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SOUND_OFF)) {
             adapter.add(mActions.get(R.id.action_sound_off));
         }
-        if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
-            adapter.add(mActions.get(R.id.action_voice_translate));
-        }
-        if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)) {
-            adapter.add(mActions.get(R.id.action_download));
+        boolean isDownloadedOrLocal = getVideo() != null && (getVideo().isLocal || getVideo().isDownloadedTranslated());
+        if (!isDownloadedOrLocal) {
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
+                adapter.add(mActions.get(R.id.action_voice_translate));
+            }
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)) {
+                adapter.add(mActions.get(R.id.action_download));
+            }
         }
         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_AFR)) {
             adapter.add(mActions.get(R.id.action_afr));
@@ -604,6 +608,34 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
     @Override
     public void onTopEdgeFocused() {
         mActionListener.onTopEdgeFocused();
+    }
+
+    @Override
+    public void setVideo(Video video) {
+        super.setVideo(video);
+        updateActionVisibilityForVideo(video);
+    }
+
+    private void updateActionVisibilityForVideo(Video video) {
+        if (getControlsRow() == null) return;
+        ArrayObjectAdapter primary = (ArrayObjectAdapter) getControlsRow().getPrimaryActionsAdapter();
+        if (primary == null) return;
+
+        boolean isDownloadedOrLocal = video != null && (video.isLocal || video.isDownloadedTranslated());
+        Action translateAction = mActions.get(R.id.action_voice_translate);
+        Action downloadAction = mActions.get(R.id.action_download);
+
+        if (isDownloadedOrLocal) {
+            if (translateAction != null) primary.remove(translateAction);
+            if (downloadAction != null) primary.remove(downloadAction);
+        } else {
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE) && translateAction != null && primary.indexOf(translateAction) == -1) {
+                primary.add(translateAction);
+            }
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD) && downloadAction != null && primary.indexOf(downloadAction) == -1) {
+                primary.add(downloadAction);
+            }
+        }
     }
 
     /** Listens for when skip to next and previous actions have been dispatched. */

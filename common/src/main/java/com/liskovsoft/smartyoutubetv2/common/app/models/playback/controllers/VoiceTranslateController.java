@@ -561,6 +561,9 @@ public class VoiceTranslateController extends BasePlayerController {
         if (buttonId != ACTION_VOICE_TRANSLATE) {
             return;
         }
+        if (getPlayer() != null && getPlayer().getVideo() != null && (getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated())) {
+            return;
+        }
         if (mState == STATE_OFF || buttonState == BTN_OFF || buttonState == BTN_ERROR) {
             Utils.removeCallbacks(mResetErrorButtonRunnable);
             armAndStart();
@@ -683,7 +686,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void tryApplyAutoTranslate(boolean fromTrackChange) {
-        if (getPlayer() == null || getPlayer().getVideo() == null || getPlayer().getVideo().isLocal) {
+        if (getPlayer() == null || getPlayer().getVideo() == null || getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) {
             return;
         }
         String videoId = getPlayer().getVideo().videoId;
