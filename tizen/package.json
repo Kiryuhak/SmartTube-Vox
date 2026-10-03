@@ -1,0 +1,21 @@
+{
+  "name": "smarttube-vox-tizen",
+  "version": "7.0.0-dev",
+  "description": "SmartTube VOX for Samsung Tizen TV",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test/testRunner.js",
+    "build": "node tools/build-wgt.js --bundle-only",
+    "package:wgt": "node tools/build-wgt.js",
+    "dev": "node tools/dev-server.js"
+  },
+  "keywords": [
+    "smarttube",
+    "vox",
+    "tizen",
+    "samsung-tv",
+    "voice-translation"
+  ],
+  "author": "SmartTube VOX Team",
+  "license": "GPL-3.0-or-later"
+}
