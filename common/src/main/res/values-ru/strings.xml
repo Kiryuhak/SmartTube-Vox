@@ -911,7 +911,15 @@
     <string name="vox_compatibility_mode_max_quality">Максимальное качество</string>
     <string name="vox_compatibility_mode_max_compatibility">Максимальная совместимость</string>
     <string name="vox_compatibility_mode_custom">Пользовательский</string>
-    <string name="vox_compatibility_rescan">Проверить устройство заново</string>
+    <string name="vox_compatibility_rescan">Повторно определить возможности</string>
+    <string name="vox_compatibility_auto_tune">Автоматическая настройка</string>
+    <string name="vox_compatibility_auto_tune_summary">VOX подобрал рекомендуемые параметры для этого устройства.</string>
+    <string name="vox_compatibility_auto_tune_applied">Рекомендуемые настройки применены</string>
+    <string name="vox_compatibility_auto_tune_apply">Применить</string>
+    <string name="vox_compatibility_view_details">Посмотреть подробнее</string>
+    <string name="vox_compatibility_risk_warning_title">Предупреждение о совместимости</string>
+    <string name="vox_compatibility_risk_continue">Продолжить</string>
+    <string name="vox_compatibility_risk_revert">Вернуть рекомендуемые настройки</string>
     <string name="vox_compatibility_diagnostics">Диагностика совместимости</string>
     <string name="vox_compatibility_max_quality">Максимальное качество</string>
     <string name="vox_compatibility_preferred_video">Предпочитаемый видеокодек</string>

@@ -58,9 +58,13 @@ class DefaultVoxStreamResolver(
             )
         }
 
-        // Выбираем формат с наилучшим совпадением по разрешению
-        val selectedFormat = selectBestVideoFormat(videoCandidates, qualityPreference)
-            ?: videoCandidates.first()
+        // Выбираем формат с наилучшим совпадением по разрешению и безопасным откатом
+        val fallbackResult = VoxDownloadFallbackPolicy.selectVideoFormat(videoCandidates, qualityPreference)
+            ?: throw VoxDownloadException(
+                VoxDownloadErrorCode.STREAM_UNAVAILABLE,
+                "No compatible video streams found for videoId=$videoId"
+            )
+        val selectedFormat = fallbackResult.selected
 
         val url = selectedFormat.url
             ?: throw VoxDownloadException(VoxDownloadErrorCode.STREAM_UNAVAILABLE, "Video format missing URL")
@@ -90,8 +94,8 @@ class DefaultVoxStreamResolver(
         val formatInfo = fetchFormatInfo(videoId)
         val formats = collectAllFormats(formatInfo)
 
-        // Для скачивания в MKV отдаем предпочтение audio/mp4 (AAC), чтобы MediaExtractor гарантированно получил csd-0 (AudioSpecificConfig)
-        val audioFormat = selectBestMuxAudioFormat(formats)
+        // Для скачивания в MKV используем VoxDownloadFallbackPolicy (приоритет AAC, затем Opus)
+        val audioFormat = VoxDownloadFallbackPolicy.selectAudioFormat(formats)?.selected
             ?: VotMediaFormatSelector.selectBestAudioFormat(formats)
             ?: formats.firstOrNull { f ->
                 val mime = f.mimeType?.lowercase(Locale.US) ?: ""

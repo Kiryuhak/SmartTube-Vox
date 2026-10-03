@@ -7,12 +7,14 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
-import com.liskovsoft.smartyoutubetv2.common.vox.capability.TriStateCapability;
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxAudioCodecPreference;
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCodecPolicy;
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCodecPolicyMode;
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityManager;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityRisk;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityRiskEvaluator;
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxDeviceProfile;
+import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxRecommendedSettings;
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxVideoCodecPreference;
 
 import java.util.ArrayList;
@@ -36,6 +38,7 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
     public void show() {
         AppDialogPresenter settingsPresenter = AppDialogPresenter.instance(getContext());
 
+        appendAutoTuneButton(settingsPresenter);
         appendPolicyModeCategory(settingsPresenter);
         appendMaxQualityCategory(settingsPresenter);
         appendVideoCodecCategory(settingsPresenter);
@@ -44,6 +47,44 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
         appendActionButtons(settingsPresenter);
 
         settingsPresenter.showDialog(getContext().getString(R.string.settings_device_compatibility));
+    }
+
+    private void appendAutoTuneButton(AppDialogPresenter settingsPresenter) {
+        settingsPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.vox_compatibility_auto_tune), option -> {
+                    showAutoTuneDialog();
+                })
+        );
+    }
+
+    private void showAutoTuneDialog() {
+        if (getContext() == null) return;
+        VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
+        VoxRecommendedSettings rec = manager.getRecommendedSettings(true);
+
+        AppDialogPresenter presenter = AppDialogPresenter.instance(getContext());
+        String title = getContext().getString(R.string.vox_compatibility_auto_tune);
+        String desc = getContext().getString(R.string.vox_compatibility_auto_tune_summary) + "\n\n" + rec.getSummaryRu();
+
+        List<OptionItem> options = new ArrayList<>();
+        options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_auto_tune_apply), opt -> {
+            manager.applyRecommendedSettings(rec);
+            presenter.closeDialog();
+            MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_auto_tune_applied);
+            show();
+        }));
+
+        options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_view_details), opt -> {
+            presenter.closeDialog();
+            VoxDiagnosticsPresenter.instance(getContext()).show();
+        }));
+
+        options.add(UiOptionItem.from(getContext().getString(R.string.cancel_dialog), opt -> {
+            presenter.closeDialog();
+        }));
+
+        presenter.appendStringsCategory(desc, options);
+        presenter.showDialog(title);
     }
 
     private void appendPolicyModeCategory(AppDialogPresenter settingsPresenter) {
@@ -55,13 +96,14 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
             options.add(UiOptionItem.from(
                     mode.getTitleRu(),
                     option -> {
-                        manager.setCodecPolicy(new VoxCodecPolicy(
+                        VoxCodecPolicy proposed = new VoxCodecPolicy(
                                 mode,
                                 policy.getMaxQualityHeight(),
                                 policy.getPreferredVideoCodec(),
                                 policy.getPreferredAudioCodec(),
                                 policy.getPassthroughEnabled()
-                        ));
+                        );
+                        applyPolicyWithRiskCheck(proposed);
                     },
                     mode == policy.getMode()
             ));
@@ -90,13 +132,14 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
             options.add(UiOptionItem.from(
                     titles[i],
                     option -> {
-                        manager.setCodecPolicy(new VoxCodecPolicy(
+                        VoxCodecPolicy proposed = new VoxCodecPolicy(
                                 policy.getMode(),
                                 h,
                                 policy.getPreferredVideoCodec(),
                                 policy.getPreferredAudioCodec(),
                                 policy.getPassthroughEnabled()
-                        ));
+                        );
+                        applyPolicyWithRiskCheck(proposed);
                     },
                     policy.getMaxQualityHeight() == h
             ));
@@ -108,23 +151,20 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
     private void appendVideoCodecCategory(AppDialogPresenter settingsPresenter) {
         VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
         VoxCodecPolicy policy = manager.getCodecPolicy();
-        VoxDeviceProfile profile = manager.getDeviceProfile(false);
 
         List<OptionItem> options = new ArrayList<>();
         for (VoxVideoCodecPreference pref : VoxVideoCodecPreference.values()) {
             options.add(UiOptionItem.from(
                     pref.getDisplayName(),
                     option -> {
-                        if (pref != VoxVideoCodecPreference.AUTO && !profile.isVideoCodecSupported(pref.getId())) {
-                            MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_unsupported_warning);
-                        }
-                        manager.setCodecPolicy(new VoxCodecPolicy(
+                        VoxCodecPolicy proposed = new VoxCodecPolicy(
                                 policy.getMode(),
                                 policy.getMaxQualityHeight(),
                                 pref,
                                 policy.getPreferredAudioCodec(),
                                 policy.getPassthroughEnabled()
-                        ));
+                        );
+                        applyPolicyWithRiskCheck(proposed);
                     },
                     policy.getPreferredVideoCodec() == pref
             ));
@@ -136,27 +176,20 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
     private void appendAudioCodecCategory(AppDialogPresenter settingsPresenter) {
         VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
         VoxCodecPolicy policy = manager.getCodecPolicy();
-        VoxDeviceProfile profile = manager.getDeviceProfile(false);
 
         List<OptionItem> options = new ArrayList<>();
         for (VoxAudioCodecPreference pref : VoxAudioCodecPreference.values()) {
             options.add(UiOptionItem.from(
                     pref.getDisplayName(),
                     option -> {
-                        if (pref != VoxAudioCodecPreference.AUTO) {
-                            boolean dec = profile.isAudioDecodeSupported(pref.getId());
-                            boolean pt = profile.isAudioPassthroughSupported(pref.getId());
-                            if (!dec && !pt) {
-                                MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_unsupported_warning);
-                            }
-                        }
-                        manager.setCodecPolicy(new VoxCodecPolicy(
+                        VoxCodecPolicy proposed = new VoxCodecPolicy(
                                 policy.getMode(),
                                 policy.getMaxQualityHeight(),
                                 policy.getPreferredVideoCodec(),
                                 pref,
                                 policy.getPassthroughEnabled()
-                        ));
+                        );
+                        applyPolicyWithRiskCheck(proposed);
                     },
                     policy.getPreferredAudioCodec() == pref
             ));
@@ -173,13 +206,14 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
         options.add(UiOptionItem.from(
                 getContext().getString(R.string.vox_compatibility_passthrough),
                 option -> {
-                    manager.setCodecPolicy(new VoxCodecPolicy(
+                    VoxCodecPolicy proposed = new VoxCodecPolicy(
                             policy.getMode(),
                             policy.getMaxQualityHeight(),
                             policy.getPreferredVideoCodec(),
                             policy.getPreferredAudioCodec(),
                             option.isSelected()
-                    ));
+                    );
+                    applyPolicyWithRiskCheck(proposed);
                 },
                 policy.getPassthroughEnabled()
         ));
@@ -187,16 +221,40 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
         settingsPresenter.appendCheckedCategory(getContext().getString(R.string.vox_compatibility_passthrough), options);
     }
 
+    private void applyPolicyWithRiskCheck(VoxCodecPolicy proposedPolicy) {
+        if (getContext() == null) return;
+        VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
+        VoxDeviceProfile profile = manager.getDeviceProfile(false);
+        VoxRecommendedSettings recommended = manager.getRecommendedSettings(false);
+
+        VoxCompatibilityRisk risk = VoxCompatibilityRiskEvaluator.evaluate(proposedPolicy, recommended, profile);
+        if (risk != null) {
+            AppDialogPresenter presenter = AppDialogPresenter.instance(getContext());
+            String title = getContext().getString(R.string.vox_compatibility_risk_warning_title);
+            String message = getContext().getString(R.string.vox_compatibility_unsupported_warning) + "\n\n" + risk.getMessageRu();
+
+            List<OptionItem> options = new ArrayList<>();
+            options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_risk_continue), opt -> {
+                manager.setCodecPolicy(proposedPolicy);
+                presenter.closeDialog();
+                show();
+            }));
+
+            options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_risk_revert), opt -> {
+                manager.applyRecommendedSettings(recommended);
+                presenter.closeDialog();
+                show();
+            }));
+
+            presenter.appendStringsCategory(message, options);
+            presenter.showDialog(title);
+        } else {
+            manager.setCodecPolicy(proposedPolicy);
+        }
+    }
+
     private void appendActionButtons(AppDialogPresenter settingsPresenter) {
         VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
-
-        settingsPresenter.appendSingleButton(
-                UiOptionItem.from(getContext().getString(R.string.vox_compatibility_rescan), option -> {
-                    VoxDeviceProfile fresh = manager.getDeviceProfile(true);
-                    manager.setScanCompleted(true);
-                    VoxDiagnosticsPresenter.instance(getContext()).show();
-                })
-        );
 
         settingsPresenter.appendSingleButton(
                 UiOptionItem.from(getContext().getString(R.string.vox_compatibility_diagnostics), option -> {
@@ -208,6 +266,7 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
                 UiOptionItem.from(getContext().getString(R.string.vox_compatibility_reset), option -> {
                     manager.resetToDefaults();
                     MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_reset_done);
+                    show();
                 })
         );
     }

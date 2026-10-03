@@ -62,6 +62,12 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
 
         View rootView = viewHolder.view;
         rootView.setFocusable(true);
+        rootView.setOnFocusChangeListener((v, hasFocus) -> {
+            View lbl = v.findViewById(R.id.header_label);
+            if (lbl != null) {
+                lbl.setSelected(hasFocus);
+            }
+        });
 
         ImageView iconView = rootView.findViewById(R.id.header_icon);
         if (iconView != null) {
@@ -96,6 +102,10 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
     protected void onSelectLevelChanged(RowHeaderPresenter.ViewHolder holder) {
         holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
                 (1.0f - mUnselectedAlpha));
+        View lbl = holder.view.findViewById(R.id.header_label);
+        if (lbl != null) {
+            lbl.setSelected(holder.getSelectLevel() > 0.5f);
+        }
     }
 
     private final RequestListener<Drawable> mErrorListener = new RequestListener<Drawable>() {

@@ -37,6 +37,17 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
         return freshProfile
     }
 
+    fun getRecommendedSettings(forceRescan: Boolean = false): VoxRecommendedSettings {
+        val profile = getDeviceProfile(forceRescan)
+        val tuner = VoxDeviceAutoTuner(appContext)
+        return tuner.tune(profile)
+    }
+
+    fun applyRecommendedSettings(recommended: VoxRecommendedSettings) {
+        setCodecPolicy(recommended.toCodecPolicy())
+        setScanCompleted(true)
+    }
+
     fun getCodecPolicy(): VoxCodecPolicy {
         val mode = VoxCodecPolicyMode.fromId(votData.codecPolicyMode)
         val maxQuality = votData.maxQualityHeight
@@ -86,6 +97,7 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
     fun generateSafeDiagnosticReport(): String {
         val profile = getDeviceProfile(false)
         val policy = getCodecPolicy()
+        val recommended = getRecommendedSettings(false)
 
         val sb = StringBuilder()
         sb.append("=== SmartTube VOX — Диагностика совместимости ===\n\n")
@@ -93,7 +105,8 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
         sb.append("Платформа: ").append(profile.platform.displayName).append("\n")
         sb.append("Производитель: ").append(profile.manufacturer).append("\n")
         sb.append("Модель: ").append(profile.model).append("\n")
-        sb.append("Система: ").append(profile.osName).append(" ").append(profile.osVersion).append("\n\n")
+        sb.append("Система: ").append(profile.osName).append(" ").append(profile.osVersion).append("\n")
+        sb.append("Уровень устройства: ").append(recommended.tier.displayNameRu).append(" (").append(recommended.tier.descriptionRu).append(")\n\n")
 
         sb.append("--- ВИДЕОДЕКОДЕРЫ ---\n")
         val videoCodecs = listOf("avc", "vp9", "av1", "hevc")
@@ -126,19 +139,26 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
         sb.append("HDR10+: ${profile.display.hdr10Plus.labelRu}\n")
         sb.append("Dolby Vision: ${profile.display.dolbyVision.labelRu}\n\n")
 
-        sb.append("--- ТЕКУЩАЯ ПОЛИТИКА VOX ---\n")
+        sb.append("--- РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ VOX ---\n")
+        sb.append("Режим: ${recommended.policyMode.titleRu}\n")
+        sb.append("Разрешение: ${if (recommended.maxQualityHeight > 0) "${recommended.maxQualityHeight}p" else "Авто"}\n")
+        sb.append("Видеокодек: ${recommended.preferredVideoCodec.displayName}\n")
+        sb.append("Аудиокодек: ${recommended.preferredAudioCodec.displayName}\n")
+        sb.append("Passthrough: ${if (recommended.passthroughEnabled) "Включён" else "Выключен"}\n\n")
+
+        sb.append("--- АКТИВНЫЕ НАСТРОЙКИ ---\n")
         sb.append("Режим: ${policy.mode.titleRu}\n")
         sb.append("Макс. разрешение: ${if (policy.maxQualityHeight > 0) "${policy.maxQualityHeight}p" else "Авто"}\n")
         sb.append("Предпочитаемый видеокодек: ${policy.preferredVideoCodec.displayName}\n")
         sb.append("Предпочитаемый аудиокодек: ${policy.preferredAudioCodec.displayName}\n")
-        sb.append("Passthrough: ${if (policy.passthroughEnabled) "Включён" else "Выключен"}\n\n")
+        sb.append("Passthrough: ${if (policy.passthroughEnabled) "Включён" else "Выключен"}\n")
 
-        val recVideo = policy.selectVideoCodec(listOf("av1", "vp9", "avc"), profile)
-        val recAudio = policy.selectAudioCodec(listOf("eac3", "ac3", "opus", "aac"), profile)
-        sb.append("--- РЕКОМЕНДАЦИЯ VOX ДЛЯ УСТРОЙСТВА ---\n")
-        sb.append("Видеокодек: ${recVideo.selected?.uppercase() ?: "AUTO"}\n")
-        sb.append("Аудиокодек: ${recAudio.selected?.uppercase() ?: "AUTO"}\n")
-        sb.append("Резервный аудиокодек: AAC\n")
+        val risk = VoxCompatibilityRiskEvaluator.evaluate(policy, recommended, profile)
+        if (risk != null) {
+            sb.append("\n⚠️ ВНИМАНИЕ: ${risk.messageRu}\n")
+        } else {
+            sb.append("\n✓ Параметры полностью согласованы с возможностями устройства.\n")
+        }
 
         return sb.toString()
     }

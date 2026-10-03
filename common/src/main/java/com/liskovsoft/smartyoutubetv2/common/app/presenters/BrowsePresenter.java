@@ -319,12 +319,31 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
                 video.percentWatched = 0;
             } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED) {
                 long fileSize = coordinator.getStorage().getPublishedFileSize(job.getPublishedUri());
-                String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.formatSize(fileSize);
+                String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadSizeFormatter.formatBytes(fileSize);
                 detail = (item.getActualQuality() != null ? item.getActualQuality() + " · " : "") + sizeStr + " · " + item.getTranslationMode();
                 video.percentWatched = 0;
             } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.FAILED) {
-                detail = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.error(job.getErrorCode());
+                String errorReason = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.error(job.getErrorCode());
+                detail = "Ошибка загрузки · " + errorReason;
                 video.percentWatched = 0;
+            } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.CANCELLED) {
+                detail = "Отменено";
+                video.percentWatched = 0;
+            } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.IDLE) {
+                detail = "В очереди";
+                video.percentWatched = 0;
+            } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.MUXING ||
+                    job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.READY_FOR_MUX ||
+                    job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.MUXED ||
+                    job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.PUBLISHING) {
+                detail = item.getPercent() != null ? "Обработка… " + item.getPercent() + "%" : "Обработка…";
+                video.percentWatched = item.getPercent() != null ? item.getPercent() : 99;
+            } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.DOWNLOADING_VIDEO ||
+                    job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO ||
+                    job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO) {
+                detail = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadSizeFormatter.formatActiveProgress(
+                        item.getDownloadedBytes(), item.getTotalBytes(), item.getPercent());
+                video.percentWatched = item.getPercent() != null ? item.getPercent() : 1;
             } else if (item.getPercent() != null) {
                 detail = item.getStage() + " · " + item.getPercent() + "%";
                 video.percentWatched = item.getPercent();
