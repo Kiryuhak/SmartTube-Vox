@@ -120,6 +120,29 @@ public class ChatController extends BasePlayerController {
 
             settingsPresenter.appendRadioCategory(chatCategoryTitle, options);
 
+            List<OptionItem> modeOptions = new ArrayList<>();
+            modeOptions.add(UiOptionItem.from(getContext().getString(R.string.chat_mode_top),
+                    optionItem -> {
+                        getPlayerData().setLiveChatMode(com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.CHAT_MODE_TOP);
+                        if (getPlayerData().isLiveChatEnabled()) {
+                            openLiveChat();
+                        }
+                        settingsPresenter.closeDialog();
+                    },
+                    getPlayerData().getLiveChatMode() == com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.CHAT_MODE_TOP));
+
+            modeOptions.add(UiOptionItem.from(getContext().getString(R.string.chat_mode_all),
+                    optionItem -> {
+                        getPlayerData().setLiveChatMode(com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.CHAT_MODE_LIVE);
+                        if (getPlayerData().isLiveChatEnabled()) {
+                            openLiveChat();
+                        }
+                        settingsPresenter.closeDialog();
+                    },
+                    getPlayerData().getLiveChatMode() == com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.CHAT_MODE_LIVE));
+
+            settingsPresenter.appendRadioCategory(getContext().getString(R.string.chat_mode_title), modeOptions);
+
             settingsPresenter.showDialog(chatCategoryTitle);
         }
     }

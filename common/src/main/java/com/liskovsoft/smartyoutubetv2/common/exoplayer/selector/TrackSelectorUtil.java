@@ -17,6 +17,11 @@ public class TrackSelectorUtil {
     private static final String CODEC_PREFIX_VP09 = "vp09";
     private static final String CODEC_PREFIX_MP4A = "mp4a";
     private static final String CODEC_PREFIX_VORBIS = "vorbis";
+    private static final String CODEC_PREFIX_AC3 = "ac-3";
+    private static final String CODEC_PREFIX_AC3_ALT = "ac3";
+    private static final String CODEC_PREFIX_EAC3 = "ec-3";
+    private static final String CODEC_PREFIX_EAC3_ALT = "eac3";
+    private static final String CODEC_PREFIX_OPUS = "opus";
     private static final String CODEC_PREFIX_VP9_HDR = "vp9.2";
     private static final String CODEC_SUFFIX_AV1_HDR = "10.0.110.09.18.09.0";
     private static final String CODEC_SUFFIX_AV1_HDR2 = "10.0.110.09.16.09.0";
@@ -170,11 +175,30 @@ public class TrackSelectorUtil {
     }
 
     public static String extractCodec(Format format) {
-        if (format.codecs == null) {
+        if (format == null) {
             return "";
         }
 
-        return codecNameShort(format.codecs);
+        if (format.codecs != null) {
+            return codecNameShort(format.codecs);
+        }
+
+        if (format.sampleMimeType != null) {
+            if (MimeTypes.AUDIO_AC3.equalsIgnoreCase(format.sampleMimeType)) {
+                return "ac3";
+            }
+            if (MimeTypes.AUDIO_E_AC3.equalsIgnoreCase(format.sampleMimeType) || MimeTypes.AUDIO_E_AC3_JOC.equalsIgnoreCase(format.sampleMimeType)) {
+                return "eac3";
+            }
+            if (MimeTypes.AUDIO_OPUS.equalsIgnoreCase(format.sampleMimeType)) {
+                return "opus";
+            }
+            if (MimeTypes.AUDIO_AAC.equalsIgnoreCase(format.sampleMimeType)) {
+                return "mp4a";
+            }
+        }
+
+        return "";
     }
 
     public static String extractBitrate(Format format, int places) {
@@ -189,7 +213,7 @@ public class TrackSelectorUtil {
 
         String codec = codecNameFull.toLowerCase();
 
-        String[] codecNames = {CODEC_PREFIX_AV1, CODEC_PREFIX_AVC, CODEC_PREFIX_VP9, CODEC_PREFIX_VP09, CODEC_PREFIX_MP4A, CODEC_PREFIX_VORBIS};
+        String[] codecNames = {CODEC_PREFIX_AV1, CODEC_PREFIX_AVC, CODEC_PREFIX_VP9, CODEC_PREFIX_VP09, CODEC_PREFIX_MP4A, CODEC_PREFIX_VORBIS, CODEC_PREFIX_EAC3, CODEC_PREFIX_EAC3_ALT, CODEC_PREFIX_AC3, CODEC_PREFIX_AC3_ALT, CODEC_PREFIX_OPUS};
 
         for (String codecName : codecNames) {
             if (codec.contains(codecName)) {
@@ -210,6 +234,14 @@ public class TrackSelectorUtil {
                 return CODEC_SHORT_AV1;
             case CODEC_PREFIX_VP09:
                 return CODEC_PREFIX_VP9;
+            case CODEC_PREFIX_EAC3:
+            case CODEC_PREFIX_EAC3_ALT:
+                return "eac3";
+            case CODEC_PREFIX_AC3:
+            case CODEC_PREFIX_AC3_ALT:
+                return "ac3";
+            case CODEC_PREFIX_OPUS:
+                return "opus";
         }
 
         return shortCodecName;

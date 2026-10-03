@@ -876,7 +876,7 @@ public class VoiceTranslateController extends BasePlayerController {
         String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
         String videoTitle = getPlayer().getVideo().getTitle();
         TrackInfo audioInfo = resolveAudioInfo();
-        String sourceLang = audioInfo != null && audioInfo.langCode != null ? audioInfo.langCode : "en";
+        String sourceLang = audioInfo != null && audioInfo.langCode != null && !audioInfo.langCode.isEmpty() ? audioInfo.langCode : "";
 
         YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
                 videoId,
@@ -1164,7 +1164,13 @@ public class VoiceTranslateController extends BasePlayerController {
             if (wasUserArmed) {
                 showBriefErrorButtonState();
                 if (progressOverlay() != null) {
-                    progressOverlay().showError(getActivity(), getContext() != null ? getContext().getString(R.string.vot_error_generic) : null);
+                    VotErrorCategory category = VotErrorCategory.fromMarker(errorMsg);
+                    if (category == VotErrorCategory.TIMEOUT) {
+                        progressOverlay().showTimeout(getActivity());
+                    } else {
+                        String msg = getContext() != null ? getContext().getString(category.getMessageResId()) : null;
+                        progressOverlay().showError(getActivity(), msg);
+                    }
                 }
             }
         }
