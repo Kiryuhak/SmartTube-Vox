@@ -83,6 +83,8 @@ public class AppDataSourceManager {
             settingItems.add(new SettingsItem(
                     context.getString(R.string.header_downloaded_videos), () -> VoxDownloadManager.show(context), R.drawable.icon_download));
             settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_device_compatibility), () -> com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxCompatibilitySettingsPresenter.instance(context).show(), R.drawable.settings_player));
+            settingItems.add(new SettingsItem(
                     context.getString(R.string.settings_reset), () -> ResetSettingsPresenter.instance(context).show(), R.drawable.settings_reset));
         }
 

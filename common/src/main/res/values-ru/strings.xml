@@ -897,4 +897,29 @@
         <item quantity="many">%s секунд</item>
         <item quantity="other">%s секунды</item>
     </plurals>
+
+    <!-- VOX Device Compatibility -->
+    <string name="settings_device_compatibility">Совместимость устройства</string>
+    <string name="vox_compatibility_title">Проверка совместимости VOX</string>
+    <string name="vox_compatibility_message">SmartTube VOX может автоматически подобрать видео и аудиоформаты, которые лучше подходят вашему устройству.</string>
+    <string name="vox_compatibility_btn_auto">Проверить автоматически</string>
+    <string name="vox_compatibility_btn_manual">Настроить вручную</string>
+    <string name="vox_compatibility_btn_later">Позже</string>
+    <string name="vox_compatibility_scan_completed_title">Проверка завершена</string>
+    <string name="vox_compatibility_mode">Режим совместимости</string>
+    <string name="vox_compatibility_mode_auto">Автоматически</string>
+    <string name="vox_compatibility_mode_max_quality">Максимальное качество</string>
+    <string name="vox_compatibility_mode_max_compatibility">Максимальная совместимость</string>
+    <string name="vox_compatibility_mode_custom">Пользовательский</string>
+    <string name="vox_compatibility_rescan">Проверить устройство заново</string>
+    <string name="vox_compatibility_diagnostics">Диагностика совместимости</string>
+    <string name="vox_compatibility_max_quality">Максимальное качество</string>
+    <string name="vox_compatibility_preferred_video">Предпочитаемый видеокодек</string>
+    <string name="vox_compatibility_preferred_audio">Предпочитаемый аудиокодек</string>
+    <string name="vox_compatibility_passthrough">Аудио Passthrough</string>
+    <string name="vox_compatibility_reset">Сбросить настройки совместимости</string>
+    <string name="vox_compatibility_reset_done">Настройки совместимости сброшены</string>
+    <string name="vox_compatibility_unsupported_warning">Формат не заявлен как поддерживаемый устройством. Воспроизведение может не работать.</string>
+    <string name="vox_diagnostics_copy">Скопировать диагностику</string>
+    <string name="vox_diagnostics_copied">Диагностика скопирована в буфер обмена</string>
 </resources>
