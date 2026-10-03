@@ -226,7 +226,7 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
             return;
         }
 
-        if (mVideo == null || !mVideo.hasVideo() || mVideo.isPlaylistAsChannel() || mVideo.isLive || mVideo.isUpcoming) {
+        if (mVideo == null || !mVideo.hasVideo() || mVideo.isPlaylistAsChannel() || mVideo.isLive || mVideo.isUpcoming || mVideo.isLocal || mVideo.isDownloadedTranslated()) {
             return;
         }
 

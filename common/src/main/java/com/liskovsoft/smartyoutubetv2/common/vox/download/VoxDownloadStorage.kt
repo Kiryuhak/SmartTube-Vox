@@ -125,7 +125,8 @@ class VoxDownloadStorage(private val context: Context) {
         errorMessage: String? = null,
         publishedUri: String? = null,
         publishedFilePath: String? = null,
-        actualVideoHeight: Int = 0
+        actualVideoHeight: Int = 0,
+        translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
     ) {
         val jobDir = getJobDir(request.downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
@@ -136,6 +137,7 @@ class VoxDownloadStorage(private val context: Context) {
             put("videoTitle", request.videoTitle)
             put("qualityPreference", request.qualityPreference.name)
             put("translationMode", request.translationMode.name)
+            put("translationState", translationState.name)
             put("createdAt", request.createdAt)
             put("state", state.name)
             if (actualVideoHeight > 0) put("actualVideoHeight", actualVideoHeight)
@@ -244,6 +246,8 @@ class VoxDownloadStorage(private val context: Context) {
 
             val rawPublishedUri = if (json.has("publishedUri")) json.getString("publishedUri") else null
             val rawPublishedFilePath = if (json.has("publishedFilePath")) json.getString("publishedFilePath") else null
+            val rawTranslationState = if (json.has("translationState")) json.getString("translationState") else null
+            val translationState = VoxDownloadTranslationState.fromString(rawTranslationState)
 
             StoredJobData(
                 request = req,
@@ -253,6 +257,7 @@ class VoxDownloadStorage(private val context: Context) {
                 publishedUri = rawPublishedUri,
                 publishedFilePath = rawPublishedFilePath,
                 actualVideoHeight = json.optInt("actualVideoHeight", 0),
+                translationState = translationState,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
                 translatedAudioProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, tBytes, tTotal, tState)
@@ -384,6 +389,7 @@ data class StoredJobData(
     val publishedUri: String? = null,
     val publishedFilePath: String? = null,
     val actualVideoHeight: Int = 0,
+    val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,
     val translatedAudioProgress: VoxTrackProgress

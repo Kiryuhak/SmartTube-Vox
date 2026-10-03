@@ -11,6 +11,23 @@ enum class VoxTranslationMode {
 }
 
 /**
+ * Состояние перевода скачанного видео.
+ */
+enum class VoxDownloadTranslationState {
+    NONE,
+    DOWNLOADED_TRANSLATED,
+    UNKNOWN;
+
+    companion object {
+        @JvmStatic
+        fun fromString(value: String?): VoxDownloadTranslationState {
+            if (value == null) return UNKNOWN
+            return values().firstOrNull { it.name.equals(value, ignoreCase = true) } ?: UNKNOWN
+        }
+    }
+}
+
+/**
  * Предпочтительное качество видео для скачивания.
  */
 enum class VoxQualityPreference(val label: String, val maxResolution: Int) {
@@ -119,6 +136,7 @@ data class VoxDownloadProgress(
     val publishBytesProcessed: Long = 0L,
     val publishTotalBytes: Long = 0L,
     val publishPercent: Int = 0,
+    val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.UNKNOWN,
     val publishedUri: String? = null,
     val publishedFilePath: String? = null,
     val errorMessage: String? = null,

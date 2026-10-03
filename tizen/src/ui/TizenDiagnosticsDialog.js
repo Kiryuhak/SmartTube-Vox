@@ -43,6 +43,37 @@ class TizenDiagnosticsDialog {
     return lines.join('\n');
   }
 
+  generateReportJson(profile, policy) {
+    const recVideo = policy.selectVideoCodec(['av1', 'vp9', 'avc'], profile);
+    const recAudio = policy.selectAudioCodec(['eac3', 'ac3', 'opus', 'aac'], profile);
+
+    return {
+      schema: 'vox-diagnostic-report-v1',
+      timestamp: Date.now(),
+      appVersion: '32.56-vox.7-dev',
+      appVersionCode: 2446007,
+      platform: profile.platform || 'Samsung Tizen',
+      manufacturer: profile.manufacturer || 'Samsung',
+      model: profile.model || 'TizenSmartTV',
+      osName: profile.osName || 'Tizen',
+      osVersion: profile.osVersion || '7.0',
+      sdkInt: 0,
+      deviceTier: 'Samsung Tizen Smart TV',
+      videoCodecs: profile.videoCodecs || {},
+      audioCodecs: profile.audioCodecs || {},
+      display: profile.display || {},
+      currentPolicy: {
+        mode: policy.mode || 'AUTO',
+        preferredVideoCodec: policy.preferredVideoCodec || 'AUTO',
+        preferredAudioCodec: policy.preferredAudioCodec || 'AUTO',
+      },
+      recommendedSettings: {
+        preferredVideoCodec: recVideo.selected || 'AUTO',
+        preferredAudioCodec: recAudio.selected || 'AUTO',
+      },
+    };
+  }
+
   render(profile, policy) {
     if (!this.container) return;
 

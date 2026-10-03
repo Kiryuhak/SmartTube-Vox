@@ -260,7 +260,7 @@ public class VideoLoaderController extends BasePlayerController {
             return false;
         }
         String url = video.mediaUrl.trim();
-        return url.startsWith("content://") || url.startsWith("file://");
+        return url.startsWith("content://") || url.startsWith("file://") || url.startsWith("/");
     }
 
     private void loadFormatInfo(Video video) {
@@ -271,9 +271,15 @@ public class VideoLoaderController extends BasePlayerController {
         // Fix no progress on next video (the engine may still buffering a bit)
         //getPlayer().showProgressBar(true);
         if (isValidLocalPlayback(video)) {
-            getPlayer().openUrlList(java.util.Collections.singletonList(video.mediaUrl));
+            String mediaUrl = video.mediaUrl.trim();
+            if (mediaUrl.startsWith("/")) {
+                mediaUrl = android.net.Uri.fromFile(new java.io.File(mediaUrl)).toString();
+                video.mediaUrl = mediaUrl;
+            }
+            getPlayer().openUrlList(java.util.Collections.singletonList(mediaUrl));
             getPlayer().setTitle(video.getTitle());
             getPlayer().showProgressBar(false);
+            getPlayer().showBackground(null);
             return;
         }
 

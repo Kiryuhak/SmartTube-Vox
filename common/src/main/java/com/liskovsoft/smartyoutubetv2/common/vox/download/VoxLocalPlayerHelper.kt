@@ -16,16 +16,24 @@ object VoxLocalPlayerHelper {
             context = context,
             videoId = job.request.videoId,
             title = job.request.videoTitle,
-            mediaUri = uri
+            mediaUri = uri,
+            translationState = job.translationState.name
         )
     }
 
     @JvmStatic
-    fun playLocalVideo(context: Context, videoId: String, title: String, mediaUri: String) {
+    fun playLocalVideo(
+        context: Context,
+        videoId: String,
+        title: String,
+        mediaUri: String,
+        translationState: String? = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED.name
+    ) {
         val video = Video.from(videoId)
         video.title = title
         video.mediaUrl = mediaUri
         video.isLocal = true
+        video.translationState = translationState ?: VoxDownloadTranslationState.DOWNLOADED_TRANSLATED.name
 
         PlaybackPresenter.instance(context).openVideo(video)
     }

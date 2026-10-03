@@ -1008,4 +1008,11 @@
     <string name="vox_compatibility_unsupported_warning">Format is not declared as supported by this device. Playback may not work.</string>
     <string name="vox_diagnostics_copy">Copy diagnostics</string>
     <string name="vox_diagnostics_copied">Diagnostics copied to clipboard</string>
+    <string name="vox_diagnostics_view">View report</string>
+    <string name="vox_diagnostics_send">Send to developers</string>
+    <string name="vox_diagnostics_send_consent_title">Send Anonymous Report</string>
+    <string name="vox_diagnostics_send_consent_desc">Send anonymous compatibility report to SmartTube VOX developers?\n\nThe report contains only technical decoder, display and device model parameters. It does NOT contain personal data, passwords or authorization tokens.</string>
+    <string name="vox_diagnostics_send_confirm">Send</string>
+    <string name="vox_diagnostics_sent_success">Report sent successfully (ID: %s)</string>
+    <string name="vox_diagnostics_send_failed">Failed to send report: %s</string>
 </resources>

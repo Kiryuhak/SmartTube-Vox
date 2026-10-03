@@ -90,6 +90,7 @@ public final class Video {
     public boolean isPending;
     public String mediaUrl;
     public boolean isLocal;
+    public String translationState; // "NONE", "DOWNLOADED_TRANSLATED", "UNKNOWN"
     public boolean finishOnEnded;
     public boolean incognito;
     public String likeCount;
@@ -193,6 +194,9 @@ public final class Video {
         video.clickTrackingParams = item.clickTrackingParams;
         video.mediaItem = item.mediaItem;
         video.group = item.group;
+        video.isLocal = item.isLocal;
+        video.mediaUrl = item.mediaUrl;
+        video.translationState = item.translationState;
 
         return video;
     }
@@ -839,12 +843,17 @@ public final class Video {
         video.durationMs = durationMs;
         video.mediaUrl = mediaUrl;
         video.isLocal = isLocal;
+        video.translationState = translationState;
 
         if (getGroup() != null) {
             video.setGroup(getGroup().copy()); // Needed for proper multi row fragments sync (row id == group id)
         }
 
         return video;
+    }
+
+    public boolean isDownloadedTranslated() {
+        return "DOWNLOADED_TRANSLATED".equals(translationState) || (isLocal && !"NONE".equals(translationState));
     }
 
     public void setDurationMs(long durationMs) {
