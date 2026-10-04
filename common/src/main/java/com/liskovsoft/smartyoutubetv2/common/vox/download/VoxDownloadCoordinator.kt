@@ -332,6 +332,11 @@ class VoxDownloadCoordinator(
             } else null
             if (videoStream != null && videoStream.height > 0) {
                 job.actualVideoHeight = videoStream.height
+                job.actualQuality = "${videoStream.height}p"
+                if (job.request.qualityPreference != VoxQualityPreference.QUALITY_AUTO &&
+                    videoStream.height < job.request.qualityPreference.maxResolution) {
+                    job.fallbackReason = "Качество снижено до ${videoStream.height}p (запрошено ${job.request.qualityPreference.label})"
+                }
                 repository.persistJob(job)
             }
 
