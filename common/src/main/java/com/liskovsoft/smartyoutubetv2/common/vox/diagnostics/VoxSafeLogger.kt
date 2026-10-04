@@ -95,11 +95,15 @@ object VoxSafeLogger {
         } else null
 
         // System Logcat routing (for developer console)
-        when (level) {
-            VoxLogLevel.DEBUG -> Log.d(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
-            VoxLogLevel.INFO -> Log.i(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
-            VoxLogLevel.WARNING -> Log.w(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
-            VoxLogLevel.ERROR -> Log.e(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
+        try {
+            when (level) {
+                VoxLogLevel.DEBUG -> Log.d(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
+                VoxLogLevel.INFO -> Log.i(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
+                VoxLogLevel.WARNING -> Log.w(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
+                VoxLogLevel.ERROR -> Log.e(TAG, "[$category][$sanitizedCode] $sanitizedMsg")
+            }
+        } catch (ignored: Throwable) {
+            // JVM unit test environment fallback
         }
 
         // Production bounded disk store (INFO, WARNING, ERROR)
