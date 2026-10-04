@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { handleRequest } from '../src/diagnostics.mjs';
+import test, { beforeEach } from 'node:test';
+import { handleRequest, resetRateLimiter, isExpiredReport, DEFAULT_RETENTION_MS } from '../src/diagnostics.mjs';
 
 const validReportV1 = {
   schema: 'vox-diagnostic-report-v1',
@@ -195,4 +195,31 @@ test('PUT /v1/report returns 405 Method Not Allowed', async () => {
   const req = createRequest(validReportV1, { method: 'PUT' });
   const res = await handleRequest(req);
   assert.equal(res.status, 405);
+});
+
+test('POST /v1/report applies rate limiting and returns 429 when threshold is exceeded', async () => {
+  resetRateLimiter();
+  for (let i = 0; i < 20; i++) {
+    const req = createRequest(validReportV1);
+    const res = await handleRequest(req);
+    assert.equal(res.status, 201);
+  }
+  // 21st request should be rate limited
+  const reqBlocked = createRequest(validReportV1);
+  const resBlocked = await handleRequest(reqBlocked);
+  assert.equal(resBlocked.status, 429);
+  const json = await resBlocked.json();
+  assert.equal(json.error, 'rate_limited');
+});
+
+test('isExpiredReport correctly identifies reports older than 30 days', () => {
+  const now = Date.now();
+  const fresh = now - 1000;
+  const old29Days = now - 29 * 24 * 60 * 60 * 1000;
+  const old31Days = now - 31 * 24 * 60 * 60 * 1000;
+
+  assert.equal(isExpiredReport(fresh), false);
+  assert.equal(isExpiredReport(old29Days), false);
+  assert.equal(isExpiredReport(old31Days), true);
+  assert.equal(isExpiredReport(null), false);
 });

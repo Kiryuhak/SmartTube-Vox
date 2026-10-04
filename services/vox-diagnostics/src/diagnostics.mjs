@@ -4,6 +4,56 @@ const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
 const SUPPORTED_SCHEMAS = ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2'];
 const MAX_EVENTS_COUNT = 50;
 const MAX_EVENT_MESSAGE_LEN = 500;
+export const DEFAULT_RETENTION_DAYS = 30;
+export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 20;
+
+// Ephemeral in-memory sliding window rate limiter (hashes source, stores no raw IP)
+const rateLimitMap = new Map();
+
+export function resetRateLimiter() {
+  rateLimitMap.clear();
+}
+
+export function isExpiredReport(reportTimestamp, retentionMs = DEFAULT_RETENTION_MS) {
+  if (!reportTimestamp || typeof reportTimestamp !== 'number') return false;
+  return Date.now() - reportTimestamp > retentionMs;
+}
+
+function checkRateLimit(request) {
+  const forwarded = request.headers.get('x-forwarded-for') || '';
+  const realIp = request.headers.get('x-real-ip') || '';
+  const userAgent = request.headers.get('user-agent') || 'anonymous';
+  const rawKey = `${forwarded}:${realIp}:${userAgent}`;
+  // One-way hash so raw IP is never kept in memory
+  const bucketKey = crypto.createHash('sha256').update(rawKey).digest('hex').substring(0, 16);
+
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(bucketKey) || [];
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+
+  if (recent.length >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+
+  recent.push(now);
+  rateLimitMap.set(bucketKey, recent);
+
+  // Periodic cleanup of stale rate-limit buckets
+  if (rateLimitMap.size > 1000) {
+    for (const [key, list] of rateLimitMap.entries()) {
+      const active = list.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+      if (active.length === 0) {
+        rateLimitMap.delete(key);
+      } else {
+        rateLimitMap.set(key, active);
+      }
+    }
+  }
+
+  return true;
+}
 
 const BANNED_PATTERNS = [
   'password',
@@ -78,6 +128,13 @@ export async function handleRequest(request) {
 
   if (path !== '/v1/report' && path !== '/report' && path !== '/') {
     return jsonResponse({ error: 'not_found', message: 'Endpoint not found' }, 404);
+  }
+
+  if (!checkRateLimit(request)) {
+    return jsonResponse({
+      error: 'rate_limited',
+      message: 'Too many diagnostic reports received from this source, please try again later',
+    }, 429);
   }
 
   let text;
