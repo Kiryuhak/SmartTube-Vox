@@ -90,6 +90,12 @@ class TizenTranslatedAudioController {
 
     if (drift > this.driftThresholdSec) {
       this.seek(videoPos);
+      if (typeof require !== 'undefined') {
+        try {
+          const { safeLogger, VoxLogCategory, VoxLogCode } = require('../diagnostics/TizenSafeLogger');
+          safeLogger.w(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATED_AUDIO_SYNC_WARNING, `Рассинхрон аудио перевода: ${Math.round(drift * 1000)}ms`);
+        } catch (ignored) {}
+      }
       return { inSync: false, driftSec: drift, resynced: true };
     }
 

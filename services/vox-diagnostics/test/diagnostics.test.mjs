@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { handleRequest } from '../src/diagnostics.mjs';
 
-const validReport = {
+const validReportV1 = {
   schema: 'vox-diagnostic-report-v1',
   timestamp: Date.now(),
   appVersion: '32.56-vox.7-dev',
@@ -44,6 +44,19 @@ const validReport = {
   },
 };
 
+const validReportV2 = {
+  ...validReportV1,
+  schema: 'vox-diagnostic-report-v2',
+  safeRecentEvents: Array.from({ length: 50 }, (_, i) => ({
+    timestamp: Date.now() - (50 - i) * 1000,
+    level: 'INFO',
+    category: 'DOWNLOAD',
+    code: 'DOWNLOAD_STARTED',
+    message: `Safe download event #${i + 1}`,
+    context: { stage: 'INIT', mode: 'DIRECT' },
+  })),
+};
+
 function createRequest(body, options = {}) {
   const url = options.url ?? 'https://diagnostics.example.com/v1/report';
   const method = options.method ?? 'POST';
@@ -62,11 +75,11 @@ test('GET /healthz returns 200 healthy status', async () => {
   assert.equal(res.status, 200);
   const json = await res.json();
   assert.equal(json.status, 'healthy');
-  assert.equal(json.schema, 'vox-diagnostic-report-v1');
+  assert.deepEqual(json.supportedSchemas, ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2']);
 });
 
-test('POST /v1/report accepts valid report and returns 201 with VOX- prefix reportId', async () => {
-  const req = createRequest(validReport);
+test('POST /v1/report accepts valid v1 report and returns 201 with VOX- prefix reportId', async () => {
+  const req = createRequest(validReportV1);
   const res = await handleRequest(req);
   assert.equal(res.status, 201);
   const json = await res.json();
@@ -74,8 +87,36 @@ test('POST /v1/report accepts valid report and returns 201 with VOX- prefix repo
   assert.match(json.reportId, /^VOX-[A-Z0-9]+$/);
 });
 
+test('POST /v1/report accepts valid v2 report with 50 safeRecentEvents', async () => {
+  const req = createRequest(validReportV2);
+  const res = await handleRequest(req);
+  assert.equal(res.status, 201);
+  const json = await res.json();
+  assert.equal(json.status, 'ok');
+  assert.equal(json.schema, 'vox-diagnostic-report-v2');
+  assert.match(json.reportId, /^VOX-[A-Z0-9]+$/);
+});
+
+test('POST /v1/report rejects v2 report exceeding 50 events with 400', async () => {
+  const tooManyEventsReport = {
+    ...validReportV2,
+    safeRecentEvents: Array.from({ length: 51 }, (_, i) => ({
+      timestamp: Date.now(),
+      level: 'INFO',
+      category: 'DOWNLOAD',
+      code: 'DOWNLOAD_STARTED',
+      message: `Event #${i}`,
+    })),
+  };
+  const req = createRequest(tooManyEventsReport);
+  const res = await handleRequest(req);
+  assert.equal(res.status, 400);
+  const json = await res.json();
+  assert.equal(json.error, 'too_many_events');
+});
+
 test('POST /v1/report rejects unsupported schema with 400', async () => {
-  const invalid = { ...validReport, schema: 'vox-report-v0-legacy' };
+  const invalid = { ...validReportV1, schema: 'vox-report-v0-legacy' };
   const req = createRequest(invalid);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
@@ -84,7 +125,7 @@ test('POST /v1/report rejects unsupported schema with 400', async () => {
 });
 
 test('POST /v1/report rejects payload containing top-level tokens with 400', async () => {
-  const dirty = { ...validReport, access_token: 'ya29.secret' };
+  const dirty = { ...validReportV1, access_token: 'ya29.secret' };
   const req = createRequest(dirty);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
@@ -94,9 +135,9 @@ test('POST /v1/report rejects payload containing top-level tokens with 400', asy
 
 test('POST /v1/report rejects payload containing nested passwords or cookies with 400', async () => {
   const dirty = {
-    ...validReport,
+    ...validReportV1,
     display: {
-      ...validReport.display,
+      ...validReportV1.display,
       session_cookie: 'secret-id',
     },
   };
@@ -107,8 +148,29 @@ test('POST /v1/report rejects payload containing nested passwords or cookies wit
   assert.equal(json.error, 'forbidden_data');
 });
 
+test('POST /v1/report rejects forbidden keys inside safeRecentEvents context', async () => {
+  const dirty = {
+    ...validReportV2,
+    safeRecentEvents: [
+      {
+        timestamp: Date.now(),
+        level: 'ERROR',
+        category: 'YANDEX_AUTH',
+        code: 'AUTH_FAILED',
+        message: 'Auth error',
+        context: { refresh_token: 'secret123' },
+      },
+    ],
+  };
+  const req = createRequest(dirty);
+  const res = await handleRequest(req);
+  assert.equal(res.status, 400);
+  const json = await res.json();
+  assert.equal(json.error, 'forbidden_data');
+});
+
 test('POST /v1/report rejects missing required device fields with 400', async () => {
-  const missing = { ...validReport };
+  const missing = { ...validReportV1 };
   delete missing.model;
   const req = createRequest(missing);
   const res = await handleRequest(req);
@@ -119,8 +181,8 @@ test('POST /v1/report rejects missing required device fields with 400', async ()
 
 test('POST /v1/report rejects oversized payload with 413', async () => {
   const bigPayload = {
-    ...validReport,
-    largeData: 'A'.repeat(70 * 1024),
+    ...validReportV1,
+    largeData: 'A'.repeat(260 * 1024),
   };
   const req = createRequest(bigPayload);
   const res = await handleRequest(req);
@@ -130,7 +192,7 @@ test('POST /v1/report rejects oversized payload with 413', async () => {
 });
 
 test('PUT /v1/report returns 405 Method Not Allowed', async () => {
-  const req = createRequest(validReport, { method: 'PUT' });
+  const req = createRequest(validReportV1, { method: 'PUT' });
   const res = await handleRequest(req);
   assert.equal(res.status, 405);
 });

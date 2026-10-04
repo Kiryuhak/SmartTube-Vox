@@ -15,12 +15,28 @@ import org.robolectric.RuntimeEnvironment
 class VoxDiagnosticReportTest {
 
     @Test
-    fun testDiagnosticReportCreationAndJsonSchema() {
+    fun testDiagnosticReportCreationAndJsonSchemaV2() {
         val context = RuntimeEnvironment.getApplication()
-        val report = VoxDiagnosticReport.create(context, "VOX-TEST01")
+        val store = VoxLogStore.instance(context)
+        store.clearLogs()
+
+        // Populate 50 safe events
+        for (i in 1..50) {
+            store.addEvent(
+                VoxLogEvent(
+                    timestamp = System.currentTimeMillis() + i,
+                    level = VoxLogLevel.INFO,
+                    category = VoxLogCategory.DOWNLOAD,
+                    code = "DOWNLOAD_STEP_$i",
+                    message = "Safe download step $i"
+                )
+            )
+        }
+
+        val report = VoxDiagnosticReport.create(context, "VOX-TEST01", true)
 
         assertNotNull(report)
-        assertEquals("vox-diagnostic-report-v1", report.schema)
+        assertEquals("vox-diagnostic-report-v2", report.schema)
         assertEquals("VOX-TEST01", report.reportId)
         assertTrue(report.appVersion.isNotBlank())
         assertTrue(report.appVersionCode > 0)
@@ -30,10 +46,11 @@ class VoxDiagnosticReportTest {
         assertNotNull(report.display)
         assertNotNull(report.currentPolicy)
         assertNotNull(report.recommendedSettings)
+        assertEquals(50, report.safeRecentEvents.size)
 
         val jsonString = report.toJson()
         val json = JSONObject(jsonString)
-        assertEquals("vox-diagnostic-report-v1", json.getString("schema"))
+        assertEquals("vox-diagnostic-report-v2", json.getString("schema"))
         assertEquals("VOX-TEST01", json.getString("reportId"))
         assertEquals(report.appVersion, json.getString("appVersion"))
         assertTrue(json.has("videoCodecs"))
@@ -41,6 +58,8 @@ class VoxDiagnosticReportTest {
         assertTrue(json.has("display"))
         assertTrue(json.has("currentPolicy"))
         assertTrue(json.has("recommendedSettings"))
+        assertTrue(json.has("safeRecentEvents"))
+        assertEquals(50, json.getJSONArray("safeRecentEvents").length())
 
         // Guaranteed privacy: No PII, no credentials
         assertTrue(VoxDiagnosticSanitizer.isSafePayload(jsonString))
@@ -52,7 +71,7 @@ class VoxDiagnosticReportTest {
         val report = VoxDiagnosticReport.create(context, "VOX-TEST02")
         val formatted = report.toFormattedText()
 
-        assertTrue(formatted.contains("=== SmartTube VOX — Диагностика совместимости ==="))
+        assertTrue(formatted.contains("=== SmartTube VOX — Диагностический отчёт ==="))
         assertTrue(formatted.contains("ID отчёта: VOX-TEST02"))
         assertTrue(formatted.contains("--- ВИДЕОДЕКОДЕРЫ ---"))
         assertTrue(formatted.contains("--- АУДИОДЕКОДЕРЫ И PASSTHROUGH ---"))

@@ -619,11 +619,48 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             } else {
                 Log.w(TAG, "LOCAL_PLAYBACK_FAIL: job not found: " + downloadId);
             }
-        } else if ("testForceVP9Opus".equalsIgnoreCase(action)) {
-            boolean enable = intent.getBooleanExtra("enable", true);
-            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxCodecTestOverrides.INSTANCE.setForceVp9Video(enable);
-            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxCodecTestOverrides.INSTANCE.setForceOpusAudio(enable);
-            Log.i(TAG, "CODEC_TEST_OVERRIDES: VP9/Opus forced=" + enable);
+        } else if ("testShowCompatibilitySettings".equalsIgnoreCase(action)) {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxCompatibilitySettingsPresenter.instance(context).show();
+                Log.i(TAG, "COMPATIBILITY_SETTINGS_SHOWN");
+            });
+        } else if ("testShowDiagnostics".equalsIgnoreCase(action)) {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxDiagnosticsPresenter.instance(context).show();
+                Log.i(TAG, "DIAGNOSTICS_PRESENTER_SHOWN");
+            });
+        } else if ("testShowJournal".equalsIgnoreCase(action)) {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxDiagnosticsPresenter.instance(context).showJournalDialog();
+                Log.i(TAG, "JOURNAL_DIALOG_SHOWN");
+            });
+        } else if ("testLogSampleEvents".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.init(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STARTED,
+                    "Started test download",
+                    java.util.Collections.singletonMap("videoId", "test_video_123")
+            );
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_DESYNC_WARNING,
+                    "Translation audio slight desync detected (180ms)"
+            );
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.NETWORK,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_FAILED,
+                    "Network request timed out to https://api.browser.yandex.ru/test?token=SECRET_TOKEN",
+                    java.util.Collections.singletonMap("ip", "192.168.1.55"),
+                    new java.io.IOException("SocketTimeoutException")
+            );
+            Log.i(TAG, "SAMPLE_LOGS_RECORDED: count=" + com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore.instance(context).getJournalEventCount());
+        } else if ("testClearLogs".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore.instance(context).clearLogs();
+            Log.i(TAG, "LOGS_CLEARED: count=" + com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore.instance(context).getJournalEventCount());
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }

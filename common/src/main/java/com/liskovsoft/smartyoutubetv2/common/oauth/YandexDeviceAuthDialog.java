@@ -18,6 +18,9 @@ import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
 import com.liskovsoft.smartyoutubetv2.common.utils.VotOAuthTokenValidator;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -184,6 +187,8 @@ public class YandexDeviceAuthDialog {
         mCodeView.setText("··········");
         mTimerView.setText("");
 
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_STARTED, "Запуск авторизации Яндекс ID", null);
+
         mPollDisposable = Observable
                 .<YandexDeviceCodeResponse>create(emitter -> {
                     try {
@@ -218,6 +223,7 @@ public class YandexDeviceAuthDialog {
         }
 
         Log.d(TAG, "Device code received");
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.DEVICE_CODE_RECEIVED, "Получен код устройства для авторизации", null);
 
         if (!response.isValid()) {
             onDeviceCodeError(sessionId, new YandexDeviceCodeException(0, "Invalid device code response"));
@@ -238,6 +244,7 @@ public class YandexDeviceAuthDialog {
             return;
         }
         Log.e(TAG, "Failed to get device code");
+        VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_FAILED, "Не удалось получить код устройства", null, error);
         mStatusView.setText(R.string.vot_device_auth_network_error);
         mCodeView.setText("—");
         mTimerView.setText("");
@@ -277,6 +284,7 @@ public class YandexDeviceAuthDialog {
     private void onCodeExpired(int sessionId) {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
+        VoxSafeLogger.w(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_TIMEOUT, "Срок действия кода авторизации истёк", null);
         mStatusView.setText(R.string.vot_device_auth_expired);
         mCodeView.setText("—");
         mTimerView.setText("");
@@ -393,6 +401,7 @@ public class YandexDeviceAuthDialog {
         mVotData.setOAuthTokens(token, refreshToken, expiresInSeconds);
         if (!mVotData.hasOAuthToken()) {
             Log.e(TAG, "Failed to persist OAuth token to secure store");
+            VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.TOKEN_SAVE_FAILED, "Ошибка сохранения токена авторизации", null, null);
             mStatusView.setText(R.string.vot_device_auth_network_error);
             mRefreshButton.setEnabled(true);
             mRefreshButton.requestFocus();
@@ -400,6 +409,8 @@ public class YandexDeviceAuthDialog {
         }
         // token здесь не логируется
         Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true, refreshPresent=%b)", refreshToken != null && !refreshToken.isEmpty());
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_SUCCESS, "Авторизация Яндекс ID успешно выполнена", null);
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.TOKEN_SAVE_SUCCESS, "Токен авторизации успешно сохранён", null);
         mStatusView.setText(R.string.vot_device_auth_success);
         mCodeView.setText("✓");
         mTimerView.setText("");
@@ -419,6 +430,7 @@ public class YandexDeviceAuthDialog {
     private void onAccessDenied(int sessionId) {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
+        VoxSafeLogger.w(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_FAILED, "Пользователь отклонил запрос авторизации", null);
         mStatusView.setText(R.string.vot_device_auth_denied);
         mCodeView.setText("✕");
         mTimerView.setText("");
@@ -430,6 +442,7 @@ public class YandexDeviceAuthDialog {
     private void onPollError(int sessionId, String message) {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
+        VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_FAILED, "Ошибка при опросе статуса авторизации", null, null);
         mStatusView.setText(R.string.vot_device_auth_network_error);
         mRefreshButton.setEnabled(true);
         mRefreshButton.requestFocus();

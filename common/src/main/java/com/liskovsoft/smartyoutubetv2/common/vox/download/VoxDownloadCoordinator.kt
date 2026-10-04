@@ -1,6 +1,9 @@
 package com.liskovsoft.smartyoutubetv2.common.vox.download
 
 import android.content.Context
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger
 import com.liskovsoft.smartyoutubetv2.common.vox.external.VoxLog
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -124,6 +127,7 @@ class VoxDownloadCoordinator(
             newJob
         }
 
+        VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_QUEUED, "Задание скачивания добавлено в очередь", mapOf("downloadId" to request.downloadId))
         scheduleJobExecution(job)
         return request.downloadId
     }
@@ -197,6 +201,7 @@ class VoxDownloadCoordinator(
         job.isCancelledFlag.set(true)
         job.bumpGeneration()
         job.updateState(VoxDownloadState.CANCELLED)
+        VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_CANCELLED, "Загрузка видео отменена", mapOf("downloadId" to downloadId))
         repository.persistJob(job)
         notifyStateChange(job)
         if (activeJobId == downloadId) {
@@ -634,6 +639,7 @@ class VoxDownloadCoordinator(
 
                 job.publishedUri = pubUri.toString()
                 job.updateState(VoxDownloadState.COMPLETED)
+                VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка и сохранение видео успешно завершены", mapOf("downloadId" to downloadId))
 
                 // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
                 storage.cleanInternalSourcesAfterPublication(downloadId)
@@ -643,6 +649,7 @@ class VoxDownloadCoordinator(
                 VoxLog.d(TAG, "Download job $downloadId published successfully to MediaStore: $pubUri")
             } else {
                 job.updateState(VoxDownloadState.COMPLETED)
+                VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка видео успешно завершена", mapOf("downloadId" to downloadId))
                 repository.persistJob(job)
                 notifyStateChange(job)
             }
@@ -723,6 +730,15 @@ class VoxDownloadCoordinator(
     }
 
     private fun notifyError(job: VoxDownloadJob, code: VoxDownloadErrorCode, message: String) {
+        val safeCode = when (code) {
+            VoxDownloadErrorCode.URL_EXPIRED -> VoxLogCode.DOWNLOAD_URL_EXPIRED
+            VoxDownloadErrorCode.INSUFFICIENT_STORAGE -> VoxLogCode.DOWNLOAD_STORAGE_FULL
+            VoxDownloadErrorCode.STREAM_UNAVAILABLE -> VoxLogCode.DOWNLOAD_FORMAT_UNAVAILABLE
+            VoxDownloadErrorCode.AUTH_REQUIRED -> VoxLogCode.DOWNLOAD_HTTP_403
+            else -> VoxLogCode.DOWNLOAD_FAILED
+        }
+        VoxSafeLogger.e(VoxLogCategory.DOWNLOAD, safeCode, "Ошибка скачивания: ${code.name}", mapOf("stage" to job.state.name))
+
         listeners[job.downloadId]?.forEach {
             try { it.onError(job.downloadId, code, message) } catch (ignored: Exception) {}
         }
