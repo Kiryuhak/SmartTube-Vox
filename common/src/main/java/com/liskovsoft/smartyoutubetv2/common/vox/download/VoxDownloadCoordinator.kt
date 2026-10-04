@@ -65,12 +65,24 @@ class VoxDownloadCoordinator(
                         httpClient = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.createTranslationDownloadClient(appContext),
                         storage = stor
                     )
+                    val transResolver = DefaultVoxTranslationResolver(
+                        oauthTokenProvider = { com.liskovsoft.smartyoutubetv2.common.prefs.VotData.instance(appContext).getOAuthToken() }
+                    )
+                    val streamResolver = DefaultVoxStreamResolver()
+                    val downloadExecutor = Executors.newSingleThreadExecutor { runnable ->
+                        Thread(runnable, "VoxDownloadWorker").apply {
+                            priority = Thread.MIN_PRIORITY
+                        }
+                    }
                     VoxDownloadCoordinator(
                         storage = stor,
                         repository = repo,
+                        streamResolver = streamResolver,
+                        translationResolver = transResolver,
                         downloader = directDownloader,
                         translationDownloader = transDownloader,
-                        publisher = pub
+                        publisher = pub,
+                        executor = downloadExecutor
                     ).also { instance = it }
                 }
             }
