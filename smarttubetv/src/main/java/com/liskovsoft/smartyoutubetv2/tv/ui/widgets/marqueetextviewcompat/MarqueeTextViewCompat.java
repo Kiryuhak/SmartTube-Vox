@@ -151,10 +151,25 @@ public class MarqueeTextViewCompat extends TextView {
         // When executing the parent constructor, if AttributeSet contains textSize,
         // setTextSize will be called first, and mTextView is not initialized yet
         if (mTextView != null) {
-            mTextView.setTextSize(size);
+            mTextView.setTextSize(unit, size);
             if (!isLayoutRequested()) {
                 requestLayout();
             }
+        }
+    }
+
+    private void syncTextViewProperties() {
+        if (mTextView == null) return;
+        mTextView.setText(getText());
+        mTextView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, getTextSize());
+        mTextView.setTypeface(getTypeface());
+        if (getTextColors() != null) {
+            mTextView.setTextColor(getTextColors());
+        }
+        mTextView.setIncludeFontPadding(getIncludeFontPadding());
+        mTextView.setGravity(getGravity());
+        if (Build.VERSION.SDK_INT >= 21) {
+            mTextView.setLetterSpacing(getLetterSpacing());
         }
     }
 
@@ -162,6 +177,7 @@ public class MarqueeTextViewCompat extends TextView {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         if (mTextView != null) {
+            syncTextViewProperties();
             mTextView.measure(MeasureSpec.UNSPECIFIED, heightMeasureSpec);
         }
     }
@@ -170,7 +186,8 @@ public class MarqueeTextViewCompat extends TextView {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         if (mTextView != null) {
-            mTextView.layout(left, top, left + mTextView.getMeasuredWidth(), bottom);
+            syncTextViewProperties();
+            mTextView.layout(0, 0, mTextView.getMeasuredWidth(), getMeasuredHeight());
 
             mLaidOut = true;
 
@@ -182,8 +199,8 @@ public class MarqueeTextViewCompat extends TextView {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (isStaticMode()) {
-            // When text width is smaller than view width, do not scroll
+        if (isStaticMode() || mLeftX == 0f) {
+            // When text width is smaller than view width or not yet scrolling, do not scroll
             super.onDraw(canvas);
         } else if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
             onDrawRTL(canvas);

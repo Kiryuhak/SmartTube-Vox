@@ -31,9 +31,9 @@ enum class VoxMuxCodec(val matroskaCodecId: String) {
                 lower.contains("avc") || lower.contains("h264") || lower.contains("mp4v") -> AVC
                 lower.contains("vp9") || lower.contains("vp09") -> VP9
                 lower.contains("av01") || lower.contains("av1") -> AV1
-                lower.contains("mp4a-latm") || lower.contains("aac") -> AAC
+                lower.contains("aac") || lower.contains("mp4a") -> AAC
                 lower.contains("opus") -> OPUS
-                lower.contains("mpeg") || lower.contains("mp3") || lower.contains("mp4a") -> MP3
+                lower.contains("mpeg") || lower.contains("mp3") -> MP3
                 else -> UNKNOWN
             }
         }
