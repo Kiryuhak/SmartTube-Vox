@@ -87,7 +87,7 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
 
         TextView label = rootView.findViewById(R.id.header_label);
         if (label != null) {
-            label.setText(headerItem.getName());
+            label.setText(headerItem != null ? headerItem.getName() : null);
         }
     }
 
