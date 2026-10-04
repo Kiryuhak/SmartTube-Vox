@@ -79,3 +79,11 @@ hs_err_pid*.log
 *.keystore
 *.log
 /release_verification/
+*.wgt
+*.p12
+*.pfx
+author-signature.xml
+signature1.xml
+/tizen/build/
+!/tizen/tools/
+

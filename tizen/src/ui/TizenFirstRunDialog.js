@@ -1,5 +1,5 @@
 /**
- * Диалог первого запуска проверки совместимости VOX для Samsung Tizen.
+ * Диалог проверки совместимости и предупреждения о рисках несовместимости VOX для Samsung Tizen.
  */
 class TizenFirstRunDialog {
   constructor(options = {}) {
@@ -39,14 +39,16 @@ class TizenFirstRunDialog {
   renderResult(profile) {
     if (!this.container) return;
 
-    const avcStatus = profile.videoCodecs.avc?.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
-    const vp9Status = profile.videoCodecs.vp9?.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
-    const av1Status = profile.videoCodecs.av1?.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+    const avcStatus = profile.videoCodecs?.avc?.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+    const vp9Status = profile.videoCodecs?.vp9?.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+    const av1Status = profile.videoCodecs?.av1?.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
 
-    const aacStatus = profile.audioCodecs.aac?.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
-    const opusStatus = profile.audioCodecs.opus?.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
-    const ac3Status = profile.audioCodecs.ac3?.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
-    const eac3Status = profile.audioCodecs.eac3?.decodeCapability === 'supported' ? 'Поддерживается' : (profile.audioCodecs.eac3?.passthroughCapability === 'supported' ? 'Только passthrough' : 'Не поддерживается');
+    const aacStatus = profile.audioCodecs?.aac?.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+    const opusStatus = profile.audioCodecs?.opus?.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+    const ac3Status = profile.audioCodecs?.ac3?.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+    const eac3Status = profile.audioCodecs?.eac3?.decodeCapability === 'supported'
+      ? 'Поддерживается'
+      : (profile.audioCodecs?.eac3?.passthroughCapability === 'supported' ? 'Только passthrough' : 'Не поддерживается');
 
     this.container.innerHTML = `
       <div class="vox-dialog-overlay" id="voxScanResultOverlay">
@@ -76,6 +78,47 @@ class TizenFirstRunDialog {
         </div>
       </div>
     `;
+  }
+
+  showRiskWarningDialog(options = {}) {
+    if (!this.container) return;
+
+    this.container.innerHTML = `
+      <div class="vox-dialog-overlay" id="voxRiskWarningOverlay">
+        <div class="vox-dialog-card">
+          <div class="vox-dialog-header">
+            <h2 class="vox-dialog-title">Предупреждение о совместимости</h2>
+          </div>
+          <div class="vox-dialog-body">
+            <p class="vox-dialog-text">
+              Выбранные параметры выше рекомендуемых для этого устройства.
+              Это может повлиять на плавность и стабильность воспроизведения.
+            </p>
+          </div>
+          <div class="vox-dialog-actions">
+            <button class="vox-btn vox-btn-secondary" id="btnRiskProceed" tabindex="1">Продолжить</button>
+            <button class="vox-btn vox-btn-primary" id="btnRiskRevert" tabindex="2">Вернуть рекомендуемые настройки</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const btnProceed = this.container.querySelector('#btnRiskProceed');
+    const btnRevert = this.container.querySelector('#btnRiskRevert');
+
+    if (btnProceed) {
+      btnProceed.addEventListener('click', () => {
+        this.dismiss();
+        if (options.onProceed) options.onProceed();
+      });
+    }
+    if (btnRevert) {
+      btnRevert.addEventListener('click', () => {
+        this.dismiss();
+        if (options.onRevert) options.onRevert();
+      });
+      btnRevert.focus();
+    }
   }
 
   _bindEvents() {
