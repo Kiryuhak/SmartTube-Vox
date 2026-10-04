@@ -1,7 +1,7 @@
-const { TriStateCapability, VoxPlatform } = require('../platform/TizenPlatform');
+const { TriStateCapability, VoxPlatform, PerformanceTier } = require('../platform/TizenPlatform');
 
 /**
- * Профиль устройства SmartTube VOX (схема vox-device-profile-v1) для платформы Tizen.
+ * Профиль устройства SmartTube VOX (схема vox-device-profile-v1) для платформы Samsung Tizen.
  */
 class VoxDeviceProfile {
   constructor(options = {}) {
@@ -28,6 +28,12 @@ class VoxDeviceProfile {
       multichannel: TriStateCapability.UNKNOWN,
       passthrough: TriStateCapability.UNKNOWN
     };
+    this.performanceTier = options.performanceTier || PerformanceTier.UNKNOWN;
+    this.recommendedSettings = options.recommendedSettings || {
+      preferredVideoCodec: 'auto',
+      preferredAudioCodec: 'auto',
+      mode: 'auto'
+    };
     this.scannedAtTimestampMs = options.scannedAtTimestampMs || Date.now();
   }
 
@@ -35,6 +41,18 @@ class VoxDeviceProfile {
     const key = this._normalizeCodec(codec);
     const item = this.videoCodecs[key];
     return item && item.capability === TriStateCapability.SUPPORTED;
+  }
+
+  isVideoCodecExplicitlyUnsupported(codec) {
+    const key = this._normalizeCodec(codec);
+    const item = this.videoCodecs[key];
+    return item && item.capability === TriStateCapability.UNSUPPORTED;
+  }
+
+  isVideoCodecUnknown(codec) {
+    const key = this._normalizeCodec(codec);
+    const item = this.videoCodecs[key];
+    return !item || item.capability === TriStateCapability.UNKNOWN;
   }
 
   isAudioDecodeSupported(codec) {
@@ -75,6 +93,8 @@ class VoxDeviceProfile {
       audio: this.audioCodecs,
       display: this.display,
       audioOutput: this.audioOutput,
+      performanceTier: this.performanceTier,
+      recommendedSettings: this.recommendedSettings,
       scannedAtTimestampMs: this.scannedAtTimestampMs
     };
   }
@@ -90,10 +110,12 @@ class VoxDeviceProfile {
       model: obj.model,
       osName: obj.osName,
       osVersion: obj.osVersion,
-      videoCodecs: obj.video || {},
-      audioCodecs: obj.audio || {},
+      videoCodecs: obj.video || obj.videoCodecs || {},
+      audioCodecs: obj.audio || obj.audioCodecs || {},
       display: obj.display,
       audioOutput: obj.audioOutput,
+      performanceTier: obj.performanceTier || PerformanceTier.UNKNOWN,
+      recommendedSettings: obj.recommendedSettings,
       scannedAtTimestampMs: obj.scannedAtTimestampMs
     });
   }

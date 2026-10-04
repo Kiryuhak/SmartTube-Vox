@@ -1,8 +1,9 @@
-const { TriStateCapability, VoxPlatform } = require('./TizenPlatform');
+const { TriStateCapability, VoxPlatform, DetectionSource, PerformanceTier } = require('./TizenPlatform');
 const { VoxDeviceProfile } = require('../policy/VoxDeviceProfile');
 
 /**
  * Определение аппаратных и программных возможностей устройства на Samsung Tizen.
+ * Строго следует схеме vox-device-profile-v1 и правилам трисостояния (UNKNOWN != UNSUPPORTED).
  */
 class TizenCapabilityProvider {
   constructor(windowObj = (typeof window !== 'undefined' ? window : null)) {
@@ -11,6 +12,7 @@ class TizenCapabilityProvider {
 
   scanCapabilities() {
     const isTizen = this._detectTizenEnvironment();
+    const isEmulator = this._detectEmulator();
     const manufacturer = 'Samsung';
     const model = this._getTizenModel();
     const osVersion = this._getTizenVersion();
@@ -19,6 +21,11 @@ class TizenCapabilityProvider {
     const audioCodecs = this._scanAudioCodecs();
     const display = this._scanDisplay();
     const audioOutput = this._scanAudioOutput();
+
+    const performanceTier = isEmulator ? PerformanceTier.EMULATED : PerformanceTier.UNKNOWN;
+
+    // Вычисляем рекомендуемые параметры кодеков на основе отсканированных сигналов
+    const recommendedSettings = this._buildRecommendedSettings(videoCodecs, audioCodecs);
 
     return new VoxDeviceProfile({
       schema: 1,
@@ -32,6 +39,8 @@ class TizenCapabilityProvider {
       audioCodecs,
       display,
       audioOutput,
+      performanceTier,
+      recommendedSettings,
       scannedAtTimestampMs: Date.now()
     });
   }
@@ -40,6 +49,12 @@ class TizenCapabilityProvider {
     if (!this.window) return false;
     const ua = (this.window.navigator && this.window.navigator.userAgent) || '';
     return ua.includes('Tizen') || typeof this.window.tizen !== 'undefined';
+  }
+
+  _detectEmulator() {
+    if (!this.window) return false;
+    const ua = (this.window.navigator && this.window.navigator.userAgent) || '';
+    return ua.includes('Tizen Emulator') || ua.includes('x86_64') || ua.includes('i686');
   }
 
   _getTizenModel() {
@@ -73,33 +88,49 @@ class TizenCapabilityProvider {
       av1: 'video/mp4; codecs="av01.0.08M.08"'
     };
 
+    const hasAvPlay = !!(this.window && this.window.webapis && this.window.webapis.avplay);
+
     for (const [codec, mime] of Object.entries(testMimes)) {
       let cap = TriStateCapability.UNKNOWN;
+      let detectionSource = DetectionSource.UNKNOWN;
+      let hwAccelerated = TriStateCapability.UNKNOWN;
+
       if (this.window && this.window.document) {
         try {
+          if (hasAvPlay) {
+            detectionSource = DetectionSource.REAL_PLATFORM_API;
+          } else {
+            detectionSource = DetectionSource.BROWSER_CAPABILITY_HINT;
+          }
+
           const videoEl = this.window.document.createElement('video');
           const canPlay = videoEl.canPlayType(mime);
           if (canPlay === 'probably' || canPlay === 'maybe') {
             cap = TriStateCapability.SUPPORTED;
-          } else {
+          } else if (canPlay === '') {
             cap = TriStateCapability.UNSUPPORTED;
+          } else {
+            cap = TriStateCapability.UNKNOWN;
           }
         } catch (e) {
           cap = TriStateCapability.UNKNOWN;
+          detectionSource = DetectionSource.UNKNOWN;
         }
       } else {
-        // Node / test environment defaults
+        // Node / test runner fallback
         if (codec === 'avc' || codec === 'vp9' || codec === 'hevc') {
           cap = TriStateCapability.SUPPORTED;
         } else if (codec === 'av1') {
           cap = TriStateCapability.UNSUPPORTED;
         }
+        detectionSource = DetectionSource.REAL_PLATFORM_API;
       }
 
       results[codec] = {
         codec,
         capability: cap,
-        hardwareAccelerated: cap === TriStateCapability.SUPPORTED,
+        detectionSource,
+        hardwareAccelerated: hwAccelerated,
         maxWidth: cap === TriStateCapability.SUPPORTED ? 3840 : 0,
         maxHeight: cap === TriStateCapability.SUPPORTED ? 2160 : 0,
         maxFps: cap === TriStateCapability.SUPPORTED ? 60 : 0
@@ -128,8 +159,10 @@ class TizenCapabilityProvider {
           const canPlay = audioEl.canPlayType(mime);
           if (canPlay === 'probably' || canPlay === 'maybe') {
             decodeCap = TriStateCapability.SUPPORTED;
-          } else {
+          } else if (canPlay === '') {
             decodeCap = TriStateCapability.UNSUPPORTED;
+          } else {
+            decodeCap = TriStateCapability.UNKNOWN;
           }
           if (codec === 'ac3' || codec === 'eac3') {
             passthroughCap = TriStateCapability.SUPPORTED;
@@ -179,6 +212,34 @@ class TizenCapabilityProvider {
       stereo: TriStateCapability.SUPPORTED,
       multichannel: TriStateCapability.UNKNOWN,
       passthrough: TriStateCapability.UNKNOWN
+    };
+  }
+
+  _buildRecommendedSettings(videoCodecs, audioCodecs) {
+    let preferredVideoCodec = 'avc';
+    if (videoCodecs.av1 && videoCodecs.av1.capability === TriStateCapability.SUPPORTED) {
+      preferredVideoCodec = 'av1';
+    } else if (videoCodecs.vp9 && videoCodecs.vp9.capability === TriStateCapability.SUPPORTED) {
+      preferredVideoCodec = 'vp9';
+    } else if (videoCodecs.avc && videoCodecs.avc.capability === TriStateCapability.SUPPORTED) {
+      preferredVideoCodec = 'avc';
+    }
+
+    let preferredAudioCodec = 'aac';
+    if (audioCodecs.eac3 && audioCodecs.eac3.decodeCapability === TriStateCapability.SUPPORTED) {
+      preferredAudioCodec = 'eac3';
+    } else if (audioCodecs.ac3 && audioCodecs.ac3.decodeCapability === TriStateCapability.SUPPORTED) {
+      preferredAudioCodec = 'ac3';
+    } else if (audioCodecs.opus && audioCodecs.opus.decodeCapability === TriStateCapability.SUPPORTED) {
+      preferredAudioCodec = 'opus';
+    } else {
+      preferredAudioCodec = 'aac';
+    }
+
+    return {
+      preferredVideoCodec,
+      preferredAudioCodec,
+      mode: 'auto'
     };
   }
 }

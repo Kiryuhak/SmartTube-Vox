@@ -4,6 +4,7 @@ const dpadNavTest = require('./dpadNavigation.test');
 const diagnosticsTest = require('./diagnostics.test');
 const voxButtonTest = require('./voxButton.test');
 const audioCtrlTest = require('./translatedAudioController.test');
+const playerEngineTest = require('./playerEngine.test');
 
 console.log('==============================================');
 console.log('Running SmartTube VOX Tizen Platform Test Suite');
@@ -18,7 +19,8 @@ const suites = [
   dpadNavTest,
   diagnosticsTest,
   voxButtonTest,
-  audioCtrlTest
+  audioCtrlTest,
+  playerEngineTest
 ];
 
 for (const suite of suites) {

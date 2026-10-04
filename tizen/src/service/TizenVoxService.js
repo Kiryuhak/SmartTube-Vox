@@ -14,6 +14,7 @@ const TizenVoxErrorCategory = {
   PROXY_ERROR: 'PROXY_ERROR',
   UPLOAD_ERROR: 'UPLOAD_ERROR',
   RATE_LIMIT: 'RATE_LIMIT',
+  DOWNLOADS_NOT_IMPLEMENTED: 'DOWNLOADS_NOT_IMPLEMENTED_TIZEN',
   UNKNOWN_ERROR: 'UNKNOWN_ERROR'
 };
 
@@ -30,6 +31,7 @@ const TizenVoxErrorMessagesRu = {
   [TizenVoxErrorCategory.PROXY_ERROR]: 'Не удалось подключиться через прокси VOX',
   [TizenVoxErrorCategory.UPLOAD_ERROR]: 'Ошибка передачи аудио на сервер перевода',
   [TizenVoxErrorCategory.RATE_LIMIT]: 'Превышен лимит запросов на перевод',
+  [TizenVoxErrorCategory.DOWNLOADS_NOT_IMPLEMENTED]: 'Загрузка видео на платформе Tizen в настоящее время не поддерживается',
   [TizenVoxErrorCategory.UNKNOWN_ERROR]: 'Не удалось перевести видео'
 };
 
@@ -65,9 +67,7 @@ class TizenVoxService {
       throw { category: TizenVoxErrorCategory.UNSUPPORTED_VIDEO, message: this.getErrorMessage(TizenVoxErrorCategory.UNSUPPORTED_VIDEO) };
     }
 
-    // Запрос к API (эмуляция / сетевой вызов)
     try {
-      // Имитация формирования и отправки запроса
       return {
         status: 'success',
         audioUrl: `https://vtrans.s3.yandex.net/audio/${videoId}.mp3`,
@@ -79,6 +79,10 @@ class TizenVoxService {
       const category = this.classifyHttpError(e.status || 0);
       throw { category, message: this.getErrorMessage(category) };
     }
+  }
+
+  getDownloadStatus() {
+    return 'DOWNLOADS_NOT_IMPLEMENTED_TIZEN';
   }
 }
 

@@ -29,6 +29,25 @@ const VoxPlatform = {
   UNKNOWN: 'unknown'
 };
 
+const DetectionSource = {
+  REAL_PLATFORM_API: 'REAL_PLATFORM_API',
+  BROWSER_CAPABILITY_HINT: 'BROWSER_CAPABILITY_HINT',
+  UNKNOWN: 'UNKNOWN'
+};
+
+const PerformanceTier = {
+  UNKNOWN: 'UNKNOWN',
+  EMULATED: 'EMULATED',
+  LOW: 'LOW',
+  MID: 'MID',
+  HIGH: 'HIGH'
+};
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { TriStateCapability, VoxPlatform };
+  module.exports = {
+    TriStateCapability,
+    VoxPlatform,
+    DetectionSource,
+    PerformanceTier
+  };
 }
