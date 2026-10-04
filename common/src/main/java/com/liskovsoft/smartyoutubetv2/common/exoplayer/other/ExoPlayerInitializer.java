@@ -36,7 +36,10 @@ public class ExoPlayerInitializer {
     private SimpleExoPlayer mPlayer;
     private static AudioAttributes sAudioAttributes;
 
+    private final Context mContext;
+
     public ExoPlayerInitializer(Context context) {
+        mContext = context.getApplicationContext();
         mPlayerData = PlayerData.instance(context);
         mPlayerTweaksData = PlayerTweaksData.instance(context);
 
@@ -100,26 +103,19 @@ public class ExoPlayerInitializer {
     private DefaultLoadControl createLoadControl() {
         DefaultLoadControl.Builder baseBuilder = new DefaultLoadControl.Builder();
 
-        // Default values
-        //DefaultLoadControl.DEFAULT_MIN_BUFFER_MS // 15_000
-        //DefaultLoadControl.DEFAULT_MAX_BUFFER_MS // 50_000
-        //DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS // 2_500
-        //DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS // 5_000
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxBufferConfiguration voxCfg =
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.resolve(mContext, false, false, 0);
 
-        // Default values
-        int minBufferMs = 30_000;
-        int maxBufferMs = 30_000;
-        int bufferForPlaybackMs = 2_500;
-        int bufferForPlaybackAfterRebufferMs = 5_000;
+        int minBufferMs = voxCfg.getMinBufferMs();
+        int maxBufferMs = voxCfg.getMaxBufferMs();
+        int bufferForPlaybackMs = voxCfg.getBufferForPlaybackMs();
+        int bufferForPlaybackAfterRebufferMs = voxCfg.getBufferForPlaybackAfterRebufferMs();
 
         switch (mPlayerData.getVideoBufferType()) {
             case PlayerData.BUFFER_HIGHEST:
                 minBufferMs = 50_000;
                 maxBufferMs = 100_000;
-                // Infinite buffer works awfully on live streams. Constant stuttering.
-                //maxBufferMs = 36_000_000; // technical infinity, recommended here a very high number, the max will be based on setTargetBufferBytes() value
-                baseBuilder
-                        .setTargetBufferBytes(mMaxBufferBytes);
+                baseBuilder.setTargetBufferBytes(mMaxBufferBytes);
                 baseBuilder.setBackBuffer(minBufferMs, true);
                 break;
             case PlayerData.BUFFER_HIGH:
@@ -128,22 +124,19 @@ public class ExoPlayerInitializer {
                 baseBuilder.setBackBuffer(minBufferMs, true);
                 break;
             case PlayerData.BUFFER_MEDIUM:
-                //minBufferMs = 30_000;
-                //maxBufferMs = 30_000;
+                baseBuilder.setTargetBufferBytes(voxCfg.getTargetBufferBytes());
+                if (voxCfg.getBackBufferMs() > 0) {
+                    baseBuilder.setBackBuffer(voxCfg.getBackBufferMs(), true);
+                }
                 break;
             case PlayerData.BUFFER_LOW:
                 minBufferMs = 5_000; // LIVE fix
                 maxBufferMs = 5_000; // LIVE fix
-                //bufferForPlaybackMs = 1_000;
-                //bufferForPlaybackAfterRebufferMs = 1_000;
                 break;
         }
 
         baseBuilder
                 .setBufferDurationsMs(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs);
-
-        // Decrease buffer size?
-        //baseBuilder.setAllocator(new DefaultAllocator(true, 16 * 1024));
 
         return baseBuilder.createDefaultLoadControl();
     }
