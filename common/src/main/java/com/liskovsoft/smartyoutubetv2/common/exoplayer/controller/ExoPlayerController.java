@@ -34,10 +34,15 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.track.VideoTrack
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.ExoUtils;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ExoPlayerController implements Player.EventListener {
     private static final String TAG = ExoPlayerController.class.getSimpleName();
@@ -54,6 +59,9 @@ public class ExoPlayerController implements Player.EventListener {
     private VolumeBooster mVolumeBooster;
     private boolean mIsEnded;
     private Runnable mOnVideoLoaded;
+    private long mPrepareStartTimeMs = 0;
+    private boolean mHasStartedPlayback = false;
+    private int mRebufferCount = 0;
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -128,6 +136,9 @@ public class ExoPlayerController implements Player.EventListener {
         mTrackSelectorManager.setMergedSource(mediaSource instanceof MergingMediaSource);
         mTrackSelectorManager.invalidate();
         mOnSourceChanged = true;
+        mPrepareStartTimeMs = System.currentTimeMillis();
+        mHasStartedPlayback = false;
+        mRebufferCount = 0;
         mEventListener.onSourceChanged(getVideo());
         mPlayer.prepare(mediaSource);
     }
@@ -330,6 +341,19 @@ public class ExoPlayerController implements Player.EventListener {
         Log.e(TAG, "onPlayerError: type=%s, renderer=%s, cause=%s",
                 error.type, error.rendererIndex, nested.getClass().getSimpleName());
 
+        Map<String, String> errorCtx = new HashMap<>();
+        errorCtx.put("errorType", String.valueOf(error.type));
+        errorCtx.put("rendererIndex", String.valueOf(error.rendererIndex));
+        errorCtx.put("causeClass", nested.getClass().getSimpleName());
+
+        String logCode = VoxLogCode.PLAYER_RENDERER_ERROR;
+        if (error.type == ExoPlaybackException.TYPE_RENDERER) {
+            logCode = VoxLogCode.PLAYER_DECODER_ERROR;
+        } else if (error.type == ExoPlaybackException.TYPE_SOURCE) {
+            logCode = VoxLogCode.PLAYER_LOCAL_SOURCE_ERROR;
+        }
+        VoxSafeLogger.e(VoxLogCategory.PLAYER, logCode, "Сбой воспроизведения ExoPlayer", errorCtx, null);
+
         // NOTE: Player is released at this point. So, there is no sense to restore the playback here.
 
         mEventListener.onEngineError(error.type, error.rendererIndex, nested);
@@ -352,6 +376,17 @@ public class ExoPlayerController implements Player.EventListener {
         }
 
         if (isPlayPressed) {
+            if (!mHasStartedPlayback) {
+                mHasStartedPlayback = true;
+                if (mPrepareStartTimeMs > 0) {
+                    long startupLatency = System.currentTimeMillis() - mPrepareStartTimeMs;
+                    if (startupLatency > 3500) {
+                        Map<String, String> ctx = new HashMap<>();
+                        ctx.put("latencyMs", String.valueOf((startupLatency / 100) * 100));
+                        VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_STARTUP_SLOW, "Замедленный старт воспроизведения", ctx);
+                    }
+                }
+            }
             mEventListener.onPlay();
         } else if (isPausePressed) {
             mEventListener.onPause();
@@ -359,6 +394,14 @@ public class ExoPlayerController implements Player.EventListener {
             mEventListener.onPlayEnd();
             mIsEnded = true;
         } else if (isBuffering) {
+            if (mHasStartedPlayback) {
+                mRebufferCount++;
+                if (mRebufferCount <= 3) {
+                    Map<String, String> ctx = new HashMap<>();
+                    ctx.put("rebufferCount", String.valueOf(mRebufferCount));
+                    VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_REBUFFER, "Буферизация потока", ctx);
+                }
+            }
             mEventListener.onBuffering();
         }
 
