@@ -17,6 +17,9 @@ class VoxDownloadJob(
     initialPublishedUri: String? = null,
     initialPublishedFilePath: String? = null,
     initialActualVideoHeight: Int = 0,
+    val requestedQuality: String? = request.qualityPreference.label,
+    var actualQuality: String? = if (initialActualVideoHeight > 0) "${initialActualVideoHeight}p" else null,
+    var fallbackReason: String? = null,
     val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
 ) {
     val downloadId: String get() = request.downloadId
@@ -135,6 +138,9 @@ class VoxDownloadJob(
             translationState = translationState,
             publishedUri = publishedUri,
             publishedFilePath = publishedFilePath,
+            requestedQuality = requestedQuality,
+            actualQuality = actualQuality ?: (if (actualVideoHeight > 0) "${actualVideoHeight}p" else null),
+            fallbackReason = fallbackReason,
             errorMessage = errorMessage,
             errorCode = errorCode
         )

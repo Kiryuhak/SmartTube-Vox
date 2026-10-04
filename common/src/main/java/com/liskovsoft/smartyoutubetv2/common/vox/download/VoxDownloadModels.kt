@@ -139,6 +139,9 @@ data class VoxDownloadProgress(
     val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.UNKNOWN,
     val publishedUri: String? = null,
     val publishedFilePath: String? = null,
+    val requestedQuality: String? = null,
+    val actualQuality: String? = null,
+    val fallbackReason: String? = null,
     val errorMessage: String? = null,
     val errorCode: VoxDownloadErrorCode? = null
 ) {

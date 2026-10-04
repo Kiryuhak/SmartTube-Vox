@@ -126,6 +126,9 @@ class VoxDownloadStorage(private val context: Context) {
         publishedUri: String? = null,
         publishedFilePath: String? = null,
         actualVideoHeight: Int = 0,
+        requestedQuality: String? = request.qualityPreference.label,
+        actualQuality: String? = if (actualVideoHeight > 0) "${actualVideoHeight}p" else null,
+        fallbackReason: String? = null,
         translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
     ) {
         val jobDir = getJobDir(request.downloadId)
@@ -141,6 +144,9 @@ class VoxDownloadStorage(private val context: Context) {
             put("createdAt", request.createdAt)
             put("state", state.name)
             if (actualVideoHeight > 0) put("actualVideoHeight", actualVideoHeight)
+            if (requestedQuality != null) put("requestedQuality", requestedQuality)
+            if (actualQuality != null) put("actualQuality", actualQuality)
+            if (fallbackReason != null) put("fallbackReason", fallbackReason)
             if (errorCode != null) {
                 put("errorCode", errorCode.name)
             }
@@ -248,6 +254,9 @@ class VoxDownloadStorage(private val context: Context) {
             val rawPublishedFilePath = if (json.has("publishedFilePath")) json.getString("publishedFilePath") else null
             val rawTranslationState = if (json.has("translationState")) json.getString("translationState") else null
             val translationState = VoxDownloadTranslationState.fromString(rawTranslationState)
+            val requestedQuality = if (json.has("requestedQuality")) json.getString("requestedQuality") else req.qualityPreference.label
+            val actualQuality = if (json.has("actualQuality")) json.getString("actualQuality") else null
+            val fallbackReason = if (json.has("fallbackReason")) json.getString("fallbackReason") else null
 
             StoredJobData(
                 request = req,
@@ -257,6 +266,9 @@ class VoxDownloadStorage(private val context: Context) {
                 publishedUri = rawPublishedUri,
                 publishedFilePath = rawPublishedFilePath,
                 actualVideoHeight = json.optInt("actualVideoHeight", 0),
+                requestedQuality = requestedQuality,
+                actualQuality = actualQuality,
+                fallbackReason = fallbackReason,
                 translationState = translationState,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
@@ -389,6 +401,9 @@ data class StoredJobData(
     val publishedUri: String? = null,
     val publishedFilePath: String? = null,
     val actualVideoHeight: Int = 0,
+    val requestedQuality: String? = null,
+    val actualQuality: String? = null,
+    val fallbackReason: String? = null,
     val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,

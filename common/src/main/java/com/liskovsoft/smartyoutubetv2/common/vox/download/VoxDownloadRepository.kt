@@ -82,6 +82,9 @@ class VoxDownloadRepository(
                 initialPublishedUri = stored.publishedUri,
                 initialPublishedFilePath = stored.publishedFilePath,
                 initialActualVideoHeight = stored.actualVideoHeight,
+                requestedQuality = stored.requestedQuality ?: stored.request.qualityPreference.label,
+                actualQuality = stored.actualQuality ?: (if (stored.actualVideoHeight > 0) "${stored.actualVideoHeight}p" else null),
+                fallbackReason = stored.fallbackReason,
                 translationState = stored.translationState
             )
             jobs[id] = job
@@ -135,6 +138,9 @@ class VoxDownloadRepository(
             publishedUri = job.publishedUri,
             publishedFilePath = job.publishedFilePath,
             actualVideoHeight = job.actualVideoHeight,
+            requestedQuality = job.requestedQuality,
+            actualQuality = job.actualQuality,
+            fallbackReason = job.fallbackReason,
             translationState = job.translationState
         )
     }
