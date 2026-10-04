@@ -1,19 +1,28 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.AttributeSet;
-
-import com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxSidebarMarqueePolicy;
-import com.liskovsoft.smartyoutubetv2.tv.util.ViewUtil;
+import androidx.appcompat.widget.AppCompatTextView;
 
 /**
- * MarqueeTextView used in browse section headers with delayed start and focus policy
+ * Safe, lightweight MarqueeTextView for Leanback sidebar headers.
+ * Uses standard Android TextView marquee without any custom canvas drawing or child views.
  */
-public class HeaderMarqueeTextViewCompat extends MarqueeTextViewCompat {
+public class HeaderMarqueeTextViewCompat extends AppCompatTextView {
+    private static final long MARQUEE_START_DELAY_MS = 800L;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
-    private final Runnable mStartScrollRunnable = this::superUpdateMarquee;
+    private boolean mIsActive = false;
+
+    private final Runnable mStartMarqueeRunnable = () -> {
+        if (mIsActive) {
+            setEllipsize(TextUtils.TruncateAt.MARQUEE);
+            super.setSelected(true);
+        }
+    };
 
     public HeaderMarqueeTextViewCompat(Context context) {
         super(context);
@@ -31,29 +40,40 @@ public class HeaderMarqueeTextViewCompat extends MarqueeTextViewCompat {
     }
 
     private void init() {
-        ViewUtil.applyMarqueeRtlParams(this, true);
-        setMarqueeSpeedFactor(VoxSidebarMarqueePolicy.MARQUEE_SPEED_FACTOR);
+        setSingleLine(true);
+        setEllipsize(TextUtils.TruncateAt.END);
+        setMarqueeRepeatLimit(-1); // marquee_forever
+        setHorizontalFadingEdgeEnabled(true);
     }
 
     @Override
-    protected void updateMarquee() {
-        mHandler.removeCallbacks(mStartScrollRunnable);
-
-        boolean active = (isFocused() || isSelected());
-        if (active) {
-            mHandler.postDelayed(mStartScrollRunnable, VoxSidebarMarqueePolicy.MARQUEE_START_DELAY_MS);
-        } else {
-            super.updateMarquee();
-        }
+    public void setSelected(boolean selected) {
+        updateMarqueeState(selected || isFocused());
     }
 
-    private void superUpdateMarquee() {
-        super.updateMarquee();
+    @Override
+    protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
+        super.onFocusChanged(focused, direction, previouslyFocusedRect);
+        updateMarqueeState(focused || isSelected());
+    }
+
+    private void updateMarqueeState(boolean active) {
+        mIsActive = active;
+        mHandler.removeCallbacks(mStartMarqueeRunnable);
+
+        if (active) {
+            // Delayed start: show static/ellipsized first, start marquee after delay if still focused
+            mHandler.postDelayed(mStartMarqueeRunnable, MARQUEE_START_DELAY_MS);
+        } else {
+            // Immediate reset on focus loss
+            setEllipsize(TextUtils.TruncateAt.END);
+            super.setSelected(false);
+        }
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        mHandler.removeCallbacks(mStartScrollRunnable);
+        mHandler.removeCallbacks(mStartMarqueeRunnable);
         super.onDetachedFromWindow();
     }
 }

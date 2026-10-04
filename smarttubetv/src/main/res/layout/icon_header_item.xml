@@ -17,12 +17,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="3dp"
         android:layout_marginStart="10dp"
-
         android:singleLine="true"
-        android:maxWidth="150sp"
-        android:marqueeRepeatLimit="marquee_forever"
-        android:ellipsize="marquee"
-        android:scrollHorizontally="true"
-
+        android:ellipsize="end"
         style="@style/TextAppearance.Leanback.Header"/>
 </androidx.leanback.widget.NonOverlappingLinearLayout>
