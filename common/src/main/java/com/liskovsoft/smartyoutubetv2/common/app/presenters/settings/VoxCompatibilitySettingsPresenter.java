@@ -257,7 +257,7 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
         VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
 
         settingsPresenter.appendSingleButton(
-                UiOptionItem.from(getContext().getString(R.string.vox_compatibility_diagnostics), option -> {
+                UiOptionItem.from(getContext().getString(R.string.settings_diagnostics_and_logs), option -> {
                     VoxDiagnosticsPresenter.instance(getContext()).show();
                 })
         );

@@ -4,9 +4,6 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.view.ViewGroup;
-import android.widget.ScrollView;
-import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
@@ -18,13 +15,21 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticReport;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsClient;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogEvent;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogLevel;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * Презентер экрана диагностики совместимости VOX.
- * Предоставляет безопасный просмотр, копирование и анонимную отправку отчёта разработчикам.
+ * Презентер раздела «Диагностика и логи» VOX.
+ * 
+ * Предоставляет безопасный просмотр отчёта, журнал ошибок, копирование,
+ * очистку журнала и анонимную отправку разработчикам с обязательным согласием пользователя.
  */
 public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
     private static final String TAG = "VoxDiagnosticsPresenter";
@@ -47,29 +52,46 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         if (context == null) return;
 
         AppDialogPresenter presenter = AppDialogPresenter.instance(context);
-        String title = context.getString(R.string.vox_compatibility_diagnostics);
+        String title = context.getString(R.string.settings_diagnostics_and_logs);
 
         List<OptionItem> options = new ArrayList<>();
 
-        // 1. Посмотреть отчёт
+        // 1. Просмотреть отчёт диагностики
         options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_view), option -> {
             presenter.closeDialog();
             showReportDialog();
         }));
 
-        // 2. Скопировать отчёт
-        options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_copy), option -> {
+        // 2. Журнал ошибок
+        int eventCount = VoxLogStore.instance(context).getJournalEventCount();
+        String journalTitle = eventCount > 0
+                ? context.getString(R.string.vox_logs_journal) + " (" + eventCount + ")"
+                : context.getString(R.string.vox_logs_journal);
+
+        options.add(UiOptionItem.from(journalTitle, option -> {
             presenter.closeDialog();
-            copyReportToClipboard();
+            showJournalDialog();
         }));
 
-        // 3. Отправить разработчику
+        // 3. Скопировать журнал
+        options.add(UiOptionItem.from(context.getString(R.string.vox_logs_copy), option -> {
+            presenter.closeDialog();
+            copyJournalToClipboard();
+        }));
+
+        // 4. Отправить отчёт разработчику
         options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_send), option -> {
             presenter.closeDialog();
             showSendConsentDialog();
         }));
 
-        // 4. Отмена
+        // 5. Очистить журнал
+        options.add(UiOptionItem.from(context.getString(R.string.vox_logs_clear), option -> {
+            presenter.closeDialog();
+            showClearLogsConfirmDialog();
+        }));
+
+        // 6. Отмена / Назад
         options.add(UiOptionItem.from(context.getString(R.string.cancel_dialog), option -> {
             presenter.closeDialog();
         }));
@@ -78,7 +100,7 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         presenter.showDialog(title);
     }
 
-    private void showReportDialog() {
+    public void showReportDialog() {
         Context context = getContext();
         if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
             Log.w(TAG, "Cannot show report dialog: invalid activity");
@@ -86,7 +108,7 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         }
 
         Activity activity = (Activity) context;
-        VoxDiagnosticReport report = VoxDiagnosticReport.create(activity, null);
+        VoxDiagnosticReport report = VoxDiagnosticReport.create(activity, null, true);
         String text = report.toFormattedText();
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
@@ -109,17 +131,135 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         }
     }
 
-    private void copyReportToClipboard() {
+    public void showJournalDialog() {
         Context context = getContext();
         if (context == null) return;
 
-        VoxDiagnosticReport report = VoxDiagnosticReport.create(context, null);
-        String text = report.toFormattedText();
-        copyToClipboard(context, text);
-        MessageHelpers.showMessage(context, R.string.vox_diagnostics_copied);
+        List<VoxLogEvent> events = VoxLogStore.instance(context).getEvents(100, VoxLogLevel.INFO);
+        AppDialogPresenter presenter = AppDialogPresenter.instance(context);
+        String title = context.getString(R.string.vox_logs_journal);
+
+        if (events.isEmpty()) {
+            List<OptionItem> options = new ArrayList<>();
+            options.add(UiOptionItem.from(context.getString(R.string.vox_logs_journal_empty), opt -> {
+                presenter.closeDialog();
+                show();
+            }));
+            options.add(UiOptionItem.from(context.getString(android.R.string.cancel), opt -> presenter.closeDialog()));
+            presenter.appendStringsCategory(title, options);
+            presenter.showDialog(title);
+            return;
+        }
+
+        SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+        List<OptionItem> options = new ArrayList<>();
+
+        for (VoxLogEvent ev : events) {
+            String timeStr = timeFmt.format(new Date(ev.getTimestamp()));
+            String itemTitle = String.format("[%s] %s · %s", timeStr, ev.getCategory().name(), ev.getCode());
+            String itemDesc = ev.getMessage();
+
+            options.add(UiOptionItem.from(itemTitle + "\n" + itemDesc, opt -> {
+                presenter.closeDialog();
+                showEventDetailsDialog(ev);
+            }));
+        }
+
+        options.add(UiOptionItem.from(context.getString(R.string.vox_logs_clear), opt -> {
+            presenter.closeDialog();
+            showClearLogsConfirmDialog();
+        }));
+
+        options.add(UiOptionItem.from(context.getString(android.R.string.cancel), opt -> {
+            presenter.closeDialog();
+            show();
+        }));
+
+        presenter.appendStringsCategory(title, options);
+        presenter.showDialog(title);
     }
 
-    private void showSendConsentDialog() {
+    private void showEventDetailsDialog(VoxLogEvent event) {
+        Context context = getContext();
+        if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
+            return;
+        }
+
+        Activity activity = (Activity) context;
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        String timeStr = df.format(new Date(event.getTimestamp()));
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Категория: ").append(event.getCategory().name()).append(" (").append(event.getCategory().getDisplayNameRu()).append(")\n");
+        sb.append("Код: ").append(event.getCode()).append("\n");
+        sb.append("Уровень: ").append(event.getLevel().name()).append("\n");
+        sb.append("Время: ").append(timeStr).append("\n\n");
+        sb.append("Описание:\n").append(event.getMessage()).append("\n");
+
+        if (event.getContext() != null && !event.getContext().isEmpty()) {
+            sb.append("\nКонтекст:\n");
+            event.getContext().forEach((k, v) -> sb.append("• ").append(k).append(" = ").append(v).append("\n"));
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+        builder.setTitle(event.getCode())
+                .setMessage(sb.toString())
+                .setCancelable(true)
+                .setPositiveButton(R.string.vox_diagnostics_copy, (dialog, which) -> {
+                    copyToClipboard(activity, sb.toString());
+                    MessageHelpers.showMessage(activity, R.string.vox_logs_copied);
+                })
+                .setNegativeButton(android.R.string.ok, (dialog, which) -> {
+                    dialog.dismiss();
+                    showJournalDialog();
+                });
+
+        try {
+            builder.create().show();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to show event details dialog", e);
+        }
+    }
+
+    public void copyJournalToClipboard() {
+        Context context = getContext();
+        if (context == null) return;
+
+        String journal = VoxLogStore.instance(context).getFormattedJournal();
+        copyToClipboard(context, journal);
+        MessageHelpers.showMessage(context, R.string.vox_logs_copied);
+    }
+
+    public void showClearLogsConfirmDialog() {
+        Context context = getContext();
+        if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
+            return;
+        }
+
+        Activity activity = (Activity) context;
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+        builder.setTitle(R.string.vox_logs_clear_confirm_title)
+                .setMessage(R.string.vox_logs_clear_confirm_message)
+                .setCancelable(true)
+                .setPositiveButton(R.string.vox_logs_clear_confirm_btn, (dialog, which) -> {
+                    dialog.dismiss();
+                    VoxLogStore.instance(activity).clearLogs();
+                    MessageHelpers.showMessage(activity, R.string.vox_logs_cleared);
+                    show();
+                })
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
+                    dialog.dismiss();
+                    show();
+                });
+
+        try {
+            builder.create().show();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to show clear logs dialog", e);
+        }
+    }
+
+    public void showSendConsentDialog() {
         Context context = getContext();
         if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
             return;
@@ -128,11 +268,15 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         Activity activity = (Activity) context;
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
         builder.setTitle(R.string.vox_diagnostics_send_consent_title)
-                .setMessage(R.string.vox_diagnostics_send_consent_desc)
+                .setMessage(R.string.vox_diagnostics_send_consent_desc_v2)
                 .setCancelable(true)
                 .setPositiveButton(R.string.vox_diagnostics_send_confirm, (dialog, which) -> {
                     dialog.dismiss();
                     performReportSubmission(activity);
+                })
+                .setNeutralButton(R.string.vox_diagnostics_view, (dialog, which) -> {
+                    dialog.dismiss();
+                    showReportDialog();
                 })
                 .setNegativeButton(android.R.string.cancel, (dialog, which) -> dialog.dismiss());
 
@@ -144,29 +288,70 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
     }
 
     private void performReportSubmission(Activity activity) {
-        VoxDiagnosticReport report = VoxDiagnosticReport.create(activity, null);
+        VoxDiagnosticReport report = VoxDiagnosticReport.create(activity, null, true);
 
         VoxDiagnosticsClient.instance().submitReportAsync(report, new VoxDiagnosticsClient.Callback() {
             @Override
             public void onSuccess(String reportId) {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
-                String msg = activity.getString(R.string.vox_diagnostics_sent_success, reportId);
-                MessageHelpers.showMessage(activity, msg);
+                showSendSuccessDialog(activity, reportId);
             }
 
             @Override
             public void onError(String errorMessage) {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
-                String msg = activity.getString(R.string.vox_diagnostics_send_failed, errorMessage);
-                MessageHelpers.showMessage(activity, msg);
+                showSendFailureDialog(activity, errorMessage);
             }
         });
+    }
+
+    private void showSendSuccessDialog(Activity activity, String reportId) {
+        String msg = activity.getString(R.string.vox_diagnostics_sent_success_code, reportId);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+        builder.setTitle(R.string.vox_diagnostics_send_consent_title)
+                .setMessage(msg)
+                .setCancelable(true)
+                .setPositiveButton(R.string.vox_diagnostics_btn_copy_code, (dialog, which) -> {
+                    copyToClipboard(activity, reportId);
+                    MessageHelpers.showMessage(activity, R.string.vox_diagnostics_copied);
+                })
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> dialog.dismiss());
+
+        try {
+            builder.create().show();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to show success dialog", e);
+        }
+    }
+
+    private void showSendFailureDialog(Activity activity, String errorMessage) {
+        String msg = activity.getString(R.string.vox_diagnostics_send_failed_retry) + "\n\n" + errorMessage;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+        builder.setTitle(R.string.vox_diagnostics_send_consent_title)
+                .setMessage(msg)
+                .setCancelable(true)
+                .setPositiveButton(R.string.vox_diagnostics_btn_retry, (dialog, which) -> {
+                    dialog.dismiss();
+                    performReportSubmission(activity);
+                })
+                .setNeutralButton(R.string.vox_logs_copy, (dialog, which) -> {
+                    copyJournalToClipboard();
+                })
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> dialog.dismiss());
+
+        try {
+            builder.create().show();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to show failure dialog", e);
+        }
     }
 
     private void copyToClipboard(Context context, String text) {
         try {
             ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("VOX Diagnostics", text);
+            ClipData clip = ClipData.newPlainText("SmartTube VOX", text);
             if (clipboard != null) {
                 clipboard.setPrimaryClip(clip);
             }

@@ -7,14 +7,17 @@ import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityMana
 import com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityRiskEvaluator
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * Неизменяемая модель диагностического отчёта SmartTube VOX (схема: vox-diagnostic-report-v1).
+ * Неизменяемая модель диагностического отчёта SmartTube VOX (схема: vox-diagnostic-report-v2).
  * Безопасность: гарантированно не содержит персональных данных (PII), токенов авторизации,
  * паролей, cookies или конфиденциальных идентификаторов.
  */
 data class VoxDiagnosticReport(
-    val schema: String = SCHEMA_V1,
+    val schema: String = SCHEMA_V2,
     val reportId: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
     val appVersion: String,
@@ -32,13 +35,17 @@ data class VoxDiagnosticReport(
     val currentPolicy: Map<String, Any>,
     val recommendedSettings: Map<String, Any>,
     val riskWarning: String? = null,
-    val playbackStats: Map<String, Any>? = null
+    val playbackStats: Map<String, Any>? = null,
+    val safeRecentEvents: List<VoxLogEvent> = emptyList()
 ) {
     companion object {
         const val SCHEMA_V1 = "vox-diagnostic-report-v1"
+        const val SCHEMA_V2 = "vox-diagnostic-report-v2"
+        const val MAX_REPORT_EVENTS = 50
 
         @JvmStatic
-        fun create(context: Context, reportId: String? = null): VoxDiagnosticReport {
+        @JvmOverloads
+        fun create(context: Context, reportId: String? = null, includeEvents: Boolean = true): VoxDiagnosticReport {
             val manager = VoxCompatibilityManager.instance(context)
             val profile = manager.getDeviceProfile(false)
             val policy = manager.getCodecPolicy()
@@ -101,8 +108,18 @@ data class VoxDiagnosticReport(
                 pInfo?.versionCode ?: 2446007
             }
 
+            val recentEvents = if (includeEvents) {
+                try {
+                    VoxLogStore.instance(context).getRecentEvents(MAX_REPORT_EVENTS)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
+
             return VoxDiagnosticReport(
-                schema = SCHEMA_V1,
+                schema = SCHEMA_V2,
                 reportId = reportId,
                 timestamp = System.currentTimeMillis(),
                 appVersion = appVer,
@@ -120,7 +137,8 @@ data class VoxDiagnosticReport(
                 currentPolicy = currentPolicyMap,
                 recommendedSettings = recommendedMap,
                 riskWarning = risk?.messageRu,
-                playbackStats = null
+                playbackStats = null,
+                safeRecentEvents = recentEvents
             )
         }
     }
@@ -169,15 +187,24 @@ data class VoxDiagnosticReport(
             root.put("playbackStats", psObj)
         }
 
+        if (safeRecentEvents.isNotEmpty()) {
+            val evArray = JSONArray()
+            for (ev in safeRecentEvents) {
+                evArray.put(ev.toJson())
+            }
+            root.put("safeRecentEvents", evArray)
+        }
+
         return root.toString(2)
     }
 
     fun toFormattedText(): String {
         val sb = StringBuilder()
-        sb.append("=== SmartTube VOX — Диагностика совместимости ===\n\n")
+        sb.append("=== SmartTube VOX — Диагностический отчёт ===\n\n")
         if (!reportId.isNullOrBlank()) {
             sb.append("ID отчёта: ").append(reportId).append("\n")
         }
+        sb.append("Схема отчёта: ").append(schema).append("\n")
         sb.append("Приложение: ").append(appVersion).append(" (").append(appVersionCode).append(")\n")
         sb.append("Платформа: ").append(platform).append("\n")
         sb.append("Производитель: ").append(manufacturer).append("\n")
@@ -218,6 +245,18 @@ data class VoxDiagnosticReport(
             sb.append("\n⚠️ ВНИМАНИЕ: ").append(riskWarning).append("\n")
         } else {
             sb.append("\n✓ Параметры полностью согласованы с возможностями устройства.\n")
+        }
+
+        if (safeRecentEvents.isNotEmpty()) {
+            sb.append("\n--- ПОСЛЕДНИЕ СОБЫТИЯ ЖУРНАЛА (").append(safeRecentEvents.size).append(") ---\n")
+            val df = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+            for (ev in safeRecentEvents.take(15)) {
+                val t = df.format(Date(ev.timestamp))
+                sb.append("• [").append(t).append("] [")
+                    .append(ev.category.name).append("] ")
+                    .append(ev.code).append(": ")
+                    .append(ev.message).append("\n")
+            }
         }
 
         return sb.toString()

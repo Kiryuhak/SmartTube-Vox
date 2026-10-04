@@ -19,6 +19,7 @@ import com.liskovsoft.sharedutils.helpers.KeyHelpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 
 import java.io.IOException;
 import java.util.concurrent.Executors;
@@ -209,6 +210,12 @@ public final class VoxProxyDialog {
             try (Response response = call.execute()) {
                 mActiveTestCall = null;
                 int code = response.code();
+                VoxSafeLogger.i(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PROXY,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.PROXY_CONNECTED,
+                        "Проверка подключения через прокси успешна",
+                        java.util.Collections.singletonMap("type", config.getType().name())
+                );
                 mMainHandler.post(() -> {
                     if (statusMsg != null) {
                         statusMsg.setText(mContext.getString(R.string.vox_proxy_test_success, code));
@@ -216,6 +223,13 @@ public final class VoxProxyDialog {
                 });
             } catch (IOException e) {
                 mActiveTestCall = null;
+                VoxSafeLogger.e(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PROXY,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.PROXY_FAILED,
+                        "Ошибка проверки подключения через прокси",
+                        java.util.Collections.singletonMap("type", config.getType().name()),
+                        e
+                );
                 mMainHandler.post(() -> {
                     if (statusMsg != null) {
                         statusMsg.setText(mContext.getString(R.string.vox_proxy_test_failed, e.getClass().getSimpleName()));

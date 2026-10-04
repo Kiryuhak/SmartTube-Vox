@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 
-const MAX_PAYLOAD_SIZE = 64 * 1024; // 64 KB
-const SUPPORTED_SCHEMA = 'vox-diagnostic-report-v1';
+const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
+const SUPPORTED_SCHEMAS = ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2'];
+const MAX_EVENTS_COUNT = 50;
+const MAX_EVENT_MESSAGE_LEN = 500;
 
 const BANNED_PATTERNS = [
   'password',
@@ -9,12 +11,24 @@ const BANNED_PATTERNS = [
   'pwd',
   'secret',
   'token',
+  'access_token',
+  'refresh_token',
+  'id_token',
   'device_code',
+  'user_code',
   'authorization',
+  'proxy_authorization',
   'cookie',
   'session',
   'account_id',
   'email',
+  'android_id',
+  'ssaid',
+  'serial',
+  'mac',
+  'private_key',
+  'api_key',
+  'apikey',
 ];
 
 function jsonResponse(data, status = 200) {
@@ -51,7 +65,11 @@ export async function handleRequest(request) {
 
   // Health check endpoint
   if (request.method === 'GET' && (path === '/healthz' || path === '/health' || path === '/')) {
-    return jsonResponse({ status: 'healthy', service: 'vox-diagnostics', schema: SUPPORTED_SCHEMA });
+    return jsonResponse({
+      status: 'healthy',
+      service: 'vox-diagnostics',
+      supportedSchemas: SUPPORTED_SCHEMAS,
+    });
   }
 
   if (request.method !== 'POST') {
@@ -88,10 +106,10 @@ export async function handleRequest(request) {
     return jsonResponse({ error: 'invalid_payload', message: 'Payload must be a JSON object' }, 400);
   }
 
-  if (payload.schema !== SUPPORTED_SCHEMA) {
+  if (!payload.schema || !SUPPORTED_SCHEMAS.includes(payload.schema)) {
     return jsonResponse({
       error: 'unsupported_schema',
-      message: `Schema '${payload.schema}' is unsupported. Expected '${SUPPORTED_SCHEMA}'`,
+      message: `Schema '${payload.schema}' is unsupported. Expected one of: ${SUPPORTED_SCHEMAS.join(', ')}`,
     }, 400);
   }
 
@@ -109,13 +127,43 @@ export async function handleRequest(request) {
     }, 400);
   }
 
+  // Validate safeRecentEvents if present
+  if (payload.safeRecentEvents !== undefined) {
+    if (!Array.isArray(payload.safeRecentEvents)) {
+      return jsonResponse({
+        error: 'invalid_events',
+        message: 'safeRecentEvents must be an array',
+      }, 400);
+    }
+    if (payload.safeRecentEvents.length > MAX_EVENTS_COUNT) {
+      return jsonResponse({
+        error: 'too_many_events',
+        message: `safeRecentEvents exceeds maximum of ${MAX_EVENTS_COUNT} events`,
+      }, 400);
+    }
+    for (const ev of payload.safeRecentEvents) {
+      if (!ev || typeof ev !== 'object' || Array.isArray(ev)) {
+        return jsonResponse({
+          error: 'invalid_event_item',
+          message: 'Each event in safeRecentEvents must be an object',
+        }, 400);
+      }
+      if (typeof ev.message === 'string' && ev.message.length > MAX_EVENT_MESSAGE_LEN) {
+        return jsonResponse({
+          error: 'event_message_too_long',
+          message: `Event message exceeds maximum limit of ${MAX_EVENT_MESSAGE_LEN} characters`,
+        }, 400);
+      }
+    }
+  }
+
   const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
   const reportId = payload.reportId || `VOX-${randomHex}`;
 
   return jsonResponse({
     status: 'ok',
     reportId,
-    schema: SUPPORTED_SCHEMA,
+    schema: payload.schema,
     receivedAt: Date.now(),
   }, 201);
 }
