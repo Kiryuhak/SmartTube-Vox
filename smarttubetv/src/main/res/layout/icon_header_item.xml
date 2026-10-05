@@ -9,8 +9,7 @@
     android:paddingStart="12dp"
     android:paddingEnd="12dp"
     android:paddingTop="6dp"
-    android:paddingBottom="6dp"
-    android:duplicateParentState="true">
+    android:paddingBottom="6dp">
 
     <ImageView
         android:id="@+id/header_icon"

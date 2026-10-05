@@ -63,24 +63,25 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
         View rootView = viewHolder.view;
         rootView.setFocusable(true);
         rootView.setOnFocusChangeListener((v, hasFocus) -> {
-            v.setSelected(hasFocus);
-            v.setActivated(hasFocus);
+            boolean isRowSelected = ((RowHeaderPresenter.ViewHolder) viewHolder).getSelectLevel() > 0.5f;
+            v.setSelected(hasFocus || isRowSelected);
+            v.setActivated(hasFocus || isRowSelected);
             if (hasFocus) {
                 v.animate().scaleX(1.03f).scaleY(1.03f).setDuration(150).start();
                 v.setAlpha(1.0f);
             } else {
                 v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start();
-                v.setAlpha(mUnselectedAlpha);
+                v.setAlpha(isRowSelected ? 1.0f : mUnselectedAlpha);
             }
             ImageView iconView = v.findViewById(R.id.header_icon);
             if (iconView != null) {
-                iconView.setAlpha(hasFocus ? 1.0f : 0.7f);
+                iconView.setAlpha(hasFocus ? 1.0f : (isRowSelected ? 0.9f : 0.7f));
             }
             View lbl = v.findViewById(R.id.header_label);
             if (lbl instanceof com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.HeaderMarqueeTextViewCompat) {
                 ((com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.HeaderMarqueeTextViewCompat) lbl).setFocusedState(hasFocus);
             } else if (lbl != null) {
-                lbl.setSelected(hasFocus);
+                lbl.setSelected(hasFocus || isRowSelected);
             }
             if (hasFocus && headerItem != null) {
                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
@@ -122,17 +123,27 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
     // mUnselectAlpha, and also assumes the xml inflation will return a RowHeaderView.
     @Override
     protected void onSelectLevelChanged(RowHeaderPresenter.ViewHolder holder) {
-        if (holder.view.hasFocus()) {
+        boolean hasFocus = holder.view.hasFocus();
+        boolean isSelected = holder.getSelectLevel() > 0.5f;
+        if (hasFocus) {
             holder.view.setAlpha(1.0f);
         } else {
             holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
                     (1.0f - mUnselectedAlpha));
         }
+        if (!hasFocus) {
+            holder.view.setSelected(isSelected);
+            holder.view.setActivated(isSelected);
+            ImageView iconView = holder.view.findViewById(R.id.header_icon);
+            if (iconView != null) {
+                iconView.setAlpha(isSelected ? 0.9f : 0.7f);
+            }
+        }
         View lbl = holder.view.findViewById(R.id.header_label);
         if (lbl instanceof com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.HeaderMarqueeTextViewCompat) {
-            ((com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.HeaderMarqueeTextViewCompat) lbl).setFocusedState(holder.view.hasFocus());
+            ((com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.HeaderMarqueeTextViewCompat) lbl).setFocusedState(hasFocus);
         } else if (lbl != null) {
-            lbl.setSelected(holder.view.hasFocus());
+            lbl.setSelected(hasFocus || isSelected);
         }
     }
 

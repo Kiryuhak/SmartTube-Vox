@@ -4,15 +4,15 @@
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/vox_focus_radius" />
-            <solid android:color="#38FFFFFF" />
-            <stroke android:width="1.5dp" android:color="#B3FFFFFF" />
+            <solid android:color="#4DFFFFFF" />
+            <stroke android:width="2dp" android:color="#FFFFFFFF" />
         </shape>
     </item>
     <!-- Selected but unfocused (active section in Leanback): very subtle, dim pill, NO border -->
     <item android:state_selected="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/vox_focus_radius" />
-            <solid android:color="#0DFFFFFF" />
+            <solid android:color="#1AFFFFFF" />
         </shape>
     </item>
     <item android:state_activated="true">
