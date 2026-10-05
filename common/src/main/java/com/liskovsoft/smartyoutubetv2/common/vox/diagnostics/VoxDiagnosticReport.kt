@@ -92,7 +92,8 @@ data class VoxDiagnosticReport(
                 "maxQualityHeight" to recommended.maxQualityHeight,
                 "preferredVideoCodec" to recommended.preferredVideoCodec.name,
                 "preferredAudioCodec" to recommended.preferredAudioCodec.name,
-                "passthroughEnabled" to recommended.passthroughEnabled
+                "passthroughEnabled" to recommended.passthroughEnabled,
+                "reasonCodes" to JSONArray(recommended.reasonCodes)
             )
 
             val pInfo = try {

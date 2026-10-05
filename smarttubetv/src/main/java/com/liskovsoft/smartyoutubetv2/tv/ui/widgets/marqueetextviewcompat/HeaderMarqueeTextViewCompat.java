@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.view.View;
 import androidx.appcompat.widget.AppCompatTextView;
 
 /**
@@ -46,18 +47,28 @@ public class HeaderMarqueeTextViewCompat extends AppCompatTextView {
         setHorizontalFadingEdgeEnabled(true);
     }
 
+    public void setFocusedState(boolean focused) {
+        updateMarqueeState(focused);
+    }
+
     @Override
     public void setSelected(boolean selected) {
-        updateMarqueeState(selected || isFocused());
+        // Leanback headers set selected on the active page row even when unfocused.
+        // We strictly require actual focus to begin marquee.
+        boolean hasActualFocus = isFocused() || hasFocus() || (getParent() instanceof View && ((View) getParent()).hasFocus());
+        updateMarqueeState(selected && hasActualFocus);
     }
 
     @Override
     protected void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
-        updateMarqueeState(focused || isSelected());
+        updateMarqueeState(focused);
     }
 
     private void updateMarqueeState(boolean active) {
+        if (mIsActive == active) {
+            return;
+        }
         mIsActive = active;
         mHandler.removeCallbacks(mStartMarqueeRunnable);
 
@@ -68,6 +79,7 @@ public class HeaderMarqueeTextViewCompat extends AppCompatTextView {
             // Immediate reset on focus loss
             setEllipsize(TextUtils.TruncateAt.END);
             super.setSelected(false);
+            scrollTo(0, 0);
         }
     }
 

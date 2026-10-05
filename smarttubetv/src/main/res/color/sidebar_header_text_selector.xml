@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Focused item: 100% bright white text -->
     <item android:state_focused="true" android:color="#FFFFFFFF" />
-    <item android:state_selected="true" android:color="#FFFFFFFF" />
-    <item android:state_activated="true" android:color="#FFFFFFFF" />
-    <item android:color="#CCEEEEEE" />
+    <!-- Selected but unfocused (active section): softer, dimmed blue-gray -->
+    <item android:state_selected="true" android:color="#B0C0D0" />
+    <item android:state_activated="true" android:color="#B0C0D0" />
+    <!-- Default idle item: subdued grey-blue -->
+    <item android:color="#8C9BAE" />
 </selector>

@@ -129,7 +129,9 @@ class VoxDownloadStorage(private val context: Context) {
         requestedQuality: String? = request.qualityPreference.label,
         actualQuality: String? = if (actualVideoHeight > 0) "${actualVideoHeight}p" else null,
         fallbackReason: String? = null,
-        translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
+        translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
+        durationMs: Long = 0L,
+        ageRating: String? = null
     ) {
         val jobDir = getJobDir(request.downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
@@ -143,6 +145,8 @@ class VoxDownloadStorage(private val context: Context) {
             put("translationState", translationState.name)
             put("createdAt", request.createdAt)
             put("state", state.name)
+            if (durationMs > 0) put("durationMs", durationMs)
+            if (!ageRating.isNullOrBlank()) put("ageRating", ageRating)
             if (actualVideoHeight > 0) put("actualVideoHeight", actualVideoHeight)
             if (requestedQuality != null) put("requestedQuality", requestedQuality)
             if (actualQuality != null) put("actualQuality", actualQuality)
@@ -257,6 +261,8 @@ class VoxDownloadStorage(private val context: Context) {
             val requestedQuality = if (json.has("requestedQuality")) json.getString("requestedQuality") else req.qualityPreference.label
             val actualQuality = if (json.has("actualQuality")) json.getString("actualQuality") else null
             val fallbackReason = if (json.has("fallbackReason")) json.getString("fallbackReason") else null
+            val durationMs = json.optLong("durationMs", 0L)
+            val ageRating = if (json.has("ageRating")) json.getString("ageRating") else null
 
             StoredJobData(
                 request = req,
@@ -270,6 +276,8 @@ class VoxDownloadStorage(private val context: Context) {
                 actualQuality = actualQuality,
                 fallbackReason = fallbackReason,
                 translationState = translationState,
+                durationMs = durationMs,
+                ageRating = ageRating,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
                 translatedAudioProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, tBytes, tTotal, tState)
@@ -405,6 +413,8 @@ data class StoredJobData(
     val actualQuality: String? = null,
     val fallbackReason: String? = null,
     val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
+    val durationMs: Long = 0L,
+    val ageRating: String? = null,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,
     val translatedAudioProgress: VoxTrackProgress

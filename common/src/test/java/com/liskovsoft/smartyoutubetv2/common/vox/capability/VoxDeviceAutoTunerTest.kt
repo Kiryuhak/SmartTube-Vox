@@ -35,6 +35,8 @@ class VoxDeviceAutoTunerTest {
         assertEquals(1080, rec.maxQualityHeight)
         assertEquals(VoxVideoCodecPreference.AVC, rec.preferredVideoCodec)
         assertFalse(rec.passthroughEnabled)
+        assertTrue(rec.reasonCodes.contains("TIER_BASIC"))
+        assertTrue(rec.reasonCodes.contains("DISPLAY_1080P"))
     }
 
     @Test
@@ -65,6 +67,8 @@ class VoxDeviceAutoTunerTest {
         assertNotEquals(VoxVideoCodecPreference.AV1, rec.preferredVideoCodec)
         assertEquals(VoxAudioCodecPreference.AC3, rec.preferredAudioCodec)
         assertTrue(rec.passthroughEnabled)
+        assertTrue(rec.reasonCodes.contains("TIER_STANDARD"))
+        assertTrue(rec.reasonCodes.contains("HW_VP9_AVAILABLE"))
     }
 
     @Test
@@ -94,5 +98,7 @@ class VoxDeviceAutoTunerTest {
         assertEquals(2160, rec.maxQualityHeight)
         assertTrue(rec.preferredVideoCodec == VoxVideoCodecPreference.AV1 || rec.preferredVideoCodec == VoxVideoCodecPreference.VP9)
         assertTrue(rec.passthroughEnabled)
+        assertTrue(rec.reasonCodes.contains("DISPLAY_4K"))
+        assertTrue(rec.reasonCodes.contains("HW_AV1_AVAILABLE"))
     }
 }

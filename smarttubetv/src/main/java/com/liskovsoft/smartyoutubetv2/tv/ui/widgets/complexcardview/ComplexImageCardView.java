@@ -85,6 +85,12 @@ public class ComplexImageCardView extends ImageCardView {
         }
     }
 
+    public void setAgeBadge(String text) {
+        if (mIsBadgeEnabled && mComplexImageView != null) {
+            mComplexImageView.setAgeBadge(text);
+        }
+    }
+
     public void setBadgeColor(int color) {
         mComplexImageView.setBadgeColor(color);
     }

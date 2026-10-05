@@ -60,7 +60,20 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
     private void showAutoTuneDialog() {
         if (getContext() == null) return;
         VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
+
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_SCANNED,
+                "Hardware scan triggered for auto tuning"
+        );
+
         VoxRecommendedSettings rec = manager.getRecommendedSettings(true);
+
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_RECOMMENDED,
+                "Recommended profile: " + rec.getTier().name() + " (" + rec.getReasonCodes().toString() + ")"
+        );
 
         AppDialogPresenter presenter = AppDialogPresenter.instance(getContext());
         String title = getContext().getString(R.string.vox_compatibility_auto_tune);
@@ -69,6 +82,11 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
         List<OptionItem> options = new ArrayList<>();
         options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_auto_tune_apply), opt -> {
             manager.applyRecommendedSettings(rec);
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_APPLIED,
+                    "Auto tuning profile applied: tier=" + rec.getTier().name() + ", maxQuality=" + rec.getMaxQualityHeight() + "p"
+            );
             presenter.closeDialog();
             MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_auto_tune_applied);
             show();
@@ -229,12 +247,23 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
 
         VoxCompatibilityRisk risk = VoxCompatibilityRiskEvaluator.evaluate(proposedPolicy, recommended, profile);
         if (risk != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.warn(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_RISK_WARNING,
+                    "Manual override risk warning: " + risk.getMessageRu()
+            );
+
             AppDialogPresenter presenter = AppDialogPresenter.instance(getContext());
             String title = getContext().getString(R.string.vox_compatibility_risk_warning_title);
             String message = getContext().getString(R.string.vox_compatibility_unsupported_warning) + "\n\n" + risk.getMessageRu();
 
             List<OptionItem> options = new ArrayList<>();
             options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_risk_continue), opt -> {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.warn(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_MANUAL_OVERRIDE,
+                        "User manually accepted risky profile"
+                );
                 manager.setCodecPolicy(proposedPolicy);
                 presenter.closeDialog();
                 show();
