@@ -31,6 +31,7 @@ object VoxDownloadServicePolicy {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING,
+            VoxDownloadState.FINALIZING,
             VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING -> true
             VoxDownloadState.IDLE,
@@ -75,6 +76,7 @@ object VoxDownloadServicePolicy {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING,
+            VoxDownloadState.FINALIZING,
             VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING -> true
             VoxDownloadState.PAUSED,
@@ -100,6 +102,7 @@ object VoxDownloadServicePolicy {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING,
+            VoxDownloadState.FINALIZING,
             VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING -> true
             VoxDownloadState.FAILED,

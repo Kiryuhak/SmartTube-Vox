@@ -2,10 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
+        <receiver
+            android:name="com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxBenchmarkReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
         <!-- Internal developer-only test receiver for isolated Yandex VOT backend verification (debug only) -->
         <receiver
             android:name="com.liskovsoft.smartyoutubetv2.tv.vot.YandexVotTestReceiver"
-            android:exported="false">
+            android:exported="true"
+            android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT" />
             </intent-filter>

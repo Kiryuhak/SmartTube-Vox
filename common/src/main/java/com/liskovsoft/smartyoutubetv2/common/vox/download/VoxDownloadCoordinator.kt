@@ -39,6 +39,8 @@ class VoxDownloadCoordinator(
 
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<VoxDownloadListener>>()
     private val globalListeners = CopyOnWriteArrayList<VoxDownloadListener>()
+    private val scheduledJobs = ConcurrentHashMap.newKeySet<String>()
+    private var lastProgressPersistedAt = 0L
 
     @Volatile
     private var activeJobId: String? = null
@@ -123,11 +125,13 @@ class VoxDownloadCoordinator(
     @Synchronized
     @JvmOverloads
     fun startDownload(request: VoxDownloadRequest, listener: VoxDownloadListener? = null): String {
+        if (scheduledJobs.contains(request.downloadId)) return request.downloadId
         if (listener != null) {
             addListener(request.downloadId, listener)
         }
 
         val existing = repository.getJob(request.downloadId)
+        if (existing?.state == VoxDownloadState.COMPLETED) return request.downloadId
         val job = if (existing != null) {
             existing.bumpGeneration()
             existing.isCancelledFlag.set(false)
@@ -150,15 +154,13 @@ class VoxDownloadCoordinator(
     @Synchronized
     @JvmOverloads
     fun resumeDownload(downloadId: String, listener: VoxDownloadListener? = null): Boolean {
+        if (scheduledJobs.contains(downloadId)) return false
         if (listener != null) {
             addListener(downloadId, listener)
         }
 
         val job = repository.getJob(downloadId) ?: return false
-        if (job.state == VoxDownloadState.MUXED) {
-            notifyProgress(job)
-            return true
-        }
+        if (job.state == VoxDownloadState.COMPLETED) return false
 
         job.bumpGeneration()
         job.isCancelledFlag.set(false)
@@ -223,7 +225,14 @@ class VoxDownloadCoordinator(
         // Удаляем незавершенные файлы треков
         for (track in VoxDownloadTrack.values()) {
             val file = storage.getTrackFile(downloadId, track)
-            if (file.exists()) {
+            val progress = job.getSnapshot().let {
+                when (track) {
+                    VoxDownloadTrack.VIDEO -> it.video
+                    VoxDownloadTrack.ORIGINAL_AUDIO -> it.originalAudio
+                    VoxDownloadTrack.TRANSLATED_AUDIO -> it.translatedAudio
+                }
+            }
+            if (file.exists() && progress.state != VoxTrackState.COMPLETED) {
                 file.delete()
             }
         }
@@ -269,11 +278,40 @@ class VoxDownloadCoordinator(
         return publisher?.isPublishedFileAvailable(job.publishedUri) ?: false
     }
 
-    fun isJobActive(downloadId: String): Boolean = activeJobId == downloadId
+    fun isJobActive(downloadId: String): Boolean = scheduledJobs.contains(downloadId)
+
+    fun getProcessingJob(): VoxDownloadJob? = activeJobId?.let { repository.getJob(it) }
+
+    fun getQueuedCount(): Int = scheduledJobs.count {
+        it != activeJobId && repository.getJob(it)?.let { job -> !job.isCancelled() && !job.isPaused() } == true
+    }
+
+    /** Повторная обработка сохраняет проверенные исходники и тот же downloadId. */
+    @Synchronized
+    fun retryDownload(downloadId: String): Boolean {
+        if (scheduledJobs.contains(downloadId)) return false
+        val job = repository.getJob(downloadId) ?: return false
+        if (job.state != VoxDownloadState.FAILED && job.state != VoxDownloadState.CANCELLED) return false
+        for (track in VoxDownloadTrack.values()) {
+            val p = when (track) {
+                VoxDownloadTrack.VIDEO -> job.videoProgress
+                VoxDownloadTrack.ORIGINAL_AUDIO -> job.originalAudioProgress
+                VoxDownloadTrack.TRANSLATED_AUDIO -> job.translatedAudioProgress
+            }
+            val file = storage.getTrackFile(downloadId, track)
+            if (!file.isFile || file.length() <= 0 || file.length() != p.bytesDownloaded || p.state != VoxTrackState.COMPLETED) {
+                job.updateTrackProgress(track, file.length(), p.totalBytes, VoxTrackState.PENDING)
+            }
+        }
+        return resumeDownload(downloadId)
+    }
 
     private fun scheduleJobExecution(job: VoxDownloadJob) {
+        if (!scheduledJobs.add(job.downloadId)) return
+        val generation = job.generation.get()
         executor.submit {
-            executeJob(job)
+            try { if (!isStale(job, generation)) executeJob(job) }
+            finally { scheduledJobs.remove(job.downloadId) }
         }
     }
 
@@ -295,6 +333,16 @@ class VoxDownloadCoordinator(
 
         try {
             if (isStale(job, expectedGen)) return
+
+            if (job.state == VoxDownloadState.MUXED && job.hasTranslatedAudio && job.finalFileBytes > 0) {
+                val output = storage.getOutputFile(downloadId)
+                validateOutputFile(output)
+                if (output.length() != job.finalFileBytes) {
+                    throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Final file size changed")
+                }
+                publishCompletedFile(job, expectedGen, output)
+                return
+            }
 
             if (job.state == VoxDownloadState.READY_FOR_MUX) {
                 executeMuxing(job, expectedGen)
@@ -569,6 +617,7 @@ class VoxDownloadCoordinator(
         VoxLog.d(TAG, "Download job $downloadId starting Matroska muxing")
 
         val sources = mutableListOf<com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxSampleSource>()
+        val processingStart = System.nanoTime()
         try {
             val vUid = java.util.concurrent.ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)
             val oUid = java.util.concurrent.ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)
@@ -616,7 +665,25 @@ class VoxDownloadCoordinator(
                 progressListener = { muxProgress ->
                     if (!isStale(job, expectedGen)) {
                         job.updateMuxProgress(muxProgress.bytesProcessed, muxProgress.totalInputBytes, muxProgress.percent)
+                        job.processingSamples = muxProgress.processedSamples
+                        job.processingTimeMs = muxProgress.elapsedMs
+                        job.processingSourceBytes = muxProgress.totalInputBytes
+                        job.lastProgressAt = System.currentTimeMillis()
                         notifyProgress(job)
+                    }
+                },
+                shouldStop = { isStale(job, expectedGen) },
+                onFinalizing = {
+                    job.updateState(VoxDownloadState.FINALIZING)
+                    repository.persistJob(job)
+                    notifyStateChange(job)
+                },
+                onStalled = {
+                    if (!isStale(job, expectedGen)) {
+                        job.updateState(VoxDownloadState.FAILED, VoxDownloadErrorCode.PROCESSING_STALLED,
+                            "Обработка остановилась. Повторите упаковку файла.")
+                        repository.persistJob(job)
+                        notifyStateChange(job)
                     }
                 }
             )
@@ -625,6 +692,14 @@ class VoxDownloadCoordinator(
 
             // Валидация созданного MKV перед присвоением MUXED
             validateOutputFile(outputFile)
+            if (result.videoSamplesCount <= 0 || result.origAudioSamplesCount <= 0 || result.transAudioSamplesCount <= 0) {
+                throw VoxDownloadException(VoxDownloadErrorCode.MEDIA_PARSE_ERROR, "Empty output track")
+            }
+            job.hasTranslatedAudio = true
+            job.durationMs = result.durationMs
+            job.finalFileBytes = result.totalBytesWritten
+            job.processingTimeMs = (System.nanoTime() - processingStart) / 1_000_000L
+            job.lastProgressAt = System.currentTimeMillis()
 
             job.updateMuxProgress(result.totalBytesWritten, result.totalBytesWritten, 100)
             job.updateState(VoxDownloadState.MUXED)
@@ -632,6 +707,22 @@ class VoxDownloadCoordinator(
             notifyStateChange(job)
             VoxLog.d(TAG, "Download job $downloadId successfully multiplexed into MKV: ${result.outputFile.absolutePath} (${result.totalBytesWritten} bytes, duration=${result.durationMs}ms)")
 
+            publishCompletedFile(job, expectedGen, outputFile)
+        } catch (e: com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxProcessingStalledException) {
+            throw VoxDownloadException(VoxDownloadErrorCode.PROCESSING_STALLED, "Обработка остановилась. Повторите упаковку файла.", e)
+        } catch (e: InterruptedException) {
+            if (job.isCancelled()) {
+                job.updateState(VoxDownloadState.CANCELLED)
+                repository.persistJob(job)
+                notifyStateChange(job)
+            }
+        } finally {
+            sources.forEach { try { it.close() } catch (ignored: Exception) {} }
+        }
+    }
+
+    private fun publishCompletedFile(job: VoxDownloadJob, expectedGen: Long, outputFile: File) {
+        val downloadId = job.downloadId
             // Публикация в MediaStore
             if (publisher != null) {
                 if (isStale(job, expectedGen)) return
@@ -655,28 +746,29 @@ class VoxDownloadCoordinator(
                 if (isStale(job, expectedGen)) return
 
                 job.publishedUri = pubUri.toString()
+                if (!publisher.isPublishedFileAvailable(job.publishedUri) || storage.getPublishedFileSize(job.publishedUri) != job.finalFileBytes) {
+                    throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Published file validation failed")
+                }
+                // Сначала фиксируем метаданные; UI не увидит COMPLETED до успешной записи.
+                VoxDownloadCompletionValidator.check(job, storage.getPublishedFileSize(job.publishedUri))
+                repository.persistJob(job, VoxDownloadState.COMPLETED)
                 job.updateState(VoxDownloadState.COMPLETED)
                 VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка и сохранение видео успешно завершены", mapOf("downloadId" to downloadId))
 
                 // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
                 storage.cleanInternalSourcesAfterPublication(downloadId)
 
-                repository.persistJob(job)
                 notifyStateChange(job)
                 VoxLog.d(TAG, "Download job $downloadId published successfully to MediaStore: $pubUri")
             } else {
+                job.publishedUri = android.net.Uri.fromFile(outputFile).toString()
+                job.publishedFilePath = outputFile.absolutePath
+                VoxDownloadCompletionValidator.check(job, storage.getPublishedFileSize(job.publishedUri))
+                repository.persistJob(job, VoxDownloadState.COMPLETED)
                 job.updateState(VoxDownloadState.COMPLETED)
                 VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка видео успешно завершена", mapOf("downloadId" to downloadId))
-                repository.persistJob(job)
                 notifyStateChange(job)
             }
-        } catch (e: InterruptedException) {
-            if (job.isCancelled()) {
-                job.updateState(VoxDownloadState.CANCELLED)
-                repository.persistJob(job)
-                notifyStateChange(job)
-            }
-        }
     }
 
     private fun validateOutputFile(outputFile: File) {
@@ -737,6 +829,11 @@ class VoxDownloadCoordinator(
     }
 
     private fun notifyProgress(job: VoxDownloadJob) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastProgressPersistedAt >= 1_000L) {
+            repository.persistJob(job)
+            lastProgressPersistedAt = now
+        }
         val snapshot = job.getSnapshot()
         listeners[job.downloadId]?.forEach {
             try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}

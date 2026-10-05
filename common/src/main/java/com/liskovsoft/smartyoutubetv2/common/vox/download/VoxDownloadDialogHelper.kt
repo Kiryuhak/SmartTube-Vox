@@ -278,10 +278,10 @@ object VoxDownloadDialogHelper {
                         context.getString(R.string.vox_download_retry),
                         { _ ->
                             cleanupListener()
-                            coordinator.deleteDownload(currentJob.downloadId)
-                            val id = coordinator.startDownload(currentJob.request.copy(downloadId = java.util.UUID.randomUUID().toString()))
-                            VoxDownloadService.start(context, id)
-                            showProgressDialog(context, id)
+                            if (coordinator.retryDownload(currentJob.downloadId)) {
+                                VoxDownloadService.start(context, currentJob.downloadId)
+                                showProgressDialog(context, currentJob.downloadId)
+                            }
                         }
                     ))
                     options.add(UiOptionItem.from(

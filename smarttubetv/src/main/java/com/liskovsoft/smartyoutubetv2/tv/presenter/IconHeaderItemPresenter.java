@@ -67,7 +67,8 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
             v.setSelected(hasFocus || isRowSelected);
             v.setActivated(hasFocus || isRowSelected);
             if (hasFocus) {
-                v.animate().scaleX(1.03f).scaleY(1.03f).setDuration(150).start();
+                v.setScaleX(1.0f);
+                v.setScaleY(1.0f);
                 v.setAlpha(1.0f);
             } else {
                 v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start();

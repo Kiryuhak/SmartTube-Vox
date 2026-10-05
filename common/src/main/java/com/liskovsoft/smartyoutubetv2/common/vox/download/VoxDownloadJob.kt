@@ -23,6 +23,13 @@ class VoxDownloadJob(
     val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
 ) {
     val downloadId: String get() = request.downloadId
+    var durationMs: Long = 0L
+    var hasTranslatedAudio: Boolean = false
+    var finalFileBytes: Long = 0L
+    var processingTimeMs: Long = 0L
+    var processingSourceBytes: Long = 0L
+    var processingSamples: Long = 0L
+    var lastProgressAt: Long = 0L
 
     val generation = AtomicLong(1L)
     val isCancelledFlag = AtomicBoolean(false)

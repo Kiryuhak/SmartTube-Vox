@@ -23,6 +23,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
     private lateinit var coordinator: VoxDownloadCoordinator
     private var notificationManager: NotificationManager? = null
     private var currentDownloadId: String? = null
+    private var lastNotificationAt = 0L
 
     companion object {
         private const val TAG = "VoxDownloadService"
@@ -283,6 +284,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO -> "${getString(R.string.vox_download_stage_orig_audio)}$pctSuffix"
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> "${getString(R.string.vox_download_stage_trans_audio)}$pctSuffix"
             VoxDownloadState.MUXING -> "${getString(R.string.vox_download_stage_muxing)}$pctSuffix"
+            VoxDownloadState.FINALIZING -> "Завершение файла…"
             VoxDownloadState.PUBLISHING -> "${getString(R.string.vox_download_stage_publishing)}$pctSuffix"
             VoxDownloadState.READY_FOR_MUX -> getString(R.string.vox_download_stage_muxing)
             VoxDownloadState.MUXED -> getString(R.string.vox_download_stage_publishing)
@@ -379,6 +381,9 @@ class VoxDownloadService : Service(), VoxDownloadListener {
     }
 
     override fun onProgressUpdated(progress: VoxDownloadProgress) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastNotificationAt < 1_000L) return
+        lastNotificationAt = now
         if (progress.downloadId == currentDownloadId && VoxDownloadServicePolicy.isActiveState(progress.state)) {
             val notification = buildProgressNotification(progress)
             notificationManager?.notify(NOTIFICATION_ID_PROGRESS, notification)

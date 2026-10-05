@@ -110,6 +110,7 @@ enum class VoxDownloadState {
     DOWNLOADING_TRANSLATED_AUDIO,
     READY_FOR_MUX,
     MUXING,
+    FINALIZING,
     MUXED,
     PUBLISHING,
     COMPLETED,
@@ -159,10 +160,10 @@ data class VoxDownloadProgress(
     val overallPercent: Int?
         get() {
             if (state == VoxDownloadState.MUXING) {
-                return muxPercent
+                return if (muxTotalBytes > 0) muxPercent.coerceIn(0, 99) else null
             }
-            if (state == VoxDownloadState.PUBLISHING) {
-                return if (publishPercent > 0) publishPercent.coerceIn(0, 99) else 99
+            if (state == VoxDownloadState.FINALIZING || state == VoxDownloadState.MUXED || state == VoxDownloadState.PUBLISHING) {
+                return null
             }
             if (state == VoxDownloadState.MUXED || state == VoxDownloadState.COMPLETED) {
                 return 100
@@ -187,6 +188,7 @@ enum class VoxDownloadErrorCode {
     INVALID_URL,
     UNSUPPORTED_CODEC,
     MEDIA_PARSE_ERROR,
+    PROCESSING_STALLED,
     CANCELLED,
     UNKNOWN
 }

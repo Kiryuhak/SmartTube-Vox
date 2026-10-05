@@ -17,14 +17,32 @@
         android:id="@+id/preview_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
-    <!-- Quality Badge: Top-Left -->
+    <!-- Общая строка: капсулы имеют собственные размеры и не перекрывают друг друга. -->
+    <LinearLayout
+        android:id="@+id/vox_badge_row"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentStart="true"
+        android:layout_margin="@dimen/vox_card_badge_margin"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:elevation="4dp">
+    <ImageView
+        android:visibility="gone"
+        android:id="@+id/local_badge_icon"
+        android:background="@drawable/badge_rounded_bg"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:padding="3dp"
+        android:elevation="4dp"
+        android:src="@drawable/action_download"
+        android:tint="@color/white"
+        tools:ignore="ContentDescription" />
     <TextView
         android:visibility="gone"
         android:id="@+id/quality_badge"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentStart="true"
-        android:layout_marginStart="@dimen/vox_card_badge_margin"
-        android:layout_marginTop="@dimen/vox_card_badge_margin"
+        android:layout_marginStart="6dp"
         android:background="@drawable/badge_rounded_bg"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -40,22 +58,7 @@
         android:textStyle="bold"
         android:elevation="4dp"
         style="@style/TextAppearance.Leanback.ImageCardView.Content" />
-    <!-- Downloaded / Translated Marker: Top-Right -->
-    <ImageView
-        android:visibility="gone"
-        android:id="@+id/local_badge_icon"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentEnd="true"
-        android:layout_marginEnd="@dimen/vox_card_badge_margin"
-        android:layout_marginTop="@dimen/vox_card_badge_margin"
-        android:background="@drawable/badge_rounded_bg"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:padding="3dp"
-        android:elevation="4dp"
-        android:src="@drawable/action_download"
-        android:tint="@color/white"
-        tools:ignore="ContentDescription" />
+    </LinearLayout>
     <!-- Age Badge: Bottom-Left -->
     <TextView
         android:visibility="gone"

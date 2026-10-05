@@ -29,7 +29,7 @@ object VoxDownloadProgressFormatter {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING,
-            VoxDownloadState.MUXED,
+            VoxDownloadState.FINALIZING, VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING,
             VoxDownloadState.PAUSED -> {
                 if (percent != null && percent in 0..100) {

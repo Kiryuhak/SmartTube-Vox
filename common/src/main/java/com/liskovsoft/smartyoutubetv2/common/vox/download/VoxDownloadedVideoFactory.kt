@@ -26,7 +26,8 @@ object VoxDownloadedVideoFactory {
         video.isLocal = true
         video.translationState = job.translationState.name
         video.cardImageUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-        video.badge = job.actualQuality ?: job.requestedQuality ?: "1080p"
+        video.badge = job.actualQuality ?: job.actualVideoHeight.takeIf { it > 0 }?.let { "${it}p" }
+        video.setDurationMs(job.durationMs)
         video.category = "Скачанные видео"
         return video
     }
@@ -46,7 +47,7 @@ object VoxDownloadedVideoFactory {
         video.isLocal = true
         video.translationState = data.translationState.name
         video.cardImageUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-        video.badge = data.actualQuality ?: data.requestedQuality ?: "1080p"
+        video.badge = data.actualQuality ?: data.actualVideoHeight.takeIf { it > 0 }?.let { "${it}p" }
         if (data.durationMs > 0) {
             video.setDurationMs(data.durationMs)
         }

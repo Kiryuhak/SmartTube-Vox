@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Focused item: High contrast bright rounded capsule with distinct border for 2-4m TV viewing -->
+    <!-- Мягкая подложка без контура; яркость текста задаёт presenter темы. -->
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/vox_focus_radius" />
-            <solid android:color="#4DFFFFFF" />
-            <stroke android:width="2dp" android:color="#FFFFFFFF" />
+            <solid android:color="#26FFFFFF" />
         </shape>
     </item>
     <!-- Selected but unfocused (active section in Leanback): very subtle, dim pill, NO border -->

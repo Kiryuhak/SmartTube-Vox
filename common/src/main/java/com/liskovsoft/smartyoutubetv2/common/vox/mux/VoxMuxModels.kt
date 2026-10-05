@@ -115,7 +115,10 @@ class VoxMuxSample(
 data class VoxMuxProgress(
     val bytesProcessed: Long,
     val totalInputBytes: Long,
-    val percent: Int
+    val percent: Int,
+    val processedSamples: Long = 0L,
+    val outputBytes: Long = 0L,
+    val elapsedMs: Long = 0L
 )
 
 /**
