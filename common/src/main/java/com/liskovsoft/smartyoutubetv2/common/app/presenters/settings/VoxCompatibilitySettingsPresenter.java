@@ -51,13 +51,16 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
 
     private void appendAutoTuneButton(AppDialogPresenter settingsPresenter) {
         VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
+        boolean isOverride = manager.isManualOverrideActive();
+
+        String autoTuneLabel = isOverride ? "Настроить заново" : getContext().getString(R.string.vox_compatibility_auto_tune);
         settingsPresenter.appendSingleButton(
-                UiOptionItem.from(getContext().getString(R.string.vox_compatibility_auto_tune), option -> {
+                UiOptionItem.from(autoTuneLabel, option -> {
                     showAutoTuneDialog();
                 })
         );
 
-        if (manager.isManualOverrideActive()) {
+        if (isOverride) {
             settingsPresenter.appendSingleButton(
                     UiOptionItem.from("Вернуть рекомендуемые настройки", option -> {
                         manager.restoreRecommendedSettings();
@@ -66,7 +69,7 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
                                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_RESTORED,
                                 "Recommended settings restored by user"
                         );
-                        MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_auto_tune_applied);
+                        MessageHelpers.showMessage(getContext(), "Рекомендуемые настройки применены");
                         show();
                     })
             );
@@ -97,14 +100,20 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
 
         List<OptionItem> options = new ArrayList<>();
         options.add(UiOptionItem.from(getContext().getString(R.string.vox_compatibility_auto_tune_apply), opt -> {
-            manager.applyRecommendedSettings(rec);
+            com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxApplyResult result = manager.applyRecommendedSettings(rec);
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_APPLIED,
-                    "Auto tuning profile applied: tier=" + rec.getTier().name() + ", maxQuality=" + rec.getMaxQualityHeight() + "p"
+                    "Auto tuning profile applied: status=" + result.getStatus().name() + ", tier=" + rec.getTier().name() + ", maxQuality=" + rec.getMaxQualityHeight() + "p"
             );
             presenter.closeDialog();
-            MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_auto_tune_applied);
+            if (result.getStatus() == com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxApplyStatus.APPLIED) {
+                MessageHelpers.showMessage(getContext(), "Рекомендуемые настройки применены");
+            } else if (result.getStatus() == com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxApplyStatus.PARTIAL) {
+                MessageHelpers.showMessage(getContext(), "Часть настроек применить не удалось");
+            } else {
+                MessageHelpers.showMessage(getContext(), "Не удалось применить настройки");
+            }
             show();
         }));
 

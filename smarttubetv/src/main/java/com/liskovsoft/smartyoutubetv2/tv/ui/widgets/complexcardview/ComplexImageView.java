@@ -31,6 +31,7 @@ public class ComplexImageView extends RelativeLayout {
     private TextView mBadgeText;
     private TextView mQualityBadge;
     private TextView mAgeBadge;
+    private ImageView mLocalBadgeIcon;
     private ViewGroup mProgressContainer;
     private int mPreviewWidth;
     private int mPreviewHeight;
@@ -60,6 +61,7 @@ public class ComplexImageView extends RelativeLayout {
         mBadgeText = findViewById(R.id.extra_text_badge);
         mQualityBadge = findViewById(R.id.quality_badge);
         mAgeBadge = findViewById(R.id.age_badge);
+        mLocalBadgeIcon = findViewById(R.id.local_badge_icon);
         mProgressBar = findViewById(R.id.clip_progress);
         mProgressContainer = findViewById(R.id.clip_info);
         mPreviewContainer = findViewById(R.id.preview_container);
@@ -131,6 +133,19 @@ public class ComplexImageView extends RelativeLayout {
             mAgeBadge.bringToFront();
         } else {
             mAgeBadge.setVisibility(View.GONE);
+        }
+    }
+
+    public void setLocalMarker(boolean isLocal, boolean isTranslated) {
+        if (mLocalBadgeIcon == null) {
+            return;
+        }
+        if (isLocal) {
+            mLocalBadgeIcon.setImageResource(isTranslated ? R.drawable.action_voice_translate : R.drawable.action_download);
+            mLocalBadgeIcon.setVisibility(View.VISIBLE);
+            mLocalBadgeIcon.bringToFront();
+        } else {
+            mLocalBadgeIcon.setVisibility(View.GONE);
         }
     }
 
