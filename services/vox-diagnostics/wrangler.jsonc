@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vox-diagnostics",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "vox_diagnostics_db",
+      "database_id": "3ba3cc6f-92a8-475d-8114-ffe495dd56ac"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

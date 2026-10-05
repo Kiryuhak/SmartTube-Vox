@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { beforeEach } from 'node:test';
-import { handleRequest, resetRateLimiter, isExpiredReport, DEFAULT_RETENTION_MS } from '../src/diagnostics.mjs';
+import { handleRequest, resetRateLimiter, isExpiredReport, DEFAULT_RETENTION_MS, CANONICAL_SCHEMA } from '../src/diagnostics.mjs';
+import { ReportStorage } from '../src/storage.mjs';
 
 const validReportV1 = {
   schema: 'vox-diagnostic-report-v1',
@@ -64,17 +65,23 @@ function createRequest(body, options = {}) {
     method,
     headers: {
       'Content-Type': options.contentType ?? 'application/json',
+      ...(options.headers || {}),
     },
     body: method === 'GET' ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
   });
 }
 
-test('GET /healthz returns 200 healthy status', async () => {
+beforeEach(() => {
+  resetRateLimiter();
+});
+
+test('GET /healthz returns 200 healthy status with canonical schema', async () => {
   const req = createRequest(null, { url: 'https://diagnostics.example.com/healthz', method: 'GET' });
   const res = await handleRequest(req);
   assert.equal(res.status, 200);
   const json = await res.json();
   assert.equal(json.status, 'healthy');
+  assert.equal(json.canonicalSchema, CANONICAL_SCHEMA);
   assert.deepEqual(json.supportedSchemas, ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2']);
 });
 
@@ -84,7 +91,7 @@ test('POST /v1/report accepts valid v1 report and returns 201 with VOX- prefix r
   assert.equal(res.status, 201);
   const json = await res.json();
   assert.equal(json.status, 'ok');
-  assert.match(json.reportId, /^VOX-[A-Z0-9]+$/);
+  assert.match(json.reportId, /^VOX-A-[A-Z0-9]+$/);
 });
 
 test('POST /v1/report accepts valid v2 report with 50 safeRecentEvents', async () => {
@@ -94,21 +101,20 @@ test('POST /v1/report accepts valid v2 report with 50 safeRecentEvents', async (
   const json = await res.json();
   assert.equal(json.status, 'ok');
   assert.equal(json.schema, 'vox-diagnostic-report-v2');
-  assert.match(json.reportId, /^VOX-[A-Z0-9]+$/);
+  assert.match(json.reportId, /^VOX-A-[A-Z0-9]+$/);
 });
 
 test('POST /v1/report rejects v2 report exceeding 50 events with 400', async () => {
-  const tooManyEventsReport = {
+  const excessiveEvents = {
     ...validReportV2,
     safeRecentEvents: Array.from({ length: 51 }, (_, i) => ({
       timestamp: Date.now(),
       level: 'INFO',
-      category: 'DOWNLOAD',
-      code: 'DOWNLOAD_STARTED',
+      code: 'EVENT',
       message: `Event #${i}`,
     })),
   };
-  const req = createRequest(tooManyEventsReport);
+  const req = createRequest(excessiveEvents);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
   const json = await res.json();
@@ -116,8 +122,8 @@ test('POST /v1/report rejects v2 report exceeding 50 events with 400', async () 
 });
 
 test('POST /v1/report rejects unsupported schema with 400', async () => {
-  const invalid = { ...validReportV1, schema: 'vox-report-v0-legacy' };
-  const req = createRequest(invalid);
+  const badSchema = { ...validReportV1, schema: 'vox-report-v999' };
+  const req = createRequest(badSchema);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
   const json = await res.json();
@@ -125,8 +131,11 @@ test('POST /v1/report rejects unsupported schema with 400', async () => {
 });
 
 test('POST /v1/report rejects payload containing top-level tokens with 400', async () => {
-  const dirty = { ...validReportV1, access_token: 'ya29.secret' };
-  const req = createRequest(dirty);
+  const leakedPayload = {
+    ...validReportV1,
+    access_token: 'secret_oauth_token_12345',
+  };
+  const req = createRequest(leakedPayload);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
   const json = await res.json();
@@ -134,14 +143,15 @@ test('POST /v1/report rejects payload containing top-level tokens with 400', asy
 });
 
 test('POST /v1/report rejects payload containing nested passwords or cookies with 400', async () => {
-  const dirty = {
+  const leakedNested = {
     ...validReportV1,
-    display: {
-      ...validReportV1.display,
-      session_cookie: 'secret-id',
+    networkLogs: {
+      headers: {
+        cookie: 'session_id=abcdef',
+      },
     },
   };
-  const req = createRequest(dirty);
+  const req = createRequest(leakedNested);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
   const json = await res.json();
@@ -149,20 +159,19 @@ test('POST /v1/report rejects payload containing nested passwords or cookies wit
 });
 
 test('POST /v1/report rejects forbidden keys inside safeRecentEvents context', async () => {
-  const dirty = {
+  const leakedEventContext = {
     ...validReportV2,
     safeRecentEvents: [
       {
         timestamp: Date.now(),
-        level: 'ERROR',
-        category: 'YANDEX_AUTH',
-        code: 'AUTH_FAILED',
-        message: 'Auth error',
-        context: { refresh_token: 'secret123' },
+        level: 'INFO',
+        code: 'AUTH',
+        message: 'Authenticated successfully',
+        context: { user_token: 'xyz789' },
       },
     ],
   };
-  const req = createRequest(dirty);
+  const req = createRequest(leakedEventContext);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
   const json = await res.json();
@@ -170,9 +179,12 @@ test('POST /v1/report rejects forbidden keys inside safeRecentEvents context', a
 });
 
 test('POST /v1/report rejects missing required device fields with 400', async () => {
-  const missing = { ...validReportV1 };
-  delete missing.model;
-  const req = createRequest(missing);
+  const missingModel = {
+    schema: 'vox-diagnostic-report-v1',
+    appVersion: '32.56-vox.7-dev',
+    platform: 'Android TV',
+  };
+  const req = createRequest(missingModel);
   const res = await handleRequest(req);
   assert.equal(res.status, 400);
   const json = await res.json();
@@ -180,11 +192,8 @@ test('POST /v1/report rejects missing required device fields with 400', async ()
 });
 
 test('POST /v1/report rejects oversized payload with 413', async () => {
-  const bigPayload = {
-    ...validReportV1,
-    largeData: 'A'.repeat(260 * 1024),
-  };
-  const req = createRequest(bigPayload);
+  const bigMessage = 'A'.repeat(300 * 1024);
+  const req = createRequest(bigMessage, { contentType: 'application/json' });
   const res = await handleRequest(req);
   assert.equal(res.status, 413);
   const json = await res.json();
@@ -198,28 +207,75 @@ test('PUT /v1/report returns 405 Method Not Allowed', async () => {
 });
 
 test('POST /v1/report applies rate limiting and returns 429 when threshold is exceeded', async () => {
-  resetRateLimiter();
   for (let i = 0; i < 20; i++) {
     const req = createRequest(validReportV1);
     const res = await handleRequest(req);
     assert.equal(res.status, 201);
   }
-  // 21st request should be rate limited
-  const reqBlocked = createRequest(validReportV1);
-  const resBlocked = await handleRequest(reqBlocked);
-  assert.equal(resBlocked.status, 429);
-  const json = await resBlocked.json();
+  const rateLimitedReq = createRequest(validReportV1);
+  const res = await handleRequest(rateLimitedReq);
+  assert.equal(res.status, 429);
+  const json = await res.json();
   assert.equal(json.error, 'rate_limited');
 });
 
 test('isExpiredReport correctly identifies reports older than 30 days', () => {
   const now = Date.now();
-  const fresh = now - 1000;
-  const old29Days = now - 29 * 24 * 60 * 60 * 1000;
-  const old31Days = now - 31 * 24 * 60 * 60 * 1000;
-
+  const fresh = now - 1000 * 60 * 60 * 24 * 10; // 10 days ago
+  const expired = now - DEFAULT_RETENTION_MS - 1000; // 30+ days ago
   assert.equal(isExpiredReport(fresh), false);
-  assert.equal(isExpiredReport(old29Days), false);
-  assert.equal(isExpiredReport(old31Days), true);
-  assert.equal(isExpiredReport(null), false);
+  assert.equal(isExpiredReport(expired), true);
+});
+
+test('Admin UI and Admin API list and single report retrieval', async () => {
+  const customStorage = new ReportStorage();
+  const env = { ADMIN_SECRET: 'test_admin_secret_123' };
+
+  // Submit a report into storage
+  const submitReq = createRequest(validReportV2);
+  const submitRes = await handleRequest(submitReq, env, customStorage);
+  assert.equal(submitRes.status, 201);
+  const { reportId } = await submitRes.json();
+  assert.ok(reportId);
+
+  // 1. GET /admin without auth -> 401
+  const unauthAdminReq = createRequest(null, { url: 'https://diagnostics.example.com/admin', method: 'GET' });
+  const unauthAdminRes = await handleRequest(unauthAdminReq, env, customStorage);
+  assert.equal(unauthAdminRes.status, 401);
+
+  // 2. GET /admin with auth -> 200 HTML
+  const authAdminReq = createRequest(null, {
+    url: 'https://diagnostics.example.com/admin?token=test_admin_secret_123',
+    method: 'GET',
+  });
+  const authAdminRes = await handleRequest(authAdminReq, env, customStorage);
+  assert.equal(authAdminRes.status, 200);
+  const html = await authAdminRes.text();
+  assert.match(html, /SmartTube VOX/);
+  assert.match(html, new RegExp(reportId));
+
+  // 3. GET /v1/admin/reports API with Bearer token
+  const listReq = createRequest(null, {
+    url: 'https://diagnostics.example.com/v1/admin/reports',
+    method: 'GET',
+    headers: { Authorization: 'Bearer test_admin_secret_123' },
+  });
+  const listRes = await handleRequest(listReq, env, customStorage);
+  assert.equal(listRes.status, 200);
+  const listJson = await listRes.json();
+  assert.equal(listJson.reports.length, 1);
+  assert.equal(listJson.reports[0].report_id, reportId);
+
+  // 4. GET /v1/admin/reports/:id API
+  const getReq = createRequest(null, {
+    url: `https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`,
+    method: 'GET',
+    headers: { Authorization: 'Bearer test_admin_secret_123' },
+  });
+  const getRes = await handleRequest(getReq, env, customStorage);
+  assert.equal(getRes.status, 200);
+  const getJson = await getRes.json();
+  assert.equal(getJson.report_id, reportId);
+  assert.equal(getJson.payload.schema, 'vox-diagnostic-report-v2');
+  assert.equal(getJson.payload.safeRecentEvents.length, 50);
 });

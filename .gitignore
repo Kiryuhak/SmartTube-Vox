@@ -86,4 +86,5 @@ author-signature.xml
 signature1.xml
 /tizen/build/
 !/tizen/tools/
+.wrangler/
 
