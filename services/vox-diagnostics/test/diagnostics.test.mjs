@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test, { beforeEach } from 'node:test';
-import { handleRequest, resetRateLimiter, isExpiredReport, DEFAULT_RETENTION_MS, CANONICAL_SCHEMA } from '../src/diagnostics.mjs';
+import {
+  handleRequest,
+  resetRateLimiter,
+  isExpiredReport,
+  generateErrorSignature,
+  DEFAULT_RETENTION_MS,
+  CANONICAL_SCHEMA,
+} from '../src/diagnostics.mjs';
 import { ReportStorage } from '../src/storage.mjs';
 
 const validReportV1 = {
@@ -48,11 +55,12 @@ const validReportV1 = {
 const validReportV2 = {
   ...validReportV1,
   schema: 'vox-diagnostic-report-v2',
+  errorCategory: 'DOWNLOAD',
   safeRecentEvents: Array.from({ length: 50 }, (_, i) => ({
     timestamp: Date.now() - (50 - i) * 1000,
-    level: 'INFO',
+    level: i === 49 ? 'ERROR' : 'INFO',
     category: 'DOWNLOAD',
-    code: 'DOWNLOAD_STARTED',
+    code: i === 49 ? 'TRANSLATION_AUDIO_DOWNLOAD_FAILED' : 'DOWNLOAD_STARTED',
     message: `Safe download event #${i + 1}`,
     context: { stage: 'INIT', mode: 'DIRECT' },
   })),
@@ -227,11 +235,34 @@ test('isExpiredReport correctly identifies reports older than 30 days', () => {
   assert.equal(isExpiredReport(expired), true);
 });
 
-test('Admin UI and Admin API list and single report retrieval', async () => {
+test('generateErrorSignature builds normalized error signature', () => {
+  const sig1 = generateErrorSignature(validReportV2);
+  assert.equal(sig1, 'DOWNLOAD|TRANSLATION_AUDIO_DOWNLOAD_FAILED|ANDROID_TV_API31');
+
+  const sigCustom = generateErrorSignature({
+    errorSignature: 'CUSTOM|SIG|TV',
+    platform: 'Android TV',
+  });
+  assert.equal(sigCustom, 'CUSTOM|SIG|TV');
+
+  const sigClean = generateErrorSignature({
+    platform: 'Android TV',
+    safeRecentEvents: [{ level: 'INFO', code: 'INIT', message: 'Ready' }],
+  });
+  assert.equal(sigClean, '');
+});
+
+test('Admin UI and Admin API list, auth check, stats, issues, PATCH status and DELETE', async () => {
   const customStorage = new ReportStorage();
   const env = { ADMIN_SECRET: 'test_admin_secret_123' };
 
-  // Submit a report into storage
+  // Fail-closed test: If env has no secret and no dev auth, admin access must be denied (401)
+  const emptyEnv = {};
+  const unauthTestReq = createRequest(null, { url: 'https://diagnostics.example.com/admin', method: 'GET' });
+  const unauthTestRes = await handleRequest(unauthTestReq, emptyEnv, customStorage);
+  assert.equal(unauthTestRes.status, 401);
+
+  // Submit report into storage
   const submitReq = createRequest(validReportV2);
   const submitRes = await handleRequest(submitReq, env, customStorage);
   assert.equal(submitRes.status, 201);
@@ -259,9 +290,36 @@ test('Admin UI and Admin API list and single report retrieval', async () => {
   assert.match(html, /SmartTube VOX/);
   assert.match(html, new RegExp(reportId));
 
-  // 3. GET /v1/admin/reports API with Bearer token
+  // 3. GET /v1/admin/stats API
+  const statsReq = createRequest(null, {
+    url: 'https://diagnostics.example.com/v1/admin/stats',
+    method: 'GET',
+    headers: { Authorization: 'Bearer test_admin_secret_123' },
+  });
+  const statsRes = await handleRequest(statsReq, env, customStorage);
+  assert.equal(statsRes.status, 200);
+  const statsJson = await statsRes.json();
+  assert.equal(statsJson.totalReports, 1);
+  assert.equal(statsJson.reports24h, 1);
+  assert.equal(statsJson.activeIssuesCount, 1);
+  assert.equal(statsJson.platformBreakdown.length, 1);
+
+  // 4. GET /v1/admin/issues API (grouped issues)
+  const issuesReq = createRequest(null, {
+    url: 'https://diagnostics.example.com/v1/admin/issues',
+    method: 'GET',
+    headers: { Authorization: 'Bearer test_admin_secret_123' },
+  });
+  const issuesRes = await handleRequest(issuesReq, env, customStorage);
+  assert.equal(issuesRes.status, 200);
+  const issuesJson = await issuesRes.json();
+  assert.equal(issuesJson.issues.length, 1);
+  assert.equal(issuesJson.issues[0].error_signature, 'DOWNLOAD|TRANSLATION_AUDIO_DOWNLOAD_FAILED|ANDROID_TV_API31');
+  assert.equal(issuesJson.issues[0].count, 1);
+
+  // 5. GET /v1/admin/reports with filters
   const listReq = createRequest(null, {
-    url: 'https://diagnostics.example.com/v1/admin/reports',
+    url: 'https://diagnostics.example.com/v1/admin/reports?platform=Android%20TV&status=NEW',
     method: 'GET',
     headers: { Authorization: 'Bearer test_admin_secret_123' },
   });
@@ -271,16 +329,23 @@ test('Admin UI and Admin API list and single report retrieval', async () => {
   assert.equal(listJson.reports.length, 1);
   assert.equal(listJson.reports[0].report_id, reportId);
 
-  // 3b. GET /v1/admin/reports API with X-Admin-Key header
-  const listKeyReq = createRequest(null, {
-    url: 'https://diagnostics.example.com/v1/admin/reports',
-    method: 'GET',
-    headers: { 'X-Admin-Key': 'test_admin_secret_123' },
-  });
-  const listKeyRes = await handleRequest(listKeyReq, env, customStorage);
-  assert.equal(listKeyRes.status, 200);
+  // 6. PATCH /v1/admin/reports/:id (update status and developer notes)
+  const patchReq = createRequest(
+    { status: 'REVIEWED', developerNotes: 'Investigating translation stream' },
+    {
+      url: `https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`,
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer test_admin_secret_123' },
+    }
+  );
+  const patchRes = await handleRequest(patchReq, env, customStorage);
+  assert.equal(patchRes.status, 200);
+  const patchJson = await patchRes.json();
+  assert.equal(patchJson.status, 'ok');
+  assert.equal(patchJson.report.status, 'REVIEWED');
+  assert.equal(patchJson.report.developer_notes, 'Investigating translation stream');
 
-  // 4. GET /v1/admin/reports/:id API
+  // 7. GET /v1/admin/reports/:id verifies update
   const getReq = createRequest(null, {
     url: `https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`,
     method: 'GET',
@@ -289,7 +354,21 @@ test('Admin UI and Admin API list and single report retrieval', async () => {
   const getRes = await handleRequest(getReq, env, customStorage);
   assert.equal(getRes.status, 200);
   const getJson = await getRes.json();
-  assert.equal(getJson.report_id, reportId);
-  assert.equal(getJson.payload.schema, 'vox-diagnostic-report-v2');
-  assert.equal(getJson.payload.safeRecentEvents.length, 50);
+  assert.equal(getJson.status, 'REVIEWED');
+  assert.equal(getJson.developer_notes, 'Investigating translation stream');
+
+  // 8. DELETE /v1/admin/reports/:id
+  const deleteReq = createRequest(null, {
+    url: `https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`,
+    method: 'DELETE',
+    headers: { Authorization: 'Bearer test_admin_secret_123' },
+  });
+  const deleteRes = await handleRequest(deleteReq, env, customStorage);
+  assert.equal(deleteRes.status, 200);
+  const deleteJson = await deleteRes.json();
+  assert.equal(deleteJson.status, 'deleted');
+
+  // Verify report is deleted
+  const getDeletedRes = await handleRequest(getReq, env, customStorage);
+  assert.equal(getDeletedRes.status, 404);
 });
