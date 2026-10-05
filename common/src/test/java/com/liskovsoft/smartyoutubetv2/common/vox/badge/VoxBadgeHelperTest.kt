@@ -83,4 +83,24 @@ class VoxBadgeHelperTest {
         }
         assertNull(VoxBadgeHelper.getQualityBadge(videoNormal))
     }
+
+    @Test
+    fun testAgeBadgeExtraction() {
+        val videoWithField = Video().apply { ageRating = "18+" }
+        assertEquals("18+", VoxBadgeHelper.getAgeBadge(videoWithField))
+
+        val videoWithBadge = Video().apply { badge = "12+" }
+        assertEquals("12+", VoxBadgeHelper.getAgeBadge(videoWithBadge))
+
+        val videoWithSecondTitle = Video().apply {
+            secondTitle = "Movie · 16+ · 2024"
+        }
+        assertEquals("16+", VoxBadgeHelper.getAgeBadge(videoWithSecondTitle))
+
+        val videoNormal = Video().apply {
+            title = "Family Vlog"
+            secondTitle = "Channel Name · 3 weeks ago"
+        }
+        assertNull(VoxBadgeHelper.getAgeBadge(videoNormal))
+    }
 }

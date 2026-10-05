@@ -276,6 +276,11 @@ public class VideoLoaderController extends BasePlayerController {
                 mediaUrl = android.net.Uri.fromFile(new java.io.File(mediaUrl)).toString();
                 video.mediaUrl = mediaUrl;
             }
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_PLAYBACK_OPENED,
+                    "Offline playback opened for videoId=" + video.videoId
+            );
             getPlayer().openUrlList(java.util.Collections.singletonList(mediaUrl));
             getPlayer().setTitle(video.getTitle());
             getPlayer().showProgressBar(false);

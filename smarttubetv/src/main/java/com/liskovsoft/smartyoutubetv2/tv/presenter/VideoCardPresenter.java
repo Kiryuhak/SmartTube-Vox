@@ -131,6 +131,23 @@ public class VideoCardPresenter extends LongClickPresenter {
         cardView.setProgress(video.percentWatched > 0 && video.percentWatched < 1 ? 1 : Math.round(video.percentWatched));
         String qualityBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video);
         cardView.setQualityBadge(qualityBadge);
+        if (qualityBadge != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.QUALITY_BADGE_BOUND,
+                    "Quality badge bound: " + qualityBadge
+            );
+        }
+
+        String ageBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getAgeBadge(video);
+        cardView.setAgeBadge(ageBadge);
+        if (ageBadge != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AGE_BADGE_BOUND,
+                    "Age badge bound: " + ageBadge
+            );
+        }
 
         String badgeText = video.hasNewContent ? context.getString(R.string.badge_new_content) :
                 video.isLive ? context.getString(R.string.badge_live) :
@@ -138,6 +155,9 @@ public class VideoCardPresenter extends LongClickPresenter {
                 video.badge;
 
         if (qualityBadge != null && badgeText != null && com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.isQualityText(badgeText)) {
+            badgeText = null;
+        }
+        if (ageBadge != null && badgeText != null && com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.isAgeText(badgeText)) {
             badgeText = null;
         }
 
@@ -189,6 +209,7 @@ public class VideoCardPresenter extends LongClickPresenter {
         // Remove references to images so that the garbage collector can free up memory.
         cardView.setBadgeImage(null);
         cardView.setQualityBadge(null);
+        cardView.setAgeBadge(null);
         cardView.setMainImage(null);
 
         // Cleanup Glide resources. https://chatgpt.com/share/682120c5-e428-8010-b848-371b2dec0cd5

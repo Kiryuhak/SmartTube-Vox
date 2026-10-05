@@ -195,11 +195,14 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_SOUND_OFF)) {
             adapter.add(mActions.get(R.id.action_sound_off));
         }
-        boolean isDownloadedOrLocal = getVideo() != null && (getVideo().isLocal || getVideo().isDownloadedTranslated());
-        if (!isDownloadedOrLocal) {
+        boolean isDownloadedTranslated = getVideo() != null && getVideo().isDownloadedTranslated();
+        boolean isLocal = getVideo() != null && getVideo().isLocal;
+        if (!isDownloadedTranslated) {
             if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
                 adapter.add(mActions.get(R.id.action_voice_translate));
             }
+        }
+        if (!isDownloadedTranslated && !isLocal) {
             if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)) {
                 adapter.add(mActions.get(R.id.action_download));
             }
@@ -621,13 +624,19 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         ArrayObjectAdapter primary = (ArrayObjectAdapter) getControlsRow().getPrimaryActionsAdapter();
         if (primary == null) return;
 
-        boolean isDownloadedOrLocal = video != null && (video.isLocal || video.isDownloadedTranslated());
+        boolean isDownloadedTranslated = video != null && video.isDownloadedTranslated();
+        boolean isLocal = video != null && video.isLocal;
         Action translateAction = mActions.get(R.id.action_voice_translate);
         Action downloadAction = mActions.get(R.id.action_download);
 
-        if (isDownloadedOrLocal) {
+        if (isDownloadedTranslated) {
             if (translateAction != null) primary.remove(translateAction);
             if (downloadAction != null) primary.remove(downloadAction);
+        } else if (isLocal) {
+            if (downloadAction != null) primary.remove(downloadAction);
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE) && translateAction != null && primary.indexOf(translateAction) == -1) {
+                primary.add(translateAction);
+            }
         } else {
             if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE) && translateAction != null && primary.indexOf(translateAction) == -1) {
                 primary.add(translateAction);

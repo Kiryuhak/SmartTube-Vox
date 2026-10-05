@@ -91,6 +91,7 @@ public final class Video {
     public String mediaUrl;
     public boolean isLocal;
     public String translationState; // "NONE", "DOWNLOADED_TRANSLATED", "UNKNOWN"
+    public String ageRating; // "0+", "6+", "12+", "16+", "18+" or null
     public boolean finishOnEnded;
     public boolean incognito;
     public String likeCount;
@@ -197,6 +198,7 @@ public final class Video {
         video.isLocal = item.isLocal;
         video.mediaUrl = item.mediaUrl;
         video.translationState = item.translationState;
+        video.ageRating = item.ageRating;
 
         return video;
     }
@@ -858,6 +860,14 @@ public final class Video {
 
     public void setDurationMs(long durationMs) {
         this.durationMs = durationMs;
+    }
+
+    public String getAgeRating() {
+        return ageRating;
+    }
+
+    public void setAgeRating(String ageRating) {
+        this.ageRating = ageRating;
     }
 
     private MediaItem findNextVideo(MediaItemMetadata metadata) {

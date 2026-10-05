@@ -62,6 +62,7 @@ public class ExoPlayerController implements Player.EventListener {
     private long mPrepareStartTimeMs = 0;
     private boolean mHasStartedPlayback = false;
     private int mRebufferCount = 0;
+    private boolean mOfflineReadyLogged = false;
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -138,6 +139,7 @@ public class ExoPlayerController implements Player.EventListener {
         mOnSourceChanged = true;
         mPrepareStartTimeMs = System.currentTimeMillis();
         mHasStartedPlayback = false;
+        mOfflineReadyLogged = false;
         mRebufferCount = 0;
         mEventListener.onSourceChanged(getVideo());
         mPlayer.prepare(mediaSource);
@@ -156,8 +158,21 @@ public class ExoPlayerController implements Player.EventListener {
      * (e.g. 302200 when duration is 302000).
      */
     public void setPositionMs(long positionMs) {
-        // Url list videos at load stage has undefined (-1) length. So, we need to remove length check.
-        if (mPlayer != null && positionMs >= 0 && positionMs <= getDurationMs()) {
+        if (mPlayer == null || positionMs < 0) {
+            return;
+        }
+        long duration = getDurationMs();
+        if (duration <= 0 && getVideo() != null && getVideo().getDurationMs() > 0) {
+            duration = getVideo().getDurationMs();
+        }
+        if (duration <= 0 || positionMs <= duration) {
+            if (getVideo() != null && getVideo().isLocal) {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_SEEK,
+                        "Seek local video to: " + positionMs + "ms"
+                );
+            }
             mPlayer.seekTo(positionMs);
         }
     }
@@ -386,6 +401,19 @@ public class ExoPlayerController implements Player.EventListener {
                         VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_STARTUP_SLOW, "Замедленный старт воспроизведения", ctx);
                     }
                 }
+            }
+            if (getVideo() != null && getVideo().isLocal && !mOfflineReadyLogged) {
+                mOfflineReadyLogged = true;
+                VoxSafeLogger.info(
+                        VoxLogCategory.PLAYER,
+                        VoxLogCode.OFFLINE_VIDEO_TRACK_READY,
+                        "Offline video track ready (local MKV)"
+                );
+                VoxSafeLogger.info(
+                        VoxLogCategory.PLAYER,
+                        VoxLogCode.OFFLINE_TIMELINE_READY,
+                        "Offline timeline ready (durationMs=" + getDurationMs() + ")"
+                );
             }
             mEventListener.onPlay();
         } else if (isPausePressed) {

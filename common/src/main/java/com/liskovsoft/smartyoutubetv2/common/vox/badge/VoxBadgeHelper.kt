@@ -64,4 +64,38 @@ object VoxBadgeHelper {
     fun isQualityText(raw: String?): Boolean {
         return VoxQualityBadgeFormatter.isQualityString(raw)
     }
+
+    @JvmStatic
+    fun normalizeAge(raw: String?): String? {
+        val parsed = VoxAgeRatingFormatter.parse(raw) ?: return null
+        return VoxAgeRatingFormatter.format(parsed)
+    }
+
+    @JvmStatic
+    fun getAgeBadge(video: Video?): String? {
+        if (video == null) return null
+
+        // 1. Прямое поле возрастного рейтинга
+        normalizeAge(video.ageRating)?.let { return it }
+
+        // 2. Явный бейдж в модели видео
+        normalizeAge(video.badge)?.let { return it }
+
+        // 3. Проверка метаданных описания/второй строки
+        val second = video.secondTitle?.toString()
+        if (!second.isNullOrBlank()) {
+            val tokens = second.split("•", "·", "|", "-")
+            for (token in tokens) {
+                val candidate = normalizeAge(token.trim())
+                if (candidate != null) return candidate
+            }
+        }
+
+        return null
+    }
+
+    @JvmStatic
+    fun isAgeText(raw: String?): Boolean {
+        return VoxAgeRatingFormatter.isAgeString(raw)
+    }
 }

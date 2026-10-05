@@ -82,6 +82,32 @@ class VoxDeviceAutoTuner(private val context: Context? = null) {
             rationale.add("Стандартная конфигурация ТВ: автоматический баланс качества и совместимости")
         }
 
+        val reasonCodes = mutableListOf<String>()
+        if (displayHeight >= 2160) {
+            reasonCodes.add("DISPLAY_4K")
+        } else if (displayHeight >= 1080) {
+            reasonCodes.add("DISPLAY_1080P")
+        } else {
+            reasonCodes.add("DISPLAY_SD")
+        }
+
+        if (hasHw4kAv1 || av1Cap?.hardwareAccelerated == true) {
+            reasonCodes.add("HW_AV1_AVAILABLE")
+        }
+        if (hasHw4kVp9 || vp9Cap?.hardwareAccelerated == true) {
+            reasonCodes.add("HW_VP9_AVAILABLE")
+        }
+        if (hasHw4kAvc || avcCap?.hardwareAccelerated == true) {
+            reasonCodes.add("HW_AVC_AVAILABLE")
+        }
+        if (isLowRam || (totalRamMb in 1..1800)) {
+            reasonCodes.add("RAM_CONSTRAINED")
+        }
+        if (cpuCores >= 4) {
+            reasonCodes.add("CPU_CORES_4_PLUS")
+        }
+        reasonCodes.add("TIER_${tier.name}")
+
         return VoxRecommendedSettings(
             tier = tier,
             policyMode = VoxCodecPolicyMode.AUTO,
@@ -89,7 +115,8 @@ class VoxDeviceAutoTuner(private val context: Context? = null) {
             preferredVideoCodec = preferredVideo,
             preferredAudioCodec = preferredAudio,
             passthroughEnabled = passthrough,
-            rationale = rationale
+            rationale = rationale,
+            reasonCodes = reasonCodes
         )
     }
 

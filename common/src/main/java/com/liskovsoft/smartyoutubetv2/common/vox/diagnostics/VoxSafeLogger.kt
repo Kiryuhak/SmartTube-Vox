@@ -63,6 +63,36 @@ object VoxSafeLogger {
         logInternal(VoxLogLevel.ERROR, category, code, message, context, throwable)
     }
 
+    @JvmStatic
+    @JvmOverloads
+    fun debug(category: VoxLogCategory, code: String, message: String, context: Map<String, String>? = null) {
+        d(category, code, message, context)
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun info(category: VoxLogCategory, code: String, message: String, context: Map<String, String>? = null) {
+        i(category, code, message, context)
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun warn(category: VoxLogCategory, code: String, message: String, context: Map<String, String>? = null) {
+        w(category, code, message, context)
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun error(
+        category: VoxLogCategory,
+        code: String,
+        message: String,
+        context: Map<String, String>? = null,
+        throwable: Throwable? = null
+    ) {
+        e(category, code, message, context, throwable)
+    }
+
     private fun logInternal(
         level: VoxLogLevel,
         category: VoxLogCategory,

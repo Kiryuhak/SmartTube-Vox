@@ -28,7 +28,8 @@ data class VoxRecommendedSettings(
     val preferredVideoCodec: VoxVideoCodecPreference = VoxVideoCodecPreference.AUTO,
     val preferredAudioCodec: VoxAudioCodecPreference = VoxAudioCodecPreference.AUTO,
     val passthroughEnabled: Boolean = true,
-    val rationale: List<String> = emptyList()
+    val rationale: List<String> = emptyList(),
+    val reasonCodes: List<String> = emptyList()
 ) {
     fun toCodecPolicy(): VoxCodecPolicy {
         return VoxCodecPolicy(
