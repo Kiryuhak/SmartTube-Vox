@@ -270,6 +270,12 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
         VoxDeviceProfile profile = manager.getDeviceProfile(false);
         VoxRecommendedSettings recommended = manager.getRecommendedSettings(false);
 
+        boolean isDeviating = proposedPolicy.getMaxQualityHeight() != recommended.getMaxQualityHeight()
+                || proposedPolicy.getPreferredVideoCodec() != recommended.getPreferredVideoCodec()
+                || proposedPolicy.getPreferredAudioCodec() != recommended.getPreferredAudioCodec()
+                || proposedPolicy.getPassthroughEnabled() != recommended.getPassthroughEnabled();
+        manager.markManualOverride(isDeviating);
+
         VoxCompatibilityRisk risk = VoxCompatibilityRiskEvaluator.evaluate(proposedPolicy, recommended, profile);
         if (risk != null) {
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.warn(
