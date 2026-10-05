@@ -311,6 +311,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             video.badge = item.getActualQuality() != null ? item.getActualQuality() : job.getRequest().getQualityPreference().getLabel();
             video.isLocal = true;
             video.mediaUrl = job.getPublishedUri();
+            video.translationState = job.getTranslationState().name();
             video.setDurationMs(0);
 
             String detail;

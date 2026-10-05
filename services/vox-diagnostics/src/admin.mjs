@@ -18,6 +18,11 @@ export function checkAdminAuth(request, env = {}) {
     return true;
   }
 
+  const adminKey = request.headers.get('x-admin-key') || request.headers.get('x-admin-secret') || '';
+  if (adminKey.trim() === secret) {
+    return true;
+  }
+
   const url = new URL(request.url);
   const tokenParam = url.searchParams.get('token');
   if (tokenParam === secret) {
