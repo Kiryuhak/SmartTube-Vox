@@ -38,19 +38,25 @@ import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 
+import androidx.annotation.Nullable;
+import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.video.VideoListener;
+import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxOfflinePlaybackProbe;
+
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ExoPlayerController implements Player.EventListener {
+public class ExoPlayerController implements Player.EventListener, VideoListener {
     private static final String TAG = ExoPlayerController.class.getSimpleName();
     private final Context mContext;
     private final ExoMediaSourceFactory mMediaSourceFactory;
     private final TrackSelectorManager mTrackSelectorManager;
     private final TrackInfoFormatter2 mTrackFormatter;
     private final TrackErrorFixer mTrackErrorFixer;
+    private final VoxOfflinePlaybackProbe mOfflineProbe = new VoxOfflinePlaybackProbe();
     private boolean mOnSourceChanged;
     private WeakReference<Video> mVideo;
     private final PlayerEventListener mEventListener;
@@ -166,14 +172,10 @@ public class ExoPlayerController implements Player.EventListener {
             duration = getVideo().getDurationMs();
         }
         if (duration <= 0 || positionMs <= duration) {
-            if (getVideo() != null && getVideo().isLocal) {
-                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_SEEK,
-                        "Seek local video to: " + positionMs + "ms"
-                );
-            }
+            long fromPos = getPositionMs();
+            mOfflineProbe.onSeekRequested(fromPos, positionMs);
             mPlayer.seekTo(positionMs);
+            mOfflineProbe.onSeekCompleted(positionMs);
         }
     }
 
@@ -231,7 +233,10 @@ public class ExoPlayerController implements Player.EventListener {
     
     public void setPlayer(SimpleExoPlayer player) {
         mPlayer = player;
-        player.addListener(this);
+        if (player != null) {
+            player.addListener(this);
+            player.addVideoListener(this);
+        }
     }
 
     //@Override
@@ -256,10 +261,17 @@ public class ExoPlayerController implements Player.EventListener {
     
     public void setVideo(Video video) {
         mVideo = new WeakReference<>(video);
+        if (video != null) {
+            mOfflineProbe.onBeforeOpen(video, video.mediaUrl);
+        }
     }
     
     public Video getVideo() {
         return mVideo != null ? mVideo.get() : null;
+    }
+
+    public VoxOfflinePlaybackProbe getOfflineProbe() {
+        return mOfflineProbe;
     }
     
     public List<FormatItem> getVideoFormats() {
@@ -307,6 +319,24 @@ public class ExoPlayerController implements Player.EventListener {
         if (trackGroups.length == 0) {
             Log.i(TAG, "onTracksChanged: Hmm. Strange. Received empty groups, no selections. Why is this happens only on next/prev videos?");
             return;
+        }
+
+        if (getVideo() != null && getVideo().isLocal) {
+            List<FormatItem> vFormats = getVideoFormats();
+            List<FormatItem> aFormats = getAudioFormats();
+            String vMime = (vFormats != null && !vFormats.isEmpty() && vFormats.get(0).getTrack() != null && vFormats.get(0).getTrack().format != null)
+                    ? vFormats.get(0).getTrack().format.sampleMimeType : null;
+            String aMime = (aFormats != null && !aFormats.isEmpty() && aFormats.get(0).getTrack() != null && aFormats.get(0).getTrack().format != null)
+                    ? aFormats.get(0).getTrack().format.sampleMimeType : null;
+            boolean hasTrans = getVideo().isDownloadedTranslated();
+            mOfflineProbe.onTracksDiscovered(
+                    vFormats != null ? vFormats.size() : 0,
+                    aFormats != null ? aFormats.size() : 0,
+                    vMime,
+                    aMime,
+                    hasTrans,
+                    hasTrans
+            );
         }
 
         notifyOnVideoLoad();
@@ -566,6 +596,7 @@ public class ExoPlayerController implements Player.EventListener {
 
         try {
             mPlayer.removeListener(this);
+            mPlayer.removeVideoListener(this);
             mPlayer.stop(true); // Cause input lags due to high cpu load?
             mPlayer.clearVideoSurface();
             mPlayer.release();
@@ -574,5 +605,24 @@ public class ExoPlayerController implements Player.EventListener {
         } finally {
             mPlayer = null;
         }
+    }
+
+    @Override
+    public void onTimelineChanged(Timeline timeline, @Nullable Object manifest, int reason) {
+        long duration = getDurationMs();
+        mOfflineProbe.onTimelineChanged(duration, duration > 0, false);
+    }
+
+    @Override
+    public void onRenderedFirstFrame() {
+        mOfflineProbe.onFirstFrameRendered();
+    }
+
+    @Override
+    public void onVideoSizeChanged(int width, int height, int unappliedRotationDegrees, float pixelWidthHeightRatio) {
+    }
+
+    @Override
+    public void onSurfaceSizeChanged(int width, int height) {
     }
 }

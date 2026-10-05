@@ -50,11 +50,27 @@ public class VoxCompatibilitySettingsPresenter extends BasePresenter<Void> {
     }
 
     private void appendAutoTuneButton(AppDialogPresenter settingsPresenter) {
+        VoxCompatibilityManager manager = VoxCompatibilityManager.instance(getContext());
         settingsPresenter.appendSingleButton(
                 UiOptionItem.from(getContext().getString(R.string.vox_compatibility_auto_tune), option -> {
                     showAutoTuneDialog();
                 })
         );
+
+        if (manager.isManualOverrideActive()) {
+            settingsPresenter.appendSingleButton(
+                    UiOptionItem.from("Вернуть рекомендуемые настройки", option -> {
+                        manager.restoreRecommendedSettings();
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.COMPATIBILITY,
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AUTO_TUNING_RESTORED,
+                                "Recommended settings restored by user"
+                        );
+                        MessageHelpers.showMessage(getContext(), R.string.vox_compatibility_auto_tune_applied);
+                        show();
+                    })
+            );
+        }
     }
 
     private void showAutoTuneDialog() {

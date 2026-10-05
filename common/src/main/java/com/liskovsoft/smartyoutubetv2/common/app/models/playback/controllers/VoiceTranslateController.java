@@ -798,6 +798,13 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void startYandexTranslation(boolean resetRetryCount, boolean subsequent) {
+        if (getPlayer() != null && getPlayer().getVideo() != null) {
+            Video video = getPlayer().getVideo();
+            if (video.isLocal && video.isDownloadedTranslated()) {
+                Log.d(TAG, "Local video already contains offline translated audio, skipping network translation");
+                return;
+            }
+        }
         if (sUseNewYandexBackend) {
             YandexVotLog.i(TAG, "Starting Yandex translation: backend=NEW (default candidate)");
             startNewYandexBackend(resetRetryCount, subsequent);
@@ -810,6 +817,11 @@ public class VoiceTranslateController extends BasePlayerController {
     private void startNewYandexBackend(boolean resetRetryCount, boolean subsequent) {
         if (getPlayer() == null || getPlayer().getVideo() == null) {
             MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
+            return;
+        }
+
+        if (getPlayer().getVideo().isLocal && getPlayer().getVideo().isDownloadedTranslated()) {
+            Log.d(TAG, "Local video already contains offline translated audio, skipping network translation");
             return;
         }
 
