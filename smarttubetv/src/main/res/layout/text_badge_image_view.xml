@@ -37,6 +37,7 @@
         android:textSize="@dimen/card_badge_text_size"
         android:textColor="@color/white"
         android:textStyle="bold"
+        android:elevation="4dp"
         style="@style/TextAppearance.Leanback.ImageCardView.Content" />
     <LinearLayout
                     android:id="@+id/clip_info"

@@ -243,6 +243,11 @@ test('Admin UI and Admin API list and single report retrieval', async () => {
   const unauthAdminRes = await handleRequest(unauthAdminReq, env, customStorage);
   assert.equal(unauthAdminRes.status, 401);
 
+  // 1b. GET /v1/admin/reports without auth -> 401
+  const unauthApiReq = createRequest(null, { url: 'https://diagnostics.example.com/v1/admin/reports', method: 'GET' });
+  const unauthApiRes = await handleRequest(unauthApiReq, env, customStorage);
+  assert.equal(unauthApiRes.status, 401);
+
   // 2. GET /admin with auth -> 200 HTML
   const authAdminReq = createRequest(null, {
     url: 'https://diagnostics.example.com/admin?token=test_admin_secret_123',
@@ -265,6 +270,15 @@ test('Admin UI and Admin API list and single report retrieval', async () => {
   const listJson = await listRes.json();
   assert.equal(listJson.reports.length, 1);
   assert.equal(listJson.reports[0].report_id, reportId);
+
+  // 3b. GET /v1/admin/reports API with X-Admin-Key header
+  const listKeyReq = createRequest(null, {
+    url: 'https://diagnostics.example.com/v1/admin/reports',
+    method: 'GET',
+    headers: { 'X-Admin-Key': 'test_admin_secret_123' },
+  });
+  const listKeyRes = await handleRequest(listKeyReq, env, customStorage);
+  assert.equal(listKeyRes.status, 200);
 
   // 4. GET /v1/admin/reports/:id API
   const getReq = createRequest(null, {

@@ -63,6 +63,11 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
         View rootView = viewHolder.view;
         rootView.setFocusable(true);
         rootView.setOnFocusChangeListener((v, hasFocus) -> {
+            v.setSelected(hasFocus);
+            v.setActivated(hasFocus);
+            if (hasFocus) {
+                v.setAlpha(1.0f);
+            }
             View lbl = v.findViewById(R.id.header_label);
             if (lbl != null) {
                 lbl.setSelected(hasFocus);
@@ -100,11 +105,15 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
     // mUnselectAlpha, and also assumes the xml inflation will return a RowHeaderView.
     @Override
     protected void onSelectLevelChanged(RowHeaderPresenter.ViewHolder holder) {
-        holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
-                (1.0f - mUnselectedAlpha));
+        if (holder.view.hasFocus()) {
+            holder.view.setAlpha(1.0f);
+        } else {
+            holder.view.setAlpha(mUnselectedAlpha + holder.getSelectLevel() *
+                    (1.0f - mUnselectedAlpha));
+        }
         View lbl = holder.view.findViewById(R.id.header_label);
         if (lbl != null) {
-            lbl.setSelected(holder.getSelectLevel() > 0.5f);
+            lbl.setSelected(holder.view.hasFocus() || holder.getSelectLevel() > 0.5f);
         }
     }
 

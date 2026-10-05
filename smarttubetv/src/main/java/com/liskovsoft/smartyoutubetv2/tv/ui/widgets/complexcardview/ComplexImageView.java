@@ -113,6 +113,7 @@ public class ComplexImageView extends RelativeLayout {
         if (text != null && !text.isEmpty()) {
             mQualityBadge.setText(text);
             mQualityBadge.setVisibility(View.VISIBLE);
+            mQualityBadge.bringToFront();
         } else {
             mQualityBadge.setVisibility(View.GONE);
         }
