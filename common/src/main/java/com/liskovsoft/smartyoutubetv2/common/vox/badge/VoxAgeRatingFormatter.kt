@@ -11,7 +11,7 @@ import java.util.regex.Pattern
 object VoxAgeRatingFormatter {
 
     // Шаблоны для точных совпадений возрастных меток в текстах
-    private val EXPLICIT_PLUS_PATTERN = Pattern.compile("(?:^|[^0-9])(0|6|12|16|18)\\+(?:[^0-9]|$)")
+    private val EXPLICIT_PLUS_PATTERN = Pattern.compile("(?:^|[^0-9])(0|6|12|16|18)(?:\\+|\\s*(?:плюс|plus))(?:[^0-9]|$)", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
     private val EXPLICIT_YEARS_PATTERN = Pattern.compile("(?:^|[^0-9])(0|6|12|16|18)\\s*(?:лет|года?|years?|yo)(?:[^a-zA-Zа-яА-Я0-9]|$)", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
 
     @JvmStatic

@@ -4,6 +4,18 @@ import android.content.Context
 import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.smartyoutubetv2.common.prefs.VotData
 
+enum class VoxApplyStatus {
+    APPLIED,
+    PARTIAL,
+    FAILED
+}
+
+data class VoxApplyResult(
+    val status: VoxApplyStatus,
+    val previousPolicy: VoxCodecPolicy,
+    val appliedPolicy: VoxCodecPolicy
+)
+
 /**
  * Менеджер совместимости устройств и политик кодеков SmartTube VOX.
  */
@@ -43,9 +55,31 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
         return tuner.tune(profile)
     }
 
-    fun applyRecommendedSettings(recommended: VoxRecommendedSettings) {
-        setCodecPolicy(recommended.toCodecPolicy())
-        setScanCompleted(true)
+    fun applyRecommendedSettings(recommended: VoxRecommendedSettings): VoxApplyResult {
+        val previous = getCodecPolicy()
+        val target = recommended.toCodecPolicy()
+        return try {
+            setCodecPolicy(target)
+            setScanCompleted(true)
+            votData.isManualOverride = false
+            votData.lastAppliedRecommendedProfile = recommended.tier.name
+            VoxApplyResult(VoxApplyStatus.APPLIED, previous, target)
+        } catch (e: Exception) {
+            VoxApplyResult(VoxApplyStatus.FAILED, previous, previous)
+        }
+    }
+
+    fun restoreRecommendedSettings(): VoxApplyResult {
+        val recommended = getRecommendedSettings(false)
+        return applyRecommendedSettings(recommended)
+    }
+
+    fun isManualOverrideActive(): Boolean {
+        return getCodecPolicy().mode == VoxCodecPolicyMode.CUSTOM || votData.isManualOverride
+    }
+
+    fun markManualOverride(isOverride: Boolean) {
+        votData.isManualOverride = isOverride
     }
 
     fun getCodecPolicy(): VoxCodecPolicy {

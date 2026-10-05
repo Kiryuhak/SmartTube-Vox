@@ -11,15 +11,30 @@ object VoxLocalPlayerHelper {
 
     @JvmStatic
     fun playJob(context: Context, job: VoxDownloadJob) {
-        val uri = job.publishedUri ?: return
-        playLocalVideo(
-            context = context,
-            videoId = job.request.videoId,
-            title = job.request.videoTitle,
-            mediaUri = uri,
-            translationState = job.translationState.name,
-            badge = job.actualQuality ?: job.requestedQuality
+        val video = VoxDownloadedVideoFactory.createVideo(job)
+        if (video.mediaUrl.isNullOrBlank()) return
+
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_PLAYBACK_OPENED,
+            "Playing offline local video: ${video.videoId} (translated=${video.isDownloadedTranslated})"
         )
+
+        PlaybackPresenter.instance(context).openVideo(video)
+    }
+
+    @JvmStatic
+    fun playStoredData(context: Context, data: StoredJobData) {
+        val video = VoxDownloadedVideoFactory.createVideo(data)
+        if (video.mediaUrl.isNullOrBlank()) return
+
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_PLAYBACK_OPENED,
+            "Playing offline local video from storage: ${video.videoId} (translated=${video.isDownloadedTranslated})"
+        )
+
+        PlaybackPresenter.instance(context).openVideo(video)
     }
 
     @JvmStatic

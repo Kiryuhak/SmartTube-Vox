@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F1218"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SmartTube VOX 7 — UI Showcase &amp; Verification Harness"
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:text="[Debug Variant Only]"
+            android:textColor="#8C9BAE"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <!-- Left Column: Sidebar States Showcase -->
+        <LinearLayout
+            android:layout_width="360dp"
+            android:layout_height="match_parent"
+            android:background="#161B22"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingBottom="16dp"
+                android:text="Боковое меню (Состояния фокуса)"
+                android:textColor="#8C9BAE"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <!-- State 1: Unfocused -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="8dp"
+                android:paddingBottom="4dp"
+                android:text="1. Обычный (Unfocused):"
+                android:textColor="#58A6FF"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:id="@+id/sidebar_state_unfocused"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:background="@drawable/bg_sidebar_header_item"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:alpha="0.7"
+                    android:src="@drawable/action_search"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:text="Поиск"
+                    android:textColor="@color/sidebar_header_text_selector"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <!-- State 2: Selected but not focused (active section) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:paddingBottom="4dp"
+                android:text="2. Выбранный, но не сфокусированный:"
+                android:textColor="#58A6FF"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:id="@+id/sidebar_state_selected"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:background="@drawable/bg_sidebar_header_item"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:alpha="0.7"
+                    android:src="@drawable/action_playlist"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:text="Главная"
+                    android:textColor="@color/sidebar_header_text_selector"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <!-- State 3: Focused DPAD capsule -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="16dp"
+                android:paddingBottom="4dp"
+                android:text="3. Сфокусированный (DPAD Focused):"
+                android:textColor="#58A6FF"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:id="@+id/sidebar_state_focused"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:background="@drawable/bg_sidebar_header_item"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:alpha="1.0"
+                    android:src="@drawable/action_download"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:text="Скачанные видео"
+                    android:textColor="@color/sidebar_header_text_selector"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Right Column: Video Cards 3-Badge Scheme Showcase -->
+        <ScrollView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="24dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="16dp"
+                    android:text="Карточки видео: Унифицированная схема (Quality Top-Left, Age Bottom-Left, Duration Bottom-Right)"
+                    android:textColor="#8C9BAE"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <!-- Row 1 of Cards -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <!-- Card 1: 4K 2160p + 12+ + 03:29:40 -->
+                    <LinearLayout
+                        android:layout_width="380dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="20dp"
+                        android:orientation="vertical">
+
+                        <RelativeLayout
+                            android:layout_width="380dp"
+                            android:layout_height="214dp"
+                            android:background="#1F2937">
+
+                            <!-- Quality Badge: Top-Left -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentStart="true"
+                                android:layout_alignParentTop="true"
+                                android:layout_margin="10dp"
+                                android:background="@drawable/badge_rounded_bg"
+                                android:elevation="4dp"
+                                android:paddingStart="8dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="8dp"
+                                android:paddingBottom="3dp"
+                                android:text="4K · 2160p"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <!-- Age Rating Badge: Bottom-Left -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentStart="true"
+                                android:layout_alignParentBottom="true"
+                                android:layout_marginStart="10dp"
+                                android:layout_marginBottom="12dp"
+                                android:background="@drawable/badge_rounded_bg"
+                                android:elevation="4dp"
+                                android:paddingStart="6dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="6dp"
+                                android:paddingBottom="3dp"
+                                android:text="12+"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <!-- Duration Badge: Bottom-Right -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:layout_alignParentBottom="true"
+                                android:layout_marginEnd="10dp"
+                                android:layout_marginBottom="12dp"
+                                android:background="@drawable/badge_rounded_bg"
+                                android:elevation="4dp"
+                                android:paddingStart="6dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="6dp"
+                                android:paddingBottom="3dp"
+                                android:text="03:29:40"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <!-- Watched Progress Bar: Bottom Edge -->
+                            <View
+                                android:layout_width="260dp"
+                                android:layout_height="4dp"
+                                android:layout_alignParentBottom="true"
+                                android:layout_alignParentStart="true"
+                                android:background="#E50914" />
+                        </RelativeLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Большое путешествие: Документальный фильм в 4K"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Discovery · 2,4 млн просмотров"
+                            android:textColor="#8C9BAE"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <!-- Card 2: FHD 1080p + 6+ + 00:45:12 -->
+                    <LinearLayout
+                        android:layout_width="380dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <RelativeLayout
+                            android:layout_width="380dp"
+                            android:layout_height="214dp"
+                            android:background="#1F2937">
+
+                            <!-- Quality Badge: Top-Left -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentStart="true"
+                                android:layout_alignParentTop="true"
+                                android:layout_margin="10dp"
+                                android:background="@drawable/badge_rounded_bg"
+                                android:elevation="4dp"
+                                android:paddingStart="8dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="8dp"
+                                android:paddingBottom="3dp"
+                                android:text="FHD · 1080p"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <!-- Age Rating Badge: Bottom-Left -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentStart="true"
+                                android:layout_alignParentBottom="true"
+                                android:layout_marginStart="10dp"
+                                android:layout_marginBottom="12dp"
+                                android:background="@drawable/badge_rounded_bg"
+                                android:elevation="4dp"
+                                android:paddingStart="6dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="6dp"
+                                android:paddingBottom="3dp"
+                                android:text="6+"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <!-- Duration Badge: Bottom-Right -->
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:layout_alignParentBottom="true"
+                                android:layout_marginEnd="10dp"
+                                android:layout_marginBottom="12dp"
+                                android:background="@drawable/badge_rounded_bg"
+                                android:elevation="4dp"
+                                android:paddingStart="6dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="6dp"
+                                android:paddingBottom="3dp"
+                                android:text="00:45:12"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </RelativeLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Путешествие по Камчатке: Вулканы и гейзеры"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="National Geographic · 890 тыс. просмотров"
+                            android:textColor="#8C9BAE"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+</LinearLayout>

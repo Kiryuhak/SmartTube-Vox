@@ -349,6 +349,24 @@ public class VotData extends SharedPreferencesBase {
     private static final String VOX_PREFERRED_AUDIO_CODEC = "vox_preferred_audio_codec";
     private static final String VOX_PASSTHROUGH_ENABLED = "vox_passthrough_enabled";
     private static final String VOX_COMPATIBILITY_SCAN_COMPLETED = "vox_compatibility_scan_completed";
+    private static final String VOX_MANUAL_OVERRIDE = "vox_manual_override";
+    private static final String VOX_LAST_APPLIED_PROFILE = "vox_last_applied_profile";
+
+    public boolean isManualOverride() {
+        return getBoolean(VOX_MANUAL_OVERRIDE, false);
+    }
+
+    public void setManualOverride(boolean override) {
+        putBoolean(VOX_MANUAL_OVERRIDE, override);
+    }
+
+    public String getLastAppliedRecommendedProfile() {
+        return getString(VOX_LAST_APPLIED_PROFILE, "");
+    }
+
+    public void setLastAppliedRecommendedProfile(String profile) {
+        putString(VOX_LAST_APPLIED_PROFILE, profile != null ? profile : "");
+    }
 
     public boolean isDeleteAfterWatchingEnabled() {
         return getPostWatchAction() == POST_WATCH_OFFER_DELETE;

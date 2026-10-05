@@ -10,6 +10,17 @@
                 <action android:name="com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT" />
             </intent-filter>
         </receiver>
+
+        <!-- Internal developer-only Android View showcase activity (debug only, absent in release) -->
+        <activity
+            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.showcase.VoxUiShowcaseActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="com.liskovsoft.smartyoutubetv2.VOX_SHOWCASE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>
