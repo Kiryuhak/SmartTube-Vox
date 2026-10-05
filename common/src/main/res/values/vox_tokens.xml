@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- VOX Unified Visual Tokens -->
+    <dimen name="vox_focus_radius">10dp</dimen>
+    <dimen name="vox_badge_radius">6dp</dimen>
+    <dimen name="vox_card_badge_padding_horizontal">6dp</dimen>
+    <dimen name="vox_card_badge_padding_vertical">3dp</dimen>
+    <dimen name="vox_card_badge_margin">8dp</dimen>
+    <dimen name="vox_badge_text_size_quality">12sp</dimen>
+    <dimen name="vox_badge_text_size_age">11sp</dimen>
+    <dimen name="vox_badge_text_size_duration">12sp</dimen>
+    <dimen name="vox_overlay_corner_radius">10dp</dimen>
+
+    <!-- Animation & Timing Tokens (ms) -->
+    <integer name="vox_anim_duration_fast">150</integer>
+    <integer name="vox_anim_duration_normal">180</integer>
+    <integer name="vox_marquee_delay_ms">800</integer>
+</resources>

@@ -91,6 +91,12 @@ public class ComplexImageCardView extends ImageCardView {
         }
     }
 
+    public void setLocalMarker(boolean isLocal, boolean isTranslated) {
+        if (mComplexImageView != null) {
+            mComplexImageView.setLocalMarker(isLocal, isTranslated);
+        }
+    }
+
     public void setBadgeColor(int color) {
         mComplexImageView.setBadgeColor(color);
     }

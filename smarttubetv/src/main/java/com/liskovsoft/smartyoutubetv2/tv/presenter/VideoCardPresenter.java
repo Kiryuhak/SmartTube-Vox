@@ -149,6 +149,10 @@ public class VideoCardPresenter extends LongClickPresenter {
             );
         }
 
+        boolean isLocal = video.isLocal;
+        boolean isTranslated = video.isDownloadedTranslated();
+        cardView.setLocalMarker(isLocal, isTranslated);
+
         String badgeText = video.hasNewContent ? context.getString(R.string.badge_new_content) :
                 video.isLive ? context.getString(R.string.badge_live) :
                 video.isShorts ? context.getString(R.string.header_shorts).toUpperCase() :
