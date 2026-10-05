@@ -18,7 +18,7 @@ class VoxBadgeRecycleTest {
         cardA.isLocal = true
         cardA.translationState = "DOWNLOADED_TRANSLATED"
 
-        assertEquals("4K · 2160p", VoxBadgeHelper.getQualityBadge(cardA))
+        assertEquals("4K", VoxBadgeHelper.getQualityBadge(cardA))
         assertEquals("12+", VoxBadgeHelper.getAgeBadge(cardA))
         assertTrue(cardA.isLocal)
         assertTrue(cardA.isDownloadedTranslated())

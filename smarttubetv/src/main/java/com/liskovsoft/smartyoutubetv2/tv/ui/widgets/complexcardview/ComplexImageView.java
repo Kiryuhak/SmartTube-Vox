@@ -12,6 +12,7 @@ import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import androidx.core.content.ContextCompat;
 import com.bumptech.glide.Glide;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
@@ -33,6 +34,7 @@ public class ComplexImageView extends RelativeLayout {
     private TextView mAgeBadge;
     private ImageView mLocalBadgeIcon;
     private ViewGroup mProgressContainer;
+    private ViewGroup mTopBadgesContainer;
     private int mPreviewWidth;
     private int mPreviewHeight;
     private Runnable mCreateAndStartPlayer;
@@ -64,6 +66,7 @@ public class ComplexImageView extends RelativeLayout {
         mLocalBadgeIcon = findViewById(R.id.local_badge_icon);
         mProgressBar = findViewById(R.id.clip_progress);
         mProgressContainer = findViewById(R.id.clip_info);
+        mTopBadgesContainer = findViewById(R.id.top_badges_container);
         mPreviewContainer = findViewById(R.id.preview_container);
     }
 
@@ -152,7 +155,12 @@ public class ComplexImageView extends RelativeLayout {
             return;
         }
 
-        mBadgeText.setBackgroundColor(color);
+        int redColor = ContextCompat.getColor(getContext(), R.color.dark_red);
+        if (color == redColor) {
+            mBadgeText.setBackgroundResource(R.drawable.badge_rounded_red_bg);
+        } else {
+            mBadgeText.setBackgroundResource(R.drawable.badge_rounded_bg);
+        }
     }
 
     /**
@@ -286,14 +294,31 @@ public class ComplexImageView extends RelativeLayout {
     }
 
     public void setMainImageDimensions(int width, int height) {
+        ViewGroup.LayoutParams lp = getLayoutParams();
+        if (lp != null && (lp.width != width || lp.height != height)) {
+            lp.width = width;
+            lp.height = height;
+            setLayoutParams(lp);
+        }
         setPreviewDimensions(width, height);
         setProgressDimensions(width, height);
     }
 
     private void setProgressDimensions(int width, int height) {
-        ViewGroup.LayoutParams lp = mProgressContainer.getLayoutParams();
-        lp.width = width;
-        mProgressContainer.setLayoutParams(lp);
+        if (mProgressContainer != null) {
+            ViewGroup.LayoutParams lp = mProgressContainer.getLayoutParams();
+            if (lp != null) {
+                lp.width = width;
+                mProgressContainer.setLayoutParams(lp);
+            }
+        }
+        if (mTopBadgesContainer != null) {
+            ViewGroup.LayoutParams topLp = mTopBadgesContainer.getLayoutParams();
+            if (topLp != null) {
+                topLp.width = width;
+                mTopBadgesContainer.setLayoutParams(topLp);
+            }
+        }
     }
 
     private void setPreviewDimensions(int width, int height) {

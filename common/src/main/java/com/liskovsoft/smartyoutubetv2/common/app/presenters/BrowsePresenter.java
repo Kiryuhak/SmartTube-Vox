@@ -312,7 +312,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             video.isLocal = true;
             video.mediaUrl = job.getPublishedUri();
             video.translationState = job.getTranslationState().name();
-            video.setDurationMs(0);
+            video.setDurationMs(job.getDurationMs());
 
             String detail;
             if (isMissing) {
@@ -321,7 +321,9 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.COMPLETED) {
                 long fileSize = coordinator.getStorage().getPublishedFileSize(job.getPublishedUri());
                 String sizeStr = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadSizeFormatter.formatBytes(fileSize);
-                detail = (item.getActualQuality() != null ? item.getActualQuality() + " · " : "") + sizeStr + " · " + item.getTranslationMode();
+                boolean hasTranslation = job.getTranslationState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadTranslationState.DOWNLOADED_TRANSLATED;
+                String transStr = hasTranslation ? "Перевод" : "Скачано";
+                detail = sizeStr + " • " + transStr;
                 video.percentWatched = 0;
             } else if (job.getState() == com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadState.FAILED) {
                 String errorReason = com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadUiMapper.INSTANCE.error(job.getErrorCode());
