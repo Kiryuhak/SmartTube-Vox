@@ -124,6 +124,36 @@ function generateReportId(platform = '') {
   return `VOX-${randomHex}`;
 }
 
+export function generateErrorSignature(report = {}) {
+  if (report.errorSignature && typeof report.errorSignature === 'string') {
+    return report.errorSignature;
+  }
+
+  const category = report.errorCategory || '';
+  const platform = (report.platform || 'Unknown').toUpperCase().replace(/\s+/g, '_');
+  const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion || '');
+
+  // Look for error codes in safeRecentEvents
+  let lastErrorCode = '';
+  if (Array.isArray(report.safeRecentEvents)) {
+    for (let i = report.safeRecentEvents.length - 1; i >= 0; i--) {
+      const ev = report.safeRecentEvents[i];
+      if (ev && (ev.level === 'ERROR' || ev.level === 'WARNING') && ev.code) {
+        lastErrorCode = ev.code;
+        break;
+      }
+    }
+  }
+
+  if (!category && !lastErrorCode) {
+    return '';
+  }
+
+  const catPart = category || 'GENERAL';
+  const codePart = lastErrorCode || 'UNKNOWN_CODE';
+  return `${catPart}|${codePart}|${platform}${sdk ? `_${sdk}` : ''}`;
+}
+
 const defaultStorage = new ReportStorage();
 
 export async function handleRequest(request, env = {}, customStorage = null) {
@@ -145,20 +175,56 @@ export async function handleRequest(request, env = {}, customStorage = null) {
   // 2. Developer Admin UI (GET /admin)
   if (request.method === 'GET' && (path === '/admin' || path === '/admin/')) {
     if (!checkAdminAuth(request, env)) {
-      return new Response('401 Unauthorized: Admin access required', { status: 401 });
+      return new Response('401 Unauthorized: Admin access required', {
+        status: 401,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'WWW-Authenticate': 'Bearer realm="VOX-Admin"',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
     }
-    const reports = await storage.listReports({ limit: 50 });
-    const html = renderAdminHtml(reports);
+    const [reports, stats, groupedIssues] = await Promise.all([
+      storage.listReports({ limit: 100 }),
+      storage.getStats(),
+      storage.getGroupedIssues({ limit: 50 }),
+    ]);
+
+    const html = renderAdminHtml(reports, stats, groupedIssues);
     return new Response(html, {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'self' 'unsafe-inline' data:; frame-ancestors 'none';",
       },
     });
   }
 
-  // 3. Admin API: List reports (GET /v1/admin/reports)
+  // 3. Admin API: Stats (GET /v1/admin/stats)
+  if (request.method === 'GET' && path === '/v1/admin/stats') {
+    if (!checkAdminAuth(request, env)) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const stats = await storage.getStats();
+    return jsonResponse(stats);
+  }
+
+  // 4. Admin API: Grouped issues (GET /v1/admin/issues)
+  if (request.method === 'GET' && path === '/v1/admin/issues') {
+    if (!checkAdminAuth(request, env)) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+    const status = url.searchParams.get('status') || undefined;
+
+    const issues = await storage.getGroupedIssues({ limit, offset, status });
+    return jsonResponse({ issues });
+  }
+
+  // 5. Admin API: List reports (GET /v1/admin/reports)
   if (request.method === 'GET' && path === '/v1/admin/reports') {
     if (!checkAdminAuth(request, env)) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
@@ -166,28 +232,66 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const platform = url.searchParams.get('platform') || undefined;
     const appVersion = url.searchParams.get('appVersion') || undefined;
     const errorCategory = url.searchParams.get('errorCategory') || undefined;
+    const status = url.searchParams.get('status') || undefined;
+    const reportPurpose = url.searchParams.get('reportPurpose') || undefined;
     const search = url.searchParams.get('search') || undefined;
     const limit = parseInt(url.searchParams.get('limit') || '50', 10);
     const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
-    const reports = await storage.listReports({ platform, appVersion, errorCategory, search, limit, offset });
+    const reports = await storage.listReports({
+      platform,
+      appVersion,
+      errorCategory,
+      status,
+      reportPurpose,
+      search,
+      limit,
+      offset,
+    });
     return jsonResponse({ reports });
   }
 
-  // 4. Admin API: Get single report (GET /v1/admin/reports/:id)
-  if (request.method === 'GET' && path.startsWith('/v1/admin/reports/')) {
+  // 6. Admin API: Single report operations (GET / PATCH / DELETE /v1/admin/reports/:id)
+  if (path.startsWith('/v1/admin/reports/')) {
     if (!checkAdminAuth(request, env)) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
     const reportId = decodeURIComponent(path.substring('/v1/admin/reports/'.length));
-    const report = await storage.getReportById(reportId);
-    if (!report) {
-      return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
+
+    if (request.method === 'GET') {
+      const report = await storage.getReportById(reportId);
+      if (!report) {
+        return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
+      }
+      return jsonResponse(report);
     }
-    return jsonResponse(report);
+
+    if (request.method === 'PATCH') {
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return jsonResponse({ error: 'invalid_json', message: 'Invalid JSON request body' }, 400);
+      }
+      const updated = await storage.updateReport(reportId, body);
+      if (!updated) {
+        return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
+      }
+      return jsonResponse({ status: 'ok', report: updated });
+    }
+
+    if (request.method === 'DELETE') {
+      const deleted = await storage.deleteReportById(reportId);
+      if (!deleted) {
+        return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
+      }
+      return jsonResponse({ status: 'deleted', reportId });
+    }
+
+    return jsonResponse({ error: 'method_not_allowed', message: `Method ${request.method} is not allowed` }, 405);
   }
 
-  // 5. Submit Diagnostic Report (POST /v1/report or POST /report)
+  // 7. Submit Diagnostic Report (POST /v1/report or POST /report)
   if (path === '/v1/report' || path === '/report') {
     if (request.method !== 'POST') {
       return jsonResponse({ error: 'method_not_allowed', message: `Method ${request.method} is not allowed` }, 405);
@@ -279,11 +383,15 @@ export async function handleRequest(request, env = {}, customStorage = null) {
 
     const reportId = payload.reportId || generateReportId(payload.platform);
     const receivedAt = Date.now();
+    const errorSignature = generateErrorSignature(payload);
+    const reportPurpose = payload.reportPurpose || payload.purpose || (reportId.includes('TEST') ? 'TEST' : 'USER');
 
     const sanitizedReport = {
       ...payload,
       reportId,
       receivedAt,
+      errorSignature,
+      reportPurpose,
     };
 
     // Save report in persistent storage (D1 / in-memory)

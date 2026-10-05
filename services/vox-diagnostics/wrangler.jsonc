@@ -13,6 +13,11 @@
       "database_id": "3ba3cc6f-92a8-475d-8114-ffe495dd56ac"
     }
   ],
+  "triggers": {
+    "crons": [
+      "0 3 * * *"
+    ]
+  },
   "observability": {
     "enabled": true
   }
