@@ -291,6 +291,7 @@ class VoxDownloadOverlay(private val context: Context) {
     fun hide() {
         mainHandler.removeCallbacks(autoDismissRunnable)
         overlayView?.let { view ->
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(view)
             view.animate().cancel()
             view.animate()
                 .alpha(0f)
@@ -305,6 +306,7 @@ class VoxDownloadOverlay(private val context: Context) {
     fun dismissImmediately() {
         mainHandler.removeCallbacks(autoDismissRunnable)
         overlayView?.let { view ->
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(view)
             view.animate().cancel()
             view.visibility = View.GONE
             view.alpha = 0f
@@ -348,8 +350,10 @@ class VoxDownloadOverlay(private val context: Context) {
             root.isFocusableInTouchMode = false
             root.isClickable = false
 
+            val playbackRootId = targetActivity.resources.getIdentifier("playback_fragment_root", "id", targetActivity.packageName)
+            val isPlayback = (playbackRootId != 0 && (targetContainer.id == playbackRootId || targetContainer.findViewById<View>(playbackRootId) != null))
             val marginEnd = dpToPx(48f)
-            val marginBottom = dpToPx(72f)
+            val marginBottom = if (isPlayback) dpToPx(132f) else dpToPx(72f)
 
             if (targetContainer is FrameLayout) {
                 val lp = FrameLayout.LayoutParams(

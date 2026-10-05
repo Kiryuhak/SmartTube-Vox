@@ -6,29 +6,29 @@ import java.util.regex.Pattern
 /**
  * Formatter for premium TV quality badges.
  * Converts raw resolution/quality descriptors into unified canonical formats:
- * - 4K · 2160p (or 4K)
- * - 2K · 1440p (or 2K)
- * - FHD · 1080p (or FHD)
- * - HD · 720p (or HD)
- * - SD · 480p / SD · 360p (or SD)
+ * - 4K (or 4K60, 4K HDR)
+ * - 1440p (or 1440p60)
+ * - 1080p (or 1080p60)
+ * - 720p (or 720p60)
+ * - 480p / 360p / 240p
  */
 object VoxQualityBadgeFormatter {
 
     // Matches e.g. "720p", "1080p", "1080p60", "2160p", "1440p HDR"
-    private val EXPLICIT_P_PATTERN = Pattern.compile("(?i)\\b(2160|1440|1080|720|480|360|240|144)p(?:\\d{2})?\\b")
+    private val EXPLICIT_P_PATTERN = Pattern.compile("(?i)\\b(2160|1440|1080|720|480|360|240|144)p(?:(\\d{2}))?\\b")
     private val STANDALONE_RES_PATTERN = Pattern.compile("(?i)\\b(4320|2160|1440|1080|720|480|360)\\b")
 
     @JvmStatic
     fun format(badge: VoxQualityBadge?): String? {
         if (badge == null) return null
-        val tier = badge.tier.label
-        val res = badge.resolutionP
-        val text = if (res != null && res > 0) {
-            "$tier · ${res}p"
-        } else {
-            tier
+        val base = when {
+            badge.tier == QualityTier.TIER_4K && (badge.resolutionP == null || badge.resolutionP == 2160) -> "4K"
+            badge.resolutionP != null && badge.resolutionP > 0 -> "${badge.resolutionP}p"
+            else -> badge.tier.label
         }
-        return text + if (badge.isHdr) " · HDR" else ""
+        val fpsSuffix = if (badge.fps != null && badge.fps >= 50) "${badge.fps}" else ""
+        val hdrSuffix = if (badge.isHdr) " HDR" else ""
+        return "$base$fpsSuffix$hdrSuffix"
     }
 
     @JvmStatic
@@ -64,37 +64,40 @@ object VoxQualityBadgeFormatter {
             return null
         }
 
+        val isHdr = upper.contains("HDR")
+
         // 1. Explicit resolution with 'p' (e.g. "720p", "1080p60", "2160p")
         val pMatcher = EXPLICIT_P_PATTERN.matcher(upper)
         if (pMatcher.find()) {
             val height = pMatcher.group(1)?.toIntOrNull()
+            val fps = pMatcher.group(2)?.toIntOrNull()
             if (height != null) {
                 return when {
-                    height >= 2160 -> VoxQualityBadge(QualityTier.TIER_4K, height)
-                    height >= 1440 -> VoxQualityBadge(QualityTier.TIER_2K, height)
-                    height >= 1080 -> VoxQualityBadge(QualityTier.TIER_FHD, height)
-                    height >= 720 -> VoxQualityBadge(QualityTier.TIER_HD, height)
-                    height in 480..719 -> VoxQualityBadge(QualityTier.TIER_SD, height)
-                    else -> VoxQualityBadge(QualityTier.TIER_SD, height)
+                    height >= 2160 -> VoxQualityBadge(QualityTier.TIER_4K, height, fps = fps, isHdr = isHdr)
+                    height >= 1440 -> VoxQualityBadge(QualityTier.TIER_2K, height, fps = fps, isHdr = isHdr)
+                    height >= 1080 -> VoxQualityBadge(QualityTier.TIER_FHD, height, fps = fps, isHdr = isHdr)
+                    height >= 720 -> VoxQualityBadge(QualityTier.TIER_HD, height, fps = fps, isHdr = isHdr)
+                    height in 480..719 -> VoxQualityBadge(QualityTier.TIER_SD, height, fps = fps, isHdr = isHdr)
+                    else -> VoxQualityBadge(QualityTier.TIER_SD, height, fps = fps, isHdr = isHdr)
                 }
             }
         }
 
         // 2. Pure tier labels
         if (upper == "4K" || upper.startsWith("4K ") || upper.endsWith(" 4K") || upper == "8K" || upper.contains("4320")) {
-            return VoxQualityBadge(QualityTier.TIER_4K, 2160)
+            return VoxQualityBadge(QualityTier.TIER_4K, 2160, isHdr = isHdr)
         }
         if (upper == "2K" || upper == "QHD" || upper.startsWith("2K ") || upper.endsWith(" 2K")) {
-            return VoxQualityBadge(QualityTier.TIER_2K, 1440)
+            return VoxQualityBadge(QualityTier.TIER_2K, 1440, isHdr = isHdr)
         }
         if (upper == "FHD" || upper == "FULL HD" || upper == "FULLHD") {
-            return VoxQualityBadge(QualityTier.TIER_FHD, 1080)
+            return VoxQualityBadge(QualityTier.TIER_FHD, 1080, isHdr = isHdr)
         }
         if (upper == "HD" || upper.startsWith("HD ") || upper.endsWith(" HD")) {
-            return VoxQualityBadge(QualityTier.TIER_HD, 720)
+            return VoxQualityBadge(QualityTier.TIER_HD, 720, isHdr = isHdr)
         }
         if (upper == "SD") {
-            return VoxQualityBadge(QualityTier.TIER_SD, 480)
+            return VoxQualityBadge(QualityTier.TIER_SD, 480, isHdr = isHdr)
         }
 
         // 3. Standalone known resolution numbers (only exact matches, not parts of words/views)
@@ -102,7 +105,7 @@ object VoxQualityBadgeFormatter {
         if (standaloneMatcher.matches()) {
             val height = standaloneMatcher.group(1)?.toIntOrNull()
             if (height != null) {
-                return fromHeight(height)
+                return fromHeight(height)?.copy(isHdr = isHdr)
             }
         }
 

@@ -2,34 +2,68 @@ package com.liskovsoft.smartyoutubetv2.common.vox.ui
 
 import android.view.View
 import java.lang.ref.WeakReference
-import java.util.WeakHashMap
 
-/** Один слот transient-статуса на окно. Загрузка имеет приоритет над онлайн-переводом. */
+/**
+ * Единый арбитр transient-статусов SmartTube VOX.
+ * Гарантирует, что в один момент времени на экране видна максимум ОДНА статусная плашка.
+ * Загрузка (DOWNLOAD = 2) имеет строгий приоритет над онлайн-переводом (TRANSLATION = 1).
+ */
 object VoxStatusHost {
     const val TRANSLATION = 1
     const val DOWNLOAD = 2
-    private data class Slot(val view: WeakReference<View>, val priority: Int)
-    private val slots = WeakHashMap<View, Slot>()
 
-    @JvmStatic fun claim(card: View, priority: Int): Boolean {
-        val window = card.rootView
-        val previous = slots[window]
-        val old = previous?.view?.get()
-        if (old != null && old !== card && old.visibility == View.VISIBLE) {
-            if (previous.priority > priority) {
+    private var activeCard: WeakReference<View>? = null
+    private var activePriority: Int = 0
+
+    @Synchronized
+    @JvmStatic
+    fun claim(card: View, priority: Int): Boolean {
+        val currentView = activeCard?.get()
+        if (currentView != null && currentView !== card && currentView.visibility == View.VISIBLE) {
+            if (activePriority > priority) {
+                // Текущая плашка имеет более высокий приоритет (например, активна загрузка):
+                // подавляем отображение низкоприоритетной плашки
                 card.animate().cancel()
                 card.visibility = View.GONE
+                card.alpha = 0f
                 return false
             }
-            old.animate().cancel()
-            old.visibility = View.GONE
+            // Новая плашка имеет равный или более высокий приоритет:
+            // скрываем и отменяем анимации предыдущей плашки
+            currentView.animate().cancel()
+            currentView.visibility = View.GONE
+            currentView.alpha = 0f
         }
-        slots[window] = Slot(WeakReference(card), priority)
+        activeCard = WeakReference(card)
+        activePriority = priority
         return true
     }
 
-    @JvmStatic fun release(card: View) {
-        val window = card.rootView
-        if (slots[window]?.view?.get() === card) slots.remove(window)
+    @Synchronized
+    @JvmStatic
+    fun isDownloadActive(): Boolean {
+        val currentView = activeCard?.get()
+        return activePriority >= DOWNLOAD && currentView != null && currentView.visibility == View.VISIBLE
+    }
+
+    @Synchronized
+    @JvmStatic
+    fun release(card: View) {
+        if (activeCard?.get() === card) {
+            activeCard = null
+            activePriority = 0
+        }
+    }
+
+    @Synchronized
+    @JvmStatic
+    fun clear() {
+        activeCard?.get()?.let {
+            it.animate().cancel()
+            it.visibility = View.GONE
+            it.alpha = 0f
+        }
+        activeCard = null
+        activePriority = 0
     }
 }

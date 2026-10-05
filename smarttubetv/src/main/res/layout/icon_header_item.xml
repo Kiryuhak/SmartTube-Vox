@@ -6,8 +6,8 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/bg_sidebar_header_item"
-    android:paddingStart="12dp"
-    android:paddingEnd="12dp"
+    android:paddingStart="10dp"
+    android:paddingEnd="8dp"
     android:paddingTop="6dp"
     android:paddingBottom="6dp">
 
@@ -25,7 +25,7 @@
         android:layout_weight="1"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
-        android:layout_marginStart="10dp"
+        android:layout_marginStart="8dp"
         android:singleLine="true"
         android:ellipsize="end"
         android:textColor="@color/sidebar_header_text_selector"

@@ -170,6 +170,7 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_IDLE;
         if (mOverlayView != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(mOverlayView);
             mOverlayView.animate().cancel();
             mOverlayView.animate()
                     .alpha(0f)
@@ -187,6 +188,7 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_IDLE;
         if (mOverlayView != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(mOverlayView);
             mOverlayView.animate().cancel();
             mOverlayView.setVisibility(View.GONE);
             mOverlayView.setAlpha(0f);
@@ -259,7 +261,12 @@ public class VotProgressOverlay {
     private void fadeIn() {
         if (mOverlayView != null) {
             if (!com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.claim(mOverlayView,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.TRANSLATION)) return;
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.TRANSLATION)) {
+                mOverlayView.animate().cancel();
+                mOverlayView.setVisibility(View.GONE);
+                mOverlayView.setAlpha(0f);
+                return;
+            }
             mOverlayView.bringToFront();
             mOverlayView.animate().cancel();
             if (mOverlayView.getVisibility() != View.VISIBLE) {
@@ -304,6 +311,10 @@ public class VotProgressOverlay {
             mOverlayView.setFocusableInTouchMode(false);
             mOverlayView.setClickable(false);
 
+            int playbackRootId = activity.getResources().getIdentifier("playback_fragment_root", "id", activity.getPackageName());
+            boolean isPlayback = (playbackRootId != 0 && (targetContainer.getId() == playbackRootId || targetContainer.findViewById(playbackRootId) != null));
+            int bottomMargin = isPlayback ? dpToPx(132) : dpToPx(72);
+
             if (targetContainer instanceof FrameLayout) {
                 FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -311,7 +322,7 @@ public class VotProgressOverlay {
                 );
                 lp.gravity = Gravity.BOTTOM | Gravity.END;
                 lp.rightMargin = dpToPx(48);
-                lp.bottomMargin = dpToPx(88);
+                lp.bottomMargin = bottomMargin;
                 mOverlayView.setLayoutParams(lp);
             } else if (targetContainer instanceof LinearLayout) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -319,7 +330,7 @@ public class VotProgressOverlay {
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 );
                 lp.gravity = Gravity.END;
-                lp.bottomMargin = dpToPx(88);
+                lp.bottomMargin = bottomMargin;
                 mOverlayView.setLayoutParams(lp);
             } else {
                 ViewGroup.MarginLayoutParams lp = new ViewGroup.MarginLayoutParams(
@@ -327,7 +338,7 @@ public class VotProgressOverlay {
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 );
                 lp.rightMargin = dpToPx(48);
-                lp.bottomMargin = dpToPx(88);
+                lp.bottomMargin = bottomMargin;
                 mOverlayView.setLayoutParams(lp);
             }
 

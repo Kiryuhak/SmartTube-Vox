@@ -8,11 +8,11 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
  */
 object VoxBadgeHelper {
 
-    const val BADGE_4K = "4K · 2160p"
-    const val BADGE_2K = "2K · 1440p"
-    const val BADGE_FHD = "FHD · 1080p"
-    const val BADGE_HD = "HD · 720p"
-    const val BADGE_SD = "SD · 480p"
+    const val BADGE_4K = "4K"
+    const val BADGE_2K = "1440p"
+    const val BADGE_FHD = "1080p"
+    const val BADGE_HD = "720p"
+    const val BADGE_SD = "480p"
 
     @JvmStatic
     fun normalizeQuality(raw: String?): String? {
