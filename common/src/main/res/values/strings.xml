@@ -378,6 +378,9 @@
     <string name="vox_download_notification_open">Open</string>
     <string name="vox_download_notification_failed">Failed to download video</string>
     <string name="vox_download_notification_completed">Video saved</string>
+    <string name="vox_download_overlay_eta_min">~ %d min left</string>
+    <string name="vox_download_overlay_eta_sec">~ %d sec left</string>
+    <string name="vox_download_overlay_queue_badge">+%d queued</string>
     <string name="header_downloaded_videos">Downloaded videos</string>
     <string name="vox_download_state_downloading">Downloading</string>
     <string name="vox_download_state_paused">Resume download</string>

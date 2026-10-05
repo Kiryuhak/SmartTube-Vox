@@ -44,7 +44,7 @@ object VoxDownloadDialogHelper {
         val activeJob = coordinator.findActiveJob(video.videoId)
         if (activeJob != null) {
             MessageHelpers.showMessage(context, R.string.vox_download_already_active)
-            showProgressDialog(context, activeJob.downloadId)
+            VoxDownloadOverlay.show(context, activeJob.downloadId)
             return
         }
 
@@ -207,7 +207,7 @@ object VoxDownloadDialogHelper {
 
         val downloadId = coordinator.startDownload(request)
         VoxDownloadService.start(context, downloadId)
-        showProgressDialog(context, downloadId)
+        VoxDownloadOverlay.show(context, downloadId)
     }
 
     @JvmStatic

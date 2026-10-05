@@ -20,7 +20,7 @@ class VoxDiagnosticsClient(
 ) {
     companion object {
         private const val TAG = "VoxDiagnosticsClient"
-        const val DEFAULT_ENDPOINT_URL = "https://diagnostics.smarttube.app/v1/report"
+        const val DEFAULT_ENDPOINT_URL = "https://vox-diagnostics.amn2402.workers.dev/v1/report"
         private const val TIMEOUT_MS = 10_000
         private val EXECUTOR = Executors.newSingleThreadExecutor()
 

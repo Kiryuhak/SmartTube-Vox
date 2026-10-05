@@ -1,9 +1,13 @@
-import crypto from 'node:crypto';
+import crypto from 'crypto';
+import { ReportStorage } from './storage.mjs';
+import { checkAdminAuth, renderAdminHtml } from './admin.mjs';
+import { sendReportNotification } from './notifier.mjs';
 
-const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
-const SUPPORTED_SCHEMAS = ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2'];
-const MAX_EVENTS_COUNT = 50;
-const MAX_EVENT_MESSAGE_LEN = 500;
+export const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
+export const CANONICAL_SCHEMA = 'vox-diagnostic-report-v2';
+export const SUPPORTED_SCHEMAS = ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2'];
+export const MAX_EVENTS_COUNT = 50;
+export const MAX_EVENT_MESSAGE_LEN = 500;
 export const DEFAULT_RETENTION_DAYS = 30;
 export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
@@ -109,118 +113,197 @@ function hasBannedKeys(obj) {
   return false;
 }
 
-export async function handleRequest(request) {
+function generateReportId(platform = '') {
+  const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const lowerPlat = platform.toLowerCase();
+  if (lowerPlat.includes('android')) {
+    return `VOX-A-${randomHex}`;
+  } else if (lowerPlat.includes('tizen')) {
+    return `VOX-TZ-${randomHex}`;
+  }
+  return `VOX-${randomHex}`;
+}
+
+const defaultStorage = new ReportStorage();
+
+export async function handleRequest(request, env = {}, customStorage = null) {
   const url = new URL(request.url);
   const path = url.pathname;
+  const storage = customStorage || (env.DB ? new ReportStorage(env.DB) : defaultStorage);
 
-  // Health check endpoint
-  if (request.method === 'GET' && (path === '/healthz' || path === '/health' || path === '/')) {
+  // 1. Health check endpoint
+  if (request.method === 'GET' && (path === '/healthz' || path === '/health')) {
     return jsonResponse({
       status: 'healthy',
       service: 'vox-diagnostics',
+      canonicalSchema: CANONICAL_SCHEMA,
       supportedSchemas: SUPPORTED_SCHEMAS,
+      retentionDays: DEFAULT_RETENTION_DAYS,
     });
   }
 
-  if (request.method !== 'POST') {
+  // 2. Developer Admin UI (GET /admin)
+  if (request.method === 'GET' && (path === '/admin' || path === '/admin/')) {
+    if (!checkAdminAuth(request, env)) {
+      return new Response('401 Unauthorized: Admin access required', { status: 401 });
+    }
+    const reports = await storage.listReports({ limit: 50 });
+    const html = renderAdminHtml(reports);
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  // 3. Admin API: List reports (GET /v1/admin/reports)
+  if (request.method === 'GET' && path === '/v1/admin/reports') {
+    if (!checkAdminAuth(request, env)) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const platform = url.searchParams.get('platform') || undefined;
+    const appVersion = url.searchParams.get('appVersion') || undefined;
+    const errorCategory = url.searchParams.get('errorCategory') || undefined;
+    const search = url.searchParams.get('search') || undefined;
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+
+    const reports = await storage.listReports({ platform, appVersion, errorCategory, search, limit, offset });
+    return jsonResponse({ reports });
+  }
+
+  // 4. Admin API: Get single report (GET /v1/admin/reports/:id)
+  if (request.method === 'GET' && path.startsWith('/v1/admin/reports/')) {
+    if (!checkAdminAuth(request, env)) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const reportId = decodeURIComponent(path.substring('/v1/admin/reports/'.length));
+    const report = await storage.getReportById(reportId);
+    if (!report) {
+      return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
+    }
+    return jsonResponse(report);
+  }
+
+  // 5. Submit Diagnostic Report (POST /v1/report or POST /report)
+  if (path === '/v1/report' || path === '/report') {
+    if (request.method !== 'POST') {
+      return jsonResponse({ error: 'method_not_allowed', message: `Method ${request.method} is not allowed` }, 405);
+    }
+
+    if (!checkRateLimit(request)) {
+      return jsonResponse({
+        error: 'rate_limited',
+        message: 'Too many diagnostic reports received from this source, please try again later',
+      }, 429);
+    }
+
+    let text;
+    try {
+      text = await request.text();
+    } catch (err) {
+      return jsonResponse({ error: 'invalid_body', message: 'Failed to read request body' }, 400);
+    }
+
+    if (!text || text.length === 0) {
+      return jsonResponse({ error: 'empty_body', message: 'Request body cannot be empty' }, 400);
+    }
+
+    if (text.length > MAX_PAYLOAD_SIZE) {
+      return jsonResponse({ error: 'payload_too_large', message: `Payload exceeds limit of ${MAX_PAYLOAD_SIZE} bytes` }, 413);
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (err) {
+      return jsonResponse({ error: 'invalid_json', message: 'Malformed JSON payload' }, 400);
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return jsonResponse({ error: 'invalid_payload', message: 'Payload must be a JSON object' }, 400);
+    }
+
+    if (!payload.schema || !SUPPORTED_SCHEMAS.includes(payload.schema)) {
+      return jsonResponse({
+        error: 'unsupported_schema',
+        message: `Schema '${payload.schema}' is unsupported. Expected one of: ${SUPPORTED_SCHEMAS.join(', ')}`,
+      }, 400);
+    }
+
+    if (hasBannedKeys(payload)) {
+      return jsonResponse({
+        error: 'forbidden_data',
+        message: 'Payload contains sensitive or forbidden fields (tokens, passwords, cookies, or account identifiers)',
+      }, 400);
+    }
+
+    if (!payload.platform || !payload.appVersion || !payload.manufacturer || !payload.model) {
+      return jsonResponse({
+        error: 'missing_fields',
+        message: 'Missing required diagnostics fields (platform, appVersion, manufacturer, model)',
+      }, 400);
+    }
+
+    // Validate safeRecentEvents if present
+    if (payload.safeRecentEvents !== undefined) {
+      if (!Array.isArray(payload.safeRecentEvents)) {
+        return jsonResponse({
+          error: 'invalid_events',
+          message: 'safeRecentEvents must be an array',
+        }, 400);
+      }
+      if (payload.safeRecentEvents.length > MAX_EVENTS_COUNT) {
+        return jsonResponse({
+          error: 'too_many_events',
+          message: `safeRecentEvents exceeds maximum of ${MAX_EVENTS_COUNT} events`,
+        }, 400);
+      }
+      for (const ev of payload.safeRecentEvents) {
+        if (!ev || typeof ev !== 'object' || Array.isArray(ev)) {
+          return jsonResponse({
+            error: 'invalid_event_item',
+            message: 'Each event in safeRecentEvents must be an object',
+          }, 400);
+        }
+        if (typeof ev.message === 'string' && ev.message.length > MAX_EVENT_MESSAGE_LEN) {
+          return jsonResponse({
+            error: 'event_message_too_long',
+            message: `Event message exceeds maximum limit of ${MAX_EVENT_MESSAGE_LEN} characters`,
+          }, 400);
+        }
+      }
+    }
+
+    const reportId = payload.reportId || generateReportId(payload.platform);
+    const receivedAt = Date.now();
+
+    const sanitizedReport = {
+      ...payload,
+      reportId,
+      receivedAt,
+    };
+
+    // Save report in persistent storage (D1 / in-memory)
+    await storage.saveReport(sanitizedReport);
+
+    // Optional safe developer notification
+    await sendReportNotification(sanitizedReport, env);
+
+    return jsonResponse({
+      status: 'ok',
+      reportId,
+      schema: payload.schema,
+      receivedAt,
+    }, 201);
+  }
+
+  // Fallback 404 for unknown endpoints
+  if (request.method !== 'GET' && request.method !== 'POST') {
     return jsonResponse({ error: 'method_not_allowed', message: `Method ${request.method} is not allowed` }, 405);
   }
 
-  if (path !== '/v1/report' && path !== '/report' && path !== '/') {
-    return jsonResponse({ error: 'not_found', message: 'Endpoint not found' }, 404);
-  }
-
-  if (!checkRateLimit(request)) {
-    return jsonResponse({
-      error: 'rate_limited',
-      message: 'Too many diagnostic reports received from this source, please try again later',
-    }, 429);
-  }
-
-  let text;
-  try {
-    text = await request.text();
-  } catch (err) {
-    return jsonResponse({ error: 'invalid_body', message: 'Failed to read request body' }, 400);
-  }
-
-  if (!text || text.length === 0) {
-    return jsonResponse({ error: 'empty_body', message: 'Request body cannot be empty' }, 400);
-  }
-
-  if (text.length > MAX_PAYLOAD_SIZE) {
-    return jsonResponse({ error: 'payload_too_large', message: `Payload exceeds limit of ${MAX_PAYLOAD_SIZE} bytes` }, 413);
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(text);
-  } catch (err) {
-    return jsonResponse({ error: 'invalid_json', message: 'Malformed JSON payload' }, 400);
-  }
-
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return jsonResponse({ error: 'invalid_payload', message: 'Payload must be a JSON object' }, 400);
-  }
-
-  if (!payload.schema || !SUPPORTED_SCHEMAS.includes(payload.schema)) {
-    return jsonResponse({
-      error: 'unsupported_schema',
-      message: `Schema '${payload.schema}' is unsupported. Expected one of: ${SUPPORTED_SCHEMAS.join(', ')}`,
-    }, 400);
-  }
-
-  if (hasBannedKeys(payload)) {
-    return jsonResponse({
-      error: 'forbidden_data',
-      message: 'Payload contains sensitive or forbidden fields (tokens, passwords, cookies, or account identifiers)',
-    }, 400);
-  }
-
-  if (!payload.platform || !payload.appVersion || !payload.manufacturer || !payload.model) {
-    return jsonResponse({
-      error: 'missing_fields',
-      message: 'Missing required diagnostics fields (platform, appVersion, manufacturer, model)',
-    }, 400);
-  }
-
-  // Validate safeRecentEvents if present
-  if (payload.safeRecentEvents !== undefined) {
-    if (!Array.isArray(payload.safeRecentEvents)) {
-      return jsonResponse({
-        error: 'invalid_events',
-        message: 'safeRecentEvents must be an array',
-      }, 400);
-    }
-    if (payload.safeRecentEvents.length > MAX_EVENTS_COUNT) {
-      return jsonResponse({
-        error: 'too_many_events',
-        message: `safeRecentEvents exceeds maximum of ${MAX_EVENTS_COUNT} events`,
-      }, 400);
-    }
-    for (const ev of payload.safeRecentEvents) {
-      if (!ev || typeof ev !== 'object' || Array.isArray(ev)) {
-        return jsonResponse({
-          error: 'invalid_event_item',
-          message: 'Each event in safeRecentEvents must be an object',
-        }, 400);
-      }
-      if (typeof ev.message === 'string' && ev.message.length > MAX_EVENT_MESSAGE_LEN) {
-        return jsonResponse({
-          error: 'event_message_too_long',
-          message: `Event message exceeds maximum limit of ${MAX_EVENT_MESSAGE_LEN} characters`,
-        }, 400);
-      }
-    }
-  }
-
-  const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
-  const reportId = payload.reportId || `VOX-${randomHex}`;
-
-  return jsonResponse({
-    status: 'ok',
-    reportId,
-    schema: payload.schema,
-    receivedAt: Date.now(),
-  }, 201);
+  return jsonResponse({ error: 'not_found', message: 'Endpoint not found' }, 404);
 }

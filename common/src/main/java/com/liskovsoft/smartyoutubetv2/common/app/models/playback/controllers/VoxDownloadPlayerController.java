@@ -61,11 +61,17 @@ public class VoxDownloadPlayerController extends BasePlayerController implements
     @Override
     public void onStateChanged(@NonNull VoxDownloadProgress progress) {
         postUpdateState(progress);
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadOverlay.onProgress(getContext(), progress);
+        }
     }
 
     @Override
     public void onProgressUpdated(@NonNull VoxDownloadProgress progress) {
         postUpdateState(progress);
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadOverlay.onProgress(getContext(), progress);
+        }
     }
 
     @Override

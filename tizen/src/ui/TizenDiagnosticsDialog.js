@@ -22,7 +22,7 @@ class TizenDiagnosticsDialog {
   constructor(options = {}) {
     this.container = options.container || null;
     this.onClose = options.onClose || null;
-    this.endpointUrl = options.endpointUrl || 'http://127.0.0.1:8765/v1/report';
+    this.endpointUrl = options.endpointUrl || 'https://vox-diagnostics.amn2402.workers.dev/v1/report';
     this.lastReportId = null;
     this.logger = options.logger || safeLogger;
   }

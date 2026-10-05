@@ -374,6 +374,9 @@
     <string name="vox_download_notification_open">Открыть</string>
     <string name="vox_download_notification_failed">Не удалось скачать видео</string>
     <string name="vox_download_notification_completed">Видео сохранено</string>
+    <string name="vox_download_overlay_eta_min">Осталось ~%d мин</string>
+    <string name="vox_download_overlay_eta_sec">Осталось ~%d с</string>
+    <string name="vox_download_overlay_queue_badge">+%d в очереди</string>
     <string name="header_downloaded_videos">Скачанные видео</string>
     <string name="vox_download_state_downloading">Загрузка идёт</string>
     <string name="vox_download_state_paused">Продолжить загрузку</string>
