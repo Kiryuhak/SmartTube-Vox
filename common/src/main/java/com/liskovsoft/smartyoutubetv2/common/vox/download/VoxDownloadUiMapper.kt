@@ -40,7 +40,7 @@ object VoxDownloadUiMapper {
         VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> "Загрузка перевода"
         VoxDownloadState.READY_FOR_MUX,
         VoxDownloadState.MUXING -> "Обработка…"
-        VoxDownloadState.MUXED,
+        VoxDownloadState.FINALIZING, VoxDownloadState.MUXED,
         VoxDownloadState.PUBLISHING -> "Сохранение…"
         VoxDownloadState.COMPLETED -> "Скачано"
         VoxDownloadState.PAUSED -> "Приостановлено"

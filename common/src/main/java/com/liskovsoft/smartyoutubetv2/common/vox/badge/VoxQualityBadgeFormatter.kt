@@ -23,11 +23,12 @@ object VoxQualityBadgeFormatter {
         if (badge == null) return null
         val tier = badge.tier.label
         val res = badge.resolutionP
-        return if (res != null && res > 0) {
+        val text = if (res != null && res > 0) {
             "$tier · ${res}p"
         } else {
             tier
         }
+        return text + if (badge.isHdr) " · HDR" else ""
     }
 
     @JvmStatic
@@ -44,7 +45,7 @@ object VoxQualityBadgeFormatter {
             height >= 1080 -> VoxQualityBadge(QualityTier.TIER_FHD, 1080)
             height >= 720 -> VoxQualityBadge(QualityTier.TIER_HD, 720)
             height in 480..719 -> VoxQualityBadge(QualityTier.TIER_SD, 480)
-            height in 1..479 -> VoxQualityBadge(QualityTier.TIER_SD, 360)
+            height in 1..479 -> VoxQualityBadge(QualityTier.TIER_SD, height)
             else -> null
         }
     }

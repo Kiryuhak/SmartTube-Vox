@@ -258,6 +258,8 @@ public class VotProgressOverlay {
 
     private void fadeIn() {
         if (mOverlayView != null) {
+            if (!com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.claim(mOverlayView,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.TRANSLATION)) return;
             mOverlayView.bringToFront();
             mOverlayView.animate().cancel();
             if (mOverlayView.getVisibility() != View.VISIBLE) {
@@ -269,6 +271,8 @@ public class VotProgressOverlay {
     }
 
     private boolean ensureAttached(@Nullable Activity activity) {
+        if (activity == null || activity.isFinishing()) return false;
+        if (mOverlayView != null && mOverlayView.getParent() != findTargetContainer(activity)) destroy();
         if (mOverlayView != null && mOverlayView.getParent() != null) {
             mOverlayView.bringToFront();
             return true;

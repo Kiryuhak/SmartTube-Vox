@@ -131,7 +131,15 @@ class VoxDownloadOverlay(private val context: Context) {
         }
     }
 
-    private fun render(@Nullable activity: Activity?, progress: VoxDownloadProgress) {
+    private fun render(@Nullable activity: Activity?, event: VoxDownloadProgress) {
+        val coordinator = VoxDownloadCoordinator.instance(context)
+        val active = coordinator.getProcessingJob()
+        val progress = if (active != null && active.downloadId != event.downloadId && !active.state.isTerminal)
+            active.getSnapshot() else event
+        if (currentDownloadId != progress.downloadId) {
+            currentDownloadId = progress.downloadId
+            speedEstimator.reset()
+        }
         if (!ensureAttached(activity)) {
             return
         }
@@ -142,9 +150,7 @@ class VoxDownloadOverlay(private val context: Context) {
         stageTitle?.text = stage
 
         // Расчет очереди
-        val coordinator = VoxDownloadCoordinator.instance(context)
-        val activeJobs = coordinator.getAllJobs().filter { VoxDownloadServicePolicy.isActiveState(it.state) }
-        val queuedCount = activeJobs.size - 1
+        val queuedCount = coordinator.getQueuedCount()
         if (queuedCount > 0) {
             queueBadge?.text = context.getString(R.string.vox_download_overlay_queue_badge, queuedCount)
             queueBadge?.visibility = View.VISIBLE
@@ -164,7 +170,7 @@ class VoxDownloadOverlay(private val context: Context) {
             }
             VoxDownloadState.FAILED -> {
                 showIcon(R.drawable.ic_vot_error, R.color.vox_error)
-                val err = progress.errorMessage ?: context.getString(R.string.vox_download_error_unknown)
+                val err = VoxDownloadFailureClassifier.getUserMessage(progress.errorCode) + " · Повторить: меню загрузки"
                 progressText?.text = err
                 etaText?.visibility = View.GONE
                 progressBar?.isIndeterminate = false
@@ -190,6 +196,8 @@ class VoxDownloadOverlay(private val context: Context) {
                 fadeIn()
             }
             VoxDownloadState.MUXING,
+            VoxDownloadState.FINALIZING,
+            VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING -> {
                 showSpinner()
                 val percent = progress.overallPercent
@@ -199,7 +207,7 @@ class VoxDownloadOverlay(private val context: Context) {
                     progressText?.text = "$percent%"
                 } else {
                     progressBar?.isIndeterminate = true
-                    progressText?.text = context.getString(R.string.vox_download_stage_muxing)
+                    progressText?.text = getStageTitle(progress.state)
                 }
                 etaText?.visibility = View.GONE
                 fadeIn()
@@ -267,6 +275,9 @@ class VoxDownloadOverlay(private val context: Context) {
 
     private fun fadeIn() {
         overlayView?.let { view ->
+            if (!com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.claim(view,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.DOWNLOAD)) return
+            if (view.visibility == View.VISIBLE && view.alpha == 1f) return
             view.bringToFront()
             view.animate().cancel()
             if (view.visibility != View.VISIBLE) {
@@ -301,6 +312,13 @@ class VoxDownloadOverlay(private val context: Context) {
     }
 
     private fun ensureAttached(@Nullable activity: Activity?): Boolean {
+        if (activity == null || activity.isFinishing) return false
+        if (overlayView != null && overlayView?.parent != findTargetContainer(activity)) {
+            dismissImmediately()
+            parentView?.removeView(overlayView)
+            overlayView = null
+            parentView = null
+        }
         if (overlayView != null && overlayView?.parent != null) {
             overlayView?.bringToFront()
             return true
@@ -335,7 +353,7 @@ class VoxDownloadOverlay(private val context: Context) {
 
             if (targetContainer is FrameLayout) {
                 val lp = FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    dpToPx(290f),
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
                 lp.gravity = Gravity.BOTTOM or Gravity.END
@@ -344,7 +362,7 @@ class VoxDownloadOverlay(private val context: Context) {
                 root.layoutParams = lp
             } else if (targetContainer is LinearLayout) {
                 val lp = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    dpToPx(290f),
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
                 lp.gravity = Gravity.END
@@ -352,7 +370,7 @@ class VoxDownloadOverlay(private val context: Context) {
                 root.layoutParams = lp
             } else {
                 val lp = ViewGroup.MarginLayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    dpToPx(290f),
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
                 lp.rightMargin = marginEnd
@@ -406,7 +424,7 @@ class VoxDownloadOverlay(private val context: Context) {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> context.getString(R.string.vox_download_stage_trans_audio)
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING -> context.getString(R.string.vox_download_stage_muxing)
-            VoxDownloadState.PUBLISHING -> context.getString(R.string.vox_download_stage_publishing)
+            VoxDownloadState.FINALIZING, VoxDownloadState.MUXED, VoxDownloadState.PUBLISHING -> "Завершение файла…"
             VoxDownloadState.COMPLETED -> context.getString(R.string.vox_download_stage_completed)
             VoxDownloadState.FAILED -> context.getString(R.string.vox_download_stage_failed)
             VoxDownloadState.CANCELLED -> context.getString(R.string.vox_download_stage_cancelled)

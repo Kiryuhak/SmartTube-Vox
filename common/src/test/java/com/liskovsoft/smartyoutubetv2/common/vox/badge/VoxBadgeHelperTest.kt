@@ -7,6 +7,24 @@ import org.junit.Test
 
 class VoxBadgeHelperTest {
 
+    @Test fun durationIsIndependentFromQualityAndExcludedForNonVod() {
+        val video = Video().apply { videoId = "test"; badge = "1080p"; durationMs = 243_000 }
+        assertEquals("4:03", VoxBadgeHelper.getDurationBadge(video))
+        assertEquals("FHD · 1080p", VoxBadgeHelper.getQualityBadge(video))
+        video.isLive = true
+        assertNull(VoxBadgeHelper.getDurationBadge(video))
+        video.isLive = false
+        video.isShorts = true
+        assertNull(VoxBadgeHelper.getDurationBadge(video))
+        video.isShorts = false
+        video.videoId = null
+        assertNull(VoxBadgeHelper.getDurationBadge(video))
+        video.videoId = "test"
+        video.durationMs = 0
+        video.badge = "12:34"
+        assertEquals("12:34", VoxBadgeHelper.getDurationBadge(video))
+    }
+
     @Test
     fun testQualityNormalization() {
         assertEquals("4K · 2160p", VoxBadgeHelper.normalizeQuality("4K"))
@@ -18,7 +36,7 @@ class VoxBadgeHelperTest {
 
         assertEquals("2K · 1440p", VoxBadgeHelper.normalizeQuality("2K"))
         assertEquals("2K · 1440p", VoxBadgeHelper.normalizeQuality("1440p"))
-        assertEquals("2K · 1440p", VoxBadgeHelper.normalizeQuality("1440p60 HDR"))
+        assertEquals("2K · 1440p · HDR", VoxBadgeHelper.normalizeQuality("1440p60 HDR"))
         assertEquals("2K · 1440p", VoxBadgeHelper.normalizeQuality("QHD"))
 
         assertEquals("FHD · 1080p", VoxBadgeHelper.normalizeQuality("1080p"))

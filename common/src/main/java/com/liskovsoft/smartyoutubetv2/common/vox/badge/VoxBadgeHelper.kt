@@ -17,7 +17,16 @@ object VoxBadgeHelper {
     @JvmStatic
     fun normalizeQuality(raw: String?): String? {
         val badge = VoxQualityBadgeFormatter.parse(raw) ?: return null
-        return VoxQualityBadgeFormatter.format(badge)
+        return VoxQualityBadgeFormatter.format(badge.copy(isHdr = raw?.contains("HDR", ignoreCase = true) == true))
+    }
+
+    /** Продолжительность независима от качества и не исчезает после выделения quality badge. */
+    @JvmStatic fun getDurationBadge(video: Video?): String? {
+        if (video == null || video.videoId == null || video.isChannel || video.isMix || video.isLive || video.isShorts || video.isUpcoming) return null
+        val seconds = video.durationMs / 1000L
+        if (seconds <= 0L) return video.badge?.takeIf { it.matches(Regex("\\d{1,3}:\\d{2}(?::\\d{2})?")) }
+        return if (seconds >= 3600) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+            else String.format(java.util.Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60)
     }
 
     @JvmStatic

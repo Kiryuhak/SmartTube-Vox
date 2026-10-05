@@ -115,6 +115,7 @@ class VoxDownloadStorage(private val context: Context) {
      * Внимание: сохраняются только логические идентификаторы, ни при каких условиях
      * не сохраняются подписанные URL, токены или заголовки авторизации.
      */
+    @Synchronized
     fun saveJobMetadata(
         request: VoxDownloadRequest,
         state: VoxDownloadState,
@@ -131,7 +132,13 @@ class VoxDownloadStorage(private val context: Context) {
         fallbackReason: String? = null,
         translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
         durationMs: Long = 0L,
-        ageRating: String? = null
+        ageRating: String? = null,
+        hasTranslatedAudio: Boolean = false,
+        finalFileBytes: Long = 0L,
+        processingTimeMs: Long = 0L,
+        processingSourceBytes: Long = 0L,
+        processingSamples: Long = 0L,
+        lastProgressAt: Long = 0L
     ) {
         val jobDir = getJobDir(request.downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
@@ -145,6 +152,12 @@ class VoxDownloadStorage(private val context: Context) {
             put("translationState", translationState.name)
             put("createdAt", request.createdAt)
             put("state", state.name)
+            put("hasTranslatedAudio", hasTranslatedAudio)
+            put("finalFileBytes", finalFileBytes)
+            put("processingTimeMs", processingTimeMs)
+            put("processingSourceBytes", processingSourceBytes)
+            put("processingSamples", processingSamples)
+            put("lastProgressAt", lastProgressAt)
             if (durationMs > 0) put("durationMs", durationMs)
             if (!ageRating.isNullOrBlank()) put("ageRating", ageRating)
             if (actualVideoHeight > 0) put("actualVideoHeight", actualVideoHeight)
@@ -189,20 +202,29 @@ class VoxDownloadStorage(private val context: Context) {
             out.write(json.toString(2).toByteArray(StandardCharsets.UTF_8))
             out.flush()
         }
-        if (tempFile.exists()) {
-            if (file.exists()) {
-                file.delete()
+        // На Android rename атомарно заменяет существующий файл. Файловые системы,
+        // запрещающие замену, используют резервную копию с восстановлением при сбое.
+        if (!tempFile.renameTo(file)) {
+            val backup = File(jobDir, "$JOB_METADATA_FILE.bak")
+            if (!file.isFile || !file.renameTo(backup)) throw java.io.IOException("Cannot back up download metadata")
+            if (!tempFile.renameTo(file)) {
+                backup.renameTo(file)
+                throw java.io.IOException("Cannot commit download metadata")
             }
-            tempFile.renameTo(file)
+            backup.delete()
         }
     }
 
     /**
      * Считывает снимок задания из `job.json`.
      */
+    @Synchronized
     fun loadJobMetadata(downloadId: String): StoredJobData? {
         val jobDir = File(baseDir, downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
+        val backup = File(jobDir, "$JOB_METADATA_FILE.bak")
+        if (!file.exists() && backup.isFile) backup.renameTo(file)
+        if (file.isFile && backup.isFile) backup.delete()
         if (!file.exists() || !file.isFile) return null
 
         return try {
@@ -277,6 +299,12 @@ class VoxDownloadStorage(private val context: Context) {
                 fallbackReason = fallbackReason,
                 translationState = translationState,
                 durationMs = durationMs,
+                hasTranslatedAudio = json.optBoolean("hasTranslatedAudio", false),
+                finalFileBytes = json.optLong("finalFileBytes", 0L),
+                processingTimeMs = json.optLong("processingTimeMs", 0L),
+                processingSourceBytes = json.optLong("processingSourceBytes", 0L),
+                processingSamples = json.optLong("processingSamples", 0L),
+                lastProgressAt = json.optLong("lastProgressAt", 0L),
                 ageRating = ageRating,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
@@ -415,6 +443,12 @@ data class StoredJobData(
     val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
     val durationMs: Long = 0L,
     val ageRating: String? = null,
+    val hasTranslatedAudio: Boolean = false,
+    val finalFileBytes: Long = 0L,
+    val processingTimeMs: Long = 0L,
+    val processingSourceBytes: Long = 0L,
+    val processingSamples: Long = 0L,
+    val lastProgressAt: Long = 0L,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,
     val translatedAudioProgress: VoxTrackProgress

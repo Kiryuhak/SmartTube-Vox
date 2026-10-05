@@ -104,6 +104,7 @@ object VoxDownloadFailureClassifier {
             VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE -> "Перевод недоступен"
             VoxDownloadErrorCode.UNSUPPORTED_CODEC -> "Этот формат пока не поддерживается"
             VoxDownloadErrorCode.MEDIA_PARSE_ERROR -> "Не удалось обработать видеофайл"
+            VoxDownloadErrorCode.PROCESSING_STALLED -> "Обработка остановилась. Повторите упаковку файла."
             VoxDownloadErrorCode.CANCELLED -> "Загрузка отменена"
             else -> "Не удалось скачать видео"
         }

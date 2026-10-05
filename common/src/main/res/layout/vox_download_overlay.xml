@@ -47,7 +47,7 @@
             android:textColor="@color/vox_text_primary"
             android:textSize="13sp"
             android:fontFamily="sans-serif-medium"
-            android:singleLine="true"
+            android:maxLines="2"
             android:ellipsize="end" />
 
         <TextView

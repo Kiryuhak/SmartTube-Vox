@@ -125,9 +125,7 @@ object VoxDownloadManager {
                     show(context)
                 }
                 "Повторить" -> {
-                    coordinator.deleteDownload(job.downloadId)
-                    val id = coordinator.startDownload(job.request.copy(downloadId = java.util.UUID.randomUUID().toString()))
-                    VoxDownloadService.start(context, id)
+                    if (coordinator.retryDownload(job.downloadId)) VoxDownloadService.start(context, job.downloadId)
                     show(context)
                 }
                 "Скачать заново" -> {

@@ -212,7 +212,8 @@ dependencies {
     //////// END EXOPLAYER //////////
 
     testImplementation 'junit:junit:' + junitVersion
-    testImplementation 'org.robolectric:robolectric:' + robolectricVersion
+    // Та же версия, что в common: поддерживает JDK 17 при реальных View-тестах.
+    testImplementation 'org.robolectric:robolectric:4.8.2'
     androidTestImplementation 'androidx.test.ext:junit:' + testXSupportVersion
     androidTestImplementation 'androidx.test.ext:truth:' + testXSupportVersion
     androidTestImplementation 'androidx.test:runner:' + testXSupportVersion

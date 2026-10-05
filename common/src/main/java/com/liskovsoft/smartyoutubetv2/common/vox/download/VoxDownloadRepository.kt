@@ -50,7 +50,7 @@ class VoxDownloadRepository(
                         VoxDownloadState.READY_FOR_MUX
                     }
                 }
-                VoxDownloadState.MUXING -> {
+                VoxDownloadState.FINALIZING, VoxDownloadState.MUXING -> {
                     // Удаляем недописанный временный файл мультиплексирования
                     val tmpMkv = storage.getTmpOutputFile(id)
                     if (tmpMkv.exists()) {
@@ -87,6 +87,13 @@ class VoxDownloadRepository(
                 fallbackReason = stored.fallbackReason,
                 translationState = stored.translationState
             )
+            job.durationMs = stored.durationMs
+            job.hasTranslatedAudio = stored.hasTranslatedAudio
+            job.finalFileBytes = stored.finalFileBytes
+            job.processingTimeMs = stored.processingTimeMs
+            job.processingSourceBytes = stored.processingSourceBytes
+            job.processingSamples = stored.processingSamples
+            job.lastProgressAt = stored.lastProgressAt
             jobs[id] = job
         }
     }
@@ -126,10 +133,12 @@ class VoxDownloadRepository(
         persistJob(job)
     }
 
-    fun persistJob(job: VoxDownloadJob) {
+    @Synchronized
+    @JvmOverloads
+    fun persistJob(job: VoxDownloadJob, state: VoxDownloadState = job.state) {
         storage.saveJobMetadata(
             request = job.request,
-            state = job.state,
+            state = state,
             videoProgress = job.videoProgress,
             originalAudioProgress = job.originalAudioProgress,
             translatedAudioProgress = job.translatedAudioProgress,
@@ -141,7 +150,14 @@ class VoxDownloadRepository(
             requestedQuality = job.requestedQuality,
             actualQuality = job.actualQuality,
             fallbackReason = job.fallbackReason,
-            translationState = job.translationState
+            translationState = job.translationState,
+            durationMs = job.durationMs,
+            hasTranslatedAudio = job.hasTranslatedAudio,
+            finalFileBytes = job.finalFileBytes,
+            processingTimeMs = job.processingTimeMs,
+            processingSourceBytes = job.processingSourceBytes,
+            processingSamples = job.processingSamples,
+            lastProgressAt = job.lastProgressAt
         )
     }
 

@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Высокопроизводительный Kotlin-мультиплексор Matroska (MKV) без транскодирования (Remux-only).
  * Упаковывает видео и аудиодорожки в единый .mkv файл с Cues-индексами для мгновенной перемотки.
  */
-class VoxMatroskaMuxer {
+class VoxMatroskaMuxer(private val stallTimeoutMs: Long = 120_000L) {
 
     companion object {
         // EBML Root
@@ -92,7 +92,10 @@ class VoxMatroskaMuxer {
         outputFile: File,
         videoTitle: String? = null,
         isCancelled: AtomicBoolean = AtomicBoolean(false),
-        progressListener: ((VoxMuxProgress) -> Unit)? = null
+        progressListener: ((VoxMuxProgress) -> Unit)? = null,
+        shouldStop: () -> Boolean = { false },
+        onFinalizing: () -> Unit = {},
+        onStalled: () -> Unit = {}
     ): VoxMuxResult {
         require(sources.isNotEmpty()) { "Sources cannot be empty" }
 
@@ -118,6 +121,30 @@ class VoxMatroskaMuxer {
         val fos = FileOutputStream(tmpOutputFile)
         val bos = BufferedOutputStream(fos, 256 * 1024)
         val writer = VoxEbmlWriter(bos)
+        val watchdog = VoxProcessingWatchdog(stallTimeoutMs)
+        val startedAt = System.nanoTime()
+        var lastReportAt = 0L
+        fun checkRunning() {
+            if (watchdog.stalled) throw VoxProcessingStalledException()
+            if (isCancelled.get() || shouldStop()) throw InterruptedException("Multiplexing stopped")
+        }
+        fun report(force: Boolean = false) {
+            val now = System.nanoTime()
+            // Слушатели вызывают Android Binder/NotificationManager. Никогда не вызывать их на каждом сэмпле.
+            if (!force && now - lastReportAt < 500_000_000L) return
+            lastReportAt = now
+            progressListener?.invoke(VoxMuxProgress(totalBytesProcessed, totalInputBytes,
+                ((totalBytesProcessed * 100L) / totalInputBytes).toInt().coerceIn(0, 99),
+                videoSamplesCount + origAudioSamplesCount + transAudioSamplesCount,
+                fos.channel.position(), (now - startedAt) / 1_000_000L))
+        }
+        watchdog.start {
+            // Сначала публикуем типизированную ошибку, затем разблокируем закрытием локальный I/O.
+            try { onStalled() } finally {
+                try { fos.close() } catch (ignored: Exception) {}
+                sources.forEach { try { it.close() } catch (ignored: Exception) {} }
+            }
+        }
 
         try {
             // 1. EBML Header
@@ -236,16 +263,13 @@ class VoxMatroskaMuxer {
                     }
 
                     // Пишем Cluster Master элемент
-                    val payloadBytes = currentClusterPayload.toByteArray()
-                    val clusterBos = ByteArrayOutputStream(payloadBytes.size + 32)
+                    val clusterBos = ByteArrayOutputStream(16)
                     val clusterElemWriter = VoxEbmlWriter(clusterBos)
                     clusterElemWriter.writeUInt(ID_CLUSTER_TIMESTAMP, clusterTimeMs)
-                    clusterBos.write(payloadBytes)
-
-                    val clusterFinal = clusterBos.toByteArray()
                     writer.writeElementId(ID_CLUSTER)
-                    writer.writeElementSize(clusterFinal.size.toLong())
-                    bos.write(clusterFinal)
+                    writer.writeElementSize((clusterBos.size() + currentClusterPayload.size()).toLong())
+                    clusterBos.writeTo(bos)
+                    currentClusterPayload.writeTo(bos)
                     bos.flush()
 
                     currentClusterPayload.reset()
@@ -256,9 +280,7 @@ class VoxMatroskaMuxer {
             }
 
             while (true) {
-                if (isCancelled.get()) {
-                    throw InterruptedException("Multiplexing was cancelled by user")
-                }
+                checkRunning()
 
                 // Находим следующий сэмпл с наименьшим presentation timestamp (PTS)
                 var minIdx = -1
@@ -291,7 +313,7 @@ class VoxMatroskaMuxer {
                     if (isVideoKey) hasClusterVideoKeyFrame = true
                 } else {
                     val clusterElapsedMs = (sample.presentationTimeUs - currentClusterStartPts) / 1000L
-                    if (isVideoKey || clusterElapsedMs >= CLUSTER_MAX_DURATION_MS) {
+                    if (isVideoKey || clusterElapsedMs >= CLUSTER_MAX_DURATION_MS || currentClusterPayload.size() >= 4 * 1024 * 1024) {
                         flushCluster()
                         currentClusterStartPts = sample.presentationTimeUs
                         if (isVideoKey) hasClusterVideoKeyFrame = true
@@ -325,15 +347,8 @@ class VoxMatroskaMuxer {
                 }
 
                 totalBytesProcessed += sample.size
-                val currentPercent = ((totalBytesProcessed * 100L) / totalInputBytes).toInt().coerceIn(0, 100)
-
-                progressListener?.invoke(
-                    VoxMuxProgress(
-                        bytesProcessed = totalBytesProcessed,
-                        totalInputBytes = totalInputBytes,
-                        percent = currentPercent
-                    )
-                )
+                watchdog.progress(videoSamplesCount + origAudioSamplesCount + transAudioSamplesCount, totalBytesProcessed)
+                report()
 
                 // Читаем следующий сэмпл для этого трека
                 currentSamples[minIdx] = sources[minIdx].readNextSample()
@@ -341,6 +356,9 @@ class VoxMatroskaMuxer {
 
             // Сбрасываем последний кластер
             flushCluster()
+            report(force = true)
+            checkRunning()
+            onFinalizing()
 
             // 7. Cues Element
             bos.flush()
@@ -360,6 +378,7 @@ class VoxMatroskaMuxer {
 
             bos.close()
             fos.close()
+            checkRunning()
 
             // 8. Патчим SeekHead и Duration в начале файла с помощью RandomAccessFile
             val sourceDurationMs = sources.map { it.trackInfo.durationUs / 1000L }.maxOrNull() ?: 0L
@@ -421,7 +440,11 @@ class VoxMatroskaMuxer {
             if (!tmpOutputFile.renameTo(outputFile)) {
                 throw IllegalStateException("Failed to rename ${tmpOutputFile.name} to ${outputFile.name}")
             }
+            checkRunning()
 
+            progressListener?.invoke(VoxMuxProgress(totalBytesProcessed, totalInputBytes, 100,
+                videoSamplesCount + origAudioSamplesCount + transAudioSamplesCount, outputFile.length(),
+                (System.nanoTime() - startedAt) / 1_000_000L))
             return VoxMuxResult(
                 outputFile = outputFile,
                 durationMs = finalDurationMs,
@@ -440,8 +463,10 @@ class VoxMatroskaMuxer {
             if (tmpOutputFile.exists()) {
                 tmpOutputFile.delete()
             }
+            if (watchdog.stalled) throw VoxProcessingStalledException(e)
             throw e
         } finally {
+            watchdog.close()
             for (source in sources) {
                 try {
                     source.close()

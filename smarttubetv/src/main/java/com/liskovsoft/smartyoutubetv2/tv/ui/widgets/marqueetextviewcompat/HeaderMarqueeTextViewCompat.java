@@ -86,6 +86,10 @@ public class HeaderMarqueeTextViewCompat extends AppCompatTextView {
     @Override
     protected void onDetachedFromWindow() {
         mHandler.removeCallbacks(mStartMarqueeRunnable);
+        mIsActive = false;
+        super.setSelected(false);
+        setEllipsize(TextUtils.TruncateAt.END);
+        scrollTo(0, 0);
         super.onDetachedFromWindow();
     }
 }

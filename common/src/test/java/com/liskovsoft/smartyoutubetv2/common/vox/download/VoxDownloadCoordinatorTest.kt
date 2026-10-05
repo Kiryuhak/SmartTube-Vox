@@ -28,6 +28,7 @@ class VoxDownloadCoordinatorTest {
     private lateinit var storage: VoxDownloadStorage
     private lateinit var repository: VoxDownloadRepository
     private lateinit var coordinator: VoxDownloadCoordinator
+    private lateinit var executor: java.util.concurrent.ExecutorService
 
     @Before
     fun setUp() {
@@ -86,18 +87,21 @@ class VoxDownloadCoordinatorTest {
 
         val mockDownloader = VoxSegmentDownloader(httpClient = fakeClient, storage = storage)
 
+        executor = Executors.newSingleThreadExecutor()
         coordinator = VoxDownloadCoordinator(
             storage = storage,
             repository = repository,
             streamResolver = mockStreamResolver,
             translationResolver = mockTranslationResolver,
             downloader = mockDownloader,
-            executor = Executors.newSingleThreadExecutor()
+            executor = executor
         )
     }
 
     @After
     fun tearDown() {
+        executor.shutdownNow()
+        assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
         storage.baseDir.deleteRecursively()
     }
 
@@ -116,6 +120,8 @@ class VoxDownloadCoordinatorTest {
             override fun onStateChanged(progress: VoxDownloadProgress) {
                 recordedStates.add(progress.state)
                 if (progress.state == VoxDownloadState.READY_FOR_MUX) {
+                    // HTTP fixtures не являются media. Останавливаемся ровно на границе mux.
+                    coordinator.pauseDownload(progress.downloadId)
                     latch.countDown()
                 }
             }
@@ -131,7 +137,7 @@ class VoxDownloadCoordinatorTest {
 
         val finalJob = coordinator.getJob("job-ready-for-mux")
         assertNotNull(finalJob)
-        assertEquals("Job failed with error=${finalJob?.errorCode}: ${finalJob?.errorMessage}", VoxDownloadState.READY_FOR_MUX, finalJob!!.state)
+        assertEquals("Job failed with error=${finalJob?.errorCode}: ${finalJob?.errorMessage}", VoxDownloadState.PAUSED, finalJob!!.state)
 
         // Проверяем наличие всех трех файлов треков
         val vFile = storage.getTrackFile("job-ready-for-mux", VoxDownloadTrack.VIDEO)
@@ -228,6 +234,57 @@ class VoxDownloadCoordinatorTest {
         } catch (e: VoxDownloadException) {
             assertEquals(VoxDownloadErrorCode.AUTH_REQUIRED, e.code)
         }
+    }
+
+    @Test fun retryRetainsValidCompletedSourcesAndRejectsDuplicateWorker() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        executor.submit { entered.countDown(); release.await() }
+        assertTrue(entered.await(2, TimeUnit.SECONDS))
+        val job = VoxDownloadJob(VoxDownloadRequest(downloadId = "retry-stalled", videoId = "retry", videoTitle = "Retry"))
+        repository.addOrUpdateJob(job)
+        for (track in VoxDownloadTrack.values()) {
+            storage.getTrackFile(job.downloadId, track).writeBytes(ByteArray(100))
+            job.updateTrackProgress(track, 100, 100, VoxTrackState.COMPLETED)
+        }
+        job.updateState(VoxDownloadState.FAILED, VoxDownloadErrorCode.PROCESSING_STALLED)
+        assertTrue(coordinator.retryDownload(job.downloadId))
+        assertFalse(coordinator.retryDownload(job.downloadId))
+        assertFalse(coordinator.resumeDownload(job.downloadId))
+        assertEquals(VoxTrackState.COMPLETED, job.videoProgress.state)
+        assertEquals(VoxTrackState.COMPLETED, job.translatedAudioProgress.state)
+        coordinator.cancelDownload(job.downloadId)
+        // Отмена тоже не уничтожает проверенные входные файлы для повторной упаковки.
+        assertEquals(100L, storage.getTrackFile(job.downloadId, VoxDownloadTrack.VIDEO).length())
+        release.countDown()
+    }
+
+    @Test fun completedMetadataIsCommittedBeforeInMemoryStateAndRestored() {
+        val job = VoxDownloadJob(VoxDownloadRequest(downloadId = "commit", videoId = "commit", videoTitle = "Commit"))
+        repository.addOrUpdateJob(job)
+        job.updateState(VoxDownloadState.MUXING)
+        repository.persistJob(job)
+        job.updateState(VoxDownloadState.FINALIZING)
+        repository.persistJob(job)
+        assertEquals(VoxDownloadState.FINALIZING, storage.loadJobMetadata(job.downloadId)!!.state)
+        job.publishedUri = "content://media/external/video/media/321"
+        job.hasTranslatedAudio = true
+        job.durationMs = 240_000
+        job.finalFileBytes = 1024
+        repository.persistJob(job, VoxDownloadState.COMPLETED)
+        assertEquals(VoxDownloadState.FINALIZING, job.state)
+        val restored = VoxDownloadRepository(storage).getJob(job.downloadId)!!
+        assertEquals(VoxDownloadState.COMPLETED, restored.state)
+        assertTrue(restored.hasTranslatedAudio)
+        assertEquals(240_000L, restored.durationMs)
+        assertEquals(1024L, restored.finalFileBytes)
+        // Ошибка записи не должна менять состояние в памяти или старый job.json.
+        val temp = File(storage.getJobDir(job.downloadId), "job.json.tmp")
+        assertTrue(temp.mkdir())
+        try { repository.persistJob(job); org.junit.Assert.fail("Expected write failure") }
+        catch (expected: java.io.IOException) {}
+        assertEquals(VoxDownloadState.FINALIZING, job.state)
+        assertEquals(VoxDownloadState.COMPLETED, storage.loadJobMetadata(job.downloadId)!!.state)
     }
 }
 

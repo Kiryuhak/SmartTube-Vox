@@ -15,7 +15,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.Voi
 
 /**
  * Developer-only internal diagnostics receiver for Yandex VOT backend verification.
- * Not exported in AndroidManifest (android:exported="false").
+ * Debug manifest restricts access to the signature-level DUMP permission (ADB shell).
  *
  * Supported internal actions:
  * - backendStatus
@@ -77,7 +77,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadRequest(
                             downloadId,
                             videoId,
-                            "Test Download Probe",
+                            intent.hasExtra("videoTitle") ? intent.getStringExtra("videoTitle") : "Test Download Probe",
                             com.liskovsoft.smartyoutubetv2.common.vox.download.VoxQualityPreference.QUALITY_360P,
                             com.liskovsoft.smartyoutubetv2.common.vox.download.VoxTranslationMode.STANDARD,
                             System.currentTimeMillis()
@@ -599,6 +599,32 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             } else {
                 Log.w(TAG, "PUBLISH_PROBE_FAIL: job not found: " + downloadId);
             }
+        } else if ("testPlayerRuntime".equalsIgnoreCase(action)) {
+            // Диагностика реального плеера, без отдельного экземпляра ExoPlayer и фиктивных PASS.
+            com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView player =
+                    com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter.instance(context).getPlayer();
+            if (player == null || player.getVideo() == null) {
+                Log.w(TAG, "PLAYER_RUNTIME: no active player");
+                return;
+            }
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId != null) {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadJob job =
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context).getJob(downloadId);
+                if (job == null || !player.getVideo().isLocal || !java.util.Objects.equals(job.getPublishedUri(), player.getVideo().mediaUrl)) {
+                    Log.e(TAG, "PLAYER_RUNTIME: downloadId mismatch " + downloadId);
+                    return;
+                }
+            }
+            if (intent.hasExtra("seekMs")) player.setPositionMs(intent.getLongExtra("seekMs", 0));
+            if (intent.hasExtra("speed")) player.setSpeed(intent.getFloatExtra("speed", 1f));
+            if (intent.hasExtra("play")) player.setPlayWhenReady(intent.getBooleanExtra("play", true));
+            Log.i(TAG, "PLAYER_RUNTIME: downloadId=" + downloadId
+                    + " videoId=" + player.getVideo().videoId + " local=" + player.getVideo().isLocal
+                    + " positionMs=" + player.getPositionMs() + " durationMs=" + player.getDurationMs()
+                    + " playing=" + player.isPlaying() + " speed=" + player.getSpeed()
+                    + " audio=" + (player.getAudioFormat() == null ? "none" : player.getAudioFormat().getTitle())
+                    + " language=" + (player.getAudioFormat() == null ? "none" : player.getAudioFormat().getLanguage()));
         } else if ("testLocalPlayback".equalsIgnoreCase(action)) {
             String downloadId = intent.getStringExtra("downloadId");
             if (downloadId == null || downloadId.isEmpty()) {

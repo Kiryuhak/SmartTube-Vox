@@ -50,6 +50,7 @@ class VoxDownloadServiceTest {
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING,
+            VoxDownloadState.FINALIZING,
             VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING
         )
@@ -164,7 +165,10 @@ class VoxDownloadServiceTest {
 
         job.updateState(VoxDownloadState.PUBLISHING)
         job.updatePublishProgress(800, 1000, 80)
-        assertEquals(80, job.getSnapshot().overallPercent)
+        // Публикация и финализация показывают стадию, не ложные 99% готовности.
+        org.junit.Assert.assertNull(job.getSnapshot().overallPercent)
+        job.updateState(VoxDownloadState.FINALIZING)
+        org.junit.Assert.assertNull(job.getSnapshot().overallPercent)
 
         job.updateState(VoxDownloadState.COMPLETED)
         assertEquals(100, job.getSnapshot().overallPercent)

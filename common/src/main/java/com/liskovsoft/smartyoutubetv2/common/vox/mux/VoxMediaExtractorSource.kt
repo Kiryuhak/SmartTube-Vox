@@ -17,7 +17,8 @@ class VoxMediaExtractorSource(
     private val trackType: VoxMuxTrackType,
     private val trackName: String,
     private val language: String,
-    private val isDefaultTrack: Boolean
+    private val isDefaultTrack: Boolean,
+    private val sourceTrackIndex: Int? = null
 ) : VoxSampleSource {
 
     private val extractor: MediaExtractor = MediaExtractor()
@@ -25,14 +26,18 @@ class VoxMediaExtractorSource(
     override val trackInfo: VoxMuxTrackInfo
     override val sourceSizeBytes: Long = if (mediaFile.exists()) mediaFile.length() else 0L
     private val buffer: ByteBuffer
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var ended = false
 
     init {
+        try {
         extractor.setDataSource(mediaFile.absolutePath)
         val numTracks = extractor.trackCount
         var foundTrackIndex = -1
         var selectedFormat: MediaFormat? = null
 
         for (i in 0 until numTracks) {
+            if (sourceTrackIndex != null && i != sourceTrackIndex) continue
             val format = extractor.getTrackFormat(i)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
             val isVideo = mime.startsWith("video/")
@@ -50,7 +55,6 @@ class VoxMediaExtractorSource(
         }
 
         if (foundTrackIndex < 0 || selectedFormat == null) {
-            extractor.release()
             throw IllegalArgumentException("No matching ${trackType.name} track found in ${mediaFile.name}")
         }
 
@@ -109,12 +113,18 @@ class VoxMediaExtractorSource(
             codecPrivate = codecPrivate,
             durationUs = durationUs
         )
+        } catch (error: Exception) {
+            close()
+            throw error
+        }
     }
 
     override fun readNextSample(): VoxMuxSample? {
+        if (ended || closed.get()) return null
         buffer.clear()
         val sampleSize = extractor.readSampleData(buffer, 0)
         if (sampleSize < 0) {
+            ended = true
             return null
         }
 
@@ -132,7 +142,7 @@ class VoxMediaExtractorSource(
             bytes
         }
 
-        extractor.advance()
+        ended = !extractor.advance()
 
         return VoxMuxSample(
             trackNumber = assignedTrackNumber,
@@ -146,6 +156,7 @@ class VoxMediaExtractorSource(
     }
 
     override fun close() {
+        if (!closed.compareAndSet(false, true)) return
         try {
             extractor.release()
         } catch (ignored: Exception) {
