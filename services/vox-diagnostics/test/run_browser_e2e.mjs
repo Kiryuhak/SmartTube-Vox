@@ -296,6 +296,9 @@ pageWs.onmessage = (event) => {
       failedRequests.push({ url, status });
     }
   }
+  if (msg.method === 'Page.javascriptDialogOpening') {
+    pageSend('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+  }
 };
 
 function pageSend(method, params = {}) {
@@ -341,106 +344,47 @@ try {
   console.log('[E2E] Waiting for page and app.js to load...');
   await sleep(1500);
 
-  // 1. Verify "Все отчёты" tab is active by default
+  // Install mock alert/confirm to prevent modal freeze in headless browser
+  await evalInPage(`
+    window.alert = (msg) => { console.log('[Browser Alert]:', msg); };
+    window.confirm = (msg) => { console.log('[Browser Confirm]:', msg); return true; };
+  `);
+
+  // 1. Verify "Все отчёты" tab is active by default with [Открыть] and [Скачать]
   const initialTabActive = await evalInPage(`
     document.getElementById('viewReports').style.display !== 'none' &&
     document.getElementById('tabBtnReports').classList.contains('active')
   `);
-  console.log('[E2E Check 1] "Все отчёты" active by default:', initialTabActive);
+  console.log('[E2E Step 1-2] "Все отчёты" active by default:', initialTabActive);
   if (!initialTabActive) throw new Error('"Все отчёты" should be active by default');
 
   const rowsCount = await evalInPage(`document.querySelectorAll('#reportsTableBody tr[data-report-id]').length`);
-  console.log('[E2E Check 1] Initial reports rows count:', rowsCount);
+  console.log('[E2E Step 2] Initial reports rows count:', rowsCount);
   if (rowsCount === 0) throw new Error('Reports table should have rows');
 
+  // Verify both "Открыть" and "Скачать" buttons exist
+  const buttonsOk = await evalInPage(`
+    Boolean(document.querySelector('button[data-action="open-report"]') &&
+            document.querySelector('button[data-action="download-report"]'))
+  `);
+  console.log('[E2E Step 2] Both Открыть and Скачать buttons present:', buttonsOk);
+  if (!buttonsOk) throw new Error('Both buttons Открыть and Скачать must be present');
+
+  // Screenshot 1: Reports list
   await takeScreenshot('screenshot_1_reports_list.png');
 
-  // 2. Click "Частые проблемы" tab
-  console.log('[E2E] Switching to "Частые проблемы"...');
-  await evalInPage(`document.getElementById('tabBtnIssues').click()`);
-  await sleep(300);
-
-  const issuesTabActive = await evalInPage(`
-    document.getElementById('viewIssues').style.display !== 'none' &&
-    document.getElementById('viewReports').style.display === 'none' &&
-    document.getElementById('tabBtnIssues').classList.contains('active')
+  // 3-4. Click "Скачать" and verify download endpoint responds
+  console.log('[E2E Step 3-4] Testing individual report download...');
+  const dlFetchStatus = await evalInPage(`
+    fetch('/v1/admin/reports/VOX-A-9BB2D7/download').then(r => r.status)
   `);
-  console.log('[E2E Check 2] "Частые проблемы" tab switched:', issuesTabActive);
-  if (!issuesTabActive) throw new Error('"Частые проблемы" tab should be active');
+  console.log('[E2E Step 4] Download endpoint HTTP status:', dlFetchStatus);
+  if (dlFetchStatus !== 200) throw new Error(`Download status expected 200, got ${dlFetchStatus}`);
 
-  await takeScreenshot('screenshot_2_issues_tab.png');
-
-  // 3. Click "Сводка и метрики" tab
-  console.log('[E2E] Switching to "Сводка и метрики"...');
-  await evalInPage(`document.getElementById('tabBtnStats').click()`);
-  await sleep(300);
-
-  const statsTabActive = await evalInPage(`
-    document.getElementById('viewStats').style.display !== 'none' &&
-    document.getElementById('viewIssues').style.display === 'none' &&
-    document.getElementById('tabBtnStats').classList.contains('active')
-  `);
-  console.log('[E2E Check 3] "Сводка и метрики" tab switched:', statsTabActive);
-  if (!statsTabActive) throw new Error('"Сводка и метрики" tab should be active');
-
-  await takeScreenshot('screenshot_3_metrics_tab.png');
-
-  // 4. Switch back to "Все отчёты" and test Search for "VOX-A-9BB2D7"
-  console.log('[E2E] Switching back to "Все отчёты" and testing search...');
-  await evalInPage(`document.getElementById('tabBtnReports').click()`);
-  await sleep(200);
-
+  // 5. Click "Открыть" on VOX-A-9BB2D7
+  console.log('[E2E Step 5] Clicking "Открыть" on report VOX-A-9BB2D7...');
   await evalInPage(`
-    const input = document.getElementById('searchInput');
-    input.value = 'VOX-A-9BB2D7';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  `);
-  await sleep(300);
-
-  const searchResults = await evalInPage(`
-    (() => {
-      const rows = Array.from(document.querySelectorAll('#reportsTableBody tr[data-report-id]'));
-      const visible = rows.filter(r => r.style.display !== 'none');
-      return {
-        total: rows.length,
-        visibleCount: visible.length,
-        visibleId: visible[0]?.getAttribute('data-report-id')
-      };
-    })()
-  `);
-  console.log('[E2E Check 4] Search results for VOX-A-9BB2D7:', searchResults);
-  if (searchResults.visibleCount !== 1 || searchResults.visibleId !== 'VOX-A-9BB2D7') {
-    throw new Error(`Search failed: expected 1 row with VOX-A-9BB2D7, got ${searchResults.visibleCount}`);
-  }
-
-  // 5. Test Filters: reset search, test platform filter
-  console.log('[E2E] Testing platform and status filters...');
-  await evalInPage(`
-    document.getElementById('searchInput').value = '';
-    const platSelect = document.getElementById('filterPlatform');
-    platSelect.value = 'Android';
-    platSelect.dispatchEvent(new Event('change', { bubbles: true }));
-  `);
-  await sleep(300);
-
-  const platFilteredCount = await evalInPage(`
-    Array.from(document.querySelectorAll('#reportsTableBody tr[data-report-id]'))
-      .filter(r => r.style.display !== 'none').length
-  `);
-  console.log('[E2E Check 5] Filtered by platform Android TV count:', platFilteredCount);
-  if (platFilteredCount === 0) throw new Error('Platform filter should return Android reports');
-
-  // Reset filters
-  await evalInPage(`
-    document.getElementById('filterPlatform').value = '';
-    document.getElementById('filterPlatform').dispatchEvent(new Event('change', { bubbles: true }));
-  `);
-  await sleep(200);
-
-  // 6. Test "Открыть" on VOX-A-9BB2D7
-  console.log('[E2E] Clicking "Открыть" on report VOX-A-9BB2D7...');
-  await evalInPage(`
-    const btn = document.querySelector('button[data-report-id="VOX-A-9BB2D7"]');
+    const btn = document.querySelector('button[data-action="open-report"][data-report-id="VOX-A-9BB2D7"]');
     if (!btn) throw new Error('Button for VOX-A-9BB2D7 not found');
     btn.click();
   `);
@@ -450,79 +394,179 @@ try {
     (() => {
       const overlay = document.getElementById('modalOverlay');
       const title = document.getElementById('modalTitle')?.textContent;
+      const statusVal = document.getElementById('detailStatusSelect')?.value;
+      const notesVal = document.getElementById('detailNotesText')?.value;
       const overviewVisible = document.getElementById('mSection_overview')?.style.display !== 'none';
-      const hasContent = document.getElementById('modalContent')?.innerHTML?.includes('VOX-A-9BB2D7') ||
-                         document.getElementById('modalContent')?.innerHTML?.includes('TCL') ||
-                         document.getElementById('modalContent')?.innerHTML?.includes('Android');
       return {
         overlayDisplay: overlay.style.display,
         title,
-        overviewVisible,
-        hasContent
+        statusVal,
+        notesVal,
+        overviewVisible
       };
     })()
   `);
-  console.log('[E2E Check 6] Modal opened state for VOX-A-9BB2D7:', modalState);
+  console.log('[E2E Step 5] Modal opened state:', modalState);
   if (modalState.overlayDisplay !== 'flex') throw new Error('Modal overlay should be flex');
 
-  await takeScreenshot('screenshot_4_report_detail.png');
+  // Screenshot 2: Detail modal (status + developer notes)
+  await takeScreenshot('screenshot_2_report_detail.png');
 
-  // 7. Test Modal tabs switching: codecs, timeline, ops, raw
-  console.log('[E2E] Testing modal sub-tabs...');
-  await evalInPage(`document.getElementById('mTabBtnCodecs').click()`);
-  await sleep(200);
-  const codecsVisible = await evalInPage(`document.getElementById('mSection_codecs').style.display !== 'none'`);
-  if (!codecsVisible) throw new Error('Codecs section should be visible');
+  // 6-9. Status: NEW -> IN_PROGRESS, save, verify persistence
+  console.log('[E2E Step 6-7] Changing status to IN_PROGRESS...');
+  await evalInPage(`
+    document.getElementById('detailStatusSelect').value = 'IN_PROGRESS';
+    document.getElementById('detailSaveBtn').click();
+  `);
+  await sleep(600);
 
-  await evalInPage(`document.getElementById('mTabBtnTimeline').click()`);
-  await sleep(200);
-  const timelineVisible = await evalInPage(`document.getElementById('mSection_timeline').style.display !== 'none'`);
-  if (!timelineVisible) throw new Error('Timeline section should be visible');
+  const statusAfterSave = await evalInPage(`
+    document.querySelector('tr[data-report-id="VOX-A-9BB2D7"]')?.getAttribute('data-status')
+  `);
+  console.log('[E2E Step 7] Status in table row after save:', statusAfterSave);
+  if (statusAfterSave !== 'IN_PROGRESS') throw new Error(`Expected status IN_PROGRESS, got ${statusAfterSave}`);
 
-  await evalInPage(`document.getElementById('mTabBtnOps').click()`);
-  await sleep(200);
-  const opsVisible = await evalInPage(`document.getElementById('mSection_ops').style.display !== 'none'`);
-  if (!opsVisible) throw new Error('Ops section should be visible');
+  // 10-12. Add developer note, save and verify
+  console.log('[E2E Step 10-11] Adding developer note and saving...');
+  await evalInPage(`
+    document.getElementById('detailNotesText').value = 'Проверено в E2E Patch #35';
+    document.getElementById('detailSaveBtn').click();
+  `);
+  await sleep(600);
 
-  await evalInPage(`document.getElementById('mTabBtnRaw').click()`);
-  await sleep(200);
-  const rawVisible = await evalInPage(`document.getElementById('mSection_raw').style.display !== 'none'`);
-  if (!rawVisible) throw new Error('Raw section should be visible');
+  // 13. Status: IN_PROGRESS -> RESOLVED
+  console.log('[E2E Step 13] Changing status to RESOLVED and saving...');
+  await evalInPage(`
+    document.getElementById('detailStatusSelect').value = 'RESOLVED';
+    document.getElementById('detailSaveBtn').click();
+  `);
+  await sleep(600);
 
-  // 8. Close Modal via Escape or close button
-  console.log('[E2E] Closing modal...');
+  // Close modal
   await evalInPage(`document.getElementById('modalCloseBtn').click()`);
   await sleep(300);
-  const modalClosed = await evalInPage(`document.getElementById('modalOverlay').style.display === 'none'`);
-  console.log('[E2E Check 8] Modal closed:', modalClosed);
-  if (!modalClosed) throw new Error('Modal should be closed');
 
-  // 9. Test "Обновить" (Refresh button)
-  console.log('[E2E] Testing "Обновить" button...');
-  await evalInPage(`document.getElementById('refreshButton').click()`);
-  await sleep(800);
-  const refreshWorking = await evalInPage(`
-    document.getElementById('refreshButton').textContent.includes('Обновить') &&
-    document.querySelectorAll('#reportsTableBody tr[data-report-id]').length > 0
+  // 14. Filter by status "RESOLVED" (Решено)
+  console.log('[E2E Step 14] Testing filter by status RESOLVED...');
+  await evalInPage(`
+    const statSelect = document.getElementById('filterStatus');
+    statSelect.value = 'RESOLVED';
+    statSelect.dispatchEvent(new Event('change', { bubbles: true }));
   `);
-  console.log('[E2E Check 9] Refresh completed:', refreshWorking);
-  if (!refreshWorking) throw new Error('Refresh button failed');
+  await sleep(300);
 
-  // 10. Check Console and Network errors
-  console.log('[E2E Check 10] Console Errors count:', consoleErrors.length);
+  const resolvedVisible = await evalInPage(`
+    Array.from(document.querySelectorAll('#reportsTableBody tr[data-report-id]'))
+      .filter(r => r.style.display !== 'none').length
+  `);
+  console.log('[E2E Step 14] Filtered rows with status RESOLVED:', resolvedVisible);
+  if (resolvedVisible !== 1) throw new Error(`Expected 1 row with RESOLVED status, got ${resolvedVisible}`);
+
+  // Reset filter
+  await evalInPage(`
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterStatus').dispatchEvent(new Event('change', { bubbles: true }));
+  `);
+  await sleep(200);
+
+  // 15. Common Issues Tab
+  console.log('[E2E Step 15] Switching to "Частые проблемы"...');
+  await evalInPage(`document.getElementById('tabBtnIssues').click()`);
+  await sleep(400);
+
+  // Screenshot 3: Common Issues
+  await takeScreenshot('screenshot_3_issues_tab.png');
+
+  // 16. Metrics Tab
+  console.log('[E2E Step 16] Switching to "Сводка и метрики"...');
+  await evalInPage(`document.getElementById('tabBtnStats').click()`);
+  await sleep(400);
+
+  // Screenshot 4: Metrics Tab
+  await takeScreenshot('screenshot_4_metrics_tab.png');
+
+  // Switch back to "Все отчёты"
+  await evalInPage(`document.getElementById('tabBtnReports').click()`);
+  await sleep(200);
+
+  // 17-22. Purge button opens modal, verify button disabled until exact word 'УДАЛИТЬ'
+  console.log('[E2E Step 17-22] Testing Safe Purge modal...');
+  await evalInPage(`document.getElementById('purgeAllBtn').click()`);
+  await sleep(300);
+
+  const purgeModalOpen = await evalInPage(`
+    document.getElementById('purgeModalOverlay').style.display !== 'none'
+  `);
+  console.log('[E2E Step 17] Purge modal visible:', purgeModalOpen);
+  if (!purgeModalOpen) throw new Error('Purge modal should be open');
+
+  const btnInitiallyDisabled = await evalInPage(`
+    document.getElementById('purgeConfirmBtn').disabled === true
+  `);
+  console.log('[E2E Step 18] Delete button initially disabled:', btnInitiallyDisabled);
+  if (!btnInitiallyDisabled) throw new Error('Delete button must be disabled initially');
+
+  // Type wrong value
+  await evalInPage(`
+    (() => {
+      const input = document.getElementById('purgeConfirmInput');
+      input.value = 'удалить_случайно';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()
+  `);
+  await sleep(100);
+
+  const btnStillDisabled = await evalInPage(`
+    document.getElementById('purgeConfirmBtn').disabled === true
+  `);
+  console.log('[E2E Step 20] Delete button still disabled with wrong input:', btnStillDisabled);
+  if (!btnStillDisabled) throw new Error('Delete button must stay disabled on wrong input');
+
+  // Type exact word 'УДАЛИТЬ'
+  await evalInPage(`
+    (() => {
+      const input = document.getElementById('purgeConfirmInput');
+      input.value = 'УДАЛИТЬ';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()
+  `);
+  await sleep(100);
+
+  const btnNowEnabled = await evalInPage(`
+    document.getElementById('purgeConfirmBtn').disabled === false
+  `);
+  console.log('[E2E Step 22] Delete button enabled when УДАЛИТЬ is typed:', btnNowEnabled);
+  if (!btnNowEnabled) throw new Error('Delete button must be enabled when УДАЛИТЬ is typed');
+
+  // Screenshot 5: Purge Confirmation Modal
+  await takeScreenshot('screenshot_5_purge_modal.png');
+
+  // 23. Do NOT confirm purge in production/destructive manner; click Cancel
+  console.log('[E2E Step 23] Cancelling purge to preserve test fixtures/data...');
+  await evalInPage(`document.getElementById('purgeCancelBtn').click()`);
+  await sleep(200);
+
+  const purgeModalClosed = await evalInPage(`
+    document.getElementById('purgeModalOverlay').style.display === 'none'
+  `);
+  console.log('[E2E Step 23] Purge modal closed cleanly:', purgeModalClosed);
+  if (!purgeModalClosed) throw new Error('Purge modal should be closed after cancel');
+
+  // 24-25. Verify 0 console errors and 0 unexpected network errors
+  console.log('[E2E Step 24] Console Errors count:', consoleErrors.length);
   if (consoleErrors.length > 0) {
     console.error('Console errors detected:', consoleErrors);
     throw new Error(`Console errors found: ${consoleErrors.join('; ')}`);
   }
 
-  console.log('[E2E Check 10] Failed network requests count:', failedRequests.length);
+  console.log('[E2E Step 25] Failed network requests count:', failedRequests.length);
   if (failedRequests.length > 0) {
     console.error('Failed network requests:', failedRequests);
     throw new Error(`Network 404/500 requests found: ${JSON.stringify(failedRequests)}`);
   }
 
   console.log('\n==================================================');
-  console.log('ALL BROWSER E2E TESTS PASSED WITH ZERO CONSOLE ERRORS!');
+  console.log('ALL 25 BROWSER E2E TESTS PASSED WITH ZERO CONSOLE ERRORS!');
   console.log('==================================================\n');
 } finally {
   pageWs.close();

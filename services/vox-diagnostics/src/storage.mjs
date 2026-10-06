@@ -1,5 +1,30 @@
 import { DEFAULT_RETENTION_MS } from './diagnostics.mjs';
 
+export const CANONICAL_STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'KNOWN_ISSUE', 'IGNORED_TEST'];
+
+export const STATUS_LABELS = {
+  NEW: 'Новый',
+  IN_PROGRESS: 'В работе',
+  RESOLVED: 'Решено',
+  KNOWN_ISSUE: 'Известная проблема',
+  IGNORED_TEST: 'Тест / игнор',
+};
+
+/**
+ * Нормализует строковый статус к каноническому виду:
+ * NEW, IN_PROGRESS, RESOLVED, KNOWN_ISSUE, IGNORED_TEST
+ */
+export function normalizeStatus(rawStatus) {
+  if (!rawStatus) return 'NEW';
+  const s = String(rawStatus).toUpperCase().trim();
+  if (s === 'REVIEWED' || s === 'TRIAGED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
+  if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
+  if (s === 'RESOLVED') return 'RESOLVED';
+  if (s === 'IGNORED_TEST' || s === 'TEST' || s === 'IGNORED') return 'IGNORED_TEST';
+  if (s === 'NEW') return 'NEW';
+  return s;
+}
+
 /**
  * Адаптер хранилища отчётов диагностики VOX.
  * Поддерживает Cloudflare D1 (когда передан env.DB) и in-memory хранилище (для тестов и локального запуска).
@@ -23,7 +48,8 @@ export class ReportStorage {
     const deviceFamily = `${report.manufacturer || ''} ${report.model || ''}`.trim() || 'unknown';
     const errorCategory = report.errorCategory || null;
     const reportPurpose = report.reportPurpose || report.purpose || (reportId && reportId.includes('TEST') ? 'TEST' : 'USER');
-    const status = report.status || (reportPurpose === 'TEST' ? 'IGNORED_TEST' : 'NEW');
+    const rawStatus = report.status || (reportPurpose === 'TEST' ? 'IGNORED_TEST' : 'NEW');
+    const status = normalizeStatus(rawStatus);
     const developerNotes = report.developerNotes || report.developer_notes || '';
     const errorSignature = report.errorSignature || report.error_signature || '';
     const payloadJson = JSON.stringify(report);
@@ -120,7 +146,7 @@ export class ReportStorage {
 
       if (status !== undefined) {
         updates.push('status = ?');
-        params.push(status);
+        params.push(normalizeStatus(status));
       }
       if (developerNotes !== undefined) {
         updates.push('developer_notes = ?');
@@ -136,7 +162,7 @@ export class ReportStorage {
     } else {
       const existing = this.inMemoryReports.get(reportId);
       if (!existing) return null;
-      if (status !== undefined) existing.status = status;
+      if (status !== undefined) existing.status = normalizeStatus(status);
       if (developerNotes !== undefined) existing.developer_notes = developerNotes;
       return {
         ...existing,
@@ -157,6 +183,22 @@ export class ReportStorage {
       return (res?.meta?.changes || 0) > 0;
     } else {
       return this.inMemoryReports.delete(reportId);
+    }
+  }
+
+  /**
+   * Удаляет ВСЕ отчёты и связанные метаданные (Safe Purge).
+   */
+  async deleteAllReports() {
+    if (this.db) {
+      const countRow = await this.db.prepare(`SELECT COUNT(*) as count FROM reports`).first();
+      const count = countRow?.count || 0;
+      await this.db.prepare(`DELETE FROM reports`).run();
+      return count;
+    } else {
+      const count = this.inMemoryReports.size;
+      this.inMemoryReports.clear();
+      return count;
     }
   }
 
@@ -187,8 +229,21 @@ export class ReportStorage {
         params.push(errorCategory);
       }
       if (status) {
-        query += ` AND status = ?`;
-        params.push(status);
+        const norm = normalizeStatus(status);
+        if (norm === 'IN_PROGRESS') {
+          query += ` AND status IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED', 'in_progress', 'reviewed', 'triaged')`;
+        } else if (norm === 'KNOWN_ISSUE') {
+          query += ` AND status IN ('KNOWN_ISSUE', 'KNOWN', 'known_issue', 'known')`;
+        } else if (norm === 'IGNORED_TEST') {
+          query += ` AND status IN ('IGNORED_TEST', 'TEST', 'ignored_test', 'test')`;
+        } else if (norm === 'NEW') {
+          query += ` AND status IN ('NEW', 'new')`;
+        } else if (norm === 'RESOLVED') {
+          query += ` AND status IN ('RESOLVED', 'resolved')`;
+        } else {
+          query += ` AND status = ?`;
+          params.push(norm);
+        }
       }
       if (reportPurpose) {
         query += ` AND report_purpose = ?`;
@@ -204,13 +259,19 @@ export class ReportStorage {
 
       const stmt = this.db.prepare(query);
       const { results } = await stmt.bind(...params).all();
-      return results || [];
+      return (results || []).map(r => ({
+        ...r,
+        status: normalizeStatus(r.status),
+      }));
     } else {
       let list = Array.from(this.inMemoryReports.values());
       if (platform) list = list.filter((r) => r.platform === platform);
       if (appVersion) list = list.filter((r) => r.app_version === appVersion);
       if (errorCategory) list = list.filter((r) => r.error_category === errorCategory);
-      if (status) list = list.filter((r) => r.status === status);
+      if (status) {
+        const norm = normalizeStatus(status);
+        list = list.filter((r) => normalizeStatus(r.status) === norm);
+      }
       if (reportPurpose) list = list.filter((r) => r.report_purpose === reportPurpose);
       if (search) {
         const s = search.toLowerCase();
@@ -231,7 +292,7 @@ export class ReportStorage {
         device_family: r.device_family,
         error_category: r.error_category,
         expires_at: r.expires_at,
-        status: r.status,
+        status: normalizeStatus(r.status),
         developer_notes: r.developer_notes,
         report_purpose: r.report_purpose,
         error_signature: r.error_signature,
@@ -250,6 +311,11 @@ export class ReportStorage {
       let query = `
         SELECT error_signature,
                COUNT(*) as count,
+               SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as new_count,
+               SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED') THEN 1 ELSE 0 END) as in_progress_count,
+               SUM(CASE WHEN UPPER(status) = 'RESOLVED' THEN 1 ELSE 0 END) as resolved_count,
+               SUM(CASE WHEN UPPER(status) IN ('KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as known_issue_count,
+               SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'TEST') THEN 1 ELSE 0 END) as ignored_test_count,
                MIN(created_at) as first_seen,
                MAX(created_at) as last_seen,
                MAX(report_id) as sample_report_id,
@@ -260,40 +326,69 @@ export class ReportStorage {
       `;
       const params = [];
       if (status) {
-        query += ` AND status = ?`;
-        params.push(status);
+        const norm = normalizeStatus(status);
+        if (norm === 'IN_PROGRESS') {
+          query += ` AND UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED')`;
+        } else if (norm === 'KNOWN_ISSUE') {
+          query += ` AND UPPER(status) IN ('KNOWN_ISSUE', 'KNOWN')`;
+        } else if (norm === 'IGNORED_TEST') {
+          query += ` AND UPPER(status) IN ('IGNORED_TEST', 'TEST')`;
+        } else {
+          query += ` AND UPPER(status) = ?`;
+          params.push(norm);
+        }
       }
       query += ` GROUP BY error_signature ORDER BY count DESC, last_seen DESC LIMIT ? OFFSET ?`;
       params.push(lim, off);
 
       const stmt = this.db.prepare(query);
       const { results } = await stmt.bind(...params).all();
-      return results || [];
+      return (results || []).map(r => ({
+        ...r,
+        status: normalizeStatus(r.status),
+        new_count: Number(r.new_count) || 0,
+        in_progress_count: Number(r.in_progress_count) || 0,
+        resolved_count: Number(r.resolved_count) || 0,
+        known_issue_count: Number(r.known_issue_count) || 0,
+        ignored_test_count: Number(r.ignored_test_count) || 0,
+      }));
     } else {
       const groups = new Map();
       for (const r of this.inMemoryReports.values()) {
         const sig = r.error_signature;
         if (!sig) continue;
-        if (status && r.status !== status) continue;
+        const normStatus = normalizeStatus(r.status);
+        if (status && normStatus !== normalizeStatus(status)) continue;
 
         if (!groups.has(sig)) {
           groups.set(sig, {
             error_signature: sig,
             count: 0,
+            new_count: 0,
+            in_progress_count: 0,
+            resolved_count: 0,
+            known_issue_count: 0,
+            ignored_test_count: 0,
             first_seen: r.created_at,
             last_seen: r.created_at,
             sample_report_id: r.report_id,
             error_category: r.error_category,
-            status: r.status,
+            status: normStatus,
           });
         }
         const g = groups.get(sig);
         g.count++;
+        if (normStatus === 'NEW') g.new_count++;
+        else if (normStatus === 'IN_PROGRESS') g.in_progress_count++;
+        else if (normStatus === 'RESOLVED') g.resolved_count++;
+        else if (normStatus === 'KNOWN_ISSUE') g.known_issue_count++;
+        else if (normStatus === 'IGNORED_TEST') g.ignored_test_count++;
+
         if (r.created_at < g.first_seen) g.first_seen = r.created_at;
         if (r.created_at > g.last_seen) {
           g.last_seen = r.created_at;
           g.sample_report_id = r.report_id;
-          g.status = r.status;
+          g.status = normStatus;
         }
       }
 
@@ -310,22 +405,54 @@ export class ReportStorage {
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
     if (this.db) {
-      const [totalRow, dayRow, weekRow, activeRow, platformsRes, versionsRes, categoriesRes, topIssuesRes] = await Promise.all([
+      const [totalRow, dayRow, weekRow, countsRes, platformsRes, versionsRes, categoriesRes, topIssuesRes] = await Promise.all([
         this.db.prepare(`SELECT COUNT(*) as count FROM reports`).first(),
         this.db.prepare(`SELECT COUNT(*) as count FROM reports WHERE created_at >= ?`).bind(oneDayAgo).first(),
         this.db.prepare(`SELECT COUNT(*) as count FROM reports WHERE created_at >= ?`).bind(sevenDaysAgo).first(),
-        this.db.prepare(`SELECT COUNT(*) as count FROM reports WHERE status IN ('NEW', 'REVIEWED', 'KNOWN_ISSUE')`).first(),
+        this.db.prepare(`
+          SELECT 
+            SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
+            SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED') THEN 1 ELSE 0 END) as count_in_progress,
+            SUM(CASE WHEN UPPER(status) = 'RESOLVED' THEN 1 ELSE 0 END) as count_resolved,
+            SUM(CASE WHEN UPPER(status) IN ('KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
+            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'TEST') THEN 1 ELSE 0 END) as count_ignored_test
+          FROM reports
+        `).first(),
         this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
         this.db.prepare(`SELECT app_version, COUNT(*) as count FROM reports GROUP BY app_version ORDER BY count DESC LIMIT 8`).all(),
         this.db.prepare(`SELECT error_category, COUNT(*) as count FROM reports WHERE error_category IS NOT NULL AND error_category != '' GROUP BY error_category ORDER BY count DESC LIMIT 8`).all(),
         this.db.prepare(`SELECT error_signature, COUNT(*) as count FROM reports WHERE error_signature IS NOT NULL AND error_signature != '' GROUP BY error_signature ORDER BY count DESC LIMIT 5`).all(),
       ]);
 
+      const totalReports = totalRow?.count || 0;
+      const reports24h = dayRow?.count || 0;
+      const reports7d = weekRow?.count || 0;
+      const newCount = Number(countsRes?.count_new) || 0;
+      const inProgressCount = Number(countsRes?.count_in_progress) || 0;
+      const resolvedCount = Number(countsRes?.count_resolved) || 0;
+      const knownIssueCount = Number(countsRes?.count_known_issue) || 0;
+      const ignoredTestCount = Number(countsRes?.count_ignored_test) || 0;
+      const activeIssuesCount = newCount + inProgressCount + knownIssueCount;
+
+      const statusBreakdown = [
+        { status: 'NEW', label: 'Новый', count: newCount },
+        { status: 'IN_PROGRESS', label: 'В работе', count: inProgressCount },
+        { status: 'RESOLVED', label: 'Решено', count: resolvedCount },
+        { status: 'KNOWN_ISSUE', label: 'Известная проблема', count: knownIssueCount },
+        { status: 'IGNORED_TEST', label: 'Тест / игнор', count: ignoredTestCount },
+      ];
+
       return {
-        totalReports: totalRow?.count || 0,
-        reports24h: dayRow?.count || 0,
-        reports7d: weekRow?.count || 0,
-        activeIssuesCount: activeRow?.count || 0,
+        totalReports,
+        reports24h,
+        reports7d,
+        newCount,
+        inProgressCount,
+        resolvedCount,
+        knownIssueCount,
+        ignoredTestCount,
+        activeIssuesCount,
+        statusBreakdown,
         platformBreakdown: platformsRes?.results || [],
         versionDistribution: versionsRes?.results || [],
         topCategories: categoriesRes?.results || [],
@@ -336,7 +463,12 @@ export class ReportStorage {
       const totalReports = all.length;
       const reports24h = all.filter((r) => r.created_at >= oneDayAgo).length;
       const reports7d = all.filter((r) => r.created_at >= sevenDaysAgo).length;
-      const activeIssuesCount = all.filter((r) => ['NEW', 'REVIEWED', 'KNOWN_ISSUE'].includes(r.status)).length;
+
+      let newCount = 0;
+      let inProgressCount = 0;
+      let resolvedCount = 0;
+      let knownIssueCount = 0;
+      let ignoredTestCount = 0;
 
       const platformsMap = new Map();
       const versionsMap = new Map();
@@ -344,6 +476,13 @@ export class ReportStorage {
       const issuesMap = new Map();
 
       for (const r of all) {
+        const normStatus = normalizeStatus(r.status);
+        if (normStatus === 'NEW') newCount++;
+        else if (normStatus === 'IN_PROGRESS') inProgressCount++;
+        else if (normStatus === 'RESOLVED') resolvedCount++;
+        else if (normStatus === 'KNOWN_ISSUE') knownIssueCount++;
+        else if (normStatus === 'IGNORED_TEST') ignoredTestCount++;
+
         platformsMap.set(r.platform, (platformsMap.get(r.platform) || 0) + 1);
         versionsMap.set(r.app_version, (versionsMap.get(r.app_version) || 0) + 1);
         if (r.error_category) {
@@ -354,13 +493,26 @@ export class ReportStorage {
         }
       }
 
-      const toList = (m) => Array.from(m.entries()).map(([k, count]) => ({ key: k, count })).sort((a, b) => b.count - a.count);
+      const activeIssuesCount = newCount + inProgressCount + knownIssueCount;
+      const statusBreakdown = [
+        { status: 'NEW', label: 'Новый', count: newCount },
+        { status: 'IN_PROGRESS', label: 'В работе', count: inProgressCount },
+        { status: 'RESOLVED', label: 'Решено', count: resolvedCount },
+        { status: 'KNOWN_ISSUE', label: 'Известная проблема', count: knownIssueCount },
+        { status: 'IGNORED_TEST', label: 'Тест / игнор', count: ignoredTestCount },
+      ];
 
       return {
         totalReports,
         reports24h,
         reports7d,
+        newCount,
+        inProgressCount,
+        resolvedCount,
+        knownIssueCount,
+        ignoredTestCount,
         activeIssuesCount,
+        statusBreakdown,
         platformBreakdown: Array.from(platformsMap.entries()).map(([platform, count]) => ({ platform, count })),
         versionDistribution: Array.from(versionsMap.entries()).map(([app_version, count]) => ({ app_version, count })).slice(0, 8),
         topCategories: Array.from(categoriesMap.entries()).map(([error_category, count]) => ({ error_category, count })).slice(0, 8),

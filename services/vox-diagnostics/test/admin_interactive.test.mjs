@@ -220,3 +220,241 @@ test('5. Admin API operations and detail inspection', async () => {
   assert.equal(deleteJson.status, 'deleted');
   assert.equal(deleteJson.reportId, reportId);
 });
+
+test('6. Individual download endpoint & privacy verification (GET /v1/admin/reports/:id/download)', async () => {
+  const storage = new ReportStorage();
+  const reportId = 'VOX-A-PRIV01';
+  await storage.saveReport({
+    reportId,
+    schema: 'vox-diagnostic-report-v2',
+    timestamp: Date.now(),
+    appVersion: '32.56-vox.7-dev',
+    platform: 'Android TV',
+    manufacturer: 'Philips',
+    model: 'Ambilight-55',
+    errorCategory: 'NETWORK',
+    errorSignature: 'NETWORK_SOCKET_TIMEOUT',
+    safeRecentEvents: [
+      {
+        timestamp: Date.now(),
+        level: 'WARNING',
+        category: 'NETWORK',
+        code: 'SOCKET_TIMEOUT',
+        message: 'Socket timed out while requesting manifest',
+      },
+    ],
+  });
+
+  // 1. Unauthenticated download -> 401
+  const unauthReq = createRequest(`https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}/download`);
+  const unauthRes = await handleRequest(unauthReq, mockEnv, storage);
+  assert.equal(unauthRes.status, 401);
+
+  // 2. Authenticated download -> 200
+  const authReq = createRequest(`https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}/download`, {
+    headers: { Authorization: `Bearer ${mockEnv.ADMIN_SECRET}` },
+  });
+  const authRes = await handleRequest(authReq, mockEnv, storage);
+  assert.equal(authRes.status, 200);
+  assert.equal(authRes.headers.get('content-type'), 'application/json; charset=utf-8');
+  assert.equal(authRes.headers.get('content-disposition'), `attachment; filename="vox-diagnostic-${reportId}.json"`);
+
+  const rawJsonText = await authRes.text();
+  const downloadData = JSON.parse(rawJsonText);
+
+  // Validate expected properties
+  assert.equal(downloadData.reportId, reportId);
+  assert.equal(downloadData.platform, 'Android TV');
+  assert.equal(downloadData.errorCategory, 'NETWORK');
+  assert.equal(downloadData.errorSignature, 'NETWORK_SOCKET_TIMEOUT');
+  assert.equal(downloadData.status, 'NEW');
+  assert.ok(downloadData.device);
+  assert.equal(downloadData.device.manufacturer, 'Philips');
+  assert.equal(downloadData.device.model, 'Ambilight-55');
+  assert.ok(Array.isArray(downloadData.safeRecentEvents));
+  assert.equal(downloadData.safeRecentEvents.length, 1);
+
+  // Mandatory Privacy Check: serialize and scan for forbidden keywords
+  const privacyBanned = [
+    'authorization',
+    'cookie',
+    'access_token',
+    'refresh_token',
+    'password',
+    'admin_secret',
+    'private_key',
+    'client_secret',
+    'signed_url',
+    mockEnv.ADMIN_SECRET,
+  ];
+
+  for (const banned of privacyBanned) {
+    assert.ok(
+      !rawJsonText.toLowerCase().includes(banned.toLowerCase()),
+      `Downloaded JSON export MUST NOT contain sensitive term: "${banned}"`
+    );
+  }
+});
+
+test('7. Incident workflow statuses and developer notes lifecycle', async () => {
+  const storage = new ReportStorage();
+  const reportId = 'VOX-A-FLOW77';
+  await storage.saveReport({
+    reportId,
+    schema: 'vox-diagnostic-report-v2',
+    timestamp: Date.now(),
+    appVersion: '32.56-vox.7-dev',
+    platform: 'Android TV',
+    errorCategory: 'TRANSLATION',
+    errorSignature: 'TRANSLATION_DESYNC_WARNING',
+  });
+
+  const authHeaders = { Authorization: `Bearer ${mockEnv.ADMIN_SECRET}` };
+
+  // Status step 1: NEW -> IN_PROGRESS with note
+  const patch1 = createRequest(`https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`, {
+    method: 'PATCH',
+    headers: authHeaders,
+    body: { status: 'IN_PROGRESS', developerNotes: 'Исправляется в Patch #35' },
+  });
+  const res1 = await handleRequest(patch1, mockEnv, storage);
+  assert.equal(res1.status, 200);
+  const data1 = (await res1.json()).report;
+  assert.equal(data1.status, 'IN_PROGRESS');
+  assert.equal(data1.developer_notes, 'Исправляется в Patch #35');
+
+  // Status step 2: IN_PROGRESS -> RESOLVED with updated note
+  const patch2 = createRequest(`https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`, {
+    method: 'PATCH',
+    headers: authHeaders,
+    body: { status: 'RESOLVED', developerNotes: 'Исправлено и проверено в Patch #35' },
+  });
+  const res2 = await handleRequest(patch2, mockEnv, storage);
+  assert.equal(res2.status, 200);
+  const data2 = (await res2.json()).report;
+  assert.equal(data2.status, 'RESOLVED');
+  assert.equal(data2.developer_notes, 'Исправлено и проверено в Patch #35');
+
+  // Status step 3: Backward-compatibility check for legacy 'reviewed' / 'triaged'
+  const patch3 = createRequest(`https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`, {
+    method: 'PATCH',
+    headers: authHeaders,
+    body: { status: 'reviewed' },
+  });
+  const res3 = await handleRequest(patch3, mockEnv, storage);
+  assert.equal(res3.status, 200);
+  const data3 = (await res3.json()).report;
+  assert.equal(data3.status, 'IN_PROGRESS'); // Normalized to IN_PROGRESS
+});
+
+test('8. Filter by status, common issues grouping, and metrics breakdown', async () => {
+  const storage = new ReportStorage();
+  // Seed reports with different statuses
+  await storage.saveReport({
+    reportId: 'VOX-A-01',
+    errorSignature: 'SIG_A',
+    status: 'NEW',
+    platform: 'Android TV',
+  });
+  await storage.saveReport({
+    reportId: 'VOX-A-02',
+    errorSignature: 'SIG_A',
+    status: 'IN_PROGRESS',
+    platform: 'Android TV',
+  });
+  await storage.saveReport({
+    reportId: 'VOX-A-03',
+    errorSignature: 'SIG_A',
+    status: 'RESOLVED',
+    platform: 'Samsung Tizen',
+  });
+  await storage.saveReport({
+    reportId: 'VOX-A-04',
+    errorSignature: 'SIG_B',
+    status: 'KNOWN_ISSUE',
+    platform: 'Android TV',
+  });
+  await storage.saveReport({
+    reportId: 'VOX-A-05',
+    errorSignature: 'SIG_B',
+    status: 'IGNORED_TEST',
+    platform: 'Android TV',
+  });
+
+  const authHeaders = { Authorization: `Bearer ${mockEnv.ADMIN_SECRET}` };
+
+  // 1. Filter by status = RESOLVED
+  const filterReq = createRequest('https://diagnostics.example.com/v1/admin/reports?status=RESOLVED', {
+    headers: authHeaders,
+  });
+  const filterRes = await handleRequest(filterReq, mockEnv, storage);
+  assert.equal(filterRes.status, 200);
+  const filterList = (await filterRes.json()).reports;
+  assert.equal(filterList.length, 1);
+  assert.equal(filterList[0].report_id, 'VOX-A-03');
+
+  // 2. Common issues grouping breakdown
+  const issuesReq = createRequest('https://diagnostics.example.com/v1/admin/issues', {
+    headers: authHeaders,
+  });
+  const issuesRes = await handleRequest(issuesReq, mockEnv, storage);
+  assert.equal(issuesRes.status, 200);
+  const issuesList = (await issuesRes.json()).issues;
+  assert.equal(issuesList.length, 2);
+  const sigA = issuesList.find(i => i.error_signature === 'SIG_A');
+  assert.ok(sigA);
+  assert.equal(sigA.count, 3);
+  assert.equal(sigA.new_count, 1);
+  assert.equal(sigA.in_progress_count, 1);
+  assert.equal(sigA.resolved_count, 1);
+
+  // 3. Stats & Metrics breakdown
+  const statsReq = createRequest('https://diagnostics.example.com/v1/admin/stats', {
+    headers: authHeaders,
+  });
+  const statsRes = await handleRequest(statsReq, mockEnv, storage);
+  assert.equal(statsRes.status, 200);
+  const stats = await statsRes.json();
+  assert.equal(stats.totalReports, 5);
+  assert.equal(stats.newCount, 1);
+  assert.equal(stats.inProgressCount, 1);
+  assert.equal(stats.resolvedCount, 1);
+  assert.equal(stats.knownIssueCount, 1);
+  assert.equal(stats.ignoredTestCount, 1);
+  assert.ok(Array.isArray(stats.statusBreakdown));
+  assert.equal(stats.statusBreakdown.length, 5);
+});
+
+test('9. Safe Purge (DELETE /v1/admin/reports)', async () => {
+  const storage = new ReportStorage();
+  await storage.saveReport({ reportId: 'VOX-DEL-1', schema: 'vox-diagnostic-report-v2' });
+  await storage.saveReport({ reportId: 'VOX-DEL-2', schema: 'vox-diagnostic-report-v2' });
+
+  // 1. Unauthenticated purge -> 401
+  const unauthPurge = createRequest('https://diagnostics.example.com/v1/admin/reports', {
+    method: 'DELETE',
+  });
+  const unauthPurgeRes = await handleRequest(unauthPurge, mockEnv, storage);
+  assert.equal(unauthPurgeRes.status, 401);
+
+  // 2. Authenticated purge -> 200
+  const authPurge = createRequest('https://diagnostics.example.com/v1/admin/reports', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${mockEnv.ADMIN_SECRET}` },
+  });
+  const authPurgeRes = await handleRequest(authPurge, mockEnv, storage);
+  assert.equal(authPurgeRes.status, 200);
+  const purgeJson = await authPurgeRes.json();
+  assert.equal(purgeJson.ok, true);
+  assert.equal(purgeJson.deleted, 2);
+
+  // 3. Verify storage is now empty
+  const afterList = await storage.listReports();
+  assert.equal(afterList.length, 0);
+
+  // 4. Schema survives: can save report after purge
+  const newSave = await storage.saveReport({ reportId: 'VOX-DEL-SURVIVE', schema: 'vox-diagnostic-report-v2' });
+  assert.equal(newSave.reportId, 'VOX-DEL-SURVIVE');
+  const checkReport = await storage.getReportById('VOX-DEL-SURVIVE');
+  assert.ok(checkReport);
+});
