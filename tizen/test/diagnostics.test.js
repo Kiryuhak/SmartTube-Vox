@@ -38,8 +38,8 @@ function run() {
   // Verify JSON schema
   const reportJson = diag.generateReportJson(profile, policy);
   assert.strictEqual(reportJson.schema, 'vox-diagnostic-report-v2');
-  assert.strictEqual(reportJson.appVersion, '32.56-vox.7');
-  assert.strictEqual(reportJson.appVersionCode, 2446008);
+  assert.strictEqual(reportJson.appVersion, '32.56-vox.8-dev');
+  assert.strictEqual(reportJson.appVersionCode, 2446009);
   assert.strictEqual(reportJson.platform, 'Tizen');
   assert.strictEqual(reportJson.manufacturer, 'Samsung');
   assert.ok(Array.isArray(reportJson.safeRecentEvents));
