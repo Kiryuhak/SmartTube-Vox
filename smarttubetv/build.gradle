@@ -140,15 +140,15 @@ android {
             targetSdkVersion project.properties.compileSdkVersion
             matchingFallbacks = ['ststable']
 
-            def votSuffix = project.findProperty("votVersionSuffix") ?: "-vox.7"
+            def votSuffix = project.findProperty("votVersionSuffix") ?: "-vox.8-dev"
             def customVersionName = project.findProperty("votVersionName")
-            def customVersionCode = project.findProperty("votVersionCode") ?: "2446008"
+            def customVersionCode = project.findProperty("votVersionCode") ?: "2446009"
 
             def effectiveVersionName = customVersionName ?: (defaultConfig.versionName + votSuffix)
             versionName effectiveVersionName
 
             def matcher = (effectiveVersionName =~ /-(?:vot|vox)\.(\d+)/)
-            def votPatch = matcher.find() ? matcher.group(1).toInteger() : 7
+            def votPatch = matcher.find() ? matcher.group(1).toInteger() : 8
             if (votPatch < 1 || votPatch > 999) {
                 throw new GradleException("votPatch must be strictly between 1 and 999! Current: " + votPatch)
             }

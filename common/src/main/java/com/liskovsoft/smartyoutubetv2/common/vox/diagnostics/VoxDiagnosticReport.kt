@@ -101,12 +101,12 @@ data class VoxDiagnosticReport(
             } catch (e: Exception) {
                 null
             }
-            val appVer = pInfo?.versionName ?: "32.56-vox.7"
+            val appVer = pInfo?.versionName ?: "32.56-vox.8-dev"
             val appCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                pInfo?.longVersionCode?.toInt() ?: 2446008
+                pInfo?.longVersionCode?.toInt() ?: 2446009
             } else {
                 @Suppress("DEPRECATION")
-                pInfo?.versionCode ?: 2446008
+                pInfo?.versionCode ?: 2446009
             }
 
             val recentEvents = if (includeEvents) {
@@ -124,7 +124,7 @@ data class VoxDiagnosticReport(
                 reportId = reportId,
                 timestamp = System.currentTimeMillis(),
                 appVersion = appVer,
-                appVersionCode = if (appCode > 0) appCode else 2446008,
+                appVersionCode = if (appCode > 0) appCode else 2446009,
                 platform = profile.platform.displayName,
                 manufacturer = profile.manufacturer,
                 model = profile.model,
