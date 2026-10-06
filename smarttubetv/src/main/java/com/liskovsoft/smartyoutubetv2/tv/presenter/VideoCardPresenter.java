@@ -3,7 +3,10 @@ package com.liskovsoft.smartyoutubetv2.tv.presenter;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Build.VERSION;
 import android.util.Pair;
 import android.view.View;
@@ -21,6 +24,8 @@ import com.bumptech.glide.request.target.Target;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+import com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxFeedQualityResolver;
+import com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxQualityBindingGuard;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.utils.ClickbaitRemover;
 import com.liskovsoft.smartyoutubetv2.tv.R;
@@ -43,6 +48,8 @@ public class VideoCardPresenter extends LongClickPresenter {
     private int mThumbQuality;
     private int mWidth;
     private int mHeight;
+    private final Handler mQualityHandler = new Handler(Looper.getMainLooper());
+    private final java.util.IdentityHashMap<Presenter.ViewHolder, QualityBinding> mQualityBindings = new java.util.IdentityHashMap<>();
 
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent) {
@@ -120,6 +127,8 @@ public class VideoCardPresenter extends LongClickPresenter {
     public void onBindViewHolder(Presenter.ViewHolder viewHolder, Object item) {
         super.onBindViewHolder(viewHolder, item);
 
+        clearQualityBinding(viewHolder);
+
         Video video = (Video) item;
 
         ComplexImageCardView cardView = (ComplexImageCardView) viewHolder.view;
@@ -130,7 +139,21 @@ public class VideoCardPresenter extends LongClickPresenter {
         // Count progress that very close to zero. E.g. when user closed video immediately.
         cardView.setProgress(video.percentWatched > 0 && video.percentWatched < 1 ? 1 : Math.round(video.percentWatched));
         String qualityBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video);
+        VoxFeedQualityResolver resolver = VoxFeedQualityResolver.get(context);
+        if (qualityBadge != null && video.videoId != null) {
+            resolver.rememberBadge(video.videoId, qualityBadge,
+                    video.isLocal ? VoxFeedQualityResolver.Source.DOWNLOAD : VoxFeedQualityResolver.Source.FEED);
+        }
+        if (qualityBadge == null && !video.isLocal && video.videoId != null) {
+            qualityBadge = resolver.cached(video.videoId);
+        }
         cardView.setQualityBadge(qualityBadge);
+        if (qualityBadge == null && canResolveQuality(video)) {
+            QualityBinding binding = new QualityBinding(cardView, video.videoId, resolver);
+            mQualityBindings.put(viewHolder, binding);
+            cardView.addOnAttachStateChangeListener(binding);
+            if (cardView.getWindowToken() != null) binding.schedule();
+        }
         if (qualityBadge != null) {
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
@@ -208,6 +231,7 @@ public class VideoCardPresenter extends LongClickPresenter {
     @Override
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
         super.onUnbindViewHolder(viewHolder);
+        clearQualityBinding(viewHolder);
 
         ComplexImageCardView cardView = (ComplexImageCardView) viewHolder.view;
 
@@ -221,6 +245,65 @@ public class VideoCardPresenter extends LongClickPresenter {
 
         // Cleanup Glide resources. https://chatgpt.com/share/682120c5-e428-8010-b848-371b2dec0cd5
         Glide.with(cardView.getContext().getApplicationContext()).clear(cardView.getMainImageView());
+    }
+
+    private static boolean canResolveQuality(Video video) {
+        return video.videoId != null && !video.isLocal && !video.isChannel() && !video.isMix() &&
+                !video.isLive && !video.isUpcoming && !video.isShorts;
+    }
+
+    private void clearQualityBinding(Presenter.ViewHolder holder) {
+        QualityBinding previous = mQualityBindings.remove(holder);
+        if (previous != null) previous.close();
+    }
+
+    private final class QualityBinding implements View.OnAttachStateChangeListener {
+        private final ComplexImageCardView view;
+        private final String videoId;
+        private final VoxFeedQualityResolver resolver;
+        private final VoxQualityBindingGuard guard = new VoxQualityBindingGuard();
+        private final long generation;
+        private final Runnable dwell = this::resolveIfVisible;
+        private VoxFeedQualityResolver.Subscription subscription;
+        private boolean active = true;
+
+        QualityBinding(ComplexImageCardView view, String videoId, VoxFeedQualityResolver resolver) {
+            this.view = view;
+            this.videoId = videoId;
+            this.resolver = resolver;
+            this.generation = guard.bind(videoId);
+        }
+
+        void schedule() {
+            mQualityHandler.removeCallbacks(dwell);
+            if (active) mQualityHandler.postDelayed(dwell, VoxFeedQualityResolver.VISIBLE_DWELL_MS);
+        }
+
+        private void resolveIfVisible() {
+            Rect visible = new Rect();
+            if (!active || view.getWindowToken() == null || !view.isShown() ||
+                    !view.getGlobalVisibleRect(visible) ||
+                    visible.width() * visible.height() < view.getWidth() * view.getHeight() / 2) return;
+            subscription = resolver.resolve(videoId, (resolvedId, badge) -> {
+                if (active && guard.accepts(resolvedId, generation) && view.getWindowToken() != null && view.isShown())
+                    view.setQualityBadge(badge);
+            });
+        }
+
+        void close() {
+            active = false;
+            guard.unbind();
+            mQualityHandler.removeCallbacks(dwell);
+            if (subscription != null) subscription.cancel();
+            view.removeOnAttachStateChangeListener(this);
+        }
+
+        @Override public void onViewAttachedToWindow(View v) { schedule(); }
+        @Override public void onViewDetachedFromWindow(View v) {
+            mQualityHandler.removeCallbacks(dwell);
+            if (subscription != null) subscription.cancel();
+            subscription = null;
+        }
     }
 
     private void updateDimensions(Context context) {
