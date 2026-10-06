@@ -33,6 +33,7 @@ public class ComplexImageView extends RelativeLayout {
     private TextView mQualityBadge;
     private TextView mAgeBadge;
     private ImageView mLocalBadgeIcon;
+    private View mTopBadgesGap;
     private ViewGroup mProgressContainer;
     private ViewGroup mTopBadgesContainer;
     private int mPreviewWidth;
@@ -64,6 +65,7 @@ public class ComplexImageView extends RelativeLayout {
         mQualityBadge = findViewById(R.id.quality_badge);
         mAgeBadge = findViewById(R.id.age_badge);
         mLocalBadgeIcon = findViewById(R.id.local_badge_icon);
+        mTopBadgesGap = findViewById(R.id.top_badges_gap);
         mProgressBar = findViewById(R.id.clip_progress);
         mProgressContainer = findViewById(R.id.clip_info);
         mTopBadgesContainer = findViewById(R.id.top_badges_container);
@@ -123,6 +125,7 @@ public class ComplexImageView extends RelativeLayout {
         } else {
             mQualityBadge.setVisibility(View.GONE);
         }
+        updateTopBadgeGap();
     }
 
     public void setAgeBadge(String text) {
@@ -147,6 +150,14 @@ public class ComplexImageView extends RelativeLayout {
             mLocalBadgeIcon.setVisibility(View.VISIBLE);
         } else {
             mLocalBadgeIcon.setVisibility(View.GONE);
+        }
+        updateTopBadgeGap();
+    }
+
+    private void updateTopBadgeGap() {
+        if (mTopBadgesGap != null) {
+            mTopBadgesGap.setVisibility(mQualityBadge.getVisibility() == View.VISIBLE &&
+                    mLocalBadgeIcon.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         }
     }
 

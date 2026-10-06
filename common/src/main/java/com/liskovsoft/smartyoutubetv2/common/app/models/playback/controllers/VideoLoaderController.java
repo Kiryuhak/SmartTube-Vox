@@ -309,6 +309,11 @@ public class VideoLoaderController extends BasePlayerController {
             return;
         }
 
+        com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxFeedQualityResolver.get(getContext()).remember(
+                getVideo().videoId,
+                com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxFeedQualityResolver.heightOf(formatInfo),
+                com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxFeedQualityResolver.Source.PLAYBACK);
+
         String bgImageUrl = null;
 
         getVideo().sync(formatInfo);
