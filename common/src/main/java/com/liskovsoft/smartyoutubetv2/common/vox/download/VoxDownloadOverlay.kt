@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.smartyoutubetv2.common.R
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils
+import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -49,6 +50,13 @@ class VoxDownloadOverlay(private val context: Context) {
     private val speedEstimator = VoxDownloadSpeedEstimator()
     private val lastUiUpdateTime = AtomicLong(0L)
     private var lastRenderedState: VoxDownloadState? = null
+    private var boundActivity = WeakReference<Activity>(null)
+
+    private val coordinatorListener = object : VoxDownloadListener {
+        override fun onStateChanged(progress: VoxDownloadProgress) = updateProgress(null, progress)
+        override fun onProgressUpdated(progress: VoxDownloadProgress) = updateProgress(null, progress)
+        override fun onError(downloadId: String, errorCode: VoxDownloadErrorCode, message: String) = Unit
+    }
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoDismissRunnable = Runnable { hide() }
@@ -66,7 +74,10 @@ class VoxDownloadOverlay(private val context: Context) {
         @JvmStatic
         fun get(context: Context): VoxDownloadOverlay {
             return globalInstance ?: synchronized(this) {
-                globalInstance ?: VoxDownloadOverlay(context.applicationContext).also { globalInstance = it }
+                globalInstance ?: VoxDownloadOverlay(context.applicationContext).also {
+                    VoxDownloadCoordinator.instance(context).addGlobalListener(it.coordinatorListener)
+                    globalInstance = it
+                }
             }
         }
 
@@ -104,6 +115,7 @@ class VoxDownloadOverlay(private val context: Context) {
     }
 
     fun showForDownload(@Nullable activity: Activity?, downloadId: String) {
+        if (activity != null) boundActivity = WeakReference(activity)
         val coordinator = VoxDownloadCoordinator.instance(context)
         val job = coordinator.getJob(downloadId) ?: return
         currentDownloadId = downloadId
@@ -116,6 +128,7 @@ class VoxDownloadOverlay(private val context: Context) {
         progress: VoxDownloadProgress,
         force: Boolean = false
     ) {
+        if (activity != null) boundActivity = WeakReference(activity)
         val now = System.currentTimeMillis()
         val isStateChange = progress.state != lastRenderedState
 
@@ -127,7 +140,7 @@ class VoxDownloadOverlay(private val context: Context) {
         lastRenderedState = progress.state
 
         mainHandler.post {
-            render(activity, progress)
+            render(activity ?: boundActivity.get(), progress)
         }
     }
 

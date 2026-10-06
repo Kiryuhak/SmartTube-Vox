@@ -225,7 +225,15 @@ class VoxMediaStorePublisher(
         isCancelled: AtomicBoolean,
         onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
     ): Uri {
-        val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        // API 28: запись в общую Movies требует runtime-разрешения. При его
+        // отсутствии оставляем файл в доступном приложению каталоге без запроса
+        // разрешения из фонового worker.
+        val hasPublicWrite = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val moviesDir = if (hasPublicWrite)
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        else context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir
         val targetDir = File(moviesDir, "SmartTube VOX")
         if (!targetDir.exists()) {
             targetDir.mkdirs()
@@ -263,12 +271,14 @@ class VoxMediaStorePublisher(
             }
             if (tmpCandidate.renameTo(candidateFile)) {
                 // Сканируем файл для появления в галерее/MediaStore
-                android.media.MediaScannerConnection.scanFile(
-                    context,
-                    arrayOf(candidateFile.absolutePath),
-                    arrayOf(MIME_TYPE_MKV),
-                    null
-                )
+                if (hasPublicWrite) {
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(candidateFile.absolutePath),
+                        arrayOf(MIME_TYPE_MKV),
+                        null
+                    )
+                }
                 return Uri.fromFile(candidateFile)
             } else {
                 throw VoxDownloadException(

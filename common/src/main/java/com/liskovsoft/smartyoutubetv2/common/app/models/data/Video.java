@@ -855,7 +855,7 @@ public final class Video {
     }
 
     public boolean isDownloadedTranslated() {
-        return "DOWNLOADED_TRANSLATED".equals(translationState) || (isLocal && !"NONE".equals(translationState));
+        return "DOWNLOADED_TRANSLATED".equals(translationState);
     }
 
     public void setDurationMs(long durationMs) {

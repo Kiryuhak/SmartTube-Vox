@@ -5,7 +5,7 @@
   const isNode = typeof module !== 'undefined' && module.exports;
 
   let TriStateCapability, VoxPlatform, VoxDeviceProfile, VoxCodecPolicy, VoxCodecPolicyMode;
-  let TizenCapabilityProvider, TizenDpadNavigation, TizenFirstRunDialog, TizenDiagnosticsDialog, TizenVoxButton, TizenVoxButtonState;
+  let TizenCapabilityProvider, TizenDpadNavigation, TizenFirstRunDialog, TizenDiagnosticsDialog;
 
   if (isNode) {
     const platformMod = require('./platform/TizenPlatform');
@@ -21,36 +21,16 @@
     TizenDpadNavigation = require('./ui/TizenDpadNavigation').TizenDpadNavigation;
     TizenFirstRunDialog = require('./ui/TizenFirstRunDialog').TizenFirstRunDialog;
     TizenDiagnosticsDialog = require('./ui/TizenDiagnosticsDialog').TizenDiagnosticsDialog;
-    const btnMod = require('./ui/TizenVoxButton');
-    TizenVoxButton = btnMod.TizenVoxButton;
-    TizenVoxButtonState = btnMod.TizenVoxButtonState;
   }
 
   function initApp() {
     if (typeof window === 'undefined' || !window.document) return;
 
     const modalContainer = document.getElementById('modalContainer');
-    const playerControlsContainer = document.getElementById('voxPlayerControlsContainer');
 
     const capProvider = new (TizenCapabilityProvider || window.TizenCapabilityProvider || Object)(window);
     const profile = capProvider.scanCapabilities ? capProvider.scanCapabilities() : {};
     const policy = new (VoxCodecPolicy || window.VoxCodecPolicy || Object)();
-
-    // VOX Button
-    const voxButton = new (TizenVoxButton || window.TizenVoxButton || Object)({
-      container: playerControlsContainer,
-      onClick: (currentState) => {
-        if (currentState === (TizenVoxButtonState?.IDLE || 'idle')) {
-          voxButton.setState(TizenVoxButtonState?.REQUESTING || 'requesting');
-          setTimeout(() => {
-            voxButton.setState(TizenVoxButtonState?.PLAYING || 'playing');
-          }, 800);
-        } else if (currentState === (TizenVoxButtonState?.PLAYING || 'playing')) {
-          voxButton.setState(TizenVoxButtonState?.IDLE || 'idle');
-        }
-      }
-    });
-    if (voxButton.render) voxButton.render();
 
     // DPAD Navigation
     const nav = new (TizenDpadNavigation || window.TizenDpadNavigation || Object)(document);

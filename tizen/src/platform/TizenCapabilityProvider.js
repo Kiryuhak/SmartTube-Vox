@@ -13,9 +13,9 @@ class TizenCapabilityProvider {
   scanCapabilities() {
     const isTizen = this._detectTizenEnvironment();
     const isEmulator = this._detectEmulator();
-    const manufacturer = 'Samsung';
-    const model = this._getTizenModel();
-    const osVersion = this._getTizenVersion();
+    const manufacturer = isTizen ? 'Samsung' : 'Unknown';
+    const model = isTizen ? this._getTizenModel() : 'Unknown';
+    const osVersion = isTizen ? this._getTizenVersion() : 'Unknown';
 
     const videoCodecs = this._scanVideoCodecs();
     const audioCodecs = this._scanAudioCodecs();
@@ -33,7 +33,7 @@ class TizenCapabilityProvider {
       platform: isTizen ? VoxPlatform.TIZEN : VoxPlatform.UNKNOWN,
       manufacturer,
       model,
-      osName: 'Tizen',
+      osName: isTizen ? 'Tizen' : 'Unknown',
       osVersion,
       videoCodecs,
       audioCodecs,
@@ -107,7 +107,7 @@ class TizenCapabilityProvider {
           const canPlay = videoEl.canPlayType(mime);
           if (canPlay === 'probably' || canPlay === 'maybe') {
             cap = TriStateCapability.SUPPORTED;
-          } else if (canPlay === '') {
+          } else if (canPlay === '' && !hasAvPlay) {
             cap = TriStateCapability.UNSUPPORTED;
           } else {
             cap = TriStateCapability.UNKNOWN;
@@ -117,13 +117,8 @@ class TizenCapabilityProvider {
           detectionSource = DetectionSource.UNKNOWN;
         }
       } else {
-        // Node / test runner fallback
-        if (codec === 'avc' || codec === 'vp9' || codec === 'hevc') {
-          cap = TriStateCapability.SUPPORTED;
-        } else if (codec === 'av1') {
-          cap = TriStateCapability.UNSUPPORTED;
-        }
-        detectionSource = DetectionSource.REAL_PLATFORM_API;
+        // Нет устройства и платформенного API: не объявляем кодеки поддерживаемыми.
+        detectionSource = DetectionSource.UNKNOWN;
       }
 
       results[codec] = {
@@ -131,9 +126,9 @@ class TizenCapabilityProvider {
         capability: cap,
         detectionSource,
         hardwareAccelerated: hwAccelerated,
-        maxWidth: cap === TriStateCapability.SUPPORTED ? 3840 : 0,
-        maxHeight: cap === TriStateCapability.SUPPORTED ? 2160 : 0,
-        maxFps: cap === TriStateCapability.SUPPORTED ? 60 : 0
+        maxWidth: 0,
+        maxHeight: 0,
+        maxFps: 0
       };
     }
 
@@ -164,19 +159,11 @@ class TizenCapabilityProvider {
           } else {
             decodeCap = TriStateCapability.UNKNOWN;
           }
-          if (codec === 'ac3' || codec === 'eac3') {
-            passthroughCap = TriStateCapability.SUPPORTED;
-          }
         } catch (e) {
           decodeCap = TriStateCapability.UNKNOWN;
         }
       } else {
-        if (codec === 'aac' || codec === 'opus' || codec === 'ac3') {
-          decodeCap = TriStateCapability.SUPPORTED;
-        } else if (codec === 'eac3') {
-          decodeCap = TriStateCapability.UNSUPPORTED;
-          passthroughCap = TriStateCapability.SUPPORTED;
-        }
+        // Node не является Tizen TV: оставляем UNKNOWN.
       }
 
       results[codec] = {
@@ -190,16 +177,16 @@ class TizenCapabilityProvider {
   }
 
   _scanDisplay() {
-    let width = 1920;
-    let height = 1080;
+    let width = 0;
+    let height = 0;
     if (this.window && this.window.screen) {
-      width = this.window.screen.width || 1920;
-      height = this.window.screen.height || 1080;
+      width = this.window.screen.width || 0;
+      height = this.window.screen.height || 0;
     }
     return {
       maxWidth: width,
       maxHeight: height,
-      maxFps: 60,
+      maxFps: 0,
       hdr10: TriStateCapability.UNKNOWN,
       hlg: TriStateCapability.UNKNOWN,
       hdr10Plus: TriStateCapability.UNKNOWN,
@@ -209,7 +196,7 @@ class TizenCapabilityProvider {
 
   _scanAudioOutput() {
     return {
-      stereo: TriStateCapability.SUPPORTED,
+      stereo: TriStateCapability.UNKNOWN,
       multichannel: TriStateCapability.UNKNOWN,
       passthrough: TriStateCapability.UNKNOWN
     };

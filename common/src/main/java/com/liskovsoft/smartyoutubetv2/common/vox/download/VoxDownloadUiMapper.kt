@@ -53,6 +53,7 @@ object VoxDownloadUiMapper {
     }
 
     fun mode(mode: VoxTranslationMode): String = when (mode) {
+        VoxTranslationMode.NONE -> "Без перевода"
         VoxTranslationMode.STANDARD -> "Стандартный перевод"
         VoxTranslationMode.LIVELY -> "Живой голос"
     }

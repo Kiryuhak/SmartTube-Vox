@@ -128,6 +128,11 @@ object VoxDownloadDialogHelper {
         // Категория режима перевода
         val transOptions = mutableListOf<OptionItem>()
         transOptions.add(UiOptionItem.from(
+            "Без перевода",
+            { opt -> if (opt.isSelected) selectedMode = VoxTranslationMode.NONE },
+            selectedMode == VoxTranslationMode.NONE
+        ))
+        transOptions.add(UiOptionItem.from(
             context.getString(R.string.vox_download_translation_standard),
             { opt -> if (opt.isSelected) selectedMode = VoxTranslationMode.STANDARD },
             selectedMode == VoxTranslationMode.STANDARD

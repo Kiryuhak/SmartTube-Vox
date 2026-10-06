@@ -40,6 +40,7 @@ function run() {
   assert.strictEqual(reportJson.schema, 'vox-diagnostic-report-v2');
   assert.strictEqual(reportJson.appVersion, '32.56-vox.7-dev');
   assert.strictEqual(reportJson.appVersionCode, 2446007);
+  assert.strictEqual(reportJson.platform, 'Tizen');
   assert.strictEqual(reportJson.manufacturer, 'Samsung');
   assert.ok(Array.isArray(reportJson.safeRecentEvents));
 

@@ -317,8 +317,13 @@ public class YandexVotShadowControllerTest {
     @Test
     public void testOnSpeedChangedWhenEnabled() {
         controller.setEnabled(true);
-        controller.onSpeedChanged(1.5f);
-        // Should execute cleanly without error
+        adapter.startPlayback(1, "https://fake.url/audio.mp3", 1.0f);
+        fakePlayer.callback.onPrepared();
+
+        for (float speed : new float[] {1.0f, 1.25f, 1.5f, 1.75f, 2.0f}) {
+            controller.onSpeedChanged(speed);
+            assertEquals("Translated audio speed must follow playback speed", speed, fakePlayer.speed, 0.001f);
+        }
     }
 
     @Test

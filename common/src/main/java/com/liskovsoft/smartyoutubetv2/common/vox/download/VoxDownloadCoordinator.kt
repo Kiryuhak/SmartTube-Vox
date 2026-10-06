@@ -334,9 +334,9 @@ class VoxDownloadCoordinator(
         try {
             if (isStale(job, expectedGen)) return
 
-            if (job.state == VoxDownloadState.MUXED && job.hasTranslatedAudio && job.finalFileBytes > 0) {
+            if (job.state == VoxDownloadState.MUXED && job.finalFileBytes > 0) {
                 val output = storage.getOutputFile(downloadId)
-                validateOutputFile(output)
+                validateOutputFile(output, job.request.translationMode != VoxTranslationMode.NONE)
                 if (output.length() != job.finalFileBytes) {
                     throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Final file size changed")
                 }
@@ -351,7 +351,8 @@ class VoxDownloadCoordinator(
 
             // 1. Этап подготовки перевода
             var resolvedTranslation: VoxResolvedTranslation? = null
-            if (job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
+            if (job.request.translationMode != VoxTranslationMode.NONE &&
+                job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
                 job.updateState(VoxDownloadState.PREPARING_TRANSLATION)
                 repository.persistJob(job)
                 notifyStateChange(job)
@@ -487,7 +488,8 @@ class VoxDownloadCoordinator(
             if (isStale(job, expectedGen)) return
 
             // 5. Загрузка перевода
-            if (job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
+            if (job.request.translationMode != VoxTranslationMode.NONE &&
+                job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
                 job.updateState(VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO)
                 job.updateTrackProgress(
                     VoxDownloadTrack.TRANSLATED_AUDIO,
@@ -550,7 +552,8 @@ class VoxDownloadCoordinator(
 
             if (!videoFile.exists() || videoFile.length() <= 0L ||
                 !origAudioFile.exists() || origAudioFile.length() <= 0L ||
-                !transAudioFile.exists() || transAudioFile.length() <= 0L
+                (job.request.translationMode != VoxTranslationMode.NONE &&
+                    (!transAudioFile.exists() || transAudioFile.length() <= 0L))
             ) {
                 throw VoxDownloadException(
                     VoxDownloadErrorCode.STORAGE_ERROR,
@@ -603,7 +606,9 @@ class VoxDownloadCoordinator(
         val transAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)
         val outputFile = storage.getOutputFile(downloadId)
 
-        val requiredBytes = videoFile.length() + origAudioFile.length() + transAudioFile.length() + 5 * 1024 * 1024L
+        val translated = job.request.translationMode != VoxTranslationMode.NONE
+        val requiredBytes = videoFile.length() + origAudioFile.length() +
+            (if (translated) transAudioFile.length() else 0L) + 5 * 1024 * 1024L
         if (!storage.hasEnoughSpace(requiredBytes)) {
             throw VoxDownloadException(
                 VoxDownloadErrorCode.INSUFFICIENT_STORAGE,
@@ -641,20 +646,22 @@ class VoxDownloadCoordinator(
                 trackType = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxTrackType.AUDIO_ORIGINAL,
                 trackName = "Оригинал",
                 language = "und",
-                isDefaultTrack = false
+                isDefaultTrack = !translated
             )
             sources.add(oSource)
 
-            val tSource = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMediaExtractorSource(
-                mediaFile = transAudioFile,
-                assignedTrackNumber = 3,
-                assignedTrackUid = tUid,
-                trackType = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxTrackType.AUDIO_TRANSLATED,
-                trackName = "Перевод",
-                language = "rus",
-                isDefaultTrack = true
-            )
-            sources.add(tSource)
+            if (translated) {
+                val tSource = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMediaExtractorSource(
+                    mediaFile = transAudioFile,
+                    assignedTrackNumber = 3,
+                    assignedTrackUid = tUid,
+                    trackType = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMuxTrackType.AUDIO_TRANSLATED,
+                    trackName = "Перевод",
+                    language = "rus",
+                    isDefaultTrack = true
+                )
+                sources.add(tSource)
+            }
 
             val muxer = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMatroskaMuxer()
             val result = muxer.mux(
@@ -691,11 +698,12 @@ class VoxDownloadCoordinator(
             if (isStale(job, expectedGen)) return
 
             // Валидация созданного MKV перед присвоением MUXED
-            validateOutputFile(outputFile)
-            if (result.videoSamplesCount <= 0 || result.origAudioSamplesCount <= 0 || result.transAudioSamplesCount <= 0) {
+            validateOutputFile(outputFile, translated)
+            if (result.videoSamplesCount <= 0 || result.origAudioSamplesCount <= 0 ||
+                (translated && result.transAudioSamplesCount <= 0)) {
                 throw VoxDownloadException(VoxDownloadErrorCode.MEDIA_PARSE_ERROR, "Empty output track")
             }
-            job.hasTranslatedAudio = true
+            job.hasTranslatedAudio = translated
             job.durationMs = result.durationMs
             job.finalFileBytes = result.totalBytesWritten
             job.processingTimeMs = (System.nanoTime() - processingStart) / 1_000_000L
@@ -771,7 +779,7 @@ class VoxDownloadCoordinator(
             }
     }
 
-    private fun validateOutputFile(outputFile: File) {
+    private fun validateOutputFile(outputFile: File, translated: Boolean) {
         if (!outputFile.exists() || outputFile.length() <= 0L) {
             throw VoxDownloadException(
                 VoxDownloadErrorCode.STORAGE_ERROR,
@@ -782,10 +790,11 @@ class VoxDownloadCoordinator(
         try {
             extractor.setDataSource(outputFile.absolutePath)
             val numTracks = extractor.trackCount
-            if (numTracks < 3) {
+            val requiredTracks = if (translated) 3 else 2
+            if (numTracks < requiredTracks) {
                 throw VoxDownloadException(
                     VoxDownloadErrorCode.MEDIA_PARSE_ERROR,
-                    "Output MKV has only $numTracks tracks, expected at least 3"
+                    "Output MKV has only $numTracks tracks, expected at least $requiredTracks"
                 )
             }
             var hasVideo = false
@@ -796,7 +805,7 @@ class VoxDownloadCoordinator(
                 if (mime.startsWith("video/")) hasVideo = true
                 if (mime.startsWith("audio/")) audioCount++
             }
-            if (!hasVideo || audioCount < 2) {
+            if (!hasVideo || audioCount < (if (translated) 2 else 1)) {
                 throw VoxDownloadException(
                     VoxDownloadErrorCode.MEDIA_PARSE_ERROR,
                     "Output MKV missing required streams (hasVideo=$hasVideo, audioTracks=$audioCount)"

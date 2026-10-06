@@ -59,7 +59,8 @@ class VoxDownloadRepository(
                     val v = storage.getTrackFile(id, VoxDownloadTrack.VIDEO)
                     val o = storage.getTrackFile(id, VoxDownloadTrack.ORIGINAL_AUDIO)
                     val t = storage.getTrackFile(id, VoxDownloadTrack.TRANSLATED_AUDIO)
-                    if (v.exists() && v.length() > 0 && o.exists() && o.length() > 0 && t.exists() && t.length() > 0) {
+                    if (v.exists() && v.length() > 0 && o.exists() && o.length() > 0 &&
+                        (stored.request.translationMode == VoxTranslationMode.NONE || (t.exists() && t.length() > 0))) {
                         VoxDownloadState.READY_FOR_MUX
                     } else {
                         VoxDownloadState.PAUSED
