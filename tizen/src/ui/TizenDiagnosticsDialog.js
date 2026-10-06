@@ -90,8 +90,8 @@ class TizenDiagnosticsDialog {
     return {
       schema: 'vox-diagnostic-report-v2',
       timestamp: Date.now(),
-      appVersion: '32.56-vox.7-dev',
-      appVersionCode: 2446007,
+      appVersion: '32.56-vox.7',
+      appVersionCode: 2446008,
       platform: 'Tizen',
       manufacturer: profile.manufacturer || 'Samsung',
       model: profile.model || 'TizenSmartTV',

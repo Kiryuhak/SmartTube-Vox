@@ -2,6 +2,31 @@
   "package": {
     "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk"
   },
+  "32.56-vox.7": {
+    "versionCode": 2446008,
+    "changelog": [
+      "Added Auto Device Tuning with hardware profile scanning and risk warning dialog.",
+      "Added full-featured Downloaded Videos library with offline playback and seek support.",
+      "Added end-to-end verified video download with Yandex neural voice-over translation.",
+      "Added privacy-first diagnostics report and local error journal with report ID.",
+      "Added refined compact TV-friendly video quality badges on home and subscription feeds.",
+      "Added native marquee scrolling for long sidebar titles on active focus.",
+      "Added foundation for Samsung Tizen TV (Preview WGT build and capability model).",
+      "Improved playback speed synchronization (1.0x-2.0x) for translated audio.",
+      "Improved reliability and persistence of Yandex ID device authorization."
+    ],
+    "changelog_ru": [
+      "Автоматическая настройка совместимости устройства с анализом декодеров и предупреждением о рисках.",
+      "Полноценный раздел «Скачанные видео» с офлайн-воспроизведением и поддержкой перемотки.",
+      "Сквозное скачивание видео с наложенной дорожкой нейросетевого перевода Яндекса.",
+      "Безопасная диагностика совместимости и журнал ошибок с персональным кодом отчёта.",
+      "Аккуратные капсульные бейджи качества видео в лентах «Главная», «Подписки» и «Поиск».",
+      "Плавная бегущая строка (Marquee) для длинных названий пунктов меню при фокусе.",
+      "Архитектурный фундамент и сборка WGT для Samsung Tizen TV (Preview).",
+      "Синхронизация закадрового перевода со скоростями воспроизведения от 1.0x до 2.0x.",
+      "Надёжное сохранение авторизации Яндекс ID между перезапусками."
+    ]
+  },
   "32.56-vot.6": {
     "versionCode": 2446006,
     "changelog": [

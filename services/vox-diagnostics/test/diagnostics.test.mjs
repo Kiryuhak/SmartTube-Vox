@@ -13,8 +13,8 @@ import { ReportStorage } from '../src/storage.mjs';
 const validReportV1 = {
   schema: 'vox-diagnostic-report-v1',
   timestamp: Date.now(),
-  appVersion: '32.56-vox.7-dev',
-  appVersionCode: 2446007,
+  appVersion: '32.56-vox.7',
+  appVersionCode: 2446008,
   platform: 'Android TV',
   manufacturer: 'TCL',
   model: 'BeyondTV',
@@ -211,7 +211,7 @@ test('POST /v1/report rejects forbidden keys inside safeRecentEvents context', a
 test('POST /v1/report rejects missing required device fields with 400', async () => {
   const missingModel = {
     schema: 'vox-diagnostic-report-v1',
-    appVersion: '32.56-vox.7-dev',
+    appVersion: '32.56-vox.7',
     platform: 'Android TV',
   };
   const req = createRequest(missingModel);
