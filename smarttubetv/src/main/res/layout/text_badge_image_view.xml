@@ -18,40 +18,22 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
-    <!-- Top Badges Row (Explicit width managed by ComplexImageView) -->
-    <RelativeLayout
+    <!-- Top-left badge stack (width managed by ComplexImageView). -->
+    <LinearLayout
         android:id="@+id/top_badges_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
         android:layoutDirection="ltr"
+        android:orientation="vertical"
+        android:gravity="start"
+        android:padding="@dimen/vox_card_badge_margin"
         tools:ignore="RtlHardcoded">
 
-        <!-- Translation / Local Marker Badge: Top-Left -->
-        <ImageView
-            android:visibility="gone"
-            android:id="@+id/local_badge_icon"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentLeft="true"
-            android:layout_margin="@dimen/vox_card_badge_margin"
-            android:background="@drawable/badge_rounded_bg"
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:padding="3dp"
-            android:elevation="4dp"
-            android:src="@drawable/action_download"
-            android:tint="@color/white"
-            tools:ignore="ContentDescription" />
-
-        <!-- Quality Badge: Top-Right -->
+        <!-- Quality always occupies the top-left corner when known. -->
         <TextView
             android:visibility="gone"
             android:id="@+id/quality_badge"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentEnd="true"
-            android:layout_alignParentRight="true"
-            android:layout_margin="@dimen/vox_card_badge_margin"
             android:background="@drawable/badge_rounded_bg"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -67,7 +49,26 @@
             android:textStyle="bold"
             android:elevation="4dp"
             style="@style/TextAppearance.Leanback.ImageCardView.Content" />
-    </RelativeLayout>
+
+        <Space
+            android:id="@+id/top_badges_gap"
+            android:visibility="gone"
+            android:layout_width="1dp"
+            android:layout_height="2dp" />
+
+        <!-- Translation / download marker sits below quality, or alone at top-left. -->
+        <ImageView
+            android:visibility="gone"
+            android:id="@+id/local_badge_icon"
+            android:background="@drawable/badge_rounded_bg"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:padding="3dp"
+            android:elevation="4dp"
+            android:src="@drawable/action_download"
+            android:tint="@color/white"
+            tools:ignore="ContentDescription" />
+    </LinearLayout>
 
     <!-- Bottom Badges Row & Progress (Explicit width managed by ComplexImageView) -->
     <LinearLayout

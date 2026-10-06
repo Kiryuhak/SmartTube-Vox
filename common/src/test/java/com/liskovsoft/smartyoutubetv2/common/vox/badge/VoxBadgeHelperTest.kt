@@ -120,5 +120,11 @@ class VoxBadgeHelperTest {
             secondTitle = "Channel Name · 3 weeks ago"
         }
         assertNull(VoxBadgeHelper.getAgeBadge(videoNormal))
+
+        val titleOnly = Video().apply {
+            title = "18+"
+            secondTitle = "Artist · 672 тыс. просмотров"
+        }
+        assertNull(VoxBadgeHelper.getAgeBadge(titleOnly))
     }
 }
