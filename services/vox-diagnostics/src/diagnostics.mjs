@@ -161,8 +161,101 @@ export async function handleRequest(request, env = {}, customStorage = null) {
   const path = url.pathname;
   const storage = customStorage || (env.DB ? new ReportStorage(env.DB) : defaultStorage);
 
-  // 1. Health check endpoint
-  if (request.method === 'GET' && (path === '/healthz' || path === '/health')) {
+  // 1. Root Service Status page
+  if (request.method === 'GET' && (path === '/' || path === '')) {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SmartTube VOX Diagnostics</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f1115;
+      color: #e6edf3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #181c24;
+      border: 1px solid #2a313d;
+      border-radius: 12px;
+      padding: 32px 40px;
+      max-width: 480px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(46, 160, 67, 0.15);
+      color: #3fb950;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: #3fb950;
+      border-radius: 50%;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 22px;
+      color: #ffffff;
+    }
+    p {
+      margin: 0 0 20px;
+      color: #8b949e;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .info {
+      font-size: 13px;
+      color: #6e7681;
+      border-top: 1px solid #2a313d;
+      padding-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="status-badge"><span class="dot"></span> Online</div>
+    <h1>SmartTube VOX Diagnostics</h1>
+    <p>SmartTube VOX Diagnostics is running</p>
+    <div class="info">Telemetry &amp; error reporting endpoint. User reports are strictly confidential and protected.</div>
+  </div>
+</body>
+</html>`;
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+
+  // 2. Health check endpoints
+  if (request.method === 'GET' && path === '/health') {
+    return jsonResponse({
+      status: 'ok',
+      service: 'SmartTube VOX Diagnostics',
+    });
+  }
+
+  if (request.method === 'GET' && path === '/healthz') {
     return jsonResponse({
       status: 'healthy',
       service: 'vox-diagnostics',
@@ -172,13 +265,82 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     });
   }
 
-  // 2. Developer Admin UI (GET /admin)
+  // 3. Developer Admin UI (GET /admin)
   if (request.method === 'GET' && (path === '/admin' || path === '/admin/')) {
     if (!checkAdminAuth(request, env)) {
-      return new Response('401 Unauthorized: Admin access required', {
+      const loginHtml = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход в панель управления — SmartTube VOX</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0b0f19;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .login-box {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    h2 { margin-top: 0; font-size: 20px; color: #fff; margin-bottom: 8px; }
+    p { font-size: 14px; color: #9ca3af; margin-bottom: 24px; line-height: 1.4; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 16px;
+      outline: none;
+    }
+    input:focus { border-color: #3b82f6; }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #3b82f6;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:hover { background: #2563eb; }
+    .footer { margin-top: 16px; font-size: 12px; color: #6b7280; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h2>SmartTube VOX Admin</h2>
+    <p>Для доступа к диагностическим отчётам требуется ключ администратора.</p>
+    <form method="GET" action="/admin">
+      <input type="password" name="token" placeholder="Секретный ключ (Admin Secret)" required autofocus />
+      <button type="submit">Войти</button>
+    </form>
+    <div class="footer">Закрытый служебный раздел разработчика</div>
+  </div>
+</body>
+</html>`;
+      return new Response(loginHtml, {
         status: 401,
         headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Type': 'text/html; charset=utf-8',
           'WWW-Authenticate': 'Bearer realm="VOX-Admin"',
           'X-Content-Type-Options': 'nosniff',
         },
@@ -191,14 +353,21 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     ]);
 
     const html = renderAdminHtml(reports, stats, groupedIssues);
+    const headers = {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'self' 'unsafe-inline' data:; frame-ancestors 'none';",
+    };
+
+    const tokenParam = url.searchParams.get('token');
+    if (tokenParam && env.ADMIN_SECRET && tokenParam === env.ADMIN_SECRET) {
+      headers['Set-Cookie'] = `vox_admin_token=${encodeURIComponent(tokenParam)}; Path=/; HttpOnly; SameSite=Strict; Secure`;
+    }
+
     return new Response(html, {
       status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "default-src 'self' 'unsafe-inline' data:; frame-ancestors 'none';",
-      },
+      headers,
     });
   }
 

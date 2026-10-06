@@ -83,6 +83,28 @@ beforeEach(() => {
   resetRateLimiter();
 });
 
+test('GET / returns 200 with service status HTML card without leaking reports', async () => {
+  const req = createRequest(null, { url: 'https://diagnostics.example.com/', method: 'GET' });
+  const res = await handleRequest(req);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'text/html; charset=utf-8');
+  const html = await res.text();
+  assert.match(html, /SmartTube VOX Diagnostics is running/);
+  assert.ok(!html.includes('VOX-A-'));
+  assert.ok(!html.includes('safeRecentEvents'));
+});
+
+test('GET /health returns 200 ok status with service name', async () => {
+  const req = createRequest(null, { url: 'https://diagnostics.example.com/health', method: 'GET' });
+  const res = await handleRequest(req);
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.deepEqual(json, {
+    status: 'ok',
+    service: 'SmartTube VOX Diagnostics',
+  });
+});
+
 test('GET /healthz returns 200 healthy status with canonical schema', async () => {
   const req = createRequest(null, { url: 'https://diagnostics.example.com/healthz', method: 'GET' });
   const res = await handleRequest(req);

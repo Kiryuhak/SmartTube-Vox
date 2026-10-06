@@ -15,6 +15,22 @@ The `vox-diagnostics` service is an ephemeral, privacy-first ingestion backend f
 
 ## 2. API Endpoints
 
+### `GET /`
+Returns service status card in clean HTML:
+`SmartTube VOX Diagnostics is running`
+No user report data or sensitive details are exposed.
+
+### `GET /health`
+Standard service health endpoint.
+
+**Response (200 OK):**
+```json
+{
+  "status": "ok",
+  "service": "SmartTube VOX Diagnostics"
+}
+```
+
 ### `GET /healthz`
 Returns service health status and supported schema versions.
 
@@ -29,6 +45,10 @@ Returns service health status and supported schema versions.
   ]
 }
 ```
+
+### `GET /admin`
+Protected developer administration panel.
+Requires `ADMIN_SECRET` via login prompt, query param `?token=...`, or header `Authorization: Bearer <ADMIN_SECRET>`.
 
 ### `POST /v1/report`
 Validates, sanitizes, and ingests a client diagnostic report.
