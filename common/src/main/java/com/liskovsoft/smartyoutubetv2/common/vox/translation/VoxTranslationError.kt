@@ -29,7 +29,26 @@ data class VoxTranslationError(
     val isRetryable: Boolean = type.defaultRetryable,
     val technicalDetails: String? = null,
     val timestampMs: Long = System.currentTimeMillis()
-)
+) {
+    companion object {
+        @JvmStatic
+        @JvmOverloads
+        fun fromHttpStatus(statusCode: Int, message: String? = null): VoxTranslationError {
+            val type = when (statusCode) {
+                401, 403 -> VoxTranslationErrorType.AUTH
+                429 -> VoxTranslationErrorType.RATE_LIMITED
+                in 500..599 -> VoxTranslationErrorType.BACKEND_UNAVAILABLE
+                400, 404, 415, 422 -> VoxTranslationErrorType.UNSUPPORTED
+                else -> VoxTranslationErrorType.UNKNOWN
+            }
+            return VoxTranslationError(
+                type = type,
+                messageRu = type.titleRu,
+                technicalDetails = "HTTP $statusCode${if (message != null) ": $message" else ""}"
+            )
+        }
+    }
+}
 
 /**
  * Политика повторов запросов перевода (Bounded Retry Policy with exponential backoff & jitter).
