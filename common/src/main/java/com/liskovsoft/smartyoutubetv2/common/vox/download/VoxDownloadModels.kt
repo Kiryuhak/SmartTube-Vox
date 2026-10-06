@@ -6,6 +6,7 @@ import java.util.UUID
  * Режим перевода видео для скачивания.
  */
 enum class VoxTranslationMode {
+    NONE,
     STANDARD,
     LIVELY
 }
@@ -153,7 +154,8 @@ data class VoxDownloadProgress(
         get() {
             val v = video.totalBytes ?: return null
             val o = originalAudio.totalBytes ?: return null
-            val t = translatedAudio.totalBytes ?: return null
+            val t = if (translationState == VoxDownloadTranslationState.NONE) 0L
+                else translatedAudio.totalBytes ?: return null
             return v + o + t
         }
 

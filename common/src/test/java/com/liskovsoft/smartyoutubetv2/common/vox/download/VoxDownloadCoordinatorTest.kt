@@ -161,6 +161,35 @@ class VoxDownloadCoordinatorTest {
     }
 
     @Test
+    fun ordinaryDownloadSkipsTranslationAndReachesMuxBoundary() {
+        val request = VoxDownloadRequest(
+            downloadId = "job-ordinary", videoId = "UF8uR6Z6KLc", videoTitle = "Ordinary",
+            translationMode = VoxTranslationMode.NONE
+        )
+        val latch = CountDownLatch(1)
+        val states = mutableListOf<VoxDownloadState>()
+        coordinator.startDownload(request, object : VoxDownloadListener {
+            override fun onStateChanged(progress: VoxDownloadProgress) {
+                states.add(progress.state)
+                if (progress.state == VoxDownloadState.READY_FOR_MUX) {
+                    coordinator.pauseDownload(progress.downloadId)
+                    latch.countDown()
+                }
+            }
+            override fun onProgressUpdated(progress: VoxDownloadProgress) {}
+            override fun onError(downloadId: String, errorCode: VoxDownloadErrorCode, message: String) {
+                latch.countDown()
+            }
+        })
+        assertTrue(latch.await(5, TimeUnit.SECONDS))
+        assertEquals(VoxDownloadState.PAUSED, coordinator.getJob(request.downloadId)?.state)
+        assertFalse(states.contains(VoxDownloadState.PREPARING_TRANSLATION))
+        assertFalse(states.contains(VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO))
+        assertTrue(states.contains(VoxDownloadState.READY_FOR_MUX))
+        assertFalse(storage.getTrackFile(request.downloadId, VoxDownloadTrack.TRANSLATED_AUDIO).exists())
+    }
+
+    @Test
     fun testRestoringUnfinishedJobsFromStorageAsPaused() {
         val req = VoxDownloadRequest(
             downloadId = "job-interrupted",

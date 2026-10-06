@@ -19,14 +19,17 @@ function run() {
 
   assert.strictEqual(profile.schema, 1);
   assert.strictEqual(profile.schemaId, 'vox-device-profile-v1');
-  assert.strictEqual(profile.manufacturer, 'Samsung');
-  assert.strictEqual(profile.isVideoCodecSupported('avc'), true);
-  assert.strictEqual(profile.isVideoCodecSupported('vp9'), true);
+  assert.strictEqual(profile.manufacturer, 'Unknown');
+  assert.strictEqual(profile.display.maxWidth, 0);
+  assert.strictEqual(profile.audioOutput.stereo, TriStateCapability.UNKNOWN);
+  assert.strictEqual(profile.platform, VoxPlatform.UNKNOWN);
+  assert.strictEqual(profile.videoCodecs.avc.capability, TriStateCapability.UNKNOWN);
+  assert.strictEqual(profile.videoCodecs.vp9.capability, TriStateCapability.UNKNOWN);
   assert.strictEqual(profile.isVideoCodecSupported('av1'), false);
 
-  assert.strictEqual(profile.isAudioDecodeSupported('ac3'), true);
+  assert.strictEqual(profile.audioCodecs.ac3.decodeCapability, TriStateCapability.UNKNOWN);
   assert.strictEqual(profile.isAudioDecodeSupported('eac3'), false);
-  assert.strictEqual(profile.isAudioPassthroughSupported('eac3'), true);
+  assert.strictEqual(profile.audioCodecs.eac3.passthroughCapability, TriStateCapability.UNKNOWN);
 
   console.log('  ✓ Tizen capabilities & Tri-state tests PASS');
 }

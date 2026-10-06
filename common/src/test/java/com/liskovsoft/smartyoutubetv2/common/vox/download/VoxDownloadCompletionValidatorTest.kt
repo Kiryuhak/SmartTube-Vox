@@ -30,4 +30,23 @@ class VoxDownloadCompletionValidatorTest {
             catch (e: VoxDownloadException) { assertEquals(VoxDownloadErrorCode.STORAGE_ERROR, e.code) }
         }
     }
+
+    @Test fun ordinaryDownloadRequiresOnlyVideoAndOriginalAudio() {
+        val job = VoxDownloadJob(VoxDownloadRequest(
+            videoId = "ordinary", videoTitle = "Ordinary",
+            translationMode = VoxTranslationMode.NONE
+        )).apply {
+            updateTrackProgress(VoxDownloadTrack.VIDEO, 200, 200, VoxTrackState.COMPLETED)
+            updateTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, 100, 100, VoxTrackState.COMPLETED)
+            durationMs = 240_000
+            finalFileBytes = 300
+            publishedUri = "content://media/external/video/media/124"
+        }
+        assertEquals(VoxDownloadTranslationState.NONE, job.translationState)
+        assertEquals(300L, job.getSnapshot().totalBytesExpected)
+        VoxDownloadCompletionValidator.check(job, 300)
+        job.hasTranslatedAudio = true
+        try { VoxDownloadCompletionValidator.check(job, 300); fail("Incorrect translated marker accepted") }
+        catch (e: VoxDownloadException) { assertEquals(VoxDownloadErrorCode.STORAGE_ERROR, e.code) }
+    }
 }

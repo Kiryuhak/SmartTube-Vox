@@ -33,6 +33,33 @@ function bundleWebAssets() {
   ensureDir(BUILD_DIR);
   copyRecursive(SRC_DIR, path.join(BUILD_DIR, 'src'));
   fs.copyFileSync(path.join(ROOT_DIR, 'config.xml'), path.join(BUILD_DIR, 'config.xml'));
+  const modules = new Map();
+  function addModule(id) {
+    if (modules.has(id)) return;
+    const sourcePath = path.join(SRC_DIR, id);
+    let source = fs.readFileSync(sourcePath, 'utf8');
+    modules.set(id, '');
+    source = source.replace(/require\((['"])(\.[^'"]+)\1\)/g, (_match, _quote, request) => {
+      const dependency = path.posix.normalize(path.posix.join(path.posix.dirname(id), request)) + '.js';
+      addModule(dependency);
+      return `require(${JSON.stringify(dependency)})`;
+    });
+    modules.set(id, source);
+  }
+  addModule('index.js');
+  const moduleTable = [...modules].map(([id, source]) =>
+    `${JSON.stringify(id)}: function(module, exports, require) {\n${source}\n}`
+  ).join(',\n');
+  const bundle = `(function () {\n'use strict';\nconst modules = {\n${moduleTable}\n};\n` +
+    `const cache = {};\nfunction load(id) {\n  if (cache[id]) return cache[id].exports;\n` +
+    `  if (!modules[id]) throw new Error('Missing module: ' + id);\n` +
+    `  const module = { exports: {} };\n  cache[id] = module;\n` +
+    `  modules[id](module, module.exports, load);\n  return module.exports;\n}\n` +
+    `load('index.js');\n})();\n`;
+  fs.writeFileSync(path.join(BUILD_DIR, 'src', 'app.bundle.js'), bundle);
+  const htmlPath = path.join(BUILD_DIR, 'src', 'index.html');
+  fs.writeFileSync(htmlPath, fs.readFileSync(htmlPath, 'utf8')
+    .replace('src="index.js"', 'src="app.bundle.js"'));
   console.log('[Tizen Build] Web assets bundled successfully in:', BUILD_DIR);
 }
 
@@ -199,7 +226,7 @@ function main() {
   console.log('[Tizen WGT] Packaging standard W3C Widget (WGT) package...');
   const result = packageStandardWgt(BUILD_DIR, WGT_OUTPUT_PATH);
   console.log(`[Tizen WGT] WGT artifact created: ${result.path} (${result.size} bytes, ${result.entriesCount} files)`);
-  console.log('[Tizen WGT] Signing profile: dev/standard W3C widget');
+  console.log('[Tizen WGT] Package is unsigned: Tizen Studio certificate profile is required for installation.');
 }
 
 if (require.main === module) {

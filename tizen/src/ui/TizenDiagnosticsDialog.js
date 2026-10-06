@@ -30,7 +30,7 @@ class TizenDiagnosticsDialog {
   generateReport(profile, policy, errorCategory = SafeErrorCategory.UNKNOWN) {
     const lines = [];
     lines.push('=== SmartTube VOX — Диагностика Samsung Tizen ===\n');
-    lines.push(`Платформа: ${profile.platform || 'Samsung Tizen'}`);
+    lines.push('Платформа: Tizen');
     lines.push(`Производитель: ${profile.manufacturer || 'Samsung'}`);
     lines.push(`Модель: ${profile.model || 'TizenSmartTV'}`);
     lines.push(`Система: ${profile.osName || 'Tizen'} ${profile.osVersion || '7.0'}`);
@@ -38,7 +38,8 @@ class TizenDiagnosticsDialog {
 
     lines.push('--- ВИДЕОДЕКОДЕРЫ ---');
     for (const [key, cap] of Object.entries(profile.videoCodecs || {})) {
-      const status = cap.capability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+      const status = cap.capability === 'supported' ? 'Поддерживается' :
+        cap.capability === 'unsupported' ? 'Не поддерживается' : 'Неизвестно';
       const src = cap.detectionSource ? ` [${cap.detectionSource}]` : '';
       lines.push(`${key.toUpperCase()}: ${status}${src}`);
     }
@@ -46,8 +47,10 @@ class TizenDiagnosticsDialog {
 
     lines.push('--- АУДИОДЕКОДЕРЫ И PASSTHROUGH ---');
     for (const [key, cap] of Object.entries(profile.audioCodecs || {})) {
-      const dec = cap.decodeCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
-      const pt = cap.passthroughCapability === 'supported' ? 'Поддерживается' : 'Не поддерживается';
+      const dec = cap.decodeCapability === 'supported' ? 'Поддерживается' :
+        cap.decodeCapability === 'unsupported' ? 'Не поддерживается' : 'Неизвестно';
+      const pt = cap.passthroughCapability === 'supported' ? 'Поддерживается' :
+        cap.passthroughCapability === 'unsupported' ? 'Не поддерживается' : 'Неизвестно';
       lines.push(`${key.toUpperCase()}: Декод: ${dec}, Passthrough: ${pt}`);
     }
     lines.push('');
@@ -89,7 +92,7 @@ class TizenDiagnosticsDialog {
       timestamp: Date.now(),
       appVersion: '32.56-vox.7-dev',
       appVersionCode: 2446007,
-      platform: profile.platform || 'Samsung Tizen',
+      platform: 'Tizen',
       manufacturer: profile.manufacturer || 'Samsung',
       model: profile.model || 'TizenSmartTV',
       osName: profile.osName || 'Tizen',

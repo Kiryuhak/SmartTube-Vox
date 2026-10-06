@@ -229,6 +229,9 @@ public class YandexVotShadowController extends BasePlayerController {
         synchronized (mLock) {
             if (!mEnabled) return;
             YandexVotLog.i(TAG, "onSpeedChanged speed=" + speed);
+            if (mPlaybackAdapter != null) {
+                mPlaybackAdapter.setPlaybackSpeed(speed);
+            }
         }
     }
 
