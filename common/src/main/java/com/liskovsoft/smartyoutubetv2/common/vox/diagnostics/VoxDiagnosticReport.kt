@@ -36,6 +36,7 @@ data class VoxDiagnosticReport(
     val recommendedSettings: Map<String, Any>,
     val riskWarning: String? = null,
     val playbackStats: Map<String, Any>? = null,
+    val livePlayback: Map<String, Any>? = null,
     val safeRecentEvents: List<VoxLogEvent> = emptyList()
 ) {
     companion object {
@@ -119,6 +120,12 @@ data class VoxDiagnosticReport(
                 emptyList()
             }
 
+            val liveMetrics = try {
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.getMetricsSummary().toMap()
+            } catch (e: Exception) {
+                null
+            }
+
             return VoxDiagnosticReport(
                 schema = SCHEMA_V2,
                 reportId = reportId,
@@ -139,6 +146,7 @@ data class VoxDiagnosticReport(
                 recommendedSettings = recommendedMap,
                 riskWarning = risk?.messageRu,
                 playbackStats = null,
+                livePlayback = liveMetrics,
                 safeRecentEvents = recentEvents
             )
         }
@@ -186,6 +194,11 @@ data class VoxDiagnosticReport(
             val psObj = JSONObject()
             playbackStats.forEach { (k, v) -> psObj.put(k, v) }
             root.put("playbackStats", psObj)
+        }
+        if (livePlayback != null) {
+            val lpObj = JSONObject()
+            livePlayback.forEach { (k, v) -> lpObj.put(k, v) }
+            root.put("livePlayback", lpObj)
         }
 
         if (safeRecentEvents.isNotEmpty()) {

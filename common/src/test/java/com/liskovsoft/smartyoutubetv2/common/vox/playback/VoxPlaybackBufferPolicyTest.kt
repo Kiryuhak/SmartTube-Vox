@@ -16,13 +16,13 @@ class VoxPlaybackBufferPolicyTest {
             isLocal = false
         )
 
-        assertEquals(VoxBufferProfile.CONSERVATIVE, config.profile)
-        assertEquals(6_000, config.minBufferMs)
-        assertEquals(12_000, config.maxBufferMs)
-        assertEquals(1_500, config.bufferForPlaybackMs)
-        assertEquals(2_500, config.bufferForPlaybackAfterRebufferMs)
+        assertEquals(VoxBufferProfile.BALANCED, config.profile)
+        assertEquals(15_000, config.minBufferMs)
+        assertEquals(30_000, config.maxBufferMs)
+        assertEquals(2_000, config.bufferForPlaybackMs)
+        assertEquals(4_000, config.bufferForPlaybackAfterRebufferMs)
         assertEquals(0, config.backBufferMs)
-        assertEquals(20 * 1024 * 1024, config.targetBufferBytes)
+        assertEquals(32 * 1024 * 1024, config.targetBufferBytes)
     }
 
     @Test

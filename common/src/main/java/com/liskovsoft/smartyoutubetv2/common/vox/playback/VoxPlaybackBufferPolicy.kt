@@ -41,6 +41,13 @@ object VoxPlaybackBufferPolicy {
     private const val MAX_TARGET_BUFFER_BYTES = 128 * 1024 * 1024   // 128 MB
     private const val MIN_TARGET_BUFFER_BYTES = 20 * 1024 * 1024    // 20 MB
 
+    const val LIVE_TARGET_OFFSET_MS = 15_000L
+    const val LIVE_MIN_BUFFER_MS = 15_000
+    const val LIVE_MAX_BUFFER_MS = 30_000
+    const val LIVE_BUFFER_FOR_PLAYBACK_MS = 2_000
+    const val LIVE_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 4_000
+    const val LIVE_TARGET_BUFFER_BYTES = 32 * 1024 * 1024
+
     @JvmStatic
     @JvmOverloads
     fun resolve(
@@ -70,16 +77,16 @@ object VoxPlaybackBufferPolicy {
         val safeRam = if (ramBytes <= 0L) 2L * 1024 * 1024 * 1024 else ramBytes
         val ramMb = safeRam / (1024 * 1024)
 
-        // 1. Прямой эфир (Live stream): минимизация задержки, исключение раздувания буфера
+        // 1. Прямой эфир (Live stream): сбалансированная буферизация для исключения периодических заиканий (Patch #4)
         if (isLive) {
             return VoxBufferConfiguration(
-                profile = VoxBufferProfile.CONSERVATIVE,
-                minBufferMs = 6_000,
-                maxBufferMs = 12_000,
-                bufferForPlaybackMs = 1_500,
-                bufferForPlaybackAfterRebufferMs = 2_500,
+                profile = VoxBufferProfile.BALANCED,
+                minBufferMs = LIVE_MIN_BUFFER_MS,
+                maxBufferMs = LIVE_MAX_BUFFER_MS,
+                bufferForPlaybackMs = LIVE_BUFFER_FOR_PLAYBACK_MS,
+                bufferForPlaybackAfterRebufferMs = LIVE_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
                 backBufferMs = 0,
-                targetBufferBytes = MIN_TARGET_BUFFER_BYTES
+                targetBufferBytes = LIVE_TARGET_BUFFER_BYTES
             )
         }
 

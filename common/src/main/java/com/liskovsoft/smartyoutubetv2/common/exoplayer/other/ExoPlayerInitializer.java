@@ -130,8 +130,8 @@ public class ExoPlayerInitializer {
                 }
                 break;
             case PlayerData.BUFFER_LOW:
-                minBufferMs = 5_000; // LIVE fix
-                maxBufferMs = 5_000; // LIVE fix
+                minBufferMs = 12_000; // VOX-Patch-4: Increased from 5_000 to prevent constant live starvation
+                maxBufferMs = 25_000;
                 break;
         }
 

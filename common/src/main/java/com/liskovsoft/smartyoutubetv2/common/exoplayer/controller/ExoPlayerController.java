@@ -81,7 +81,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
         mMediaSourceFactory.setTrackErrorFixer(mTrackErrorFixer);
         mEventListener = eventListener;
-        
+
         applyShield720pFix();
         VideoTrack.sIsAltPresetsEnabled = playerTweaksData.isAltPresetsEnabled();
         MediaTrack.setAvcOverVp9Preferred(playerTweaksData.isAvcOverVp9Preferred());
@@ -147,6 +147,11 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         mHasStartedPlayback = false;
         mOfflineReadyLogged = false;
         mRebufferCount = 0;
+        boolean isLive = getVideo() != null && getVideo().isLive;
+        String marker = getVideo() != null && getVideo().videoId != null
+                ? "live_" + Integer.toHexString(getVideo().videoId.hashCode())
+                : "stream_unknown";
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onPlaybackStart(marker, isLive);
         mEventListener.onSourceChanged(getVideo());
         mPlayer.prepare(mediaSource);
     }
@@ -205,7 +210,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     public boolean isPlaying() {
         return ExoUtils.isPlaying(mPlayer);
     }
-    
+
     public boolean isLoading() {
         return ExoUtils.isLoading(mPlayer);
     }
@@ -213,7 +218,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     public boolean isBuffering() {
         return ExoUtils.isBuffering(mPlayer);
     }
-    
+
     public boolean containsMedia() {
         if (mPlayer == null) {
             return false;
@@ -221,7 +226,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
         return mPlayer.getPlaybackState() != Player.STATE_IDLE;
     }
-    
+
     public void release() {
         mTrackSelectorManager.release();
         mMediaSourceFactory.release();
@@ -230,7 +235,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         // Don't destroy it (needed inside the bridge)!
         //mEventListener = null;
     }
-    
+
     public void setPlayer(SimpleExoPlayer player) {
         mPlayer = player;
         if (player != null) {
@@ -243,11 +248,11 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     //public void setEventListener(PlayerEventListener eventListener) {
     //    mEventListener = eventListener;
     //}
-    
+
     public void setPlayerView(PlayerView playerView) {
         mPlayerView = playerView;
     }
-    
+
     public void setTrackSelector(DefaultTrackSelector trackSelector) {
         mTrackSelectorManager.setTrackSelector(trackSelector);
 
@@ -258,14 +263,14 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             }
         }
     }
-    
+
     public void setVideo(Video video) {
         mVideo = new WeakReference<>(video);
         if (video != null) {
             mOfflineProbe.onBeforeOpen(video, video.mediaUrl);
         }
     }
-    
+
     public Video getVideo() {
         return mVideo != null ? mVideo.get() : null;
     }
@@ -273,19 +278,19 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     public VoxOfflinePlaybackProbe getOfflineProbe() {
         return mOfflineProbe;
     }
-    
+
     public List<FormatItem> getVideoFormats() {
         return ExoFormatItem.from(mTrackSelectorManager.getVideoTracks());
     }
-    
+
     public List<FormatItem> getAudioFormats() {
         return ExoFormatItem.from(mTrackSelectorManager.getAudioTracks());
     }
-    
+
     public List<FormatItem> getSubtitleFormats() {
         return ExoFormatItem.from(mTrackSelectorManager.getSubtitleTracks());
     }
-    
+
     public void selectFormat(FormatItem formatItem) {
         if (formatItem != null && formatItem.getTrack() != null) {
             FormatItem selectedFormatItem = getSelectedFormat(formatItem.getTrack().rendererIndex);
@@ -354,8 +359,22 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 mTrackFormatter.setFormat(format);
             }
         }
-        
+
         setQualityInfo(mTrackFormatter.getQualityLabel());
+
+        boolean isLiveTracks = (getVideo() != null && getVideo().isLive) || (mPlayer != null && mPlayer.isCurrentWindowDynamic());
+        if (isLiveTracks) {
+            FormatItem vFormat = getVideoFormat();
+            int h = vFormat != null ? vFormat.getHeight() : 0;
+            String codec = (vFormat != null && vFormat.getTrack() != null && vFormat.getTrack().format != null && vFormat.getTrack().format.sampleMimeType != null)
+                    ? vFormat.getTrack().format.sampleMimeType : "auto";
+            long pos = getPositionMs();
+            long dur = getDurationMs();
+            long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
+            long offset = dur > pos ? dur - pos : 0;
+            com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onBufferHealthTick(
+                    buffered, offset, 0, 0, h, codec);
+        }
 
         // Manage audio focus. E.g. use Spotify when audio is disabled. (NOT NEEDED!!!)
         //MediaTrack audioTrack = mTrackSelectorManager.getAudioTrack();
@@ -399,6 +418,14 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
         VoxSafeLogger.e(VoxLogCategory.PLAYER, logCode, "Сбой воспроизведения ExoPlayer", errorCtx, null);
 
+        if (getVideo() != null && getVideo().isLive) {
+            int httpCode = 0;
+            if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) {
+                httpCode = ((com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) nested).responseCode;
+            }
+            com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onSegmentError(httpCode, nested.getClass().getSimpleName());
+        }
+
         // NOTE: Player is released at this point. So, there is no sense to restore the playback here.
 
         mEventListener.onEngineError(error.type, error.rendererIndex, nested);
@@ -420,7 +447,16 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             return;
         }
 
+        boolean isLive = (getVideo() != null && getVideo().isLive) || (mPlayer != null && mPlayer.isCurrentWindowDynamic());
+
         if (isPlayPressed) {
+            if (isLive) {
+                long pos = getPositionMs();
+                long dur = getDurationMs();
+                long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
+                long offset = dur > pos ? dur - pos : 0;
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onReady(buffered, offset, 0);
+            }
             if (!mHasStartedPlayback) {
                 mHasStartedPlayback = true;
                 if (mPrepareStartTimeMs > 0) {
@@ -452,6 +488,15 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mEventListener.onPlayEnd();
             mIsEnded = true;
         } else if (isBuffering) {
+            if (isLive) {
+                long pos = getPositionMs();
+                long dur = getDurationMs();
+                long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
+                long offset = dur > pos ? dur - pos : 0;
+                float speed = getSpeed();
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onBufferingStarted(
+                        buffered, offset, 0, 0, speed > 0 ? speed : 1.0f);
+            }
             if (mHasStartedPlayback) {
                 mRebufferCount++;
                 if (mRebufferCount <= 3) {
@@ -527,7 +572,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             //applyVolumeBoost(volume);
         }
     }
-    
+
     public float getVolume() {
         if (mPlayer != null) {
             return mPlayer.getVolume();
@@ -546,7 +591,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mPlayer.stop(true);
         }
     }
-    
+
     public void setOnVideoLoaded(Runnable onVideoLoaded) {
         mOnVideoLoaded = onVideoLoaded;
     }
@@ -574,7 +619,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mPlayer.addAudioListener(mVolumeBooster);
         }
     }
-    
+
     private boolean contains51Audio() {
         if (mTrackSelectorManager == null || mTrackSelectorManager.getAudioTracks() == null) {
             return false;

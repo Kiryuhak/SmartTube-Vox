@@ -157,13 +157,16 @@ public class ExoMediaSourceFactory {
                         )
                                 .setManifestParser(new LiveDashManifestParser()) // Don't make static! Need state reset for each live source.
                                 .setLoadErrorHandlingPolicy(new DashDefaultLoadErrorHandlingPolicy())
+                                .setLivePresentationDelayMs(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLiveTargetOffsetPolicy.BALANCED.getTargetOffsetMs(), true)
                                 .createMediaSource(uri);
                 if (mTrackErrorFixer != null) {
                     dashSource.addEventListener(Utils.sHandler, mTrackErrorFixer);
                 }
                 return dashSource;
             case C.TYPE_HLS:
-                HlsMediaSource hlsSource = new HlsMediaSource.Factory(getMediaDataSourceFactory()).createMediaSource(uri);
+                HlsMediaSource hlsSource = new HlsMediaSource.Factory(getMediaDataSourceFactory())
+                        .setLoadErrorHandlingPolicy(new DashDefaultLoadErrorHandlingPolicy())
+                        .createMediaSource(uri);
                 if (mTrackErrorFixer != null) {
                     hlsSource.addEventListener(Utils.sHandler, mTrackErrorFixer);
                 }
@@ -198,12 +201,15 @@ public class ExoMediaSourceFactory {
 
     private MediaSource buildDashMediaSource(MediaItemFormatInfo formatInfo) {
         // Are you using FrameworkSampleSource or ExtractorSampleSource when you build your player?
-        DashMediaSource dashSource = new DashMediaSource.Factory(
+        DashMediaSource.Factory dashFactory = new DashMediaSource.Factory(
                 getDashChunkSourceFactory(),
                 null
         )
-                .setLoadErrorHandlingPolicy(new DashDefaultLoadErrorHandlingPolicy())
-                .createMediaSource(getManifest(formatInfo));
+                .setLoadErrorHandlingPolicy(new DashDefaultLoadErrorHandlingPolicy());
+        if (formatInfo != null && formatInfo.isLive()) {
+            dashFactory.setLivePresentationDelayMs(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLiveTargetOffsetPolicy.BALANCED.getTargetOffsetMs(), true);
+        }
+        DashMediaSource dashSource = dashFactory.createMediaSource(getManifest(formatInfo));
         if (mTrackErrorFixer != null) {
             dashSource.addEventListener(Utils.sHandler, mTrackErrorFixer);
         }
@@ -217,6 +223,7 @@ public class ExoMediaSourceFactory {
                 null
         )
                 .setLoadErrorHandlingPolicy(new DashDefaultLoadErrorHandlingPolicy())
+                .setLivePresentationDelayMs(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLiveTargetOffsetPolicy.BALANCED.getTargetOffsetMs(), true)
                 .createMediaSource(getManifest(uri, mpdContent));
         if (mTrackErrorFixer != null) {
             dashSource.addEventListener(Utils.sHandler, mTrackErrorFixer);
