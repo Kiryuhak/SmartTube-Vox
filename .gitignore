@@ -87,4 +87,10 @@ signature1.xml
 /tizen/build/
 !/tizen/tools/
 .wrangler/
+node_modules/
 
+# Environment & local secrets
+.env
+.env.*
+.dev.vars
+.dev.vars.*
