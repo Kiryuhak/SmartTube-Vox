@@ -249,3 +249,25 @@ $$\text{effectiveMinimumBufferMs} = \text{minimumPlayableBufferMs} \times \max(1
    - Если стриминговый API обнаружен: проектирование защищенного сетевого транспорта и прототипа Segment Push.
    - Если стриминговый API закрыт или отсутствует: фиксация архитектурного решения по локальному захвату чанков и согласованию форматов без создания фиктивной поддержки.
 3. **Сохранение абсолютной стабильности VOD**: Любые сетевые эксперименты изолируются в отдельных модулях без вмешательства в рабочий контур `YandexVotOrchestrator`.
+
+---
+
+## 17. Protocol Investigation Result (Patch #3)
+
+В ходе реализации Patch #3 проведены фактические сетевые замеры и аудит контрактов:
+1. **Сетевой транспорт**:
+   - `WebSocket`: **НЕ обнаружен** (отсутствует в клиенте и сервере).
+   - `gRPC`: **НЕ обнаружен** (отсутствует в стеке).
+   - `HTTP Chunked Streaming`: **НЕ поддерживается** серверными эндпоинтами перевода.
+   - Текущий рабочий протокол: `HTTP_POLLING` поверх Protobuf REST API.
+2. **Серверные ограничения (Blocker)**:
+   - `LIVE_BACKEND_CAPABILITY`: `VOD_ONLY`.
+   - `LIVE_TRANSLATION_BLOCKER`: `BACKEND_REQUIRES_COMPLETE_MEDIA`.
+   - Сервер отклоняет динамические потоки без финальной длительности (`duration`) и требует завершённый медиафайл.
+3. **Безопасность и Feature Flag**:
+   - Добавлена модель `VoxLiveProtocolCapability` и `VoxLiveBackendTransport`.
+   - Экспериментальный флаг `VOX_LIVE_TRANSLATION_EXPERIMENTAL` по умолчанию строго выключен (`false`).
+   - Реализована Zero-Telemetry сетевая инструментация `VoxLiveProtocolLogger` с маскированием секретов и URL.
+4. **Следующий шаг (Patch #4)**:
+   - В связи с блокировкой `BACKEND_REQUIRES_COMPLETE_MEDIA` прямой клиент-серверный live-перевод через публичный VOT невозможен.
+   - Patch #4 сфокусируется на архитектуре прокси-шлюза (Controlled Live Proxy / Ingestion Service) и локального захвата аудиодорожки без сторонних бинарных утилит (без yt-dlp/FFmpeg).
