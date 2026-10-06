@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { ReportStorage } from './storage.mjs';
 import { checkAdminAuth, renderAdminHtml } from './admin.mjs';
+import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
 
 export const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
@@ -357,7 +358,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': "default-src 'self' 'unsafe-inline' data:; frame-ancestors 'none';",
+      'Content-Security-Policy': "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none';",
     };
 
     const tokenParam = url.searchParams.get('token');
@@ -368,6 +369,18 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     return new Response(html, {
       status: 200,
       headers,
+    });
+  }
+
+  // 3.1 Developer Admin Client Application (GET /admin/app.js)
+  if (request.method === 'GET' && path === '/admin/app.js') {
+    return new Response(ADMIN_APP_JS, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+      },
     });
   }
 
