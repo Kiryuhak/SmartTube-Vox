@@ -353,7 +353,7 @@ test('Admin UI and Admin API list, auth check, stats, issues, PATCH status and D
 
   // 6. PATCH /v1/admin/reports/:id (update status and developer notes)
   const patchReq = createRequest(
-    { status: 'REVIEWED', developerNotes: 'Investigating translation stream' },
+    { status: 'IN_PROGRESS', developerNotes: 'Investigating translation stream' },
     {
       url: `https://diagnostics.example.com/v1/admin/reports/${encodeURIComponent(reportId)}`,
       method: 'PATCH',
@@ -364,7 +364,7 @@ test('Admin UI and Admin API list, auth check, stats, issues, PATCH status and D
   assert.equal(patchRes.status, 200);
   const patchJson = await patchRes.json();
   assert.equal(patchJson.status, 'ok');
-  assert.equal(patchJson.report.status, 'REVIEWED');
+  assert.equal(patchJson.report.status, 'IN_PROGRESS');
   assert.equal(patchJson.report.developer_notes, 'Investigating translation stream');
 
   // 7. GET /v1/admin/reports/:id verifies update
@@ -376,7 +376,7 @@ test('Admin UI and Admin API list, auth check, stats, issues, PATCH status and D
   const getRes = await handleRequest(getReq, env, customStorage);
   assert.equal(getRes.status, 200);
   const getJson = await getRes.json();
-  assert.equal(getJson.status, 'REVIEWED');
+  assert.equal(getJson.status, 'IN_PROGRESS');
   assert.equal(getJson.developer_notes, 'Investigating translation stream');
 
   // 8. DELETE /v1/admin/reports/:id

@@ -1,8 +1,50 @@
 import crypto from 'crypto';
-import { ReportStorage } from './storage.mjs';
+import { ReportStorage, normalizeStatus } from './storage.mjs';
 import { checkAdminAuth, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
+
+/**
+ * Формирует безопасный и полный JSON объект для скачивания отчёта администратором.
+ * Гарантирует отсутствие любых секретов, токенов, cookies, внутренних ключей и IP.
+ */
+export function prepareReportDownloadJson(report) {
+  if (!report) return null;
+  const p = report.payload || {};
+  // Глубокое клонирование payload
+  const sanitizedPayload = JSON.parse(JSON.stringify(p));
+  delete sanitizedPayload.ip;
+  delete sanitizedPayload.clientIp;
+  delete sanitizedPayload.token;
+  delete sanitizedPayload.secret;
+  delete sanitizedPayload.authorization;
+  delete sanitizedPayload.cookie;
+  delete sanitizedPayload.session;
+
+  const status = normalizeStatus(report.status);
+  const developerNotes = report.developer_notes || report.developerNotes || '';
+
+  return {
+    reportId: report.report_id || report.reportId,
+    createdAt: report.created_at || report.createdAt,
+    platform: report.platform || 'unknown',
+    appVersion: report.app_version || report.appVersion || 'unknown',
+    device: {
+      family: report.device_family || '',
+      manufacturer: p.manufacturer || '',
+      model: p.model || '',
+      tier: p.deviceTier || '',
+      sdkInt: p.sdkInt || null,
+      osVersion: p.osVersion || '',
+    },
+    errorCategory: report.error_category || report.errorCategory || null,
+    errorSignature: report.error_signature || report.errorSignature || '',
+    status,
+    developerNotes,
+    safeRecentEvents: p.safeRecentEvents || [],
+    payload: sanitizedPayload,
+  };
+}
 
 export const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
 export const CANONICAL_SCHEMA = 'vox-diagnostic-report-v2';
@@ -433,12 +475,50 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     return jsonResponse({ reports });
   }
 
-  // 6. Admin API: Single report operations (GET / PATCH / DELETE /v1/admin/reports/:id)
+  // 5.1 Admin API: Purge all reports / Safe Purge (DELETE /v1/admin/reports)
+  if (request.method === 'DELETE' && path === '/v1/admin/reports') {
+    if (!checkAdminAuth(request, env)) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const deleted = await storage.deleteAllReports();
+    return jsonResponse({ ok: true, deleted });
+  }
+
+  // 6. Admin API: Single report operations (GET / PATCH / DELETE /v1/admin/reports/:id and /download)
   if (path.startsWith('/v1/admin/reports/')) {
     if (!checkAdminAuth(request, env)) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
-    const reportId = decodeURIComponent(path.substring('/v1/admin/reports/'.length));
+    const subPath = path.substring('/v1/admin/reports/'.length);
+
+    // Download single sanitized report JSON: GET /v1/admin/reports/:id/download
+    if (subPath.endsWith('/download')) {
+      const rawId = subPath.slice(0, -('/download'.length));
+      const reportId = decodeURIComponent(rawId);
+
+      if (request.method !== 'GET') {
+        return jsonResponse({ error: 'method_not_allowed', message: `Method ${request.method} is not allowed` }, 405);
+      }
+
+      const report = await storage.getReportById(reportId);
+      if (!report) {
+        return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
+      }
+
+      const downloadData = prepareReportDownloadJson(report);
+      const filename = `vox-diagnostic-${encodeURIComponent(reportId)}.json`;
+      return new Response(JSON.stringify(downloadData, null, 2), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    }
+
+    const reportId = decodeURIComponent(subPath);
 
     if (request.method === 'GET') {
       const report = await storage.getReportById(reportId);

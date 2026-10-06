@@ -1,3 +1,5 @@
+import { normalizeStatus, STATUS_LABELS } from './storage.mjs';
+
 /**
  * Модуль аутентификации и панели администратора SmartTube VOX Diagnostics.
  */
@@ -288,11 +290,11 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     .tag-android { background: rgba(16, 185, 129, 0.15); color: var(--success); }
     .tag-tizen { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
     .tag-error { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-    .tag-status-new { background: rgba(59, 130, 246, 0.2); color: var(--accent); }
-    .tag-status-reviewed { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
-    .tag-status-known, .tag-status-known_issue { background: rgba(139, 92, 246, 0.2); color: var(--purple); }
-    .tag-status-resolved { background: rgba(16, 185, 129, 0.2); color: var(--success); }
-    .tag-status-test, .tag-status-ignored_test { background: rgba(156, 163, 175, 0.2); color: var(--text-muted); }
+    .tag-status-new { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .tag-status-in_progress, .tag-status-reviewed { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .tag-status-known, .tag-status-known_issue { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+    .tag-status-resolved { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .tag-status-test, .tag-status-ignored_test { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
     .tag-purpose-test { background: rgba(156, 163, 175, 0.2); color: var(--text-muted); font-size: 10px; }
 
     /* Modal / Drawer */
@@ -407,11 +409,12 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
   <div class="header">
     <div class="logo">
       <span>SmartTube VOX</span>
-      <span class="badge-vox">DIAGNOSTICS &amp; OPERATIONS</span>
+      <span class="badge-vox">DIAGNOSTICS &amp; INCIDENTS</span>
     </div>
-    <div style="display: flex; gap: 10px; align-items: center;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
       <span style="font-size: 13px; color: var(--text-muted);">Retention: 30 дней</span>
       <button class="btn btn-primary" id="refreshButton">Обновить</button>
+      <button class="btn btn-danger" id="purgeAllBtn" style="font-size: 12px; padding: 6px 12px;">Очистить все логи</button>
     </div>
   </div>
 
@@ -425,8 +428,24 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       <div class="kpi-val" id="kpi7d">${reports7d}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-title">Активные проблемы</div>
-      <div class="kpi-val" id="kpiActiveIssues" style="color: var(--warning);">${activeIssues}</div>
+      <div class="kpi-title">Новый</div>
+      <div class="kpi-val" id="kpiNew" style="color: #60a5fa;">${stats.newCount ?? 0}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">В работе</div>
+      <div class="kpi-val" id="kpiInProgress" style="color: var(--warning);">${stats.inProgressCount ?? 0}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Решено</div>
+      <div class="kpi-val" id="kpiResolved" style="color: var(--success);">${stats.resolvedCount ?? 0}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Известная проблема</div>
+      <div class="kpi-val" id="kpiKnownIssue" style="color: var(--purple);">${stats.knownIssueCount ?? 0}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-title">Тест / игнор</div>
+      <div class="kpi-val" id="kpiIgnoredTest" style="color: var(--text-muted);">${stats.ignoredTestCount ?? 0}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-title">Всего в базе</div>
@@ -453,11 +472,11 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
 
       <select id="filterStatus" class="select-filter">
         <option value="">Все статусы</option>
-        <option value="NEW">NEW (Новые)</option>
-        <option value="REVIEWED">REVIEWED (Просмотренные)</option>
-        <option value="KNOWN_ISSUE">KNOWN_ISSUE (Известные)</option>
-        <option value="RESOLVED">RESOLVED (Исправленные)</option>
-        <option value="IGNORED_TEST">IGNORED_TEST (Тестовые)</option>
+        <option value="NEW">Новый</option>
+        <option value="IN_PROGRESS">В работе</option>
+        <option value="RESOLVED">Решено</option>
+        <option value="KNOWN_ISSUE">Известная проблема</option>
+        <option value="IGNORED_TEST">Тест / игнор</option>
       </select>
 
       <select id="filterPurpose" class="select-filter">
@@ -497,13 +516,16 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
             <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">
               Отчётов пока нет.
             </td>
-          </tr>` : reports.map(r => `
+          </tr>` : reports.map(r => {
+            const normStatus = normalizeStatus(r.status);
+            const statusLabel = STATUS_LABELS[normStatus] || normStatus;
+            return `
           <tr data-report-id="${escapeHtml(r.report_id)}"
               data-platform="${escapeHtml(r.platform || '')}"
               data-version="${escapeHtml(r.app_version || '')}"
               data-device="${escapeHtml(r.device_family || '')}"
               data-category="${escapeHtml(r.error_category || '')}"
-              data-status="${escapeHtml(r.status || 'NEW')}"
+              data-status="${escapeHtml(normStatus)}"
               data-purpose="${escapeHtml(r.report_purpose || 'USER')}"
               data-signature="${escapeHtml(r.error_signature || '')}">
             <td>
@@ -515,9 +537,13 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
             <td>${escapeHtml(r.app_version || '-')}</td>
             <td>${escapeHtml(r.device_family || '-')}</td>
             <td>${r.error_category ? `<span class="tag tag-error">${escapeHtml(r.error_category)}</span>` : '<span style="color: var(--text-muted);">-</span>'}</td>
-            <td><span class="tag tag-status-${(r.status || 'new').toLowerCase()}">${escapeHtml(r.status || 'NEW')}</span></td>
-            <td><button class="btn btn-open-report" data-action="open-report" data-report-id="${escapeHtml(r.report_id)}">Открыть</button></td>
-          </tr>`).join('')}
+            <td><span class="tag tag-status-${normStatus.toLowerCase()}">${escapeHtml(statusLabel)}</span></td>
+            <td style="white-space: nowrap;">
+              <button class="btn btn-open-report" data-action="open-report" data-report-id="${escapeHtml(r.report_id)}" style="margin-right: 6px;">Открыть</button>
+              <button class="btn btn-download-report" data-action="download-report" data-report-id="${escapeHtml(r.report_id)}" title="Скачать JSON">Скачать</button>
+            </td>
+          </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
@@ -529,19 +555,21 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       <table>
         <thead>
           <tr>
-            <th>Сигнатура проблемы</th>
+            <th>Проблема</th>
             <th>Категория</th>
-            <th>Количество случаев</th>
-            <th>Первый случай</th>
-            <th>Последний случай</th>
-            <th>Статус</th>
+            <th>Всего</th>
+            <th>Новый</th>
+            <th>В работе</th>
+            <th>Решено</th>
+            <th>Известная</th>
+            <th>Последнее появление</th>
             <th>Действие</th>
           </tr>
         </thead>
         <tbody id="issuesTableBody">
           ${groupedIssues.length === 0 ? `
           <tr>
-            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+            <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 32px;">
               Сгруппированных проблем пока нет.
             </td>
           </tr>` : groupedIssues.map(i => `
@@ -549,10 +577,15 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
             <td style="font-family: monospace; font-size: 12px; color: var(--accent); font-weight: 600;">${escapeHtml(i.error_signature || '-')}</td>
             <td><span class="tag tag-error">${escapeHtml(i.error_category || 'ERROR')}</span></td>
             <td><strong style="color: var(--text-bright); font-size: 14px;">${i.count || 1}</strong></td>
-            <td>${new Date(i.first_seen).toLocaleString('ru-RU')}</td>
+            <td><span class="tag tag-status-new">${i.new_count || 0}</span></td>
+            <td><span class="tag tag-status-in_progress">${i.in_progress_count || 0}</span></td>
+            <td><span class="tag tag-status-resolved">${i.resolved_count || 0}</span></td>
+            <td><span class="tag tag-status-known_issue">${i.known_issue_count || 0}</span></td>
             <td>${new Date(i.last_seen).toLocaleString('ru-RU')}</td>
-            <td><span class="tag tag-status-${(i.status || 'new').toLowerCase()}">${escapeHtml(i.status || 'NEW')}</span></td>
-            <td><button class="btn btn-primary btn-open-sample" data-action="open-report" data-report-id="${escapeHtml(i.sample_report_id || '')}">Открыть образец</button></td>
+            <td style="white-space: nowrap;">
+              <button class="btn btn-primary btn-open-sample" data-action="open-report" data-report-id="${escapeHtml(i.sample_report_id || '')}" style="margin-right: 6px;">Открыть образец</button>
+              <button class="btn" data-action="filter-signature" data-signature="${escapeHtml(i.error_signature || '')}">В отчёты</button>
+            </td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -562,6 +595,16 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
   <!-- VIEW 3: СВОДКА И МЕТРИКИ (STATS) -->
   <div id="viewStats" style="display: none;">
     <div class="grid-2">
+      <div class="section-card">
+        <div class="section-title">Распределение по статусам</div>
+        <table>
+          <thead><tr><th>Статус</th><th>Количество</th></tr></thead>
+          <tbody id="statsStatusBody">
+            ${(stats.statusBreakdown || []).map(s => `<tr><td><span class="tag tag-status-${(s.status || '').toLowerCase()}">${escapeHtml(s.label || s.status)}</span></td><td><strong>${s.count}</strong></td></tr>`).join('') || '<tr><td colspan="2">Нет данных</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
       <div class="section-card">
         <div class="section-title">Распределение по платформам</div>
         <table>
@@ -616,6 +659,33 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       </div>
 
       <div class="modal-body">
+        <!-- TOP WORKFLOW CONTROL BAR -->
+        <div class="section-card" id="detailWorkflowCard" style="margin-bottom: 16px; border-left: 3px solid var(--accent); background: #0c121e;">
+          <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 260px;">
+              <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px;">
+                <label for="detailStatusSelect" style="font-size: 13px; font-weight: 600;">Статус:</label>
+                <select id="detailStatusSelect" class="select-filter" style="font-weight: 600;">
+                  <option value="NEW">Новый</option>
+                  <option value="IN_PROGRESS">В работе</option>
+                  <option value="RESOLVED">Решено</option>
+                  <option value="KNOWN_ISSUE">Известная проблема</option>
+                  <option value="IGNORED_TEST">Тест / игнор</option>
+                </select>
+                <button class="btn btn-primary" id="detailSaveBtn" data-action="save-detail-ops">Сохранить</button>
+              </div>
+              <label for="detailNotesText" style="font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 4px;">Заметка разработчика:</label>
+              <textarea id="detailNotesText" class="notes-textarea" style="min-height: 56px;" placeholder="Заметка к инциденту, причина сбоя, ссылка на PR или номер фикса..."></textarea>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px; min-width: 190px;">
+              <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Действия:</span>
+              <button class="btn" id="detailDownloadJsonBtn" data-action="download-json">💾 Скачать JSON</button>
+              <button class="btn" id="detailCopyMdBtn" data-action="copy-markdown">📋 Скопировать Markdown</button>
+              <button class="btn btn-danger" id="detailDeleteBtn" data-action="delete-report">🗑️ Удалить отчёт</button>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-tabs">
           <button class="modal-tab-btn active" id="mTabBtnOverview" data-modal-tab="overview">Сводка и устройство</button>
           <button class="modal-tab-btn" id="mTabBtnCodecs" data-modal-tab="codecs">Кодеки и политика</button>
@@ -626,6 +696,30 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
 
         <div id="modalContent">
           <p style="color: var(--text-muted); padding: 24px; text-align: center;">Выберите отчёт для просмотра деталей.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ОЧИСТКА ВСЕХ ЛОГОВ (SAFE PURGE) -->
+  <div id="purgeModalOverlay" class="modal-overlay">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 style="color: var(--danger);">Удалить все диагностические отчёты?</h3>
+        <button class="btn" id="purgeModalCloseBtn" data-action="close-purge-modal">Закрыть</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 14px; font-size: 14px; color: var(--text); line-height: 1.6;">
+          Будут безвозвратно удалены все диагностические отчёты SmartTube VOX.<br>
+          <strong style="color: #fca5a5;">Это действие нельзя отменить.</strong>
+        </p>
+        <label for="purgeConfirmInput" style="display: block; font-size: 13px; margin-bottom: 8px; color: var(--text-muted);">
+          Введите слово: <strong style="color: var(--danger); font-family: monospace; font-size: 15px;">УДАЛИТЬ</strong>
+        </label>
+        <input type="text" id="purgeConfirmInput" class="search-input" style="width: 100%; margin-bottom: 18px;" placeholder="УДАЛИТЬ" autocomplete="off">
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button class="btn" id="purgeCancelBtn" data-action="cancel-purge">Отмена</button>
+          <button class="btn btn-danger" id="purgeConfirmBtn" data-action="confirm-purge" disabled>Удалить все</button>
         </div>
       </div>
     </div>
