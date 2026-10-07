@@ -351,6 +351,19 @@ public class VotData extends SharedPreferencesBase {
     private static final String VOX_COMPATIBILITY_SCAN_COMPLETED = "vox_compatibility_scan_completed";
     private static final String VOX_MANUAL_OVERRIDE = "vox_manual_override";
     private static final String VOX_LAST_APPLIED_PROFILE = "vox_last_applied_profile";
+    private static final String VOX_PLAYBACK_HEALTH_AGGREGATE_JSON = "vox_playback_health_aggregate_json";
+
+    public String getPlaybackHealthAggregateJson() {
+        return getString(VOX_PLAYBACK_HEALTH_AGGREGATE_JSON, "");
+    }
+
+    public void setPlaybackHealthAggregateJson(String json) {
+        putString(VOX_PLAYBACK_HEALTH_AGGREGATE_JSON, json != null ? json : "");
+    }
+
+    public void clearPlaybackHealthAggregate() {
+        putString(VOX_PLAYBACK_HEALTH_AGGREGATE_JSON, "");
+    }
 
     public boolean isManualOverride() {
         return getBoolean(VOX_MANUAL_OVERRIDE, false);

@@ -1,0 +1,23 @@
+{
+  "name": "vox-live-backend",
+  "version": "1.0.0",
+  "description": "SmartTube VOX Production Live Translation Server Backend",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "smarttube",
+    "vox",
+    "live",
+    "translation",
+    "backend",
+    "stt",
+    "tts"
+  ],
+  "author": "SmartTube VOX Team",
+  "license": "MIT"
+}

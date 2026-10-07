@@ -106,6 +106,24 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
         votData.isPassthroughEnabled = policy.passthroughEnabled
     }
 
+    private val healthTracker: VoxPlaybackHealthTracker by lazy { VoxPlaybackHealthTracker(votData) }
+
+    fun getPlaybackHealthTracker(): VoxPlaybackHealthTracker = healthTracker
+
+    fun recordPlaybackSession(observation: VoxPlaybackSessionObservation) {
+        healthTracker.recordSession(observation)
+    }
+
+    fun getAutoSetupRecommendation(): VoxAutoSetupRecommendation {
+        val profile = getDeviceProfile(false)
+        val policy = getCodecPolicy()
+        return healthTracker.getRecommendation(profile, policy, isManualOverrideActive())
+    }
+
+    fun resetAutoSetupData() {
+        healthTracker.reset()
+    }
+
     fun isScanCompleted(): Boolean {
         return votData.isCompatibilityScanCompleted
     }
@@ -117,6 +135,7 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
     fun resetToDefaults() {
         votData.clearCachedDeviceProfile()
         cachedProfile = null
+        healthTracker.reset()
         votData.codecPolicyMode = VoxCodecPolicyMode.AUTO.id
         votData.maxQualityHeight = 0
         votData.preferredVideoCodec = VoxVideoCodecPreference.AUTO.id
@@ -192,6 +211,15 @@ class VoxCompatibilityManager private constructor(private val context: Context) 
             sb.append("\n⚠️ ВНИМАНИЕ: ${risk.messageRu}\n")
         } else {
             sb.append("\n✓ Параметры полностью согласованы с возможностями устройства.\n")
+        }
+
+        val summary = healthTracker.getHealthSummary()
+        sb.append("\n--- ЗДОРОВЬЕ ВОСПРОИЗВЕДЕНИЯ (AUTO SETUP 2.0) ---\n")
+        sb.append(summary.toDiagnosticString()).append("\n")
+
+        val recommendation = getAutoSetupRecommendation()
+        if (recommendation.reasonCodes.contains(VoxAutoSetupReasonCode.RUNTIME_4K_REBUFFER)) {
+            sb.append("⚠️ Рекомендация: ${recommendation.userExplanationRu}\n")
         }
 
         return sb.toString()
