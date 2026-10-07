@@ -31,9 +31,17 @@ object VoxLiveFeatureFlags {
     @JvmField
     var VOX_LIVE_TRANSLATION_EXPERIMENTAL: Boolean = false
 
+    @JvmField
+    var VOX_LIVE_AUDIO_CAPTURE_EXPERIMENTAL: Boolean = false
+
+    @JvmField
+    var VOX_LIVE_SECONDARY_AUDIO_EXPERIMENTAL: Boolean = false
+
     @JvmStatic
     fun resetToDefaults() {
         VOX_LIVE_TRANSLATION_EXPERIMENTAL = false
+        VOX_LIVE_AUDIO_CAPTURE_EXPERIMENTAL = false
+        VOX_LIVE_SECONDARY_AUDIO_EXPERIMENTAL = false
     }
 }
 
