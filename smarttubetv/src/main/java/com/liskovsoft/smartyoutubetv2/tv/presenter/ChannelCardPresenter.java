@@ -31,7 +31,6 @@ public class ChannelCardPresenter extends LongClickPresenter {
     private int mDefaultBackgroundColor;
     private int mDefaultTextColor;
     private int mSelectedBackgroundColor;
-    private int mNewContentBackgroundColor;
     private int mSelectedTextColor;
     private int mWidth;
     private int mHeight;
@@ -44,8 +43,6 @@ public class ChannelCardPresenter extends LongClickPresenter {
                 ContextCompat.getColor(context, Helpers.getThemeAttr(context, R.attr.cardDefaultBackground));
         mDefaultTextColor =
                 ContextCompat.getColor(context, R.color.card_default_text);
-        mNewContentBackgroundColor =
-                ContextCompat.getColor(context, R.color.dark_red);
         mSelectedBackgroundColor =
                 ContextCompat.getColor(context, Helpers.getThemeAttr(context, R.attr.cardSelectedBackground));
         mSelectedTextColor =
@@ -56,9 +53,6 @@ public class ChannelCardPresenter extends LongClickPresenter {
         @SuppressLint("InflateParams")
         View container = LayoutInflater.from(context).inflate(R.layout.channel_card, null);
         container.setBackgroundColor(mDefaultBackgroundColor);
-        //if (VERSION.SDK_INT >= 23 && MainUIData.instance(context).isUiTweakEnabled(MainUIData.UI_TWEAK_ROUNDED_CORNERS)) {
-        //    container.setForeground(ContextCompat.getDrawable(context, R.drawable.lb_card_outline));
-        //}
 
         TextView textView = container.findViewById(R.id.channel_title);
         textView.setBackgroundColor(mDefaultBackgroundColor);
@@ -70,10 +64,9 @@ public class ChannelCardPresenter extends LongClickPresenter {
         }
 
         container.setOnFocusChangeListener((v, hasFocus) -> {
-            int backgroundColor = hasFocus ? mSelectedBackgroundColor :
-                    textView.getTag(R.id.channel_new_content) != null ? mNewContentBackgroundColor : mDefaultBackgroundColor;
+            int backgroundColor = hasFocus ? mSelectedBackgroundColor : mDefaultBackgroundColor;
             int textColor = hasFocus ? mSelectedTextColor : mDefaultTextColor;
-            
+
             textView.setBackgroundColor(backgroundColor);
             textView.setTextColor(textColor);
 
@@ -104,9 +97,14 @@ public class ChannelCardPresenter extends LongClickPresenter {
         textView.setText(video.getTitle());
 
         // We should setup props each time because object may be reused by the underlying RecyclerView
-        textView.setBackgroundColor(video.hasNewContent ? mNewContentBackgroundColor : mDefaultBackgroundColor);
+        textView.setBackgroundColor(mDefaultBackgroundColor);
+        textView.setTextColor(mDefaultTextColor);
         textView.setTag(R.id.channel_new_content, video.hasNewContent ? true : null);
 
+        View dot = viewHolder.view.findViewById(R.id.channel_new_content_dot);
+        if (dot != null) {
+            dot.setVisibility(video.hasNewContent ? View.VISIBLE : View.GONE);
+        }
 
         ImageView imageView = viewHolder.view.findViewById(R.id.channel_image);
         imageView.setVisibility(View.VISIBLE);
@@ -115,7 +113,6 @@ public class ChannelCardPresenter extends LongClickPresenter {
                 .load(video.cardImageUrl)
                 .apply(ViewUtil.glideOptions())
                 .listener(mErrorListener)
-                //.error(R.drawable.card_placeholder) // R.color.lb_grey
                 .into(imageView);
     }
 

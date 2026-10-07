@@ -20,13 +20,30 @@ object VoxCompatibilityRiskEvaluator {
             "Это может увеличить нагрузку, вызвать задержки или снизить стабильность воспроизведения."
 
     @JvmStatic
+    @JvmOverloads
     fun evaluate(
         proposedPolicy: VoxCodecPolicy,
         recommended: VoxRecommendedSettings,
-        profile: VoxDeviceProfile
+        profile: VoxDeviceProfile,
+        runtimeRebuffers: Int = 0,
+        slowStartup: Boolean = false
     ): VoxCompatibilityRisk? {
-        // 1. Проверка разрешения: если выбрано разрешение выше рекомендуемого или выше возможностей экрана
-        if (proposedPolicy.maxQualityHeight > 0 && proposedPolicy.maxQualityHeight > recommended.maxQualityHeight) {
+        val has4kHw = profile.has4kHardwareDecode()
+        val isDisplay1080 = profile.display.maxHeight in 1..1080
+
+        // Случай DuneHD Pro Vision 4K (экран 1080p, аппаратный 4K декодер):
+        // 4K аппаратно поддерживается и downscale возможен без проблем.
+        // Не запрещаем 4K навсегда только из-за 1080p дисплея.
+        // При наличии повторных буферизаций или долгого старта выдаём мягкую рекомендацию.
+        if (proposedPolicy.maxQualityHeight > 1080 && isDisplay1080 && has4kHw) {
+            if (runtimeRebuffers >= 2 || (slowStartup && runtimeRebuffers >= 1)) {
+                return VoxCompatibilityRisk(
+                    titleRu = "Повторные буферизации",
+                    messageRu = "Обнаружены повторные буферизации при профиле «Максимальное качество». Для более стабильной работы рекомендуется профиль «Автоматически».",
+                    affectedSetting = "maxQuality"
+                )
+            }
+        } else if (proposedPolicy.maxQualityHeight > 0 && proposedPolicy.maxQualityHeight > recommended.maxQualityHeight) {
             return VoxCompatibilityRisk(
                 titleRu = "Повышенное разрешение",
                 messageRu = "Разрешение ${proposedPolicy.maxQualityHeight}p превышает рекомендуемое для этого экрана/процессора (${recommended.maxQualityHeight}p). Возможны подтормаживания видео.",

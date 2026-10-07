@@ -136,9 +136,11 @@ class VoxDownloadCoordinator(
             existing.bumpGeneration()
             existing.isCancelledFlag.set(false)
             existing.isPausedFlag.set(false)
+            existing.lastOperation = "QUEUED"
             existing
         } else {
             val newJob = VoxDownloadJob(request)
+            newJob.lastOperation = "QUEUED"
             repository.addOrUpdateJob(newJob)
             newJob
         }
@@ -165,6 +167,14 @@ class VoxDownloadCoordinator(
         job.bumpGeneration()
         job.isCancelledFlag.set(false)
         job.isPausedFlag.set(false)
+        job.retryCount++
+        job.lastOperation = "RESUME"
+        VoxSafeLogger.i(
+            VoxLogCategory.DOWNLOAD,
+            VoxLogCode.DOWNLOAD_RESUMED,
+            "Возобновление скачивания",
+            mapOf("downloadId" to downloadId, "retryCount" to job.retryCount.toString())
+        )
         scheduleJobExecution(job)
         return true
     }
@@ -214,6 +224,7 @@ class VoxDownloadCoordinator(
         val job = repository.getJob(downloadId) ?: return
         job.isCancelledFlag.set(true)
         job.bumpGeneration()
+        job.lastOperation = "CANCEL"
         job.updateState(VoxDownloadState.CANCELLED)
         VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_CANCELLED, "Загрузка видео отменена", mapOf("downloadId" to downloadId))
         repository.persistJob(job)
@@ -333,6 +344,13 @@ class VoxDownloadCoordinator(
 
         try {
             if (isStale(job, expectedGen)) return
+            job.lastOperation = "START"
+            VoxSafeLogger.i(
+                VoxLogCategory.DOWNLOAD,
+                VoxLogCode.DOWNLOAD_STARTED,
+                "Старт выполнения задания скачивания",
+                mapOf("downloadId" to downloadId)
+            )
 
             if (job.state == VoxDownloadState.MUXED && job.finalFileBytes > 0) {
                 val output = storage.getOutputFile(downloadId)
@@ -354,6 +372,13 @@ class VoxDownloadCoordinator(
             if (job.request.translationMode != VoxTranslationMode.NONE &&
                 job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
                 job.updateState(VoxDownloadState.PREPARING_TRANSLATION)
+                job.lastOperation = "PREPARING_TRANSLATION"
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_TRANSLATION_STARTED,
+                    "Загрузка перевода начата",
+                    mapOf("downloadId" to downloadId)
+                )
                 repository.persistJob(job)
                 notifyStateChange(job)
 
@@ -373,6 +398,7 @@ class VoxDownloadCoordinator(
 
             // 2. Этап резолвинга медиа-потоков видео и оригинального аудио
             job.updateState(VoxDownloadState.RESOLVING_STREAMS)
+            job.lastOperation = "RESOLVING"
             repository.persistJob(job)
             notifyStateChange(job)
 
@@ -398,6 +424,13 @@ class VoxDownloadCoordinator(
             // 3. Загрузка видео-потока
             if (job.videoProgress.state != VoxTrackState.COMPLETED && videoStream != null) {
                 job.updateState(VoxDownloadState.DOWNLOADING_VIDEO)
+                job.lastOperation = "DOWNLOAD_VIDEO"
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_VIDEO_STARTED,
+                    "Загрузка видео начата",
+                    mapOf("downloadId" to downloadId, "height" to videoStream.height.toString())
+                )
                 job.updateTrackProgress(
                     VoxDownloadTrack.VIDEO,
                     storage.getTrackFileSize(downloadId, VoxDownloadTrack.VIDEO),
@@ -436,6 +469,12 @@ class VoxDownloadCoordinator(
                     videoStream.contentLength ?: targetFile.length(),
                     VoxTrackState.COMPLETED
                 )
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_VIDEO_COMPLETED,
+                    "Загрузка видео завершена",
+                    mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString())
+                )
                 repository.persistJob(job)
             }
 
@@ -444,6 +483,13 @@ class VoxDownloadCoordinator(
             // 4. Загрузка оригинального аудио
             if (job.originalAudioProgress.state != VoxTrackState.COMPLETED && originalAudioStream != null) {
                 job.updateState(VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO)
+                job.lastOperation = "DOWNLOAD_AUDIO"
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_AUDIO_STARTED,
+                    "Загрузка аудио начата",
+                    mapOf("downloadId" to downloadId)
+                )
                 job.updateTrackProgress(
                     VoxDownloadTrack.ORIGINAL_AUDIO,
                     storage.getTrackFileSize(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO),
@@ -482,6 +528,12 @@ class VoxDownloadCoordinator(
                     originalAudioStream.contentLength ?: targetFile.length(),
                     VoxTrackState.COMPLETED
                 )
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_AUDIO_COMPLETED,
+                    "Загрузка аудио завершена",
+                    mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString())
+                )
                 repository.persistJob(job)
             }
 
@@ -491,6 +543,7 @@ class VoxDownloadCoordinator(
             if (job.request.translationMode != VoxTranslationMode.NONE &&
                 job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
                 job.updateState(VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO)
+                job.lastOperation = "DOWNLOAD_TRANSLATION"
                 job.updateTrackProgress(
                     VoxDownloadTrack.TRANSLATED_AUDIO,
                     storage.getTrackFileSize(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO),
@@ -540,6 +593,13 @@ class VoxDownloadCoordinator(
                     targetFile.length(),
                     VoxTrackState.COMPLETED
                 )
+                job.hasTranslatedAudio = true
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_TRANSLATION_COMPLETED,
+                    "Загрузка перевода завершена",
+                    mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString())
+                )
                 repository.persistJob(job)
             }
 
@@ -570,21 +630,57 @@ class VoxDownloadCoordinator(
             // Автоматический переход к мультиплексированию MKV
             executeMuxing(job, expectedGen)
 
-        } catch (e: VoxDownloadException) {
+        } catch (t: Throwable) {
             if (job.generation.get() == expectedGen) {
-                if (e.code == VoxDownloadErrorCode.CANCELLED) {
+                val failedStage = job.state.stageName
+                val (category, safeReason) = VoxDownloadFailureClassifier.classifyWithReason(t)
+                val rootCause = VoxDownloadFailureClassifier.extractRootCause(t) ?: t
+                val safeRootCauseName = rootCause.javaClass.simpleName
+
+                val errorCode = if (t is VoxDownloadException) {
+                    t.code
+                } else {
+                    when (category) {
+                        VoxDownloadFailureCategory.STORAGE_FULL -> VoxDownloadErrorCode.STORAGE_FULL
+                        VoxDownloadFailureCategory.STORAGE_PERMISSION -> VoxDownloadErrorCode.STORAGE_PERMISSION
+                        VoxDownloadFailureCategory.TEMP_FILE_FAILED -> VoxDownloadErrorCode.TEMP_FILE_FAILED
+                        VoxDownloadFailureCategory.OUTPUT_MOVE_FAILED -> VoxDownloadErrorCode.OUTPUT_MOVE_FAILED
+                        VoxDownloadFailureCategory.FINALIZE_FAILED -> VoxDownloadErrorCode.FINALIZE_FAILED
+                        VoxDownloadFailureCategory.NETWORK -> VoxDownloadErrorCode.NETWORK
+                        VoxDownloadFailureCategory.TIMEOUT -> VoxDownloadErrorCode.TIMEOUT
+                        VoxDownloadFailureCategory.RESOLVE_FAILED -> VoxDownloadErrorCode.RESOLVE_FAILED
+                        VoxDownloadFailureCategory.VIDEO_DOWNLOAD_FAILED -> VoxDownloadErrorCode.VIDEO_DOWNLOAD_FAILED
+                        VoxDownloadFailureCategory.AUDIO_DOWNLOAD_FAILED -> VoxDownloadErrorCode.AUDIO_DOWNLOAD_FAILED
+                        VoxDownloadFailureCategory.TRANSLATION_FAILED -> VoxDownloadErrorCode.TRANSLATION_FAILED
+                        VoxDownloadFailureCategory.PACKAGING_FAILED -> VoxDownloadErrorCode.PACKAGING_FAILED
+                        VoxDownloadFailureCategory.MUX_FAILED -> VoxDownloadErrorCode.MUX_FAILED
+                        VoxDownloadFailureCategory.INVALID_MEDIA -> VoxDownloadErrorCode.INVALID_MEDIA
+                        VoxDownloadFailureCategory.UNSUPPORTED_FORMAT -> VoxDownloadErrorCode.UNSUPPORTED_FORMAT
+                        VoxDownloadFailureCategory.CHECKSUM_FAILED -> VoxDownloadErrorCode.CHECKSUM_FAILED
+                        VoxDownloadFailureCategory.CANCELLED -> VoxDownloadErrorCode.CANCELLED
+                        else -> VoxDownloadErrorCode.UNKNOWN
+                    }
+                }
+
+                job.lastFailedStage = failedStage
+                job.lastErrorCategory = category.name
+                job.safeRootCause = "$safeRootCauseName:$safeReason"
+
+                val userMessage = VoxDownloadFailureClassifier.getUserMessage(category)
+
+                if (errorCode == VoxDownloadErrorCode.CANCELLED) {
                     job.updateState(VoxDownloadState.CANCELLED)
                 } else {
-                    job.updateState(VoxDownloadState.FAILED, e.code, e.message)
-                    notifyError(job, e.code, e.message ?: "Download failed")
+                    job.updateState(VoxDownloadState.FAILED, errorCode, userMessage)
+                    notifyError(
+                        job = job,
+                        code = errorCode,
+                        message = userMessage,
+                        failedStage = failedStage,
+                        category = category,
+                        safeReason = safeReason
+                    )
                 }
-                repository.persistJob(job)
-                notifyStateChange(job)
-            }
-        } catch (e: Exception) {
-            if (job.generation.get() == expectedGen) {
-                job.updateState(VoxDownloadState.FAILED, VoxDownloadErrorCode.UNKNOWN, e.message)
-                notifyError(job, VoxDownloadErrorCode.UNKNOWN, e.message ?: "Unknown error")
                 repository.persistJob(job)
                 notifyStateChange(job)
             }
@@ -617,6 +713,14 @@ class VoxDownloadCoordinator(
         }
 
         job.updateState(VoxDownloadState.MUXING)
+        job.lastOperation = "PACKAGING"
+        job.packagingStarted = true
+        VoxSafeLogger.i(
+            VoxLogCategory.DOWNLOAD,
+            VoxLogCode.DOWNLOAD_PACKAGING_STARTED,
+            "Упаковка медиафайла начата",
+            mapOf("downloadId" to downloadId)
+        )
         repository.persistJob(job)
         notifyStateChange(job)
         VoxLog.d(TAG, "Download job $downloadId starting Matroska muxing")
@@ -682,6 +786,20 @@ class VoxDownloadCoordinator(
                 shouldStop = { isStale(job, expectedGen) },
                 onFinalizing = {
                     job.updateState(VoxDownloadState.FINALIZING)
+                    job.lastOperation = "FINALIZE"
+                    job.packagingCompleted = true
+                    VoxSafeLogger.i(
+                        VoxLogCategory.DOWNLOAD,
+                        VoxLogCode.DOWNLOAD_PACKAGING_COMPLETED,
+                        "Упаковка завершена, финализация",
+                        mapOf("downloadId" to downloadId)
+                    )
+                    VoxSafeLogger.i(
+                        VoxLogCategory.DOWNLOAD,
+                        VoxLogCode.DOWNLOAD_FINALIZE_STARTED,
+                        "Финализация контейнера начата",
+                        mapOf("downloadId" to downloadId)
+                    )
                     repository.persistJob(job)
                     notifyStateChange(job)
                 },
@@ -731,6 +849,8 @@ class VoxDownloadCoordinator(
 
     private fun publishCompletedFile(job: VoxDownloadJob, expectedGen: Long, outputFile: File) {
         val downloadId = job.downloadId
+            job.lastOperation = "PUBLISH"
+            job.finalizeCompleted = true
             // Публикация в MediaStore
             if (publisher != null) {
                 if (isStale(job, expectedGen)) return
@@ -852,15 +972,63 @@ class VoxDownloadCoordinator(
         }
     }
 
-    private fun notifyError(job: VoxDownloadJob, code: VoxDownloadErrorCode, message: String) {
-        val safeCode = when (code) {
-            VoxDownloadErrorCode.URL_EXPIRED -> VoxLogCode.DOWNLOAD_URL_EXPIRED
-            VoxDownloadErrorCode.INSUFFICIENT_STORAGE -> VoxLogCode.DOWNLOAD_STORAGE_FULL
-            VoxDownloadErrorCode.STREAM_UNAVAILABLE -> VoxLogCode.DOWNLOAD_FORMAT_UNAVAILABLE
-            VoxDownloadErrorCode.AUTH_REQUIRED -> VoxLogCode.DOWNLOAD_HTTP_403
+    private fun notifyError(
+        job: VoxDownloadJob,
+        code: VoxDownloadErrorCode,
+        message: String,
+        failedStage: String = job.lastFailedStage ?: job.state.stageName,
+        category: VoxDownloadFailureCategory? = null,
+        safeReason: String? = null
+    ) {
+        val safeCategory = category ?: when (code) {
+            VoxDownloadErrorCode.INSUFFICIENT_STORAGE,
+            VoxDownloadErrorCode.STORAGE_FULL -> VoxDownloadFailureCategory.STORAGE_FULL
+            VoxDownloadErrorCode.STORAGE_PERMISSION -> VoxDownloadFailureCategory.STORAGE_PERMISSION
+            VoxDownloadErrorCode.PACKAGING_FAILED -> VoxDownloadFailureCategory.PACKAGING_FAILED
+            VoxDownloadErrorCode.MUX_FAILED -> VoxDownloadFailureCategory.MUX_FAILED
+            VoxDownloadErrorCode.URL_EXPIRED -> VoxDownloadFailureCategory.URL_EXPIRED
+            VoxDownloadErrorCode.STREAM_UNAVAILABLE,
+            VoxDownloadErrorCode.RESOLVE_FAILED -> VoxDownloadFailureCategory.RESOLVE_FAILED
+            VoxDownloadErrorCode.AUTH_REQUIRED -> VoxDownloadFailureCategory.HTTP_FORBIDDEN
+            VoxDownloadErrorCode.NETWORK_ERROR,
+            VoxDownloadErrorCode.NETWORK -> VoxDownloadFailureCategory.NETWORK
+            VoxDownloadErrorCode.TIMEOUT -> VoxDownloadFailureCategory.TIMEOUT
+            else -> VoxDownloadFailureCategory.UNKNOWN
+        }
+
+        val safeLogCode = when (safeCategory) {
+            VoxDownloadFailureCategory.URL_EXPIRED -> VoxLogCode.DOWNLOAD_URL_EXPIRED
+            VoxDownloadFailureCategory.STORAGE_FULL -> VoxLogCode.DOWNLOAD_STORAGE_FULL
+            VoxDownloadFailureCategory.RESOLVE_FAILED,
+            VoxDownloadFailureCategory.STREAM_UNAVAILABLE,
+            VoxDownloadFailureCategory.VIDEO_UNAVAILABLE -> VoxLogCode.DOWNLOAD_FORMAT_UNAVAILABLE
+            VoxDownloadFailureCategory.HTTP_FORBIDDEN -> VoxLogCode.DOWNLOAD_HTTP_403
             else -> VoxLogCode.DOWNLOAD_FAILED
         }
-        VoxSafeLogger.e(VoxLogCategory.DOWNLOAD, safeCode, "Ошибка скачивания: ${code.name}", mapOf("stage" to job.state.name))
+
+        val freeMb = try { storage.getAvailableBytes() / (1024 * 1024) } catch (ignored: Exception) { -1L }
+        val tempCount = try { storage.getTemporaryFileCount(job.downloadId) } catch (ignored: Exception) { 0 }
+
+        val contextMap = mapOf(
+            "stage" to failedStage,
+            "errorCategory" to safeCategory.name,
+            "reason" to (safeReason ?: code.name),
+            "operation" to (job.lastOperation ?: "UNKNOWN"),
+            "retryCount" to job.retryCount.toString(),
+            "videoBytesDownloaded" to job.videoProgress.bytesDownloaded.toString(),
+            "audioBytesDownloaded" to job.originalAudioProgress.bytesDownloaded.toString(),
+            "translationBytesDownloaded" to job.translatedAudioProgress.bytesDownloaded.toString(),
+            "freeStorageMb" to freeMb.toString(),
+            "outputContainer" to "mkv",
+            "temporaryFileCount" to tempCount.toString()
+        )
+
+        VoxSafeLogger.e(
+            VoxLogCategory.DOWNLOAD,
+            safeLogCode,
+            message,
+            contextMap
+        )
 
         listeners[job.downloadId]?.forEach {
             try { it.onError(job.downloadId, code, message) } catch (ignored: Exception) {}
@@ -868,5 +1036,29 @@ class VoxDownloadCoordinator(
         globalListeners.forEach {
             try { it.onError(job.downloadId, code, message) } catch (ignored: Exception) {}
         }
+    }
+
+    fun getDiagnosticsSummary(): Map<String, Any> {
+        val lastJob = repository.getAllJobs().maxByOrNull { it.request.createdAt }
+        val freeMb = try { storage.getAvailableBytes() / (1024 * 1024) } catch (ignored: Exception) { -1L }
+        if (lastJob == null) {
+            return mapOf(
+                "hasJobs" to false,
+                "freeStorageMb" to freeMb
+            )
+        }
+        return mapOf(
+            "lastStage" to (lastJob.lastFailedStage ?: lastJob.state.stageName),
+            "lastErrorCategory" to (lastJob.lastErrorCategory ?: lastJob.errorCode?.name ?: "NONE"),
+            "lastOperation" to (lastJob.lastOperation ?: "NONE"),
+            "retryCount" to lastJob.retryCount,
+            "completedVideoBytes" to lastJob.videoProgress.bytesDownloaded,
+            "completedAudioBytes" to lastJob.originalAudioProgress.bytesDownloaded,
+            "translatedAudioPresent" to lastJob.hasTranslatedAudio,
+            "packagingStarted" to lastJob.packagingStarted,
+            "packagingCompleted" to lastJob.packagingCompleted,
+            "finalizeCompleted" to lastJob.finalizeCompleted,
+            "freeStorageMb" to freeMb
+        )
     }
 }

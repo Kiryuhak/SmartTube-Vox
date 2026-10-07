@@ -20,6 +20,14 @@
             android:layout_gravity="start"
             android:visibility="invisible"
             tools:ignore="ContentDescription"/>
+        <View
+            android:id="@+id/channel_new_content_dot"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/channel_new_content_dot"
+            android:visibility="gone"/>
         <com.liskovsoft.smartyoutubetv2.tv.ui.widgets.marqueetextviewcompat.MarqueeTextViewCompat
             android:id="@+id/channel_title"
             android:singleLine="true"

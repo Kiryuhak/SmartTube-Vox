@@ -180,6 +180,17 @@ data class VoxDeviceProfile(
         return audioCodecs[key]?.passthroughCapability == TriStateCapability.SUPPORTED
     }
 
+    fun has4kHardwareDecode(): Boolean {
+        val av1Cap = videoCodecs["av1"]
+        val vp9Cap = videoCodecs["vp9"]
+        val avcCap = videoCodecs["avc"]
+        val hevcCap = videoCodecs["hevc"]
+        return (av1Cap?.hardwareAccelerated == true && av1Cap.maxHeight >= 2160) ||
+               (vp9Cap?.hardwareAccelerated == true && vp9Cap.maxHeight >= 2160) ||
+               (avcCap?.hardwareAccelerated == true && avcCap.maxHeight >= 2160) ||
+               (hevcCap?.hardwareAccelerated == true && hevcCap.maxHeight >= 2160)
+    }
+
     private fun normalizeCodecKey(codec: String): String {
         val lower = codec.lowercase()
         return when {
