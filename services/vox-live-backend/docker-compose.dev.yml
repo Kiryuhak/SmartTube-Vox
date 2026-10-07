@@ -1,0 +1,22 @@
+services:
+  vox-live-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vox-live-backend-dev
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+      - HOST=0.0.0.0
+      - NODE_ENV=development
+      - VOX_BACKEND_MODE=MOCK
+      - VOX_MAX_CONCURRENT_SESSIONS=50
+      - VOX_MAX_CONCURRENT_SEGMENTS=100
+      - VOX_SESSION_TTL_MS=90000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
