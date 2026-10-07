@@ -57,12 +57,12 @@
 
 | Патч | Название / Фокус |
 |:---:|---|
-| **Patch #1** | **Foundation**: Старт цикла VOX 8, перевод на `32.56-vox.8-dev`, фиксация Release Policy и Roadmap |
-| **Patch #2** | **Translation 2.0**: Архитектурный аудит подсистемы перевода |
-| **Patch #3** | **Live Translation**: Исследование и спецификация протокола Live-перевода |
-| **Patch #4** | **Live Translation**: Клиентский контроллер и буфер синхронизации |
-| **Patch #5** | **Live Translation**: Сквозное E2E-тестирование Live-перевода |
-| **Patch #6** | **Translation Reliability**: Стабилизация сессий перевода и обработка ошибок |
+| **Patch #1** | **Foundation**: Старт цикла VOX 8, перевод на `32.56-vox.8-dev`, фиксация Release Policy и Roadmap (MERGED) |
+| **Patch #2** | **Translation 2.0**: Архитектурный аудит подсистемы перевода, сессионная модель и синхронизация (MERGED) |
+| **Patch #3** | **Live Translation**: Исследование протокола, анализ Yandex VOT API (VOD_ONLY) и отказ от фейков (MERGED) |
+| **Patch #4** | **Live Playback Stability**: Устранение причин периодического зависания спиннера, Dash 404 policy, стратегия Controlled Live Backend (MERGED) |
+| **Patch #5** | **Live Ingestion Gateway**: Реализация Controlled Live Ingestion Gateway, REST API, адаптивный контроллер сегментов, Mock provider (MERGED) |
+| **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS |
 | **Patch #7** | **Downloads 2.0**: Очередь загрузок, pause/resume и очистка временных файлов |
 | **Patch #8** | **Auto Setup 2.0**: Адаптивное профилирование на основе dropped frames |
 | **Patch #9** | **Android Compatibility**: Runtime-тестирование API 28–34 |
