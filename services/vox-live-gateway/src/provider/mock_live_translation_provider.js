@@ -1,6 +1,6 @@
 'use strict';
 
-const { LiveTranslationProvider } = require('./live_translation_provider');
+const { LiveTranslationProvider, ProviderState } = require('./live_translation_provider');
 
 /**
  * Latency presets for mock provider.
@@ -23,16 +23,18 @@ class MockLiveTranslationProvider extends LiveTranslationProvider {
    * @param {boolean} [options.simulate429=false]
    * @param {boolean} [options.simulateTimeout=false]
    * @param {boolean} [options.passthroughAudio=true]
+   * @param {string} [options.mode='MOCK'] - 'MOCK' or 'PASSTHROUGH'
    */
   constructor(options = {}) {
     super();
+    this.mode = options.mode || (options.passthroughAudio === false ? 'MOCK' : 'PASSTHROUGH');
     this.latencyMode = options.latencyMode || 'NORMAL';
     this.fixedLatencyMs = options.fixedLatencyMs !== undefined ? options.fixedLatencyMs : null;
     this.errorEveryNth = options.errorEveryNth || 0;
     this.errorCode = options.errorCode || 500;
     this.simulate429 = !!options.simulate429;
     this.simulateTimeout = !!options.simulateTimeout;
-    this.passthroughAudio = options.passthroughAudio !== false;
+    this.passthroughAudio = options.passthroughAudio !== false && this.mode !== 'MOCK';
 
     this.segmentCounter = 0;
     this.cancelledSegments = new Set(); // Set of `${sessionId}:${generation}:${sequence}`
@@ -40,13 +42,24 @@ class MockLiveTranslationProvider extends LiveTranslationProvider {
 
   capabilities() {
     return {
-      supportsSequentialSegments: true,
+      supportsRawPcm: true,
+      supportsEncodedAudio: true,
+      supportsIncremental: true,
       supportsIncrementalAudio: true,
-      supportsCancellation: true,
+      supportsSequentialSegments: true,
+      supportsStreaming: true,
+      supportsSession: true,
       supportsSessionContinuation: true,
-      providerId: 'mock_provider',
+      supportsCancellation: true,
+      supportsSourceLanguageAuto: true,
+      supportsVoiceSynthesis: true,
+      supportsPartialResults: false,
+      targetSampleRate: 48000,
+      targetChannels: 2,
+      providerId: this.mode === 'MOCK' ? 'mock_provider' : 'passthrough_provider',
+      status: ProviderState.AVAILABLE,
       isRealTranslation: false,
-      description: 'Deterministic test mock provider with configurable latency and error injection'
+      description: `Deterministic test ${this.mode.toLowerCase()} provider with configurable latency and error injection`
     };
   }
 
@@ -61,9 +74,8 @@ class MockLiveTranslationProvider extends LiveTranslationProvider {
   }
 
   async startSession(session) {
-    // Mock initializes instantly
     return {
-      providerSessionId: `mock_${session.sessionId}`,
+      providerSessionId: `${this.mode.toLowerCase()}_${session.sessionId}`,
       status: 'INITIALIZED'
     };
   }
@@ -83,14 +95,18 @@ class MockLiveTranslationProvider extends LiveTranslationProvider {
     // Error injection checks
     if (this.simulate429) {
       const err = new Error('Simulated Rate Limit 429');
-      err.code = 429;
+      err.code = ProviderState.RATE_LIMITED;
+      err.status = ProviderState.RATE_LIMITED;
+      err.statusCode = 429;
       err.retryAfter = 2;
       throw err;
     }
 
     if (this.errorEveryNth > 0 && (this.segmentCounter % this.errorEveryNth === 0)) {
       const err = new Error(`Simulated Error ${this.errorCode} on segment ${segment.sequence}`);
-      err.code = this.errorCode;
+      err.code = ProviderState.ERROR;
+      err.status = ProviderState.ERROR;
+      err.statusCode = this.errorCode;
       throw err;
     }
 
@@ -111,8 +127,7 @@ class MockLiveTranslationProvider extends LiveTranslationProvider {
       throw err;
     }
 
-    // Return deterministic mock result
-    // In passthrough mode, returns segment audio or mock payload
+    // Return deterministic mock or passthrough result
     const mockAudioPayload = this.passthroughAudio && segment.payload
       ? segment.payload
       : Buffer.from(`MOCK_TRANSLATED_AUDIO_SEQ_${segment.sequence}_GEN_${segment.generation}`, 'utf8');
@@ -123,17 +138,22 @@ class MockLiveTranslationProvider extends LiveTranslationProvider {
       generation: segment.generation,
       sourceStartMs: segment.sourceStartMs,
       sourceEndMs: segment.sourceEndMs,
+      sourceStartPtsUs: segment.ptsStartUs || (segment.sourceStartMs ? segment.sourceStartMs * 1000 : 0),
+      sourceEndPtsUs: segment.ptsEndUs || (segment.sourceEndMs ? segment.sourceEndMs * 1000 : 0),
       ptsStartUs: segment.ptsStartUs !== undefined ? segment.ptsStartUs : null,
       ptsEndUs: segment.ptsEndUs !== undefined ? segment.ptsEndUs : null,
-      sampleRate: segment.sampleRate !== undefined ? segment.sampleRate : null,
-      channels: segment.channels !== undefined ? segment.channels : null,
-      encoding: segment.encoding || (segment.codec === 'pcm_16bit' ? 'pcm_16bit' : null),
+      sampleRate: segment.sampleRate || 48000,
+      channels: segment.channels || 2,
+      encoding: segment.encoding || (segment.codec === 'pcm_16bit' ? 'pcm_16bit' : 'pcm_16le'),
       durationMs: segment.durationMs,
       translatedDurationMs: segment.durationMs,
-      codec: segment.codec || 'opus',
-      text: `[MOCK_RU_TRANSLATION_SEQ_${segment.sequence}]`,
+      codec: segment.codec || 'pcm_16le',
+      audioFormat: 'pcm_16le',
+      text: `[${this.mode}_RU_TRANSLATION_SEQ_${segment.sequence}]`,
       audioData: mockAudioPayload,
+      translatedAudio: mockAudioPayload,
       providerLatencyMs: delayMs,
+      providerStatus: ProviderState.AVAILABLE,
       completedAtMs: Date.now(),
       isRealTranslation: false
     };
