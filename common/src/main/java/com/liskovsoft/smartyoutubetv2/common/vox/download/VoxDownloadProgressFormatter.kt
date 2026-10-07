@@ -24,6 +24,7 @@ object VoxDownloadProgressFormatter {
             null -> "Скачать"
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
+            VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO,
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,

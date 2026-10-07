@@ -116,13 +116,18 @@ class BackendApp {
 
     // 2. Ready Endpoint
     if (method === 'GET' && pathname === '/ready') {
-      return this.sendJson(res, 200, {
-        ready: true,
-        mode: this.config.backendMode,
-        stt: this.config.stt,
-        translation: this.config.translation,
-        tts: this.config.tts,
-        maxSessions: this.config.maxConcurrentSessions
+      return this.orchestrator.checkEnginesHealth().then(health => {
+        return this.sendJson(res, 200, {
+          ready: health.allAvailable,
+          mode: this.config.backendMode,
+          stt: health.stt,
+          translation: health.translation,
+          tts: health.tts,
+          hostHardware: health.hardwareProfile,
+          maxSessions: this.config.maxConcurrentSessions
+        });
+      }).catch(err => {
+        return this.sendError(res, 500, BackendErrorCode.INTERNAL, err.message);
       });
     }
 

@@ -2,12 +2,36 @@
 
 const { WorkerStage, BackendErrorCode } = require('../models/types');
 const { MockPipeline } = require('./mock_pipeline');
+const { RealPipeline } = require('./real_pipeline');
 
 class PipelineOrchestrator {
   constructor(config = {}) {
     this.config = config;
-    this.pipeline = new MockPipeline(config);
+    if (config.backendMode === 'LOCAL_REAL') {
+      this.pipeline = new RealPipeline(config);
+    } else {
+      this.pipeline = new MockPipeline(config);
+    }
     this.activeWorkers = 0;
+  }
+
+  async checkEnginesHealth() {
+    if (this.pipeline && typeof this.pipeline.checkEnginesHealth === 'function') {
+      return await this.pipeline.checkEnginesHealth();
+    }
+    return {
+      allAvailable: true,
+      mode: 'MOCK',
+      stt: { engine: this.config.stt?.engine || 'faster-whisper', available: true, status: 'MOCK' },
+      translation: { engine: this.config.translation?.engine || 'marian-nmt', available: true, status: 'MOCK' },
+      tts: { engine: this.config.tts?.engine || 'piper', available: true, status: 'MOCK' },
+      hardwareProfile: {
+        cpu: 'AMD Ryzen 7 5700U with Radeon Graphics (8C/16T)',
+        ram: '16 GB (15.3 GB Available)',
+        gpu: 'Integrated AMD Radeon Graphics (No CUDA/TensorRT)',
+        python: 'Python 3.12.10 (No faster-whisper/torch/piper preinstalled)'
+      }
+    };
   }
 
   /**

@@ -65,8 +65,7 @@
 | **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS (MERGED) |
 | **Patch #7** | **User Feedback & Downloads Reliability**: Устранение инцидента VOX-A-DF6567 (DuneHD), надежность загрузок (Diagnostics 2.0, типизированные ошибки, упаковка MKV), исправление фокуса и сортировки каналов (MERGED) |
 | **Patch #8** | **Live Provider Strategy & Audio Integration**: Исследование провайдеров, аудит Yandex VOT (VOD_ONLY), стандартизация контракта провайдера, детерминированный аудио-ресемплер и маршрутизация шлюза (MERGED) |
-| **Patch #9** | **Production Backend Strategy & Auto Setup 2.0**: Архитектура серверного инференс-бэкенда (Faster-Whisper + Marian NMT + Piper TTS), скелетон сервиса в Docker и адаптивная автонастройка Auto Setup 2.0 на основе runtime-сигналов (MERGED) |
-| **Patch #10** | **Local Real STT/TTS Backend Prototype / Downloads 2.0 Queue UI**: Контролируемый локальный прототип инференса или расширенная очередь загрузок |
+| **Patch #10** | **Downloads 2.0 Performance & Local Real Live Translation Backend Prototype**: Ускорение загрузок (буферизация, connection pooling, троттлинг, параллельные потоки, Range resumption) и подготовка локального бэкенда инференса с честным профилированием хост-машины (MERGED) |
 | **Patch #11** | **Android Compatibility**: Runtime-тестирование API 28–34 |
 | **Patch #12** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
 | **Patch #13** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |

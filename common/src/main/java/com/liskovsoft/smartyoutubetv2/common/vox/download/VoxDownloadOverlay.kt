@@ -225,6 +225,7 @@ class VoxDownloadOverlay(private val context: Context) {
                 etaText?.visibility = View.GONE
                 fadeIn()
             }
+            VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO,
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> {
@@ -249,8 +250,9 @@ class VoxDownloadOverlay(private val context: Context) {
                 }
                 progressText?.text = sizeStr
 
-                // EMA ETA
+                // Скорость и сглаженный EMA ETA
                 val etaSec = speedEstimator.update(downloaded, total)
+                val speedStr = speedEstimator.getFormattedSpeed()
                 if (etaSec != null && etaSec > 0L) {
                     val etaFormatted = if (etaSec >= 60L) {
                         val minutes = (etaSec + 30L) / 60L
@@ -258,7 +260,11 @@ class VoxDownloadOverlay(private val context: Context) {
                     } else {
                         context.getString(R.string.vox_download_overlay_eta_sec, etaSec.toInt())
                     }
-                    etaText?.text = etaFormatted
+                    val combinedText = if (speedStr.isNotEmpty()) "$speedStr · $etaFormatted" else etaFormatted
+                    etaText?.text = combinedText
+                    etaText?.visibility = View.VISIBLE
+                } else if (speedStr.isNotEmpty()) {
+                    etaText?.text = speedStr
                     etaText?.visibility = View.VISIBLE
                 } else {
                     etaText?.visibility = View.GONE
@@ -436,12 +442,13 @@ class VoxDownloadOverlay(private val context: Context) {
         return when (state) {
             VoxDownloadState.PREPARING_TRANSLATION -> context.getString(R.string.vox_download_stage_prep_trans)
             VoxDownloadState.RESOLVING_STREAMS -> context.getString(R.string.vox_download_stage_resolving)
+            VoxDownloadState.DOWNLOADING_MEDIA -> "Загрузка медиа…"
             VoxDownloadState.DOWNLOADING_VIDEO -> context.getString(R.string.vox_download_stage_video)
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO -> context.getString(R.string.vox_download_stage_orig_audio)
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> context.getString(R.string.vox_download_stage_trans_audio)
             VoxDownloadState.READY_FOR_MUX,
-            VoxDownloadState.MUXING -> context.getString(R.string.vox_download_stage_muxing)
-            VoxDownloadState.FINALIZING, VoxDownloadState.MUXED, VoxDownloadState.PUBLISHING -> "Завершение файла…"
+            VoxDownloadState.MUXING -> "Сборка файла…"
+            VoxDownloadState.FINALIZING, VoxDownloadState.MUXED, VoxDownloadState.PUBLISHING -> "Сохранение файла…"
             VoxDownloadState.COMPLETED -> context.getString(R.string.vox_download_stage_completed)
             VoxDownloadState.FAILED -> context.getString(R.string.vox_download_stage_failed)
             VoxDownloadState.CANCELLED -> context.getString(R.string.vox_download_stage_cancelled)

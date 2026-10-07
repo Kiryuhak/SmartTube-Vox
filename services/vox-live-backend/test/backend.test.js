@@ -254,4 +254,98 @@ test('VOX Live Backend Test Suite', async (t) => {
     assert.strictEqual(overflowRes.statusCode, 429);
     assert.strictEqual(overflowRes.body.error, BackendErrorCode.QUEUE_FULL);
   });
+
+  await t.test('10. LOCAL_REAL mode reports unavailable status in /ready when weights missing', async () => {
+    const realApp = new BackendApp({
+      port: 0,
+      host: '127.0.0.1',
+      backendMode: 'LOCAL_REAL'
+    });
+    const realAddr = await realApp.listen(0, '127.0.0.1');
+    try {
+      const res = await request(realAddr, { path: '/ready' });
+      assert.strictEqual(res.statusCode, 200);
+      assert.strictEqual(res.body.ready, false);
+      assert.strictEqual(res.body.mode, 'LOCAL_REAL');
+      assert.strictEqual(res.body.stt.status, 'NOT_AVAILABLE');
+      assert.strictEqual(res.body.translation.status, 'NOT_AVAILABLE');
+      assert.strictEqual(res.body.tts.status, 'NOT_AVAILABLE');
+      assert.ok(res.body.hostHardware.cpu.includes('Ryzen'));
+    } finally {
+      await realApp.close();
+    }
+  });
+
+  await t.test('11. LOCAL_REAL mode with fallback degrades gracefully', async () => {
+    const fallbackApp = new BackendApp({
+      port: 0,
+      host: '127.0.0.1',
+      backendMode: 'LOCAL_REAL',
+      allowFallbackToMock: true
+    });
+    const fbAddr = await fallbackApp.listen(0, '127.0.0.1');
+    try {
+      const sessRes = await request(fbAddr, {
+        method: 'POST',
+        path: '/v1/live/session',
+        headers: { 'Content-Type': 'application/json' }
+      }, { streamId: 'stream_fb' });
+      const sessionId = sessRes.body.sessionId;
+
+      const segRes = await request(fbAddr, {
+        method: 'POST',
+        path: `/v1/live/session/${sessionId}/segment`,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sequence': '1',
+          'X-Generation': '1'
+        }
+      }, {
+        audioBase64: Buffer.alloc(1000).toString('base64'),
+        durationMs: 2000
+      });
+
+      assert.strictEqual(segRes.statusCode, 200);
+      assert.strictEqual(segRes.body.status, WorkerStage.READY);
+      assert.ok(segRes.body.translatedAudio.length > 0);
+    } finally {
+      await fallbackApp.close();
+    }
+  });
+
+  await t.test('12. LOCAL_REAL mode with fallback disabled returns MODEL_UNAVAILABLE', async () => {
+    const strictApp = new BackendApp({
+      port: 0,
+      host: '127.0.0.1',
+      backendMode: 'LOCAL_REAL',
+      allowFallbackToMock: false
+    });
+    const strictAddr = await strictApp.listen(0, '127.0.0.1');
+    try {
+      const sessRes = await request(strictAddr, {
+        method: 'POST',
+        path: '/v1/live/session',
+        headers: { 'Content-Type': 'application/json' }
+      }, { streamId: 'stream_strict' });
+      const sessionId = sessRes.body.sessionId;
+
+      const segRes = await request(strictAddr, {
+        method: 'POST',
+        path: `/v1/live/session/${sessionId}/segment`,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sequence': '1',
+          'X-Generation': '1'
+        }
+      }, {
+        audioBase64: Buffer.alloc(1000).toString('base64'),
+        durationMs: 2000
+      });
+
+      assert.strictEqual(segRes.statusCode, 500);
+      assert.strictEqual(segRes.body.error, BackendErrorCode.MODEL_UNAVAILABLE);
+    } finally {
+      await strictApp.close();
+    }
+  });
 });
