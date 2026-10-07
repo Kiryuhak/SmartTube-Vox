@@ -1,0 +1,21 @@
+{
+  "name": "vox-live-gateway",
+  "version": "1.0.0",
+  "description": "SmartTube VOX Controlled Live Ingestion Gateway",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "smarttube",
+    "vox",
+    "live",
+    "gateway",
+    "translation"
+  ],
+  "author": "SmartTube VOX Team",
+  "license": "MIT"
+}

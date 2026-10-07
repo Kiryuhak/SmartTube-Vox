@@ -139,6 +139,28 @@ class VoxTranslationQueue(
 
     fun containsSegment(segmentId: String): Boolean = idIndex.containsKey(segmentId)
 
+    fun getDepth(): Int = sequenceMap.size
+
+    fun getQueuedDurationMs(): Long {
+        synchronized(lock) {
+            return sequenceMap.values
+                .filter { it.state == VoxSegmentState.QUEUED || it.state == VoxSegmentState.TRANSLATING || it.state == VoxSegmentState.PENDING }
+                .sumOf { it.durationMs }
+        }
+    }
+
+    fun getSegment(sequence: Long): VoxTranslationSegment? = sequenceMap[sequence]
+
+    fun remove(sequence: Long): VoxTranslationSegment? {
+        synchronized(lock) {
+            val seg = sequenceMap.remove(sequence)
+            if (seg != null) {
+                idIndex.remove(seg.segmentId)
+            }
+            return seg
+        }
+    }
+
     private fun purgeOldestCompletedLocked() {
         val iterator = sequenceMap.entries.iterator()
         while (iterator.hasNext() && sequenceMap.size >= maxCapacity) {
