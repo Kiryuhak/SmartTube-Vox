@@ -64,8 +64,8 @@
 | **Patch #5** | **Live Ingestion Gateway**: Реализация Controlled Live Ingestion Gateway, REST API, адаптивный контроллер сегментов, Mock provider (MERGED) |
 | **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS (MERGED) |
 | **Patch #7** | **User Feedback & Downloads Reliability**: Устранение инцидента VOX-A-DF6567 (DuneHD), надежность загрузок (Diagnostics 2.0, типизированные ошибки, упаковка MKV), исправление фокуса и сортировки каналов (MERGED) |
-| **Patch #8** | **Live Translation Provider Strategy & Audio Integration**: Стратегия реального провайдера потокового перевода (Yandex VOT Live / WebSocket streaming) и интеграция захвата звука |
-| **Patch #9** | **Auto Setup 2.0**: Адаптивное профилирование на основе dropped frames и статистики воспроизведения |
+| **Patch #8** | **Live Provider Strategy & Audio Integration**: Исследование провайдеров, аудит Yandex VOT (VOD_ONLY), стандартизация контракта провайдера, детерминированный аудио-ресемплер и маршрутизация шлюза (MERGED) |
+| **Patch #9** | **Production Backend Strategy & Auto Setup 2.0**: Стратегия серверного инференс-бэкенда (Faster-Whisper + Piper TTS) и адаптивное профилирование на основе dropped frames |
 | **Patch #10** | **Android Compatibility**: Runtime-тестирование API 28–34 |
 | **Patch #11** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
 | **Patch #12** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |

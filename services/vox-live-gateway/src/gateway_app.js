@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { SessionManager, SessionState, GatewayLimits } = require('./session_manager');
 const { MockLiveTranslationProvider } = require('./provider/mock_live_translation_provider');
 const { YandexLiveTranslationProviderAdapter } = require('./provider/yandex_live_translation_provider_adapter');
+const { RealExperimentalLiveTranslationProvider } = require('./provider/real_experimental_provider_adapter');
 
 const FORBIDDEN_KEYS = ['videotitle', 'signedurl', 'account', 'cookie', 'token', 'authorization', 'secret'];
 
@@ -154,13 +155,19 @@ class GatewayApp {
           return;
         }
 
-        // Choose provider: mock vs yandex adapter
-        const requestedProvider = req.headers['x-vox-provider'] || bodyJson.provider || 'mock';
+        // Choose provider: MOCK, PASSTHROUGH, REAL_EXPERIMENTAL, YANDEX_VOD_ONLY (Section 23)
+        const rawRequested = (req.headers['x-vox-provider'] || bodyJson.provider || 'mock').toString().toLowerCase();
         let providerInstance;
-        if (requestedProvider === 'yandex' || requestedProvider === 'yandex_live') {
+
+        if (rawRequested === 'yandex' || rawRequested === 'yandex_live' || rawRequested === 'yandex_vod_only') {
           providerInstance = new YandexLiveTranslationProviderAdapter();
+        } else if (rawRequested === 'real' || rawRequested === 'real_experimental') {
+          providerInstance = new RealExperimentalLiveTranslationProvider(bodyJson.realOptions || {});
+        } else if (rawRequested === 'passthrough') {
+          providerInstance = new MockLiveTranslationProvider({ mode: 'PASSTHROUGH', passthroughAudio: true, ...(bodyJson.mockOptions || {}) });
         } else {
-          providerInstance = this.options.mockProvider || new MockLiveTranslationProvider(bodyJson.mockOptions || {});
+          // Default to MOCK
+          providerInstance = this.options.mockProvider || new MockLiveTranslationProvider({ mode: 'MOCK', passthroughAudio: false, ...(bodyJson.mockOptions || {}) });
         }
 
         const session = this.sessionManager.createSession(bodyJson, providerInstance);
