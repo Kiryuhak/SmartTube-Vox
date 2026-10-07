@@ -35,13 +35,14 @@ object VoxDownloadUiMapper {
         VoxDownloadState.IDLE -> "В очереди"
         VoxDownloadState.PREPARING_TRANSLATION -> "Подготовка перевода"
         VoxDownloadState.RESOLVING_STREAMS -> "Подготовка загрузки"
+        VoxDownloadState.DOWNLOADING_MEDIA -> "Загрузка медиа…"
         VoxDownloadState.DOWNLOADING_VIDEO -> "Загрузка видео"
         VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO -> "Загрузка оригинального звука"
         VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> "Загрузка перевода"
         VoxDownloadState.READY_FOR_MUX,
-        VoxDownloadState.MUXING -> "Обработка…"
+        VoxDownloadState.MUXING -> "Сборка файла…"
         VoxDownloadState.FINALIZING, VoxDownloadState.MUXED,
-        VoxDownloadState.PUBLISHING -> "Сохранение…"
+        VoxDownloadState.PUBLISHING -> "Сохранение файла…"
         VoxDownloadState.COMPLETED -> "Скачано"
         VoxDownloadState.PAUSED -> "Приостановлено"
         VoxDownloadState.FAILED -> "Ошибка загрузки"
@@ -74,6 +75,7 @@ object VoxDownloadUiMapper {
         val realPercent = when (job.state) {
             VoxDownloadState.PUBLISHING -> snapshot.publishTotalBytes.takeIf { it > 0 }?.let { snapshot.publishPercent }
             VoxDownloadState.MUXING -> snapshot.muxTotalBytes.takeIf { it > 0 }?.let { snapshot.muxPercent }
+            VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO, VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> snapshot.overallPercent
             else -> null

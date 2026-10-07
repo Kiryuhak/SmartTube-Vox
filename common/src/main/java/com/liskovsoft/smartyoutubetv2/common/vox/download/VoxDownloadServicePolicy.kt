@@ -26,6 +26,7 @@ object VoxDownloadServicePolicy {
         return when (state) {
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
+            VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO,
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
@@ -71,6 +72,7 @@ object VoxDownloadServicePolicy {
             VoxDownloadState.IDLE -> true
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
+            VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO,
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
@@ -97,6 +99,7 @@ object VoxDownloadServicePolicy {
             VoxDownloadState.IDLE,
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
+            VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO,
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,

@@ -40,6 +40,12 @@ class VoxDownloadCoordinator(
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<VoxDownloadListener>>()
     private val globalListeners = CopyOnWriteArrayList<VoxDownloadListener>()
     private val scheduledJobs = ConcurrentHashMap.newKeySet<String>()
+    private val progressLock = Any()
+    private val trackExecutor: ExecutorService = Executors.newFixedThreadPool(3) { runnable ->
+        Thread(runnable, "VoxTrackDownloader").apply {
+            priority = Thread.MIN_PRIORITY
+        }
+    }
     private var lastProgressPersistedAt = 0L
 
     @Volatile
@@ -421,185 +427,239 @@ class VoxDownloadCoordinator(
 
             if (isStale(job, expectedGen)) return
 
-            // 3. Загрузка видео-потока
-            if (job.videoProgress.state != VoxTrackState.COMPLETED && videoStream != null) {
-                job.updateState(VoxDownloadState.DOWNLOADING_VIDEO)
-                job.lastOperation = "DOWNLOAD_VIDEO"
-                VoxSafeLogger.i(
-                    VoxLogCategory.DOWNLOAD,
-                    VoxLogCode.DOWNLOAD_VIDEO_STARTED,
-                    "Загрузка видео начата",
-                    mapOf("downloadId" to downloadId, "height" to videoStream.height.toString())
-                )
-                job.updateTrackProgress(
-                    VoxDownloadTrack.VIDEO,
-                    storage.getTrackFileSize(downloadId, VoxDownloadTrack.VIDEO),
-                    videoStream.contentLength,
-                    VoxTrackState.IN_PROGRESS
-                )
+            // 3. Параллельная загрузка медиа-потоков (видео, оригинальный звук, перевод)
+            val needVideo = job.videoProgress.state != VoxTrackState.COMPLETED && videoStream != null
+            val needAudio = job.originalAudioProgress.state != VoxTrackState.COMPLETED && originalAudioStream != null
+            val needTranslation = job.request.translationMode != VoxTranslationMode.NONE &&
+                job.translatedAudioProgress.state != VoxTrackState.COMPLETED
+
+            if (needVideo || needAudio || needTranslation) {
+                // Оповещаем о начале стадий загрузки (для слушателей UI и совместимости тестов)
+                if (needVideo) {
+                    job.updateState(VoxDownloadState.DOWNLOADING_VIDEO)
+                    job.lastOperation = "DOWNLOAD_VIDEO"
+                    job.updateTrackProgress(
+                        VoxDownloadTrack.VIDEO,
+                        storage.getTrackFileSize(downloadId, VoxDownloadTrack.VIDEO),
+                        videoStream?.contentLength,
+                        VoxTrackState.IN_PROGRESS
+                    )
+                    notifyStateChange(job)
+                }
+                if (needAudio) {
+                    job.updateState(VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO)
+                    job.lastOperation = "DOWNLOAD_AUDIO"
+                    job.updateTrackProgress(
+                        VoxDownloadTrack.ORIGINAL_AUDIO,
+                        storage.getTrackFileSize(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO),
+                        originalAudioStream?.contentLength,
+                        VoxTrackState.IN_PROGRESS
+                    )
+                    notifyStateChange(job)
+                }
+                if (needTranslation) {
+                    job.updateState(VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO)
+                    job.lastOperation = "DOWNLOAD_TRANSLATION"
+                    job.updateTrackProgress(
+                        VoxDownloadTrack.TRANSLATED_AUDIO,
+                        storage.getTrackFileSize(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO),
+                        null,
+                        VoxTrackState.IN_PROGRESS
+                    )
+                    notifyStateChange(job)
+                }
+
+                // Устанавливаем общее состояние параллельной загрузки медиа
+                job.updateState(VoxDownloadState.DOWNLOADING_MEDIA)
+                job.lastOperation = "DOWNLOAD_MEDIA_PARALLEL"
                 repository.persistJob(job)
                 notifyStateChange(job)
 
-                val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.VIDEO)
-                downloader.download(
-                    initialUrl = videoStream.url,
-                    targetFile = targetFile,
-                    isCancelled = { isStale(job, expectedGen) },
-                    onProgress = { bytes, total ->
-                        if (!isStale(job, expectedGen)) {
-                            job.updateTrackProgress(VoxDownloadTrack.VIDEO, bytes, total, VoxTrackState.IN_PROGRESS)
-                            notifyProgress(job)
-                        }
-                    },
-                    urlProvider = {
-                        streamResolver.resolveVideoStream(job.request.videoId, job.request.qualityPreference).url
-                    }
+                val downloadStartMs = System.currentTimeMillis()
+                job.parallelStreamsCount = listOf(needVideo, needAudio, needTranslation).count { it }
+
+                VoxSafeLogger.i(
+                    VoxLogCategory.DOWNLOAD,
+                    VoxLogCode.DOWNLOAD_STARTED,
+                    "Параллельная загрузка дорожек начата",
+                    mapOf("downloadId" to downloadId, "streams" to job.parallelStreamsCount.toString())
                 )
 
-                if (!targetFile.exists() || targetFile.length() <= 0L) {
-                    throw VoxDownloadException(
-                        VoxDownloadErrorCode.STORAGE_ERROR,
-                        "Video track file is missing or empty after download"
-                    )
+                val videoFuture = if (needVideo && videoStream != null) {
+                    trackExecutor.submit {
+                        val t0 = System.currentTimeMillis()
+                        val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.VIDEO)
+                        downloader.download(
+                            initialUrl = videoStream.url,
+                            targetFile = targetFile,
+                            isCancelled = { isStale(job, expectedGen) },
+                            onProgress = { bytes, total ->
+                                if (!isStale(job, expectedGen)) {
+                                    job.updateTrackProgress(VoxDownloadTrack.VIDEO, bytes, total, VoxTrackState.IN_PROGRESS)
+                                    notifyProgress(job)
+                                }
+                            },
+                            urlProvider = {
+                                streamResolver.resolveVideoStream(job.request.videoId, job.request.qualityPreference).url
+                            },
+                            onRangeResumed = { resumedOffset ->
+                                job.rangeResumptionsCount++
+                                job.bytesResumed += resumedOffset
+                            },
+                            onStallDetected = {
+                                job.stallEventsCount++
+                            }
+                        )
+
+                        if (!targetFile.exists() || targetFile.length() <= 0L) {
+                            throw VoxDownloadException(
+                                VoxDownloadErrorCode.STORAGE_ERROR,
+                                "Video track file is missing or empty after download"
+                            )
+                        }
+
+                        job.updateTrackProgress(
+                            VoxDownloadTrack.VIDEO,
+                            targetFile.length(),
+                            videoStream.contentLength ?: targetFile.length(),
+                            VoxTrackState.COMPLETED
+                        )
+                        job.videoElapsedMs = System.currentTimeMillis() - t0
+                        VoxSafeLogger.i(
+                            VoxLogCategory.DOWNLOAD,
+                            VoxLogCode.DOWNLOAD_VIDEO_COMPLETED,
+                            "Загрузка видео завершена",
+                            mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString(), "elapsedMs" to job.videoElapsedMs.toString())
+                        )
+                    }
+                } else null
+
+                val audioFuture = if (needAudio && originalAudioStream != null) {
+                    trackExecutor.submit {
+                        val t0 = System.currentTimeMillis()
+                        val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO)
+                        downloader.download(
+                            initialUrl = originalAudioStream.url,
+                            targetFile = targetFile,
+                            isCancelled = { isStale(job, expectedGen) },
+                            onProgress = { bytes, total ->
+                                if (!isStale(job, expectedGen)) {
+                                    job.updateTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, bytes, total, VoxTrackState.IN_PROGRESS)
+                                    notifyProgress(job)
+                                }
+                            },
+                            urlProvider = {
+                                streamResolver.resolveOriginalAudio(job.request.videoId).url
+                            },
+                            onRangeResumed = { resumedOffset ->
+                                job.rangeResumptionsCount++
+                                job.bytesResumed += resumedOffset
+                            },
+                            onStallDetected = {
+                                job.stallEventsCount++
+                            }
+                        )
+
+                        if (!targetFile.exists() || targetFile.length() <= 0L) {
+                            throw VoxDownloadException(
+                                VoxDownloadErrorCode.STORAGE_ERROR,
+                                "Original audio track file is missing or empty after download"
+                            )
+                        }
+
+                        job.updateTrackProgress(
+                            VoxDownloadTrack.ORIGINAL_AUDIO,
+                            targetFile.length(),
+                            originalAudioStream.contentLength ?: targetFile.length(),
+                            VoxTrackState.COMPLETED
+                        )
+                        job.audioElapsedMs = System.currentTimeMillis() - t0
+                        VoxSafeLogger.i(
+                            VoxLogCategory.DOWNLOAD,
+                            VoxLogCode.DOWNLOAD_AUDIO_COMPLETED,
+                            "Загрузка аудио завершена",
+                            mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString(), "elapsedMs" to job.audioElapsedMs.toString())
+                        )
+                    }
+                } else null
+
+                val transFuture = if (needTranslation) {
+                    trackExecutor.submit {
+                        val t0 = System.currentTimeMillis()
+                        val translationUrl = resolvedTranslation?.url
+                            ?: translationResolver.resolveTranslation(
+                                videoId = job.request.videoId,
+                                mode = job.request.translationMode,
+                                isCancelled = { isStale(job, expectedGen) }
+                            ).url
+
+                        val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)
+                        translationDownloader.download(
+                            initialUrl = translationUrl,
+                            targetFile = targetFile,
+                            isCancelled = { isStale(job, expectedGen) },
+                            onProgress = { bytes, total ->
+                                if (!isStale(job, expectedGen)) {
+                                    job.updateTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, bytes, total, VoxTrackState.IN_PROGRESS)
+                                    notifyProgress(job)
+                                }
+                            },
+                            urlProvider = {
+                                translationResolver.resolveTranslation(
+                                    videoId = job.request.videoId,
+                                    mode = job.request.translationMode,
+                                    isCancelled = { isStale(job, expectedGen) }
+                                ).url
+                            },
+                            onRangeResumed = { resumedOffset ->
+                                job.rangeResumptionsCount++
+                                job.bytesResumed += resumedOffset
+                            },
+                            onStallDetected = {
+                                job.stallEventsCount++
+                            }
+                        )
+
+                        if (!targetFile.exists() || targetFile.length() <= 0L) {
+                            throw VoxDownloadException(
+                                VoxDownloadErrorCode.STORAGE_ERROR,
+                                "Translated audio track file is missing or empty after download"
+                            )
+                        }
+
+                        job.updateTrackProgress(
+                            VoxDownloadTrack.TRANSLATED_AUDIO,
+                            targetFile.length(),
+                            targetFile.length(),
+                            VoxTrackState.COMPLETED
+                        )
+                        job.hasTranslatedAudio = true
+                        job.translationElapsedMs = System.currentTimeMillis() - t0
+                        VoxSafeLogger.i(
+                            VoxLogCategory.DOWNLOAD,
+                            VoxLogCode.DOWNLOAD_TRANSLATION_COMPLETED,
+                            "Загрузка перевода завершена",
+                            mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString(), "elapsedMs" to job.translationElapsedMs.toString())
+                        )
+                    }
+                } else null
+
+                val futures = listOfNotNull(videoFuture, audioFuture, transFuture)
+                try {
+                    for (f in futures) {
+                        f.get()
+                    }
+                } catch (e: Exception) {
+                    futures.forEach { it.cancel(true) }
+                    val cause = if (e is java.util.concurrent.ExecutionException) e.cause ?: e else e
+                    if (cause is Exception) throw cause else throw Exception(cause)
                 }
 
-                job.updateTrackProgress(
-                    VoxDownloadTrack.VIDEO,
-                    targetFile.length(),
-                    videoStream.contentLength ?: targetFile.length(),
-                    VoxTrackState.COMPLETED
-                )
-                VoxSafeLogger.i(
-                    VoxLogCategory.DOWNLOAD,
-                    VoxLogCode.DOWNLOAD_VIDEO_COMPLETED,
-                    "Загрузка видео завершена",
-                    mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString())
-                )
-                repository.persistJob(job)
-            }
-
-            if (isStale(job, expectedGen)) return
-
-            // 4. Загрузка оригинального аудио
-            if (job.originalAudioProgress.state != VoxTrackState.COMPLETED && originalAudioStream != null) {
-                job.updateState(VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO)
-                job.lastOperation = "DOWNLOAD_AUDIO"
-                VoxSafeLogger.i(
-                    VoxLogCategory.DOWNLOAD,
-                    VoxLogCode.DOWNLOAD_AUDIO_STARTED,
-                    "Загрузка аудио начата",
-                    mapOf("downloadId" to downloadId)
-                )
-                job.updateTrackProgress(
-                    VoxDownloadTrack.ORIGINAL_AUDIO,
-                    storage.getTrackFileSize(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO),
-                    originalAudioStream.contentLength,
-                    VoxTrackState.IN_PROGRESS
-                )
-                repository.persistJob(job)
-                notifyStateChange(job)
-
-                val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO)
-                downloader.download(
-                    initialUrl = originalAudioStream.url,
-                    targetFile = targetFile,
-                    isCancelled = { isStale(job, expectedGen) },
-                    onProgress = { bytes, total ->
-                        if (!isStale(job, expectedGen)) {
-                            job.updateTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, bytes, total, VoxTrackState.IN_PROGRESS)
-                            notifyProgress(job)
-                        }
-                    },
-                    urlProvider = {
-                        streamResolver.resolveOriginalAudio(job.request.videoId).url
-                    }
-                )
-
-                if (!targetFile.exists() || targetFile.length() <= 0L) {
-                    throw VoxDownloadException(
-                        VoxDownloadErrorCode.STORAGE_ERROR,
-                        "Original audio track file is missing or empty after download"
-                    )
+                job.downloadElapsedMs = System.currentTimeMillis() - downloadStartMs
+                val totalBytes = job.videoProgress.bytesDownloaded + job.originalAudioProgress.bytesDownloaded + job.translatedAudioProgress.bytesDownloaded
+                if (job.downloadElapsedMs > 0) {
+                    job.averageSpeedMbps = (totalBytes * 8.0) / (job.downloadElapsedMs * 1000.0)
                 }
-
-                job.updateTrackProgress(
-                    VoxDownloadTrack.ORIGINAL_AUDIO,
-                    targetFile.length(),
-                    originalAudioStream.contentLength ?: targetFile.length(),
-                    VoxTrackState.COMPLETED
-                )
-                VoxSafeLogger.i(
-                    VoxLogCategory.DOWNLOAD,
-                    VoxLogCode.DOWNLOAD_AUDIO_COMPLETED,
-                    "Загрузка аудио завершена",
-                    mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString())
-                )
-                repository.persistJob(job)
-            }
-
-            if (isStale(job, expectedGen)) return
-
-            // 5. Загрузка перевода
-            if (job.request.translationMode != VoxTranslationMode.NONE &&
-                job.translatedAudioProgress.state != VoxTrackState.COMPLETED) {
-                job.updateState(VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO)
-                job.lastOperation = "DOWNLOAD_TRANSLATION"
-                job.updateTrackProgress(
-                    VoxDownloadTrack.TRANSLATED_AUDIO,
-                    storage.getTrackFileSize(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO),
-                    null,
-                    VoxTrackState.IN_PROGRESS
-                )
-                repository.persistJob(job)
-                notifyStateChange(job)
-
-                val translationUrl = resolvedTranslation?.url
-                    ?: translationResolver.resolveTranslation(
-                        videoId = job.request.videoId,
-                        mode = job.request.translationMode,
-                        isCancelled = { isStale(job, expectedGen) }
-                    ).url
-
-                val targetFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)
-                translationDownloader.download(
-                    initialUrl = translationUrl,
-                    targetFile = targetFile,
-                    isCancelled = { isStale(job, expectedGen) },
-                    onProgress = { bytes, total ->
-                        if (!isStale(job, expectedGen)) {
-                            job.updateTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, bytes, total, VoxTrackState.IN_PROGRESS)
-                            notifyProgress(job)
-                        }
-                    },
-                    urlProvider = {
-                        translationResolver.resolveTranslation(
-                            videoId = job.request.videoId,
-                            mode = job.request.translationMode,
-                            isCancelled = { isStale(job, expectedGen) }
-                        ).url
-                    }
-                )
-
-                if (!targetFile.exists() || targetFile.length() <= 0L) {
-                    throw VoxDownloadException(
-                        VoxDownloadErrorCode.STORAGE_ERROR,
-                        "Translated audio track file is missing or empty after download"
-                    )
-                }
-
-                job.updateTrackProgress(
-                    VoxDownloadTrack.TRANSLATED_AUDIO,
-                    targetFile.length(),
-                    targetFile.length(),
-                    VoxTrackState.COMPLETED
-                )
-                job.hasTranslatedAudio = true
-                VoxSafeLogger.i(
-                    VoxLogCategory.DOWNLOAD,
-                    VoxLogCode.DOWNLOAD_TRANSLATION_COMPLETED,
-                    "Загрузка перевода завершена",
-                    mapOf("downloadId" to downloadId, "bytes" to targetFile.length().toString())
-                )
                 repository.persistJob(job)
             }
 
@@ -825,6 +885,7 @@ class VoxDownloadCoordinator(
             job.durationMs = result.durationMs
             job.finalFileBytes = result.totalBytesWritten
             job.processingTimeMs = (System.nanoTime() - processingStart) / 1_000_000L
+            job.packagingElapsedMs = job.processingTimeMs
             job.lastProgressAt = System.currentTimeMillis()
 
             job.updateMuxProgress(result.totalBytesWritten, result.totalBytesWritten, 100)
@@ -849,31 +910,33 @@ class VoxDownloadCoordinator(
 
     private fun publishCompletedFile(job: VoxDownloadJob, expectedGen: Long, outputFile: File) {
         val downloadId = job.downloadId
-            job.lastOperation = "PUBLISH"
-            job.finalizeCompleted = true
-            // Публикация в MediaStore
-            if (publisher != null) {
-                if (isStale(job, expectedGen)) return
-                job.updateState(VoxDownloadState.PUBLISHING)
-                repository.persistJob(job)
-                notifyStateChange(job)
-                VoxLog.d(TAG, "Download job $downloadId starting MediaStore publication")
+        val finalizeStart = System.currentTimeMillis()
+        job.lastOperation = "PUBLISH"
+        job.finalizeCompleted = true
+        // Публикация в MediaStore
+        if (publisher != null) {
+            if (isStale(job, expectedGen)) return
+            job.updateState(VoxDownloadState.PUBLISHING)
+            repository.persistJob(job)
+            notifyStateChange(job)
+            VoxLog.d(TAG, "Download job $downloadId starting MediaStore publication")
 
-                val pubUri = publisher.publish(
-                    outputFile = outputFile,
-                    videoTitle = job.request.videoTitle,
-                    isCancelled = job.isCancelledFlag,
-                    onProgress = { bytesCopied, totalBytes, percent ->
-                        if (!isStale(job, expectedGen)) {
-                            job.updatePublishProgress(bytesCopied, totalBytes, percent)
-                            notifyProgress(job)
-                        }
+            val pubUri = publisher.publish(
+                outputFile = outputFile,
+                videoTitle = job.request.videoTitle,
+                isCancelled = job.isCancelledFlag,
+                onProgress = { bytesCopied, totalBytes, percent ->
+                    if (!isStale(job, expectedGen)) {
+                        job.updatePublishProgress(bytesCopied, totalBytes, percent)
+                        notifyProgress(job)
                     }
-                )
+                }
+            )
 
-                if (isStale(job, expectedGen)) return
+            if (isStale(job, expectedGen)) return
 
-                job.publishedUri = pubUri.toString()
+            job.finalizeElapsedMs = System.currentTimeMillis() - finalizeStart
+            job.publishedUri = pubUri.toString()
                 if (!publisher.isPublishedFileAvailable(job.publishedUri) || storage.getPublishedFileSize(job.publishedUri) != job.finalFileBytes) {
                     throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Published file validation failed")
                 }
@@ -958,17 +1021,19 @@ class VoxDownloadCoordinator(
     }
 
     private fun notifyProgress(job: VoxDownloadJob) {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastProgressPersistedAt >= 1_000L) {
-            repository.persistJob(job)
-            lastProgressPersistedAt = now
-        }
-        val snapshot = job.getSnapshot()
-        listeners[job.downloadId]?.forEach {
-            try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
-        }
-        globalListeners.forEach {
-            try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
+        synchronized(progressLock) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastProgressPersistedAt >= 1_000L) {
+                repository.persistJob(job)
+                lastProgressPersistedAt = now
+            }
+            val snapshot = job.getSnapshot()
+            listeners[job.downloadId]?.forEach {
+                try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
+            }
+            globalListeners.forEach {
+                try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
+            }
         }
     }
 
@@ -1047,6 +1112,8 @@ class VoxDownloadCoordinator(
                 "freeStorageMb" to freeMb
             )
         }
+        val totalBytes = lastJob.videoProgress.bytesDownloaded + lastJob.originalAudioProgress.bytesDownloaded + lastJob.translatedAudioProgress.bytesDownloaded
+        val avgBytesPerSec = if (lastJob.downloadElapsedMs > 0) (totalBytes * 1000L) / lastJob.downloadElapsedMs else 0L
         return mapOf(
             "lastStage" to (lastJob.lastFailedStage ?: lastJob.state.stageName),
             "lastErrorCategory" to (lastJob.lastErrorCategory ?: lastJob.errorCode?.name ?: "NONE"),
@@ -1058,7 +1125,22 @@ class VoxDownloadCoordinator(
             "packagingStarted" to lastJob.packagingStarted,
             "packagingCompleted" to lastJob.packagingCompleted,
             "finalizeCompleted" to lastJob.finalizeCompleted,
-            "freeStorageMb" to freeMb
+            "freeStorageMb" to freeMb,
+            "downloadPerformance" to mapOf(
+                "totalBytes" to totalBytes,
+                "totalElapsedMs" to lastJob.downloadElapsedMs,
+                "averageBytesPerSecond" to avgBytesPerSec,
+                "averageMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.averageSpeedMbps),
+                "videoElapsedMs" to lastJob.videoElapsedMs,
+                "audioElapsedMs" to lastJob.audioElapsedMs,
+                "translationElapsedMs" to lastJob.translationElapsedMs,
+                "packagingElapsedMs" to lastJob.packagingElapsedMs,
+                "finalizeElapsedMs" to lastJob.finalizeElapsedMs,
+                "stallCount" to lastJob.stallEventsCount,
+                "resumeCount" to lastJob.rangeResumptionsCount,
+                "retryCount" to lastJob.retryCount,
+                "parallelConnections" to lastJob.parallelStreamsCount
+            )
         )
     }
 }

@@ -40,6 +40,19 @@ class VoxDownloadJob(
     var packagingCompleted: Boolean = false
     var finalizeCompleted: Boolean = false
 
+    // Diagnostics 2.0: Downloads Performance Metrics
+    var downloadElapsedMs: Long = 0L
+    var videoElapsedMs: Long = 0L
+    var audioElapsedMs: Long = 0L
+    var translationElapsedMs: Long = 0L
+    var parallelStreamsCount: Int = 1
+    var rangeResumptionsCount: Int = 0
+    var bytesResumed: Long = 0L
+    var stallEventsCount: Int = 0
+    var packagingElapsedMs: Long = 0L
+    var finalizeElapsedMs: Long = 0L
+    var averageSpeedMbps: Double = 0.0
+
     val generation = AtomicLong(1L)
     val isCancelledFlag = AtomicBoolean(false)
     val isPausedFlag = AtomicBoolean(false)

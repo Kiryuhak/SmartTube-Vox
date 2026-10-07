@@ -83,4 +83,19 @@ class VoxDownloadSpeedEstimator(
     }
 
     fun getEmaSpeedBytesPerSec(): Double = emaSpeedBytesPerSec
+
+    fun getSpeedMbps(): Double {
+        return (emaSpeedBytesPerSec * 8.0) / (1000.0 * 1000.0)
+    }
+
+    fun getFormattedSpeed(): String {
+        if (emaSpeedBytesPerSec <= 0.0) return ""
+        val mbPerSec = emaSpeedBytesPerSec / (1024.0 * 1024.0)
+        return if (mbPerSec >= 1.0) {
+            String.format(java.util.Locale.US, "%.1f МБ/с", mbPerSec)
+        } else {
+            val kbPerSec = emaSpeedBytesPerSec / 1024.0
+            String.format(java.util.Locale.US, "%.0f КБ/с", kbPerSec)
+        }
+    }
 }

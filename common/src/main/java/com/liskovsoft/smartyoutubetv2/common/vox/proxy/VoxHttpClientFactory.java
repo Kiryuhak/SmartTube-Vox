@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.ConnectionPool;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -29,6 +30,8 @@ public final class VoxHttpClientFactory {
     private static volatile VoxProxyConfig sOverrideConfig = null;
     private static volatile OkHttpClient sCachedVotClient = null;
     private static volatile OkHttpClient sCachedAudioClient = null;
+    private static volatile OkHttpClient sCachedDirectMediaDownloadClient = null;
+    private static volatile ConnectionPool sSharedDownloadConnectionPool = null;
     private static volatile VoxProxyConfig sCachedConfig = null;
 
     private VoxHttpClientFactory() {
@@ -44,6 +47,15 @@ public final class VoxHttpClientFactory {
         sCachedVotClient = null;
         sCachedAudioClient = null;
         sCachedConfig = null;
+        sCachedDirectMediaDownloadClient = null;
+    }
+
+    @NonNull
+    public static synchronized ConnectionPool getSharedDownloadConnectionPool() {
+        if (sSharedDownloadConnectionPool == null) {
+            sSharedDownloadConnectionPool = new ConnectionPool(8, 5, TimeUnit.MINUTES);
+        }
+        return sSharedDownloadConnectionPool;
     }
 
     @NonNull
@@ -148,15 +160,27 @@ public final class VoxHttpClientFactory {
     }
 
     /**
-     * Создает прямой OkHttpClient (без прокси) для скачивания видео и оригинального звука с YouTube.
+     * Возвращает переиспользуемый прямой OkHttpClient (без прокси) для скачивания видео и оригинального звука с YouTube.
+     * Использует общий ConnectionPool и 15-секундный таймаут чтения для своевременного обнаружения зависаний (stall detection).
      */
     @NonNull
-    public static OkHttpClient createDirectMediaDownloadClient() {
-        return buildClient(VoxProxyConfig.DIRECT, 15, 30, 30);
+    public static synchronized OkHttpClient createDirectMediaDownloadClient() {
+        if (sCachedDirectMediaDownloadClient == null) {
+            sCachedDirectMediaDownloadClient = new OkHttpClient.Builder()
+                    .connectionPool(getSharedDownloadConnectionPool())
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(15, TimeUnit.SECONDS)
+                    .writeTimeout(30, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .retryOnConnectionFailure(true)
+                    .build();
+        }
+        return sCachedDirectMediaDownloadClient;
     }
 
     private static OkHttpClient buildClient(VoxProxyConfig config, long connectSec, long readSec, long writeSec) {
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectionPool(getSharedDownloadConnectionPool())
                 .connectTimeout(connectSec, TimeUnit.SECONDS)
                 .readTimeout(readSec, TimeUnit.SECONDS)
                 .writeTimeout(writeSec, TimeUnit.SECONDS)

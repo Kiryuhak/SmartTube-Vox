@@ -106,6 +106,7 @@ enum class VoxDownloadState {
     IDLE,
     PREPARING_TRANSLATION,
     RESOLVING_STREAMS,
+    DOWNLOADING_MEDIA,
     DOWNLOADING_VIDEO,
     DOWNLOADING_ORIGINAL_AUDIO,
     DOWNLOADING_TRANSLATED_AUDIO,
@@ -126,6 +127,7 @@ enum class VoxDownloadState {
         get() = when (this) {
             IDLE -> "QUEUED"
             RESOLVING_STREAMS -> "RESOLVING"
+            DOWNLOADING_MEDIA -> "DOWNLOADING_MEDIA"
             DOWNLOADING_VIDEO -> "DOWNLOADING_VIDEO"
             DOWNLOADING_ORIGINAL_AUDIO -> "DOWNLOADING_AUDIO"
             PREPARING_TRANSLATION -> "PREPARING_TRANSLATION"
@@ -171,11 +173,12 @@ data class VoxDownloadProgress(
 
     val totalBytesExpected: Long?
         get() {
-            val v = video.totalBytes ?: return null
-            val o = originalAudio.totalBytes ?: return null
-            val t = if (translationState == VoxDownloadTranslationState.NONE) 0L
-                else translatedAudio.totalBytes ?: return null
-            return v + o + t
+            val v = video.totalBytes
+            val o = originalAudio.totalBytes
+            if (v == null && o == null) return null
+            val trans = if (translationState == VoxDownloadTranslationState.NONE) 0L
+                else (translatedAudio.totalBytes ?: 0L)
+            return (v ?: 0L) + (o ?: 0L) + trans
         }
 
     val overallPercent: Int?
@@ -186,7 +189,7 @@ data class VoxDownloadProgress(
             if (state == VoxDownloadState.FINALIZING || state == VoxDownloadState.MUXED || state == VoxDownloadState.PUBLISHING) {
                 return null
             }
-            if (state == VoxDownloadState.MUXED || state == VoxDownloadState.COMPLETED) {
+            if (state == VoxDownloadState.READY_FOR_MUX || state == VoxDownloadState.COMPLETED) {
                 return 100
             }
             val expected = totalBytesExpected ?: return null

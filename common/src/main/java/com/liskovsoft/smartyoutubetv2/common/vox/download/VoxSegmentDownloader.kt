@@ -3,15 +3,18 @@ package com.liskovsoft.smartyoutubetv2.common.vox.download
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.RandomAccessFile
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
 /**
  * Потоковый загрузчик медиа-сегментов с поддержкой HTTP Range, докачки,
- * обработки кодов ошибок 200/206/403/410/416/429/5xx и контроля дискового пространства.
+ * обработки кодов ошибок 200/206/403/410/416/429/5xx, защиты от зависаний (stall detection)
+ * и оптимизированным троттлингом прогресса и буферизованным вводом-выводом.
  */
 class VoxSegmentDownloader(
     private val httpClient: OkHttpClient = createDefaultHttpClient(),
@@ -19,28 +22,34 @@ class VoxSegmentDownloader(
 ) {
 
     companion object {
-        private const val BUFFER_SIZE = 64 * 1024 // 64 KiB bounded buffer
+        const val BUFFER_SIZE = 128 * 1024 // 128 KiB memory read buffer
+        const val IO_BUFFER_SIZE = 128 * 1024 // 128 KiB disk write buffer
+        const val PROGRESS_NOTIFY_MIN_INTERVAL_MS = 250L // Throttle UI notifications to max 4/sec
+        const val PROGRESS_NOTIFY_MIN_BYTES = 256 * 1024L // Or at least 256 KiB written
         private const val MAX_RETRIES = 3
         private const val INITIAL_BACKOFF_MS = 1000L
 
         private fun createDefaultHttpClient(): OkHttpClient {
             return OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS) // 15s timeout for fast stall detection
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .followRedirects(true)
+                .retryOnConnectionFailure(true)
                 .build()
         }
     }
 
     /**
-     * Загружает медиа-поток в целевой файл с поддержкой докачки.
+     * Загружает медиа-поток в целевой файл с поддержкой докачки и защиты от зависаний.
      *
      * @param initialUrl URL медиа-файла
      * @param targetFile Целевой файл на диске
      * @param isCancelled Предикат отмены
      * @param onProgress Коллбэк прогресса (bytesDownloaded, totalBytes)
      * @param urlProvider Провайдер обновления URL при 403/410
+     * @param onRangeResumed Коллбэк возобновления докачки с сохраненной позиции
+     * @param onStallDetected Коллбэк обнаружения сетевого зависания (stall)
      */
     @Throws(VoxDownloadException::class)
     fun download(
@@ -48,7 +57,9 @@ class VoxSegmentDownloader(
         targetFile: File,
         isCancelled: () -> Boolean = { false },
         onProgress: ((bytesDownloaded: Long, totalBytes: Long?) -> Unit)? = null,
-        urlProvider: (() -> String)? = null
+        urlProvider: (() -> String)? = null,
+        onRangeResumed: ((resumedFromOffset: Long) -> Unit)? = null,
+        onStallDetected: (() -> Unit)? = null
     ) {
         var currentUrl = initialUrl
         var attempt = 0
@@ -63,6 +74,9 @@ class VoxSegmentDownloader(
             VoxUrlSecurityValidator.validateUrl(currentUrl)
 
             val existingBytes = if (targetFile.exists() && targetFile.isFile) targetFile.length() else 0L
+            if (existingBytes > 0L) {
+                onRangeResumed?.invoke(existingBytes)
+            }
 
             try {
                 downloadInternal(
@@ -77,6 +91,10 @@ class VoxSegmentDownloader(
             } catch (e: Exception) {
                 if (isCancelled()) {
                     throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Download cancelled", e)
+                }
+
+                if (e is SocketTimeoutException || e.cause is SocketTimeoutException) {
+                    onStallDetected?.invoke()
                 }
 
                 val category = retryPolicy.classifyError(e)
@@ -267,18 +285,28 @@ class VoxSegmentDownloader(
         targetFile.parentFile?.mkdirs()
 
         var inputStream: InputStream? = null
-        var outputStream: FileOutputStream? = null
-        var randomAccessFile: RandomAccessFile? = null
+        var outputStream: BufferedOutputStream? = null
 
         try {
             inputStream = body.byteStream()
 
             if (append && startOffset > 0) {
-                randomAccessFile = RandomAccessFile(targetFile, "rw")
-                randomAccessFile.seek(startOffset)
+                // Если файл уже больше startOffset, усекаем его до точки докачки
+                if (targetFile.exists() && targetFile.length() > startOffset) {
+                    val raf = RandomAccessFile(targetFile, "rw")
+                    try {
+                        raf.setLength(startOffset)
+                    } finally {
+                        raf.close()
+                    }
+                }
+                outputStream = BufferedOutputStream(FileOutputStream(targetFile, true), IO_BUFFER_SIZE)
             } else {
-                outputStream = FileOutputStream(targetFile, false)
+                outputStream = BufferedOutputStream(FileOutputStream(targetFile, false), IO_BUFFER_SIZE)
             }
+
+            var lastNotifiedBytes = bytesWritten
+            var lastNotifiedTimeMs = System.currentTimeMillis()
 
             onProgress?.invoke(bytesWritten, totalExpectedBytes)
 
@@ -290,22 +318,29 @@ class VoxSegmentDownloader(
                     throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Download cancelled during read")
                 }
 
-                if (randomAccessFile != null) {
-                    randomAccessFile.write(buffer, 0, read)
-                } else if (outputStream != null) {
-                    outputStream.write(buffer, 0, read)
+                outputStream.write(buffer, 0, read)
+                bytesWritten += read
+
+                val now = System.currentTimeMillis()
+                if (bytesWritten - lastNotifiedBytes >= PROGRESS_NOTIFY_MIN_BYTES ||
+                    now - lastNotifiedTimeMs >= PROGRESS_NOTIFY_MIN_INTERVAL_MS) {
+                    onProgress?.invoke(bytesWritten, totalExpectedBytes)
+                    lastNotifiedBytes = bytesWritten
+                    lastNotifiedTimeMs = now
                 }
 
-                bytesWritten += read
-                onProgress?.invoke(bytesWritten, totalExpectedBytes)
-
-                // Периодическая проверка дискового пространства каждые ~1 МБ
+                // Периодическая проверка дискового пространства каждые ~2 МБ
                 spaceCheckCounter += read
-                if (spaceCheckCounter >= 1024 * 1024) {
+                if (spaceCheckCounter >= 2 * 1024 * 1024) {
                     spaceCheckCounter = 0
                     checkStorageSpace(10 * 1024 * 1024L)
                 }
             }
+
+            outputStream.flush()
+
+            // Гарантированное финальное обновление 100% трека
+            onProgress?.invoke(bytesWritten, totalExpectedBytes)
 
             // Валидация полноты, если totalExpectedBytes был известен
             if (totalExpectedBytes != null && totalExpectedBytes > 0 && bytesWritten < totalExpectedBytes) {
@@ -317,7 +352,6 @@ class VoxSegmentDownloader(
         } finally {
             try { inputStream?.close() } catch (ignored: Exception) {}
             try { outputStream?.flush(); outputStream?.close() } catch (ignored: Exception) {}
-            try { randomAccessFile?.close() } catch (ignored: Exception) {}
         }
     }
 
