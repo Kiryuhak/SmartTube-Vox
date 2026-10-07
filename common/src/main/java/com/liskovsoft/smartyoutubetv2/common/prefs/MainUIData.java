@@ -128,10 +128,14 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
     }
 
     public static MainUIData instance(Context context) {
-        if (sInstance == null) {
+        if (sInstance == null && context != null) {
             sInstance = new MainUIData(context.getApplicationContext());
         }
 
+        return sInstance;
+    }
+
+    public static MainUIData instance() {
         return sInstance;
     }
 
@@ -531,9 +535,7 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
             mChannelCategorySorting = CHANNEL_SORTING_NAME;
         }
 
-        if (mChannelCategorySorting == CHANNEL_SORTING_DEFAULT) {
-            mChannelCategorySorting = CHANNEL_SORTING_LAST_VIEWED;
-        }
+// CHANNEL_SORTING_DEFAULT is preserved as independent option
     }
 
     @Override

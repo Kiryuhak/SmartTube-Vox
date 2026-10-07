@@ -211,8 +211,15 @@ class VoxMediaStorePublisher(
                 resolver.delete(itemUri, null, null)
             } catch (ignored: Exception) {}
             if (e is VoxDownloadException) throw e
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("enospc") || msg.contains("no space left") || msg.contains("disk full")) {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_FULL, "No space left on device during MediaStore publishing", e)
+            }
+            if (msg.contains("eacces") || msg.contains("permission denied") || e is SecurityException) {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_PERMISSION, "Storage permission denied during MediaStore publishing", e)
+            }
             throw VoxDownloadException(
-                VoxDownloadErrorCode.STORAGE_ERROR,
+                VoxDownloadErrorCode.FINALIZE_FAILED,
                 "Error copying MKV to MediaStore: ${e.message}",
                 e
             )
@@ -269,28 +276,45 @@ class VoxMediaStorePublisher(
                     outStream.flush()
                 }
             }
-            if (tmpCandidate.renameTo(candidateFile)) {
-                // Сканируем файл для появления в галерее/MediaStore
-                if (hasPublicWrite) {
-                    android.media.MediaScannerConnection.scanFile(
-                        context,
-                        arrayOf(candidateFile.absolutePath),
-                        arrayOf(MIME_TYPE_MKV),
-                        null
+            if (!tmpCandidate.renameTo(candidateFile)) {
+                // Пытаемся скопировать, если атомарное переименование не сработало
+                try {
+                    tmpCandidate.inputStream().use { input ->
+                        candidateFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    tmpCandidate.delete()
+                } catch (copyErr: Exception) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.OUTPUT_MOVE_FAILED,
+                        "Failed to rename or copy temporary file to $candidateFile: ${copyErr.message}",
+                        copyErr
                     )
                 }
-                return Uri.fromFile(candidateFile)
-            } else {
-                throw VoxDownloadException(
-                    VoxDownloadErrorCode.STORAGE_ERROR,
-                    "Failed to rename temporary file to $candidateFile"
+            }
+            // Сканируем файл для появления в галерее/MediaStore
+            if (hasPublicWrite) {
+                android.media.MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(candidateFile.absolutePath),
+                    arrayOf(MIME_TYPE_MKV),
+                    null
                 )
             }
+            return Uri.fromFile(candidateFile)
         } catch (e: Exception) {
             if (tmpCandidate.exists()) tmpCandidate.delete()
             if (e is VoxDownloadException) throw e
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("enospc") || msg.contains("no space left") || msg.contains("disk full")) {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_FULL, "No space left on device during legacy storage publishing", e)
+            }
+            if (msg.contains("eacces") || msg.contains("permission denied") || e is SecurityException) {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_PERMISSION, "Storage permission denied during legacy storage publishing", e)
+            }
             throw VoxDownloadException(
-                VoxDownloadErrorCode.STORAGE_ERROR,
+                VoxDownloadErrorCode.FINALIZE_FAILED,
                 "Error copying MKV to legacy storage: ${e.message}",
                 e
             )

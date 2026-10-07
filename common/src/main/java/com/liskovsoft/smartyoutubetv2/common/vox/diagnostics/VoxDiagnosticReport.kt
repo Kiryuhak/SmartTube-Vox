@@ -37,6 +37,7 @@ data class VoxDiagnosticReport(
     val riskWarning: String? = null,
     val playbackStats: Map<String, Any>? = null,
     val livePlayback: Map<String, Any>? = null,
+    val downloadDiagnostics: Map<String, Any>? = null,
     val safeRecentEvents: List<VoxLogEvent> = emptyList()
 ) {
     companion object {
@@ -126,6 +127,12 @@ data class VoxDiagnosticReport(
                 null
             }
 
+            val downloadDiag = try {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(context).getDiagnosticsSummary()
+            } catch (e: Exception) {
+                null
+            }
+
             return VoxDiagnosticReport(
                 schema = SCHEMA_V2,
                 reportId = reportId,
@@ -147,6 +154,7 @@ data class VoxDiagnosticReport(
                 riskWarning = risk?.messageRu,
                 playbackStats = null,
                 livePlayback = liveMetrics,
+                downloadDiagnostics = downloadDiag,
                 safeRecentEvents = recentEvents
             )
         }
@@ -199,6 +207,11 @@ data class VoxDiagnosticReport(
             val lpObj = JSONObject()
             livePlayback.forEach { (k, v) -> lpObj.put(k, v) }
             root.put("livePlayback", lpObj)
+        }
+        if (downloadDiagnostics != null && downloadDiagnostics.isNotEmpty()) {
+            val ddObj = JSONObject()
+            downloadDiagnostics.forEach { (k, v) -> ddObj.put(k, v) }
+            root.put("downloadDiagnostics", ddObj)
         }
 
         if (safeRecentEvents.isNotEmpty()) {
@@ -259,6 +272,13 @@ data class VoxDiagnosticReport(
             sb.append("\n⚠️ ВНИМАНИЕ: ").append(riskWarning).append("\n")
         } else {
             sb.append("\n✓ Параметры полностью согласованы с возможностями устройства.\n")
+        }
+
+        if (downloadDiagnostics != null && downloadDiagnostics.isNotEmpty()) {
+            sb.append("\n--- ДИАГНОСТИКА СКАЧИВАНИЯ ---\n")
+            downloadDiagnostics.forEach { (k, v) ->
+                sb.append(k).append(": ").append(v).append("\n")
+            }
         }
 
         if (safeRecentEvents.isNotEmpty()) {

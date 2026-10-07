@@ -6,6 +6,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicBoolean
+import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadErrorCode
+import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadException
 
 /**
  * Высокопроизводительный Kotlin-мультиплексор Matroska (MKV) без транскодирования (Remux-only).
@@ -433,12 +435,25 @@ class VoxMatroskaMuxer(private val stallTimeoutMs: Long = 120_000L) {
                 raf.close()
             }
 
-            // Атомарное переименование во вспомогательный финальный файл
+            // Атомарное переименование во вспомогательный финальный файл с отказоустойчивым копированием
             if (outputFile.exists()) {
                 outputFile.delete()
             }
             if (!tmpOutputFile.renameTo(outputFile)) {
-                throw IllegalStateException("Failed to rename ${tmpOutputFile.name} to ${outputFile.name}")
+                try {
+                    tmpOutputFile.inputStream().use { input ->
+                        outputFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    tmpOutputFile.delete()
+                } catch (copyErr: Exception) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.OUTPUT_MOVE_FAILED,
+                        "Failed to rename or copy ${tmpOutputFile.name} to ${outputFile.name}: ${copyErr.message}",
+                        copyErr
+                    )
+                }
             }
             checkRunning()
 
@@ -464,7 +479,18 @@ class VoxMatroskaMuxer(private val stallTimeoutMs: Long = 120_000L) {
                 tmpOutputFile.delete()
             }
             if (watchdog.stalled) throw VoxProcessingStalledException(e)
-            throw e
+            if (e is VoxDownloadException || e is InterruptedException) throw e
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("enospc") || msg.contains("no space left") || msg.contains("disk full")) {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_FULL, "No space left on device during MKV muxing", e)
+            }
+            if (msg.contains("eacces") || msg.contains("permission denied") || e is SecurityException) {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_PERMISSION, "Storage permission denied during MKV muxing", e)
+            }
+            if (e is java.io.IOException) {
+                throw VoxDownloadException(VoxDownloadErrorCode.MUX_FAILED, "Matroska muxing I/O failure: ${e.message}", e)
+            }
+            throw VoxDownloadException(VoxDownloadErrorCode.PACKAGING_FAILED, "Packaging failed: ${e.message}", e)
         } finally {
             watchdog.close()
             for (source in sources) {

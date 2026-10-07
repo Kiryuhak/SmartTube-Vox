@@ -197,7 +197,24 @@ public class MediaServiceManager implements OnAccountChange {
     public void loadSubscribedChannels(OnMediaGroup onMediaGroup) {
         RxHelper.disposeActions(mSubscribedChannelsAction);
 
-        Observable<MediaGroup> observable = mContentService.getSubscribedChannelsByNewContentObserve();
+        Observable<MediaGroup> observable;
+        int sortingType = MainUIData.instance() != null ? MainUIData.instance().getChannelCategorySorting() : MainUIData.CHANNEL_SORTING_DEFAULT;
+        switch (sortingType) {
+            case MainUIData.CHANNEL_SORTING_DEFAULT:
+                observable = mContentService.getSubscribedChannelsObserve();
+                break;
+            case MainUIData.CHANNEL_SORTING_NAME2:
+            case MainUIData.CHANNEL_SORTING_NAME:
+                observable = mContentService.getSubscribedChannelsByNameObserve();
+                break;
+            case MainUIData.CHANNEL_SORTING_LAST_VIEWED:
+                observable = mContentService.getSubscribedChannelsByLastViewedObserve();
+                break;
+            case MainUIData.CHANNEL_SORTING_NEW_CONTENT:
+            default:
+                observable = mContentService.getSubscribedChannelsByNewContentObserve();
+                break;
+        }
 
         mSubscribedChannelsAction = observable
                 .subscribe(

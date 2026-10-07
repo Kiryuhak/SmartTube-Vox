@@ -31,6 +31,14 @@ class VoxDownloadJob(
     var processingSourceBytes: Long = 0L
     var processingSamples: Long = 0L
     var lastProgressAt: Long = 0L
+    var lastFailedStage: String? = null
+    var lastErrorCategory: String? = null
+    var lastOperation: String? = null
+    var safeRootCause: String? = null
+    var retryCount: Int = 0
+    var packagingStarted: Boolean = false
+    var packagingCompleted: Boolean = false
+    var finalizeCompleted: Boolean = false
 
     val generation = AtomicLong(1L)
     val isCancelledFlag = AtomicBoolean(false)

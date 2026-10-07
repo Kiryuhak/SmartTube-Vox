@@ -464,6 +464,19 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                     if (startupLatency > 3500) {
                         Map<String, String> ctx = new HashMap<>();
                         ctx.put("latencyMs", String.valueOf((startupLatency / 100) * 100));
+                        ctx.put("startupLatencyMs", String.valueOf(startupLatency));
+                        FormatItem vf = getVideoFormat();
+                        if (vf != null) {
+                            ctx.put("selectedHeight", String.valueOf(vf.getHeight()));
+                            MediaTrack tr = vf.getTrack();
+                            if (tr != null && tr.format != null && tr.format.codecs != null) {
+                                ctx.put("selectedCodec", tr.format.codecs);
+                            }
+                        }
+                        long pos = getPositionMs();
+                        long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
+                        ctx.put("initialBufferMs", String.valueOf(buffered));
+                        ctx.put("isLive", String.valueOf(isLive));
                         VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_STARTUP_SLOW, "Замедленный старт воспроизведения", ctx);
                     }
                 }
@@ -502,6 +515,18 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 if (mRebufferCount <= 3) {
                     Map<String, String> ctx = new HashMap<>();
                     ctx.put("rebufferCount", String.valueOf(mRebufferCount));
+                    FormatItem vf = getVideoFormat();
+                    if (vf != null) {
+                        ctx.put("selectedHeight", String.valueOf(vf.getHeight()));
+                        MediaTrack tr = vf.getTrack();
+                        if (tr != null && tr.format != null && tr.format.codecs != null) {
+                            ctx.put("selectedCodec", tr.format.codecs);
+                        }
+                    }
+                    long pos = getPositionMs();
+                    long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
+                    ctx.put("bufferedMs", String.valueOf(buffered));
+                    ctx.put("isLive", String.valueOf(isLive));
                     VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_REBUFFER, "Буферизация потока", ctx);
                 }
             }

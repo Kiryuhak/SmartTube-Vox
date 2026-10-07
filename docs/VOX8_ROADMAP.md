@@ -63,11 +63,11 @@
 | **Patch #4** | **Live Playback Stability**: Устранение причин периодического зависания спиннера, Dash 404 policy, стратегия Controlled Live Backend (MERGED) |
 | **Patch #5** | **Live Ingestion Gateway**: Реализация Controlled Live Ingestion Gateway, REST API, адаптивный контроллер сегментов, Mock provider (MERGED) |
 | **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS (MERGED) |
-| **Patch #7** | **Downloads 2.0**: Очередь загрузок, pause/resume и очистка временных файлов |
-| **Patch #8** | **Auto Setup 2.0**: Адаптивное профилирование на основе dropped frames |
-| **Patch #9** | **Android Compatibility**: Runtime-тестирование API 28–34 |
-| **Patch #10** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
-| **Patch #11** | **Diagnostics 2.0**: Группировка инцидентов и привязка к версиям/патчам |
-| **Patch #12** | **Performance**: Оптимизация памяти, старта и длительного воспроизведения |
-| **Patch #13** | **UI Polish**: Полировка оверлея, бейджей и экрана «Что нового» |
+| **Patch #7** | **User Feedback & Downloads Reliability**: Устранение инцидента VOX-A-DF6567 (DuneHD), надежность загрузок (Diagnostics 2.0, типизированные ошибки, упаковка MKV), исправление фокуса и сортировки каналов (MERGED) |
+| **Patch #8** | **Live Translation Provider Strategy & Audio Integration**: Стратегия реального провайдера потокового перевода (Yandex VOT Live / WebSocket streaming) и интеграция захвата звука |
+| **Patch #9** | **Auto Setup 2.0**: Адаптивное профилирование на основе dropped frames и статистики воспроизведения |
+| **Patch #10** | **Android Compatibility**: Runtime-тестирование API 28–34 |
+| **Patch #11** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
+| **Patch #12** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |
+| **Patch #13** | **Performance & UI Polish**: Оптимизация памяти, полировка оверлея, бейджей и экрана «Что нового» |
 | **Далее** | Корректировки и доработки на основе реальной диагностики и обратной связи |

@@ -417,6 +417,15 @@ class VoxDownloadStorage(private val context: Context) {
     }
 
     /**
+     * Возвращает количество временных файлов (.part, .tmp) задания.
+     */
+    fun getTemporaryFileCount(downloadId: String): Int {
+        val dir = File(baseDir, downloadId)
+        if (!dir.exists() || !dir.isDirectory) return 0
+        return dir.listFiles()?.count { it.isFile && (it.name.endsWith(".part") || it.name.endsWith(".tmp")) } ?: 0
+    }
+
+    /**
      * Удаляет изолированную директорию задания и все ее файлы.
      */
     fun deleteJobDir(downloadId: String): Boolean {
