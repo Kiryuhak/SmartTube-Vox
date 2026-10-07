@@ -15,6 +15,7 @@ import com.google.android.exoplayer2.mediacodec.MediaCodecSelector;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 
 import java.nio.ByteBuffer;
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxLiveAudioTap;
 
 public class DelayMediaCodecAudioRenderer extends MediaCodecAudioRenderer {
     private static final String TAG = DelayMediaCodecAudioRenderer.class.getSimpleName();
@@ -61,10 +62,28 @@ public class DelayMediaCodecAudioRenderer extends MediaCodecAudioRenderer {
     @Override
     protected boolean processOutputBuffer(long positionUs, long elapsedRealtimeUs, MediaCodec codec, ByteBuffer buffer, int bufferIndex,
                                           int bufferFlags, long bufferPresentationTimeUs, boolean isDecodeOnlyBuffer, boolean isLastBuffer, Format format) throws ExoPlaybackException {
+        ByteBuffer tapBuffer = null;
+        if (VoxLiveAudioTap.isEnabled() && buffer != null) {
+            tapBuffer = buffer.duplicate();
+        }
+
         boolean result = super.processOutputBuffer(
                 positionUs, elapsedRealtimeUs, codec, buffer, bufferIndex, bufferFlags,
                 bufferPresentationTimeUs, isDecodeOnlyBuffer, isLastBuffer, format
         );
+
+        if (result && tapBuffer != null && VoxLiveAudioTap.isEnabled()) {
+            int sampleRate = format != null ? format.sampleRate : 48000;
+            int channelCount = format != null ? format.channelCount : 2;
+            int pcmEncoding = format != null ? format.pcmEncoding : 2;
+            VoxLiveAudioTap.onAudioOutputBuffer(
+                    tapBuffer,
+                    bufferPresentationTimeUs,
+                    sampleRate,
+                    channelCount,
+                    pcmEncoding
+            );
+        }
 
         // Disable the use of AudioTrack.getTimestamp and force ExoPlayer to go through the legacy path of using
         // AudioTrack.getPlaybackHeadPosition instead, which might help if the first one drifts but the second one doesn't.

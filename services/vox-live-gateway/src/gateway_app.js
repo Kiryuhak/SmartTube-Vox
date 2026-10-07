@@ -82,7 +82,7 @@ class GatewayApp {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Vox-Sequence, X-Vox-Generation, X-Vox-Source-Start-Ms, X-Vox-Source-End-Ms, X-Vox-Duration-Ms, X-Vox-Codec, X-Vox-Checksum, X-Vox-Provider',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Vox-Sequence, X-Vox-Generation, X-Vox-Source-Start-Ms, X-Vox-Source-End-Ms, X-Vox-Duration-Ms, X-Vox-Codec, X-Vox-Checksum, X-Vox-Provider, X-Vox-Pts-Start-Us, X-Vox-Pts-End-Us, X-Vox-Sample-Rate, X-Vox-Channels, X-Vox-Encoding',
       ...headers
     });
     res.end(JSON.stringify(data));
@@ -96,7 +96,7 @@ class GatewayApp {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, X-Vox-Sequence, X-Vox-Generation, X-Vox-Source-Start-Ms, X-Vox-Source-End-Ms, X-Vox-Duration-Ms, X-Vox-Codec, X-Vox-Checksum, X-Vox-Provider',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Vox-Sequence, X-Vox-Generation, X-Vox-Source-Start-Ms, X-Vox-Source-End-Ms, X-Vox-Duration-Ms, X-Vox-Codec, X-Vox-Checksum, X-Vox-Provider, X-Vox-Pts-Start-Us, X-Vox-Pts-End-Us, X-Vox-Sample-Rate, X-Vox-Channels, X-Vox-Encoding',
         'Access-Control-Max-Age': '86400'
       });
       res.end();
@@ -236,6 +236,13 @@ class GatewayApp {
         let codec = req.headers['x-vox-codec'] || 'opus';
         let checksum = req.headers['x-vox-checksum'] || null;
 
+        // PTS and Audio Format metadata (Patch #6)
+        let ptsStartUs = parseInt(req.headers['x-vox-pts-start-us'], 10);
+        let ptsEndUs = parseInt(req.headers['x-vox-pts-end-us'], 10);
+        let sampleRate = parseInt(req.headers['x-vox-sample-rate'], 10);
+        let channels = parseInt(req.headers['x-vox-channels'], 10);
+        let encoding = req.headers['x-vox-encoding'] || null;
+
         let audioPayload = bodyBuf;
 
         // If JSON body was sent instead of raw binary
@@ -253,6 +260,11 @@ class GatewayApp {
             if (isNaN(durationMs) && meta.durationMs !== undefined) durationMs = parseInt(meta.durationMs, 10);
             if (isNaN(sourceStartMs) && meta.sourceStartMs !== undefined) sourceStartMs = parseInt(meta.sourceStartMs, 10);
             if (isNaN(sourceEndMs) && meta.sourceEndMs !== undefined) sourceEndMs = parseInt(meta.sourceEndMs, 10);
+            if (isNaN(ptsStartUs) && meta.ptsStartUs !== undefined) ptsStartUs = parseInt(meta.ptsStartUs, 10);
+            if (isNaN(ptsEndUs) && meta.ptsEndUs !== undefined) ptsEndUs = parseInt(meta.ptsEndUs, 10);
+            if (isNaN(sampleRate) && meta.sampleRate !== undefined) sampleRate = parseInt(meta.sampleRate, 10);
+            if (isNaN(channels) && meta.channels !== undefined) channels = parseInt(meta.channels, 10);
+            if (!encoding && meta.encoding) encoding = meta.encoding;
             if (meta.codec) codec = meta.codec;
             if (meta.checksum) checksum = meta.checksum;
             if (meta.audioPayloadBase64) {
@@ -278,6 +290,15 @@ class GatewayApp {
           this.sendJson(res, 400, {
             error: 'INVALID_SEGMENT_DURATION',
             message: `Segment duration must be between ${GatewayLimits.MIN_SEGMENT_DURATION_MS}ms and ${GatewayLimits.MAX_SEGMENT_DURATION_MS}ms`
+          });
+          return;
+        }
+
+        // Validate PTS range if both timestamps are supplied
+        if (!isNaN(ptsStartUs) && !isNaN(ptsEndUs) && ptsEndUs < ptsStartUs) {
+          this.sendJson(res, 400, {
+            error: 'INVALID_PTS_RANGE',
+            message: `ptsEndUs (${ptsEndUs}) cannot be less than ptsStartUs (${ptsStartUs})`
           });
           return;
         }
@@ -339,6 +360,11 @@ class GatewayApp {
           generation,
           sourceStartMs: isNaN(sourceStartMs) ? 0 : sourceStartMs,
           sourceEndMs: isNaN(sourceEndMs) ? durationMs : sourceEndMs,
+          ptsStartUs: isNaN(ptsStartUs) ? null : ptsStartUs,
+          ptsEndUs: isNaN(ptsEndUs) ? null : ptsEndUs,
+          sampleRate: isNaN(sampleRate) ? (codec === 'pcm_16bit' ? 48000 : null) : sampleRate,
+          channels: isNaN(channels) ? 2 : channels,
+          encoding: encoding || (codec === 'pcm_16bit' ? 'pcm_16bit' : 'opus'),
           durationMs,
           codec,
           payload: audioPayload,
@@ -406,6 +432,11 @@ class GatewayApp {
           generation: result.generation,
           sourceStartMs: result.sourceStartMs,
           sourceEndMs: result.sourceEndMs,
+          ptsStartUs: result.ptsStartUs !== undefined ? result.ptsStartUs : null,
+          ptsEndUs: result.ptsEndUs !== undefined ? result.ptsEndUs : null,
+          sampleRate: result.sampleRate !== undefined ? result.sampleRate : null,
+          channels: result.channels !== undefined ? result.channels : null,
+          encoding: result.encoding !== undefined ? result.encoding : null,
           durationMs: result.durationMs,
           translatedDurationMs: result.translatedDurationMs,
           codec: result.codec,

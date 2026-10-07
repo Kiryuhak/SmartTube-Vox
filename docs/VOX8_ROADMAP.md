@@ -62,7 +62,7 @@
 | **Patch #3** | **Live Translation**: Исследование протокола, анализ Yandex VOT API (VOD_ONLY) и отказ от фейков (MERGED) |
 | **Patch #4** | **Live Playback Stability**: Устранение причин периодического зависания спиннера, Dash 404 policy, стратегия Controlled Live Backend (MERGED) |
 | **Patch #5** | **Live Ingestion Gateway**: Реализация Controlled Live Ingestion Gateway, REST API, адаптивный контроллер сегментов, Mock provider (MERGED) |
-| **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS |
+| **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS (MERGED) |
 | **Patch #7** | **Downloads 2.0**: Очередь загрузок, pause/resume и очистка временных файлов |
 | **Patch #8** | **Auto Setup 2.0**: Адаптивное профилирование на основе dropped frames |
 | **Patch #9** | **Android Compatibility**: Runtime-тестирование API 28–34 |

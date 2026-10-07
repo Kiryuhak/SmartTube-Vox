@@ -450,4 +450,87 @@ describe('SmartTube VOX Controlled Live Gateway Tests', () => {
     const okRes = await makeRequest(testServer, '/health');
     assert.equal(okRes.statusCode, 200);
   });
+
+  test('19. PTS metadata ingestion: parses PTS headers and returns them in segment result', async () => {
+    const sRes = await makeRequest(testServer, '/v1/live/session', { method: 'POST' });
+    const sessionId = sRes.body.sessionId;
+
+    const startPtsUs = 12000000;
+    const endPtsUs = 14000000;
+
+    const uploadRes = await makeRequest(testServer, `/v1/live/session/${sessionId}/segment`, {
+      method: 'POST',
+      headers: {
+        'X-Vox-Sequence': '0',
+        'X-Vox-Generation': '1',
+        'X-Vox-Duration-Ms': '2000',
+        'X-Vox-Pts-Start-Us': String(startPtsUs),
+        'X-Vox-Pts-End-Us': String(endPtsUs),
+        'X-Vox-Sample-Rate': '48000',
+        'X-Vox-Channels': '2',
+        'X-Vox-Encoding': 'pcm_16bit'
+      }
+    }, Buffer.from('test_pcm_payload_bytes'));
+
+    assert.equal(uploadRes.statusCode, 202);
+
+    await new Promise(r => setTimeout(r, 40));
+
+    const pollRes = await makeRequest(testServer, `/v1/live/session/${sessionId}/segment/0`);
+    assert.equal(pollRes.statusCode, 200);
+    assert.equal(pollRes.body.ptsStartUs, startPtsUs);
+    assert.equal(pollRes.body.ptsEndUs, endPtsUs);
+    assert.equal(pollRes.body.sampleRate, 48000);
+    assert.equal(pollRes.body.channels, 2);
+    assert.equal(pollRes.body.encoding, 'pcm_16bit');
+  });
+
+  test('20. Invalid PTS range rejection: returns 400 when ptsEndUs < ptsStartUs', async () => {
+    const sRes = await makeRequest(testServer, '/v1/live/session', { method: 'POST' });
+    const sessionId = sRes.body.sessionId;
+
+    const badUploadRes = await makeRequest(testServer, `/v1/live/session/${sessionId}/segment`, {
+      method: 'POST',
+      headers: {
+        'X-Vox-Sequence': '1',
+        'X-Vox-Generation': '1',
+        'X-Vox-Duration-Ms': '2000',
+        'X-Vox-Pts-Start-Us': '5000000',
+        'X-Vox-Pts-End-Us': '4000000' // End before start!
+      }
+    }, Buffer.from('pcm_bad_pts'));
+
+    assert.equal(badUploadRes.statusCode, 400);
+    assert.equal(badUploadRes.body.error, 'INVALID_PTS_RANGE');
+  });
+
+  test('21. Passthrough mode: preserves raw audio payload and returns base64 in poll', async () => {
+    const sRes = await makeRequest(testServer, '/v1/live/session', { method: 'POST' });
+    const sessionId = sRes.body.sessionId;
+    const session = testApp.sessionManager.getSession(sessionId);
+
+    // Mock provider with passthroughAudio = true
+    const passthroughProvider = new MockLiveTranslationProvider({ passthroughAudio: true, fixedLatencyMs: 5 });
+    session.provider = passthroughProvider;
+
+    const originalAudio = Buffer.from('EXACT_PASSTHROUGH_PCM_DATA_12345');
+    await makeRequest(testServer, `/v1/live/session/${sessionId}/segment`, {
+      method: 'POST',
+      headers: {
+        'X-Vox-Sequence': '0',
+        'X-Vox-Generation': '1',
+        'X-Vox-Duration-Ms': '2000',
+        'X-Vox-Pts-Start-Us': '1000000',
+        'X-Vox-Pts-End-Us': '3000000'
+      }
+    }, originalAudio);
+
+    await new Promise(r => setTimeout(r, 40));
+
+    const pollRes = await makeRequest(testServer, `/v1/live/session/${sessionId}/segment/0`);
+    assert.equal(pollRes.statusCode, 200);
+    assert.ok(pollRes.body.audioData);
+    const returnedBuf = Buffer.from(pollRes.body.audioData, 'base64');
+    assert.deepEqual(returnedBuf, originalAudio);
+  });
 });
