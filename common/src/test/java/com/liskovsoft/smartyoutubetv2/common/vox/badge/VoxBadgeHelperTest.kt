@@ -95,6 +95,22 @@ class VoxBadgeHelperTest {
         }
         assertEquals("4K", VoxBadgeHelper.getQualityBadge(videoWithSecondTitle))
 
+        val videoWithDimensions = Video().apply {
+            width = 3840
+            height = 2160
+        }
+        assertEquals("4K", VoxBadgeHelper.getQualityBadge(videoWithDimensions))
+
+        val videoWithTitleQuality = Video().apply {
+            title = "[4K HDR] Nature in 60FPS"
+        }
+        assertEquals("4K HDR", VoxBadgeHelper.getQualityBadge(videoWithTitleQuality))
+
+        val videoWith1080pTitle = Video().apply {
+            title = "Awesome Travel Vlog (1080p60)"
+        }
+        assertEquals("1080p60", VoxBadgeHelper.getQualityBadge(videoWith1080pTitle))
+
         val videoNormal = Video().apply {
             title = "Regular Video"
             secondTitle = "Channel Name · 2 days ago"

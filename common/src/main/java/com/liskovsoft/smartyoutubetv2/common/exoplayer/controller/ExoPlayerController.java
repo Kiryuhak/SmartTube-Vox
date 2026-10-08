@@ -42,6 +42,7 @@ import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.video.VideoListener;
 import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxOfflinePlaybackProbe;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLiveStallRecoveryController;
 
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
@@ -57,6 +58,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private final TrackInfoFormatter2 mTrackFormatter;
     private final TrackErrorFixer mTrackErrorFixer;
     private final VoxOfflinePlaybackProbe mOfflineProbe = new VoxOfflinePlaybackProbe();
+    private final VoxLiveStallRecoveryController mStallRecoveryController;
     private boolean mOnSourceChanged;
     private WeakReference<Video> mVideo;
     private final PlayerEventListener mEventListener;
@@ -78,6 +80,45 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         mTrackFormatter = new TrackInfoFormatter2();
         mTrackFormatter.enableBitrate(PlayerTweaksData.instance(context).isQualityInfoBitrateEnabled());
         mTrackErrorFixer = new TrackErrorFixer(mTrackSelectorManager);
+
+        mStallRecoveryController = new VoxLiveStallRecoveryController(new VoxLiveStallRecoveryController.LiveRecoveryActionHandler() {
+            @Override
+            public void onRefreshManifestRequested() {
+                if (mPlayer != null) {
+                    mPlayer.retry();
+                }
+            }
+
+            @Override
+            public void onReseekRequested(long targetPositionMs) {
+                if (mPlayer != null) {
+                    mPlayer.seekTo(targetPositionMs);
+                }
+            }
+
+            @Override
+            public void onRecreateSourceRequested() {
+                mEventListener.onEngineError(PlayerEventListener.ERROR_TYPE_SOURCE, PlayerEventListener.RENDERER_INDEX_UNKNOWN, new java.io.IOException("Live stall timeout recovery"));
+            }
+
+            @Override
+            public void onNetworkFallbackRequested(int nextEngine) {
+                PlayerTweaksData.instance(mContext).setPlayerDataSource(nextEngine);
+                mEventListener.onEngineError(PlayerEventListener.ERROR_TYPE_SOURCE, PlayerEventListener.RENDERER_INDEX_UNKNOWN, new java.io.IOException("Live network fallback to engine " + nextEngine));
+            }
+
+            @Override
+            public void onReturnToLiveRequested() {
+                if (mPlayer != null) {
+                    mPlayer.seekToDefaultPosition();
+                }
+            }
+
+            @Override
+            public void showMessage(String message) {
+                com.liskovsoft.sharedutils.helpers.MessageHelpers.showMessage(mContext, message);
+            }
+        });
 
         mMediaSourceFactory.setTrackErrorFixer(mTrackErrorFixer);
         mEventListener = eventListener;
@@ -148,6 +189,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         mOfflineReadyLogged = false;
         mRebufferCount = 0;
         boolean isLive = getVideo() != null && getVideo().isLive;
+        mStallRecoveryController.onPlaybackStart(isLive);
         String marker = getVideo() != null && getVideo().videoId != null
                 ? "live_" + Integer.toHexString(getVideo().videoId.hashCode())
                 : "stream_unknown";
@@ -172,9 +214,13 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         if (mPlayer == null || positionMs < 0) {
             return;
         }
+        boolean isLive = (getVideo() != null && getVideo().isLive) || (mPlayer != null && mPlayer.isCurrentWindowDynamic());
         long duration = getDurationMs();
         if (duration <= 0 && getVideo() != null && getVideo().getDurationMs() > 0) {
             duration = getVideo().getDurationMs();
+        }
+        if (isLive) {
+            positionMs = mStallRecoveryController.onSeekRequested(positionMs, duration, 0L, true);
         }
         if (duration <= 0 || positionMs <= duration) {
             long fromPos = getPositionMs();
@@ -228,6 +274,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     }
 
     public void release() {
+        mStallRecoveryController.reset();
         mTrackSelectorManager.release();
         mMediaSourceFactory.release();
         releasePlayer();
@@ -465,12 +512,30 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
         VoxSafeLogger.e(VoxLogCategory.PLAYER, logCode, "Сбой воспроизведения ExoPlayer", errorCtx, null);
 
+        if (nested instanceof com.google.android.exoplayer2.source.BehindLiveWindowException) {
+            mStallRecoveryController.handleBehindLiveWindow(mContext, () -> {
+                if (mPlayer != null) {
+                    mPlayer.seekToDefaultPosition();
+                    mPlayer.retry();
+                }
+            });
+            return;
+        }
+
         if (getVideo() != null && getVideo().isLive) {
             int httpCode = 0;
             if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) {
                 httpCode = ((com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) nested).responseCode;
             }
             com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onSegmentError(httpCode, nested.getClass().getSimpleName());
+
+            int currentEngine = PlayerTweaksData.instance(mContext).getPlayerDataSource();
+            int[] availableEngines = com.liskovsoft.smartyoutubetv2.common.utils.Utils.skipCronet()
+                    ? new int[] { PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP }
+                    : new int[] { PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET, PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP };
+            if (mStallRecoveryController.handleNetworkTransportError(nested, currentEngine, availableEngines)) {
+                return;
+            }
         }
 
         // NOTE: Player is released at this point. So, there is no sense to restore the playback here.
@@ -497,6 +562,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         boolean isLive = (getVideo() != null && getVideo().isLive) || (mPlayer != null && mPlayer.isCurrentWindowDynamic());
 
         if (isPlayPressed) {
+            mStallRecoveryController.onBufferingEnded();
             if (isLive) {
                 long pos = getPositionMs();
                 long dur = getDurationMs();
@@ -551,6 +617,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             }
             mEventListener.onPlay();
         } else if (isPausePressed) {
+            mStallRecoveryController.onBufferingEnded();
             mEventListener.onPause();
         } else if (isPlaybackEnded) {
             mEventListener.onPlayEnd();
@@ -564,6 +631,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 float speed = getSpeed();
                 com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onBufferingStarted(
                         buffered, offset, 0, 0, speed > 0 ? speed : 1.0f);
+                mStallRecoveryController.onBufferingStarted(true, pos, dur, offset);
             }
             if (mHasStartedPlayback) {
                 mRebufferCount++;

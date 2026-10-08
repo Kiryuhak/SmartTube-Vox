@@ -102,6 +102,8 @@ public final class Video {
     public boolean isLiveEnd;
     public boolean isShuffled;
     public String searchQuery;
+    public int width = -1;
+    public int height = -1;
     private int startSegmentNum;
     private long liveDurationMs = -1;
     private long durationMs = -1;
@@ -164,6 +166,8 @@ public final class Video {
         video.clickTrackingParams = item.getClickTrackingParams();
         video.durationMs = item.getDurationMs();
         video.searchQuery = item.getSearchQuery();
+        video.width = item.getWidth();
+        video.height = item.getHeight();
         video.mediaItem = item;
 
         return video;
@@ -199,6 +203,8 @@ public final class Video {
         video.mediaUrl = item.mediaUrl;
         video.translationState = item.translationState;
         video.ageRating = item.ageRating;
+        video.width = item.width;
+        video.height = item.height;
 
         return video;
     }
@@ -846,6 +852,8 @@ public final class Video {
         video.mediaUrl = mediaUrl;
         video.isLocal = isLocal;
         video.translationState = translationState;
+        video.width = width;
+        video.height = height;
 
         if (getGroup() != null) {
             video.setGroup(getGroup().copy()); // Needed for proper multi row fragments sync (row id == group id)
