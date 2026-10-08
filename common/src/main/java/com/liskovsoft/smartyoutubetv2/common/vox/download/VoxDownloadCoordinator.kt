@@ -40,6 +40,7 @@ class VoxDownloadCoordinator(
     private val listeners = ConcurrentHashMap<String, CopyOnWriteArrayList<VoxDownloadListener>>()
     private val globalListeners = CopyOnWriteArrayList<VoxDownloadListener>()
     private val scheduledJobs = ConcurrentHashMap.newKeySet<String>()
+    private val pendingQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
     private val progressLock = Any()
     private val trackExecutor: ExecutorService = Executors.newFixedThreadPool(3) { runnable ->
         Thread(runnable, "VoxTrackDownloader").apply {
@@ -131,7 +132,6 @@ class VoxDownloadCoordinator(
     @Synchronized
     @JvmOverloads
     fun startDownload(request: VoxDownloadRequest, listener: VoxDownloadListener? = null): String {
-        if (scheduledJobs.contains(request.downloadId)) return request.downloadId
         if (listener != null) {
             addListener(request.downloadId, listener)
         }
@@ -145,14 +145,25 @@ class VoxDownloadCoordinator(
             existing.lastOperation = "QUEUED"
             existing
         } else {
-            val newJob = VoxDownloadJob(request)
+            val newJob = VoxDownloadJob(request, initialState = VoxDownloadState.QUEUED)
             newJob.lastOperation = "QUEUED"
             repository.addOrUpdateJob(newJob)
             newJob
         }
 
         VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_QUEUED, "Задание скачивания добавлено в очередь", mapOf("downloadId" to request.downloadId))
-        scheduleJobExecution(job)
+
+        if (activeJobId == null || activeJobId == request.downloadId) {
+            activeJobId = request.downloadId
+            scheduleJobExecution(job)
+        } else {
+            job.updateState(VoxDownloadState.QUEUED)
+            repository.persistJob(job)
+            notifyStateChange(job)
+            if (!pendingQueue.contains(request.downloadId)) {
+                pendingQueue.offer(request.downloadId)
+            }
+        }
         return request.downloadId
     }
 
@@ -175,13 +186,27 @@ class VoxDownloadCoordinator(
         job.isPausedFlag.set(false)
         job.retryCount++
         job.lastOperation = "RESUME"
+        job.averageSpeedMbps = 0.0
+        job.peakSpeedMbps = 0.0
+
         VoxSafeLogger.i(
             VoxLogCategory.DOWNLOAD,
             VoxLogCode.DOWNLOAD_RESUMED,
             "Возобновление скачивания",
             mapOf("downloadId" to downloadId, "retryCount" to job.retryCount.toString())
         )
-        scheduleJobExecution(job)
+
+        if (activeJobId == null || activeJobId == downloadId) {
+            activeJobId = downloadId
+            scheduleJobExecution(job)
+        } else {
+            job.updateState(VoxDownloadState.QUEUED)
+            repository.persistJob(job)
+            notifyStateChange(job)
+            if (!pendingQueue.contains(downloadId)) {
+                pendingQueue.offer(downloadId)
+            }
+        }
         return true
     }
 
@@ -213,13 +238,22 @@ class VoxDownloadCoordinator(
      */
     fun pauseDownload(downloadId: String) {
         val job = repository.getJob(downloadId) ?: return
+        if (job.state == VoxDownloadState.COMPLETED) return
         job.isPausedFlag.set(true)
         job.bumpGeneration()
         job.updateState(VoxDownloadState.PAUSED)
         repository.persistJob(job)
         notifyStateChange(job)
-        if (activeJobId == downloadId) {
-            activeJobId = null
+        pendingQueue.remove(downloadId)
+        var wasActive = false
+        synchronized(this) {
+            if (activeJobId == downloadId) {
+                activeJobId = null
+                wasActive = true
+            }
+        }
+        if (wasActive) {
+            processNextQueuedJob()
         }
     }
 
@@ -235,8 +269,13 @@ class VoxDownloadCoordinator(
         VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_CANCELLED, "Загрузка видео отменена", mapOf("downloadId" to downloadId))
         repository.persistJob(job)
         notifyStateChange(job)
-        if (activeJobId == downloadId) {
-            activeJobId = null
+        pendingQueue.remove(downloadId)
+        var wasActive = false
+        synchronized(this) {
+            if (activeJobId == downloadId) {
+                activeJobId = null
+                wasActive = true
+            }
         }
 
         // Удаляем незавершенные файлы треков
@@ -258,6 +297,10 @@ class VoxDownloadCoordinator(
         val tmpMkv = storage.getTmpOutputFile(downloadId)
         if (tmpMkv.exists()) {
             tmpMkv.delete()
+        }
+
+        if (wasActive) {
+            processNextQueuedJob()
         }
     }
 
@@ -299,16 +342,30 @@ class VoxDownloadCoordinator(
 
     fun getProcessingJob(): VoxDownloadJob? = activeJobId?.let { repository.getJob(it) }
 
-    fun getQueuedCount(): Int = scheduledJobs.count {
-        it != activeJobId && repository.getJob(it)?.let { job -> !job.isCancelled() && !job.isPaused() } == true
+    fun getQueuedCount(): Int = repository.getAllJobs().count {
+        it.downloadId != activeJobId && (it.state == VoxDownloadState.QUEUED || it.state == VoxDownloadState.IDLE) && !it.isCancelled() && !it.isPaused()
     }
 
     /** Повторная обработка сохраняет проверенные исходники и тот же downloadId. */
     @Synchronized
-    fun retryDownload(downloadId: String): Boolean {
+    fun retryDownload(downloadId: String, force: Boolean = false): Boolean {
         if (scheduledJobs.contains(downloadId)) return false
         val job = repository.getJob(downloadId) ?: return false
         if (job.state != VoxDownloadState.FAILED && job.state != VoxDownloadState.CANCELLED) return false
+
+        if (!force) {
+            when (job.errorCode) {
+                VoxDownloadErrorCode.STORAGE_FULL,
+                VoxDownloadErrorCode.INSUFFICIENT_STORAGE,
+                VoxDownloadErrorCode.UNSUPPORTED_CODEC,
+                VoxDownloadErrorCode.UNSUPPORTED_FORMAT -> {
+                    VoxLog.w(TAG, "Cannot retry download $downloadId due to permanent error: ${job.errorCode}")
+                    return false
+                }
+                else -> { /* allowed */ }
+            }
+        }
+
         for (track in VoxDownloadTrack.values()) {
             val p = when (track) {
                 VoxDownloadTrack.VIDEO -> job.videoProgress
@@ -317,17 +374,51 @@ class VoxDownloadCoordinator(
             }
             val file = storage.getTrackFile(downloadId, track)
             if (!file.isFile || file.length() <= 0 || file.length() != p.bytesDownloaded || p.state != VoxTrackState.COMPLETED) {
-                job.updateTrackProgress(track, file.length(), p.totalBytes, VoxTrackState.PENDING)
+                job.updateTrackProgress(track, if (file.exists()) file.length() else 0L, p.totalBytes, VoxTrackState.PENDING)
             }
         }
+        job.updateState(VoxDownloadState.QUEUED)
+        repository.persistJob(job)
         return resumeDownload(downloadId)
     }
 
+    @Synchronized
+    fun processNextQueuedJob() {
+        if (activeJobId != null) return
+        var nextId: String? = null
+        while (pendingQueue.isNotEmpty()) {
+            val candidateId = pendingQueue.poll() ?: break
+            val candidateJob = repository.getJob(candidateId)
+            if (candidateJob != null &&
+                (candidateJob.state == VoxDownloadState.QUEUED || candidateJob.state == VoxDownloadState.IDLE) &&
+                !candidateJob.isCancelled() && !candidateJob.isPaused()
+            ) {
+                nextId = candidateId
+                break
+            }
+        }
+        if (nextId == null) {
+            val candidate = repository.getAllJobs()
+                .filter { (it.state == VoxDownloadState.QUEUED || it.state == VoxDownloadState.IDLE) && !it.isCancelled() && !it.isPaused() }
+                .minByOrNull { it.request.createdAt }
+            nextId = candidate?.downloadId
+        }
+        if (nextId != null) {
+            val job = repository.getJob(nextId) ?: return
+            activeJobId = nextId
+            scheduleJobExecution(job)
+        }
+    }
+
     private fun scheduleJobExecution(job: VoxDownloadJob) {
-        if (!scheduledJobs.add(job.downloadId)) return
+        val added = scheduledJobs.add(job.downloadId)
         val generation = job.generation.get()
+        if (!added) return
         executor.submit {
-            try { if (!isStale(job, generation)) executeJob(job) }
+            try {
+                val stale = isStale(job, generation)
+                if (!stale) executeJob(job)
+            }
             finally { scheduledJobs.remove(job.downloadId) }
         }
     }
@@ -338,11 +429,13 @@ class VoxDownloadCoordinator(
 
         synchronized(this) {
             if (activeJobId != null && activeJobId != downloadId) {
-                // В MVP выполняется одно активное задание за раз
                 VoxLog.d(TAG, "Another download is already active ($activeJobId), queueing $downloadId")
-                job.updateState(VoxDownloadState.PAUSED)
+                job.updateState(VoxDownloadState.QUEUED)
                 repository.persistJob(job)
                 notifyStateChange(job)
+                if (!pendingQueue.contains(downloadId)) {
+                    pendingQueue.offer(downloadId)
+                }
                 return
             }
             activeJobId = downloadId
@@ -427,6 +520,23 @@ class VoxDownloadCoordinator(
 
             if (isStale(job, expectedGen)) return
 
+            // Storage space pre-check before downloading streams (Worst-case estimate: Prompt #37-#39)
+            val videoBytes = videoStream?.contentLength ?: 0L
+            val audioBytes = originalAudioStream?.contentLength ?: 0L
+            val transBytes = if (resolvedTranslation != null) 10 * 1024 * 1024L else 0L
+            val totalTrackBytes = videoBytes + audioBytes + transBytes
+            if (totalTrackBytes > 0L) {
+                val worstCaseRequiredBytes = (totalTrackBytes * 2) + 10 * 1024 * 1024L
+                if (!storage.hasEnoughSpace(worstCaseRequiredBytes)) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.INSUFFICIENT_STORAGE,
+                        "Insufficient storage space: required $worstCaseRequiredBytes bytes, available ${storage.getAvailableBytes()}"
+                    )
+                }
+            }
+
+            if (isStale(job, expectedGen)) return
+
             // 3. Параллельная загрузка медиа-потоков (видео, оригинальный звук, перевод)
             val needVideo = job.videoProgress.state != VoxTrackState.COMPLETED && videoStream != null
             val needAudio = job.originalAudioProgress.state != VoxTrackState.COMPLETED && originalAudioStream != null
@@ -469,6 +579,8 @@ class VoxDownloadCoordinator(
                     notifyStateChange(job)
                 }
 
+                if (isStale(job, expectedGen)) return
+
                 // Устанавливаем общее состояние параллельной загрузки медиа
                 job.updateState(VoxDownloadState.DOWNLOADING_MEDIA)
                 job.lastOperation = "DOWNLOAD_MEDIA_PARALLEL"
@@ -508,6 +620,7 @@ class VoxDownloadCoordinator(
                             },
                             onStallDetected = {
                                 job.stallEventsCount++
+                                job.networkReconnectCount++
                             }
                         )
 
@@ -557,6 +670,7 @@ class VoxDownloadCoordinator(
                             },
                             onStallDetected = {
                                 job.stallEventsCount++
+                                job.networkReconnectCount++
                             }
                         )
 
@@ -617,6 +731,7 @@ class VoxDownloadCoordinator(
                             },
                             onStallDetected = {
                                 job.stallEventsCount++
+                                job.networkReconnectCount++
                             }
                         )
 
@@ -658,7 +773,11 @@ class VoxDownloadCoordinator(
                 job.downloadElapsedMs = System.currentTimeMillis() - downloadStartMs
                 val totalBytes = job.videoProgress.bytesDownloaded + job.originalAudioProgress.bytesDownloaded + job.translatedAudioProgress.bytesDownloaded
                 if (job.downloadElapsedMs > 0) {
-                    job.averageSpeedMbps = (totalBytes * 8.0) / (job.downloadElapsedMs * 1000.0)
+                    val avgSpeed = (totalBytes * 8.0) / (job.downloadElapsedMs * 1000.0)
+                    job.averageSpeedMbps = avgSpeed
+                    if (avgSpeed > job.peakSpeedMbps) {
+                        job.peakSpeedMbps = avgSpeed
+                    }
                 }
                 repository.persistJob(job)
             }
@@ -745,10 +864,15 @@ class VoxDownloadCoordinator(
                 notifyStateChange(job)
             }
         } finally {
+            var wasActive = false
             synchronized(this) {
                 if (activeJobId == downloadId) {
                     activeJobId = null
+                    wasActive = true
                 }
+            }
+            if (wasActive) {
+                processNextQueuedJob()
             }
         }
     }
@@ -1104,17 +1228,31 @@ class VoxDownloadCoordinator(
     }
 
     fun getDiagnosticsSummary(): Map<String, Any> {
-        val lastJob = repository.getAllJobs().maxByOrNull { it.request.createdAt }
+        val allJobs = repository.getAllJobs()
+        val lastJob = allJobs.maxByOrNull { it.request.createdAt }
         val freeMb = try { storage.getAvailableBytes() / (1024 * 1024) } catch (ignored: Exception) { -1L }
+        val queueLength = getQueuedCount()
+        val activeJobs = if (activeJobId != null) 1 else 0
+        val pausedJobs = allJobs.count { it.state == VoxDownloadState.PAUSED }
+        val failedJobs = allJobs.count { it.state == VoxDownloadState.FAILED }
+
         if (lastJob == null) {
             return mapOf(
                 "hasJobs" to false,
+                "queueLength" to queueLength,
+                "activeJobs" to activeJobs,
+                "pausedJobs" to pausedJobs,
+                "failedJobs" to failedJobs,
                 "freeStorageMb" to freeMb
             )
         }
         val totalBytes = lastJob.videoProgress.bytesDownloaded + lastJob.originalAudioProgress.bytesDownloaded + lastJob.translatedAudioProgress.bytesDownloaded
         val avgBytesPerSec = if (lastJob.downloadElapsedMs > 0) (totalBytes * 1000L) / lastJob.downloadElapsedMs else 0L
         return mapOf(
+            "queueLength" to queueLength,
+            "activeJobs" to activeJobs,
+            "pausedJobs" to pausedJobs,
+            "failedJobs" to failedJobs,
             "lastStage" to (lastJob.lastFailedStage ?: lastJob.state.stageName),
             "lastErrorCategory" to (lastJob.lastErrorCategory ?: lastJob.errorCode?.name ?: "NONE"),
             "lastOperation" to (lastJob.lastOperation ?: "NONE"),
@@ -1131,6 +1269,7 @@ class VoxDownloadCoordinator(
                 "totalElapsedMs" to lastJob.downloadElapsedMs,
                 "averageBytesPerSecond" to avgBytesPerSec,
                 "averageMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.averageSpeedMbps),
+                "peakMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.peakSpeedMbps),
                 "videoElapsedMs" to lastJob.videoElapsedMs,
                 "audioElapsedMs" to lastJob.audioElapsedMs,
                 "translationElapsedMs" to lastJob.translationElapsedMs,
@@ -1138,6 +1277,8 @@ class VoxDownloadCoordinator(
                 "finalizeElapsedMs" to lastJob.finalizeElapsedMs,
                 "stallCount" to lastJob.stallEventsCount,
                 "resumeCount" to lastJob.rangeResumptionsCount,
+                "rangeResumeCount" to lastJob.rangeResumptionsCount,
+                "networkReconnectCount" to lastJob.networkReconnectCount,
                 "retryCount" to lastJob.retryCount,
                 "parallelConnections" to lastJob.parallelStreamsCount
             )

@@ -283,7 +283,7 @@ object VoxDownloadDialogHelper {
                         context.getString(R.string.vox_download_retry),
                         { _ ->
                             cleanupListener()
-                            if (coordinator.retryDownload(currentJob.downloadId)) {
+                            if (coordinator.retryDownload(currentJob.downloadId, force = true)) {
                                 VoxDownloadService.start(context, currentJob.downloadId)
                                 showProgressDialog(context, currentJob.downloadId)
                             }
@@ -296,7 +296,46 @@ object VoxDownloadDialogHelper {
                             presenter.closeDialog()
                         }
                     ))
+                } else if (currentJob.state == VoxDownloadState.PAUSED) {
+                    options.add(UiOptionItem.from(
+                        context.getString(R.string.vox_download_resume),
+                        { _ ->
+                            cleanupListener()
+                            VoxDownloadService.resume(context, downloadId)
+                            showProgressDialog(context, downloadId)
+                        }
+                    ))
+                    options.add(UiOptionItem.from(
+                        context.getString(R.string.vox_download_cancel_job),
+                        { _ ->
+                            cleanupListener()
+                            AppDialogUtil.showConfirmationDialog(
+                                context,
+                                context.getString(R.string.vox_download_cancel_confirm),
+                                {
+                                    cleanupListener()
+                                    VoxDownloadService.cancel(context, downloadId)
+                                    presenter.closeDialog()
+                                }
+                            )
+                        }
+                    ))
+                    options.add(UiOptionItem.from(
+                        context.getString(R.string.vox_download_close),
+                        { _ ->
+                            cleanupListener()
+                            presenter.closeDialog()
+                        }
+                    ))
                 } else {
+                    options.add(UiOptionItem.from(
+                        "Пауза",
+                        { _ ->
+                            cleanupListener()
+                            VoxDownloadService.pause(context, downloadId)
+                            showProgressDialog(context, downloadId)
+                        }
+                    ))
                     options.add(UiOptionItem.from(
                         context.getString(R.string.vox_download_cancel_job),
                         { _ ->

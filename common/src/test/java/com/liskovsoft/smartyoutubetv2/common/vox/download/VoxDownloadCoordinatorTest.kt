@@ -244,7 +244,7 @@ class VoxDownloadCoordinatorTest {
         val jobB = coordinator.getJob("job-B")
         assertNotNull(jobB)
         // jobB не должно стартовать параллельно, пока jobA выполняется
-        assertTrue(jobB!!.state == VoxDownloadState.PAUSED || jobB.state == VoxDownloadState.IDLE)
+        assertTrue(jobB!!.state == VoxDownloadState.QUEUED || jobB.state == VoxDownloadState.PAUSED || jobB.state == VoxDownloadState.IDLE)
     }
 
     @Test

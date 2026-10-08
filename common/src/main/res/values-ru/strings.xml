@@ -344,6 +344,10 @@
     <string name="vox_download_open_local">Открыть</string>
     <string name="vox_download_redownload">Скачать ещё раз</string>
     <string name="vox_download_delete">Удалить</string>
+    <string name="vox_download_pause">Пауза</string>
+    <string name="vox_download_resume">Продолжить</string>
+    <string name="vox_download_stage_queued">В очереди</string>
+    <string name="vox_download_stage_paused">Приостановлено</string>
     <string name="vox_download_cancel_job">Отменить загрузку</string>
     <string name="vox_download_cancel_confirm">Отменить загрузку?</string>
     <string name="vox_download_close">Закрыть</string>

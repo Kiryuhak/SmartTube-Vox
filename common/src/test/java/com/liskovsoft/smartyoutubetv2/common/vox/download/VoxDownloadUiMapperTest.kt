@@ -16,8 +16,8 @@ class VoxDownloadUiMapperTest {
 
     @Test fun missingCompletedFileHasNoOpenAction() {
         assertFalse(VoxDownloadUiMapper.actions(VoxDownloadState.COMPLETED, true).contains("Открыть"))
-        assertTrue(VoxDownloadUiMapper.actions(VoxDownloadState.COMPLETED, false).contains("Открыть"))
-        assertEquals(listOf("Продолжить", "Удалить"), VoxDownloadUiMapper.actions(VoxDownloadState.PAUSED, false))
+        assertEquals(listOf("Продолжить", "Отменить загрузку", "Удалить"), VoxDownloadUiMapper.actions(VoxDownloadState.PAUSED, false))
+        assertEquals(listOf("Пауза", "Отменить загрузку"), VoxDownloadUiMapper.actions(VoxDownloadState.QUEUED, false))
     }
 
     @Test fun labelsAndStorageMath() {

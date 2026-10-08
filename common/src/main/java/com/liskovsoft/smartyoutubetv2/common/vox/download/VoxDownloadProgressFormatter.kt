@@ -21,6 +21,7 @@ object VoxDownloadProgressFormatter {
             VoxDownloadState.FAILED -> "Ошибка загрузки"
             VoxDownloadState.CANCELLED,
             VoxDownloadState.IDLE,
+            VoxDownloadState.QUEUED,
             null -> "Скачать"
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,

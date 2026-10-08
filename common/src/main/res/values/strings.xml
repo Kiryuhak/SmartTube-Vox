@@ -348,6 +348,10 @@
     <string name="vox_download_open_local">Open</string>
     <string name="vox_download_redownload">Download again</string>
     <string name="vox_download_delete">Delete</string>
+    <string name="vox_download_pause">Pause</string>
+    <string name="vox_download_resume">Resume</string>
+    <string name="vox_download_stage_queued">Queued</string>
+    <string name="vox_download_stage_paused">Paused</string>
     <string name="vox_download_cancel_job">Cancel download</string>
     <string name="vox_download_cancel_confirm">Cancel download?</string>
     <string name="vox_download_close">Close</string>

@@ -35,6 +35,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
 
         const val ACTION_START_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.START_DOWNLOAD"
         const val ACTION_RESUME_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.RESUME_DOWNLOAD"
+        const val ACTION_PAUSE_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.PAUSE_DOWNLOAD"
         const val ACTION_CANCEL_DOWNLOAD = "com.liskovsoft.smartyoutubetv2.action.CANCEL_DOWNLOAD"
         const val ACTION_STOP_SERVICE = "com.liskovsoft.smartyoutubetv2.action.STOP_DOWNLOAD_SERVICE"
         const val EXTRA_DOWNLOAD_ID = "extra_download_id"
@@ -70,6 +71,19 @@ class VoxDownloadService : Service(), VoxDownloadListener {
                 }
             } catch (e: Exception) {
                 VoxLog.e(TAG, "Failed to resume VoxDownloadService: ${e.message}")
+            }
+        }
+
+        @JvmStatic
+        fun pause(context: Context, downloadId: String) {
+            val intent = Intent(context, VoxDownloadService::class.java).apply {
+                action = ACTION_PAUSE_DOWNLOAD
+                putExtra(EXTRA_DOWNLOAD_ID, downloadId)
+            }
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                VoxLog.e(TAG, "Failed to send pause to VoxDownloadService: ${e.message}")
             }
         }
 
@@ -159,6 +173,12 @@ class VoxDownloadService : Service(), VoxDownloadListener {
                 } else {
                     checkActiveWorkOrStop()
                 }
+            }
+            ACTION_PAUSE_DOWNLOAD -> {
+                if (VoxDownloadServicePolicy.isValidDownloadId(downloadId)) {
+                    coordinator.pauseDownload(downloadId!!)
+                }
+                checkActiveWorkOrStop()
             }
             ACTION_CANCEL_DOWNLOAD -> {
                 if (VoxDownloadServicePolicy.isValidDownloadId(downloadId)) {
@@ -292,7 +312,8 @@ class VoxDownloadService : Service(), VoxDownloadListener {
             VoxDownloadState.COMPLETED -> getString(R.string.vox_download_stage_completed)
             VoxDownloadState.FAILED -> getString(R.string.vox_download_stage_failed)
             VoxDownloadState.CANCELLED -> getString(R.string.vox_download_stage_cancelled)
-            VoxDownloadState.PAUSED -> getString(R.string.vox_download_stage_prep_trans)
+            VoxDownloadState.PAUSED -> getString(R.string.vox_download_stage_paused)
+            VoxDownloadState.QUEUED -> getString(R.string.vox_download_stage_queued)
             VoxDownloadState.IDLE -> getString(R.string.vox_download_stage_prep_trans)
         }
     }

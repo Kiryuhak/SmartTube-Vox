@@ -104,6 +104,7 @@ data class VoxTrackProgress(
  */
 enum class VoxDownloadState {
     IDLE,
+    QUEUED,
     PREPARING_TRANSLATION,
     RESOLVING_STREAMS,
     DOWNLOADING_MEDIA,
@@ -125,7 +126,7 @@ enum class VoxDownloadState {
 
     val stageName: String
         get() = when (this) {
-            IDLE -> "QUEUED"
+            IDLE, QUEUED -> "QUEUED"
             RESOLVING_STREAMS -> "RESOLVING"
             DOWNLOADING_MEDIA -> "DOWNLOADING_MEDIA"
             DOWNLOADING_VIDEO -> "DOWNLOADING_VIDEO"
