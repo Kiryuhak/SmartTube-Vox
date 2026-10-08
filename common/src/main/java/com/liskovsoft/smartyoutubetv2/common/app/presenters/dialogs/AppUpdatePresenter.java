@@ -14,8 +14,17 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.utils.LoadingManager;
+import com.liskovsoft.sharedutils.helpers.AppInfoHelpers;
+import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaErrorCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo;
+
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,10 +62,57 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
 
         if (forceCheck) {
             LoadingManager.showLoading(getContext(), true);
-            mUpdateChecker.forceCheckForUpdates(mUpdateManifestUrls);
-        } else {
-            mUpdateChecker.checkForUpdates(mUpdateManifestUrls);
         }
+
+        String currentVersion = AppInfoHelpers.getAppVersionName(getContext());
+        boolean isBeta = getContext() != null && getContext().getPackageName() != null && getContext().getPackageName().contains("beta");
+
+        VoxOtaUpdateManager.instance(getContext()).checkForUpdates(
+                currentVersion,
+                mUpdateManifestUrls,
+                isBeta,
+                new VoxOtaUpdateManager.Callback() {
+                    @Override
+                    public void onUpdateAvailable(VoxReleaseInfo release, VoxReleaseAsset asset) {
+                        if (mIsForceCheck) {
+                            LoadingManager.showLoading(getContext(), false);
+                            showVoxUpdateDialog(release, asset);
+                        } else if (GeneralData.instance(getContext()).isOldUpdateNotificationsEnabled()) {
+                            showVoxUpdateDialog(release, asset);
+                        } else {
+                            pinUpdateSection(release.getVersionName(), release.getChangelog(), asset.getDownloadUrl());
+                        }
+                    }
+
+                    @Override
+                    public void onNoUpdateAvailable(String currentVersion) {
+                        if (mIsForceCheck) {
+                            LoadingManager.showLoading(getContext(), false);
+                            MessageHelpers.showMessage(getContext(), R.string.update_not_found);
+                        }
+                        onFinish();
+                    }
+
+                    @Override
+                    public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {
+                    }
+
+                    @Override
+                    public void onDownloadCompleted(File apkFile) {
+                        LoadingManager.showLoading(getContext(), false);
+                        VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
+                    }
+
+                    @Override
+                    public void onError(VoxOtaException error) {
+                        if (mIsForceCheck) {
+                            LoadingManager.showLoading(getContext(), false);
+                            MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
+                        }
+                        onFinish();
+                    }
+                }
+        );
     }
 
     @Override
@@ -79,12 +135,52 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
             if (AppUpdateCheckerListener.LATEST_VERSION.equals(error.getMessage())) {
                 MessageHelpers.showMessage(getContext(), R.string.update_not_found);
             } else {
-                MessageHelpers.showMessage(getContext(), String.format("%s: %s", getContext().getString(R.string.update_error),
-                        error.getCause() != null ? error.getCause().getMessage() : error.getMessage()));
+                // Никогда не показываем сырой Java exception пользователю
+                MessageHelpers.showMessage(getContext(), R.string.update_error);
             }
         }
 
         onFinish();
+    }
+
+    private void showVoxUpdateDialog(VoxReleaseInfo release, VoxReleaseAsset asset) {
+        if (getContext() == null || getViewManager().isPlayerInForeground() || !Utils.isAppInForegroundFixed()) {
+            return;
+        }
+
+        mSettingsPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.install_update), optionItem -> {
+                    GeneralData.instance(getContext()).setChangelog(release.getChangelog());
+                    LoadingManager.showLoading(getContext(), true);
+                    VoxOtaUpdateManager.instance(getContext()).downloadAndVerify(
+                            asset,
+                            release,
+                            new VoxOtaUpdateManager.Callback() {
+                                @Override
+                                public void onUpdateAvailable(VoxReleaseInfo r, VoxReleaseAsset a) {}
+
+                                @Override
+                                public void onNoUpdateAvailable(String v) {}
+
+                                @Override
+                                public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {}
+
+                                @Override
+                                public void onDownloadCompleted(File apkFile) {
+                                    LoadingManager.showLoading(getContext(), false);
+                                    VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
+                                }
+
+                                @Override
+                                public void onError(VoxOtaException error) {
+                                    LoadingManager.showLoading(getContext(), false);
+                                    MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
+                                }
+                            }
+                    );
+                }, false));
+        mSettingsPresenter.appendStringsCategory(getContext().getString(R.string.update_changelog), createChangelogOptions(release.getChangelog()));
+        mSettingsPresenter.showDialog(String.format("%s %s", getContext().getString(R.string.app_name), release.getVersionName()), AppUpdatePresenter::unhold);
     }
 
     private void showUpdateDialog(String versionName, List<String> changelog, String apkPath) {
@@ -99,11 +195,6 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
                     mUpdateChecker.installUpdate();
                 }, false));
         mSettingsPresenter.appendStringsCategory(getContext().getString(R.string.update_changelog), createChangelogOptions(changelog));
-        //mSettingsPresenter.appendSingleSwitch(UiOptionItem.from(getContext().getString(R.string.show_again), optionItem -> {
-        //    mUpdateChecker.enableUpdateCheck(optionItem.isSelected());
-        //}, mUpdateChecker.isUpdateCheckEnabled()));
-
-        //mSettingsPresenter.setOnFinish(getOnFinish());
         mSettingsPresenter.showDialog(String.format("%s %s", getContext().getString(R.string.app_name), versionName), AppUpdatePresenter::unhold);
     }
 

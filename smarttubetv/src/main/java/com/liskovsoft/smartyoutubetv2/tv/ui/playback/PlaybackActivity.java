@@ -2,6 +2,8 @@ package com.liskovsoft.smartyoutubetv2.tv.ui.playback;
 
 import android.annotation.TargetApi;
 import android.app.PictureInPictureParams;
+import android.content.Context;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.InputDevice;
@@ -17,8 +19,12 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
+import com.liskovsoft.smartyoutubetv2.common.misc.BackgroundPlaybackService;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.common.LeanbackActivity;
 
@@ -35,6 +41,7 @@ public class PlaybackActivity extends LeanbackActivity {
     private static final float GAMEPAD_TRIGGER_INTENSITY_OFF = 0.45f;
     private boolean gamepadTriggerPressed = false;
     private PlaybackFragment mPlaybackFragment;
+    private boolean mIsBackgroundAudioOnlyActive = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -168,9 +175,11 @@ public class PlaybackActivity extends LeanbackActivity {
         // Also, avoid enter pip on stop!
         // More info: https://developer.android.com/guide/topics/ui/picture-in-picture#continuing_playback
 
-        // NOTE: block back button for PIP.
-        // User pressed PIP button in the player.
-        if (!skipPip()) {
+        if (mIsBackgroundAudioOnlyActive) {
+            exitBackgroundAudioOnly();
+        }
+
+        if (wannaEnterToPip() && !skipPip()) {
             enterPipMode(); // NOTE: without this call app will hangs when pressing on PIP button
         }
 
@@ -194,9 +203,31 @@ public class PlaybackActivity extends LeanbackActivity {
 
     @Override
     public void finishReally() {
+        if (mIsBackgroundAudioOnlyActive) {
+            exitBackgroundAudioOnly();
+        }
+        BackgroundPlaybackService.stop(this);
         super.finishReally();
 
         mPlaybackFragment.onFinish();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mIsBackgroundAudioOnlyActive) {
+            exitBackgroundAudioOnly();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mIsBackgroundAudioOnlyActive) {
+            exitBackgroundAudioOnly();
+        }
+        unregisterAudioFocusListener();
+        BackgroundPlaybackService.stop(this);
+        super.onDestroy();
     }
 
     @Override
@@ -261,29 +292,133 @@ public class PlaybackActivity extends LeanbackActivity {
             return;
         }
 
-        switch (getPlayerData().getBackgroundMode()) {
+        int backgroundMode = getPlayerData().getBackgroundMode();
+        VoxSafeLogger.info(
+                VoxLogCategory.BACKGROUND,
+                VoxLogCode.BACKGROUND_PLAYBACK_REQUESTED,
+                "Запрошен переход в фоновый режим по нажатию Home (mode=" + backgroundMode + ")"
+        );
+
+        if (backgroundMode == PlayerData.BACKGROUND_MODE_DEFAULT) {
+            VoxSafeLogger.info(
+                    VoxLogCategory.BACKGROUND,
+                    VoxLogCode.BACKGROUND_PLAYBACK_BLOCKED,
+                    "Фоновое воспроизведение отключено в настройках, остановка плеера"
+            );
+            if (mPlaybackFragment != null && mPlaybackFragment.isPlaying()) {
+                mPlaybackFragment.onPause();
+                VoxSafeLogger.info(
+                        VoxLogCategory.BACKGROUND,
+                        VoxLogCode.BACKGROUND_PLAYER_PAUSED,
+                        "Плеер приостановлен при уходе в фон"
+                );
+            }
+            return;
+        }
+
+        VoxSafeLogger.info(
+                VoxLogCategory.BACKGROUND,
+                VoxLogCode.BACKGROUND_PLAYBACK_ALLOWED,
+                "Фоновое воспроизведение разрешено (mode=" + backgroundMode + ")"
+        );
+
+        switch (backgroundMode) {
             case PlayerData.BACKGROUND_MODE_PLAY_BEHIND:
                 enterBackgroundPlayMode();
-                // Do we need to do something additional when running Play Behind?
                 break;
             case PlayerData.BACKGROUND_MODE_PIP:
                 enterPipMode();
                 if (doNotDestroy()) {
                     mPlaybackFragment.blockEngine(true);
-                    // Ensure to opening this activity when the user will return to the app
                     getViewManager().blockTop(this);
-                    // Enable collapse app to Home launcher
-                    //getViewManager().enableMoveToBack(true);
                 }
                 break;
             case PlayerData.BACKGROUND_MODE_SOUND:
-                if (doNotDestroy()) {
-                    // Ensure to continue a playback
-                    mPlaybackFragment.blockEngine(true);
-                    getViewManager().blockTop(this);
-                    //getViewManager().enableMoveToBack(true);
-                }
+                enterBackgroundAudioOnly();
                 break;
+        }
+    }
+
+    private AudioManager.OnAudioFocusChangeListener mAudioFocusListener;
+
+    private void enterBackgroundAudioOnly() {
+        if (mPlaybackFragment == null) return;
+        mIsBackgroundAudioOnlyActive = true;
+        VoxSafeLogger.info(
+                VoxLogCategory.BACKGROUND,
+                VoxLogCode.BACKGROUND_AUDIO_ONLY_ENTER,
+                "Вход в режим воспроизведения Только аудио"
+        );
+        mPlaybackFragment.blockEngine(true);
+        getViewManager().blockTop(this);
+        // Отключаем видеопоток, чтобы ExoPlayer не застревал в BUFFERING без Surface
+        mPlaybackFragment.setVideoTrackEnabled(false);
+        // Регистрируем управление AudioFocus для отслеживания событий системы
+        registerAudioFocusListener();
+        // Запускаем службу фонового воспроизведения для удержания приоритета процесса
+        BackgroundPlaybackService.start(this);
+        VoxSafeLogger.info(
+                VoxLogCategory.BACKGROUND,
+                VoxLogCode.BACKGROUND_PLAYER_CONTINUED,
+                "Воспроизведение звука продолжено в фоновом режиме"
+        );
+    }
+
+    private void exitBackgroundAudioOnly() {
+        if (!mIsBackgroundAudioOnlyActive) return;
+        mIsBackgroundAudioOnlyActive = false;
+        unregisterAudioFocusListener();
+        VoxSafeLogger.info(
+                VoxLogCategory.BACKGROUND,
+                VoxLogCode.BACKGROUND_AUDIO_ONLY_EXIT,
+                "Выход из режима Только аудио, возврат на передний план"
+        );
+        if (mPlaybackFragment != null) {
+            mPlaybackFragment.setVideoTrackEnabled(true);
+            mPlaybackFragment.blockEngine(false);
+        }
+        BackgroundPlaybackService.stop(this);
+    }
+
+    private void registerAudioFocusListener() {
+        if (mAudioFocusListener == null) {
+            mAudioFocusListener = focusChange -> {
+                if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
+                    VoxSafeLogger.info(
+                            VoxLogCategory.BACKGROUND,
+                            VoxLogCode.BACKGROUND_AUDIO_FOCUS_GAIN,
+                            "Audio focus gained in background"
+                    );
+                } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS ||
+                           focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
+                           focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
+                    VoxSafeLogger.warn(
+                            VoxLogCategory.BACKGROUND,
+                            VoxLogCode.BACKGROUND_AUDIO_FOCUS_LOSS,
+                            "Audio focus lost in background (focusChange=" + focusChange + ")"
+                    );
+                }
+            };
+        }
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am != null) {
+            int res = am.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+            if (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                VoxSafeLogger.info(
+                        VoxLogCategory.BACKGROUND,
+                        VoxLogCode.BACKGROUND_AUDIO_FOCUS_GAIN,
+                        "Audio focus granted for background playback"
+                );
+            }
+        }
+    }
+
+    private void unregisterAudioFocusListener() {
+        if (mAudioFocusListener != null) {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                am.abandonAudioFocus(mAudioFocusListener);
+            }
         }
     }
 
@@ -309,17 +444,15 @@ public class PlaybackActivity extends LeanbackActivity {
 
     @TargetApi(24)
     private boolean wannaEnterToPip() {
-        //return mPlaybackFragment != null && mPlaybackFragment.getBackgroundMode() == PlayerEngine.BACKGROUND_MODE_PIP && !isInPictureInPictureMode();
-        //return mPlaybackFragment != null && mPlaybackFragment.isEngineBlocked() && !isInPictureInPictureMode();
-        boolean isPip = getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_PIP || isEngineBlocked();
+        boolean isPip = getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_PIP;
         return isPip && !isInPictureInPictureMode();
     }
 
     private boolean doNotDestroy() {
         sIsInPipMode = isInPipMode();
-        //return sIsInPipMode || mPlaybackFragment.getBackgroundMode() == PlayerEngine.BACKGROUND_MODE_SOUND;
-        //return sIsInPipMode || mPlaybackFragment.isEngineBlocked();
-        boolean isBackground = getPlayerData().getBackgroundMode() == PlayerEngine.BACKGROUND_MODE_SOUND || isEngineBlocked();
+        boolean isBackground = getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_SOUND ||
+                getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_PIP ||
+                isEngineBlocked();
         return sIsInPipMode || isBackground;
     }
 

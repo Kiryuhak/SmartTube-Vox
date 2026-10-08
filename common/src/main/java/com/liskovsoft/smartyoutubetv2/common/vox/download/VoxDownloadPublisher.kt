@@ -59,7 +59,7 @@ class VoxMediaStorePublisher(
         const val RELATIVE_SUBDIRECTORY = "Movies/SmartTube VOX"
         const val MIME_TYPE_MKV = "video/x-matroska"
         private const val MAX_FILENAME_LENGTH = 120
-        private const val BUFFER_SIZE = 64 * 1024
+        private const val BUFFER_SIZE = 128 * 1024
 
         /**
          * Очищает название видео от запрещённых символов файловой системы
@@ -129,7 +129,16 @@ class VoxMediaStorePublisher(
         val resolver = context.contentResolver
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return publishScopedStorage(resolver, outputFile, videoTitle, isCancelled, onProgress)
+            try {
+                return publishScopedStorage(resolver, outputFile, videoTitle, isCancelled, onProgress)
+            } catch (scopedErr: Exception) {
+                if (isCancelled.get()) throw scopedErr
+                com.liskovsoft.sharedutils.mylogger.Log.w(
+                    "VoxMediaStorePublisher",
+                    "Scoped storage publish failed (${scopedErr.message}), falling back to direct/legacy storage (DuneHD/custom storage fallback)"
+                )
+                return publishLegacyStorage(outputFile, videoTitle, isCancelled, onProgress)
+            }
         } else {
             return publishLegacyStorage(outputFile, videoTitle, isCancelled, onProgress)
         }
@@ -277,14 +286,23 @@ class VoxMediaStorePublisher(
                 }
             }
             if (!tmpCandidate.renameTo(candidateFile)) {
-                // Пытаемся скопировать, если атомарное переименование не сработало
+                // Пытаемся скопировать с 128 KiB буфером, если атомарное переименование не сработало (cross-mount / EXDEV)
                 try {
                     tmpCandidate.inputStream().use { input ->
                         candidateFile.outputStream().use { output ->
-                            input.copyTo(output)
+                            val copyBuf = ByteArray(BUFFER_SIZE)
+                            var readBytes: Int
+                            while (input.read(copyBuf).also { readBytes = it } != -1) {
+                                output.write(copyBuf, 0, readBytes)
+                            }
+                            output.flush()
                         }
                     }
-                    tmpCandidate.delete()
+                    if (candidateFile.exists() && candidateFile.length() == outputFile.length()) {
+                        tmpCandidate.delete()
+                    } else {
+                        throw java.io.IOException("Destination file verification failed after cross-mount copy (expected ${outputFile.length()}, got ${candidateFile.length()})")
+                    }
                 } catch (copyErr: Exception) {
                     throw VoxDownloadException(
                         VoxDownloadErrorCode.OUTPUT_MOVE_FAILED,

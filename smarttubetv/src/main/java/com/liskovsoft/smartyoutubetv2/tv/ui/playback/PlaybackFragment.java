@@ -428,6 +428,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             mMediaSession.setActive(false);
             mMediaSession.release();
             mMediaSession = null;
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.BACKGROUND,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.BACKGROUND_MEDIASESSION_RELEASED,
+                    "MediaSession освобождена"
+            );
         }
         if (mPlayerGlue != null) {
             ((PlaybackTransportRowPresenter) mPlayerGlue.getPlaybackRowPresenter()).setOnActionLongClickedListener(null);
@@ -630,6 +635,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         boolean disableNotifications = getPlayerTweaksData().isPlaybackNotificationsDisabled();
         mMediaSession = new MediaSessionCompat(getContext().getApplicationContext(), getContext().getPackageName()); // NOTE: mem leak fix (SegmentTimelineElement)
         mMediaSession.setActive(!disableNotifications);
+        if (!disableNotifications) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.BACKGROUND,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.BACKGROUND_MEDIASESSION_ACTIVE,
+                    "MediaSession активирована"
+            );
+        }
         mMediaSessionConnector = new MediaSessionConnector(mMediaSession);
 
         try {
@@ -1090,6 +1102,12 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     @Override
     public boolean isEngineBlocked() {
         return mIsEngineBlocked;
+    }
+
+    public void setVideoTrackEnabled(boolean enabled) {
+        if (mExoPlayerController != null) {
+            mExoPlayerController.setVideoTrackEnabled(enabled);
+        }
     }
 
     @Override

@@ -1061,14 +1061,16 @@ class VoxDownloadCoordinator(
 
             job.finalizeElapsedMs = System.currentTimeMillis() - finalizeStart
             job.publishedUri = pubUri.toString()
-                if (!publisher.isPublishedFileAvailable(job.publishedUri) || storage.getPublishedFileSize(job.publishedUri) != job.finalFileBytes) {
-                    throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Published file validation failed")
-                }
-                // Сначала фиксируем метаданные; UI не увидит COMPLETED до успешной записи.
-                VoxDownloadCompletionValidator.check(job, storage.getPublishedFileSize(job.publishedUri))
-                repository.persistJob(job, VoxDownloadState.COMPLETED)
-                job.updateState(VoxDownloadState.COMPLETED)
-                VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка и сохранение видео успешно завершены", mapOf("downloadId" to downloadId))
+            val publishedSize = storage.getPublishedFileSize(job.publishedUri)
+            val effectiveSize = if (publishedSize > 0L) publishedSize else outputFile.length()
+            if (!publisher.isPublishedFileAvailable(job.publishedUri) || (publishedSize > 0L && publishedSize != job.finalFileBytes)) {
+                throw VoxDownloadException(VoxDownloadErrorCode.FINALIZE_FAILED, "Published file validation failed (publishedSize=$publishedSize, expected=${job.finalFileBytes})")
+            }
+            // Сначала фиксируем метаданные; UI не увидит COMPLETED до успешной записи.
+            VoxDownloadCompletionValidator.check(job, effectiveSize)
+            repository.persistJob(job, VoxDownloadState.COMPLETED)
+            job.updateState(VoxDownloadState.COMPLETED)
+            VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка и сохранение видео успешно завершены", mapOf("downloadId" to downloadId))
 
                 // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
                 storage.cleanInternalSourcesAfterPublication(downloadId)
@@ -1173,7 +1175,12 @@ class VoxDownloadCoordinator(
             VoxDownloadErrorCode.INSUFFICIENT_STORAGE,
             VoxDownloadErrorCode.STORAGE_FULL -> VoxDownloadFailureCategory.STORAGE_FULL
             VoxDownloadErrorCode.STORAGE_PERMISSION -> VoxDownloadFailureCategory.STORAGE_PERMISSION
-            VoxDownloadErrorCode.PACKAGING_FAILED -> VoxDownloadFailureCategory.PACKAGING_FAILED
+            VoxDownloadErrorCode.STORAGE_ERROR -> VoxDownloadFailureCategory.FINALIZE_FAILED
+            VoxDownloadErrorCode.FINALIZE_FAILED -> VoxDownloadFailureCategory.FINALIZE_FAILED
+            VoxDownloadErrorCode.OUTPUT_MOVE_FAILED -> VoxDownloadFailureCategory.OUTPUT_MOVE_FAILED
+            VoxDownloadErrorCode.TEMP_FILE_FAILED -> VoxDownloadFailureCategory.TEMP_FILE_FAILED
+            VoxDownloadErrorCode.PACKAGING_FAILED,
+            VoxDownloadErrorCode.PROCESSING_STALLED -> VoxDownloadFailureCategory.PACKAGING_FAILED
             VoxDownloadErrorCode.MUX_FAILED -> VoxDownloadFailureCategory.MUX_FAILED
             VoxDownloadErrorCode.URL_EXPIRED -> VoxDownloadFailureCategory.URL_EXPIRED
             VoxDownloadErrorCode.STREAM_UNAVAILABLE,
@@ -1182,7 +1189,25 @@ class VoxDownloadCoordinator(
             VoxDownloadErrorCode.NETWORK_ERROR,
             VoxDownloadErrorCode.NETWORK -> VoxDownloadFailureCategory.NETWORK
             VoxDownloadErrorCode.TIMEOUT -> VoxDownloadFailureCategory.TIMEOUT
-            else -> VoxDownloadFailureCategory.UNKNOWN
+            VoxDownloadErrorCode.VIDEO_DOWNLOAD_FAILED -> VoxDownloadFailureCategory.VIDEO_DOWNLOAD_FAILED
+            VoxDownloadErrorCode.AUDIO_DOWNLOAD_FAILED -> VoxDownloadFailureCategory.AUDIO_DOWNLOAD_FAILED
+            VoxDownloadErrorCode.TRANSLATION_FAILED,
+            VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE -> VoxDownloadFailureCategory.TRANSLATION_FAILED
+            VoxDownloadErrorCode.CHECKSUM_FAILED -> VoxDownloadFailureCategory.CHECKSUM_FAILED
+            VoxDownloadErrorCode.INVALID_MEDIA,
+            VoxDownloadErrorCode.MEDIA_PARSE_ERROR -> VoxDownloadFailureCategory.INVALID_MEDIA
+            VoxDownloadErrorCode.UNSUPPORTED_FORMAT,
+            VoxDownloadErrorCode.UNSUPPORTED_CODEC -> VoxDownloadFailureCategory.UNSUPPORTED_FORMAT
+            VoxDownloadErrorCode.CANCELLED -> VoxDownloadFailureCategory.CANCELLED
+            else -> {
+                if (failedStage.contains("mux", ignoreCase = true) || failedStage.contains("pack", ignoreCase = true)) {
+                    VoxDownloadFailureCategory.PACKAGING_FAILED
+                } else if (failedStage.contains("finalize", ignoreCase = true) || failedStage.contains("publish", ignoreCase = true)) {
+                    VoxDownloadFailureCategory.FINALIZE_FAILED
+                } else {
+                    VoxDownloadFailureCategory.UNKNOWN
+                }
+            }
         }
 
         val safeLogCode = when (safeCategory) {
@@ -1192,6 +1217,10 @@ class VoxDownloadCoordinator(
             VoxDownloadFailureCategory.STREAM_UNAVAILABLE,
             VoxDownloadFailureCategory.VIDEO_UNAVAILABLE -> VoxLogCode.DOWNLOAD_FORMAT_UNAVAILABLE
             VoxDownloadFailureCategory.HTTP_FORBIDDEN -> VoxLogCode.DOWNLOAD_HTTP_403
+            VoxDownloadFailureCategory.PACKAGING_FAILED,
+            VoxDownloadFailureCategory.MUX_FAILED -> VoxLogCode.DOWNLOAD_PACKAGING_FAILED
+            VoxDownloadFailureCategory.FINALIZE_FAILED,
+            VoxDownloadFailureCategory.OUTPUT_MOVE_FAILED -> VoxLogCode.DOWNLOAD_FINALIZE_FAILED
             else -> VoxLogCode.DOWNLOAD_FAILED
         }
 

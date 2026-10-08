@@ -93,6 +93,31 @@ object VoxSafeLogger {
         e(category, code, message, context, throwable)
     }
 
+    @JvmStatic
+    fun logBackgroundFailureSnapshot(
+        reason: String,
+        playerState: String,
+        playWhenReady: Boolean,
+        isPlaying: Boolean,
+        audioFocusState: String?,
+        serviceState: String?,
+        mediaSessionState: String?,
+        backgroundEnabled: Boolean,
+        audioOnlyEnabled: Boolean
+    ) {
+        val context = mapOf(
+            "playerState" to playerState,
+            "playWhenReady" to playWhenReady.toString(),
+            "isPlaying" to isPlaying.toString(),
+            "audioFocusState" to (audioFocusState ?: "unknown"),
+            "serviceState" to (serviceState ?: "unknown"),
+            "mediaSessionState" to (mediaSessionState ?: "unknown"),
+            "backgroundEnabled" to backgroundEnabled.toString(),
+            "audioOnlyEnabled" to audioOnlyEnabled.toString()
+        )
+        w(VoxLogCategory.BACKGROUND, VoxLogCode.BACKGROUND_PLAYER_PAUSED, "Background playback stopped unexpectedly: $reason", context)
+    }
+
     private fun logInternal(
         level: VoxLogLevel,
         category: VoxLogCategory,
