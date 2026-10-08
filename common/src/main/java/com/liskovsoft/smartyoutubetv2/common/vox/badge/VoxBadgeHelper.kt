@@ -56,10 +56,29 @@ object VoxBadgeHelper {
         // 2. Явный бейдж в модели видео (например, YouTube descBadge "4K" или "HD")
         normalizeQuality(video.badge)?.let { return it }
 
-        // 3. Проверка метаданных описания/второй строки (например "4K · Автор · 1 млн")
+        // 3. Габариты видео (width / height) из Video или MediaItem
+        if (video.width > 0 || video.height > 0) {
+            getQualityBadgeFromDimensions(video.width, video.height)?.let { return it }
+        }
+        val mediaItem = video.mediaItem
+        if (mediaItem != null && (mediaItem.width > 0 || mediaItem.height > 0)) {
+            getQualityBadgeFromDimensions(mediaItem.width, mediaItem.height)?.let { return it }
+        }
+
+        // 4. Проверка метаданных описания/второй строки (например "4K · Автор · 1 млн")
         val second = video.secondTitle?.toString()
         if (!second.isNullOrBlank()) {
             val tokens = second.split("•", "·", "|", "-")
+            for (token in tokens) {
+                val candidate = normalizeQuality(token.trim())
+                if (candidate != null) return candidate
+            }
+        }
+
+        // 5. Проверка заголовка (например "[4K] Documentary", "1080p60", "4K HDR")
+        val title = video.title
+        if (!title.isNullOrBlank()) {
+            val tokens = title.split("[", "]", "(", ")", "【", "】", "「", "」", "•", "·", "|", " - ")
             for (token in tokens) {
                 val candidate = normalizeQuality(token.trim())
                 if (candidate != null) return candidate
