@@ -1,0 +1,23 @@
+{
+  "coldStart": {
+    "run1": 2143,
+    "run2": 1316,
+    "run3": 1302,
+    "average": 1587,
+    "median": 1316
+  },
+  "memory": {
+    "startPssMb": 89.8,
+    "midPssMb": 212.6,
+    "endPssMb": 195.5,
+    "nativeHeapMb": 56.2,
+    "javaHeapMb": 0
+  },
+  "resources": {
+    "pid": "6790",
+    "activeThreads": 99,
+    "openFds": 1
+  },
+  "crashes": 0,
+  "anrs": 0
+}

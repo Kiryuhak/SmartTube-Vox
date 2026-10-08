@@ -72,5 +72,6 @@
 | **Patch #13** | **Channel Groups & Collections**: Локальные группы каналов, TV UI управление подписками без изменения YouTube, фильтрация внутри раздела «Каналы» (MERGED) |
 | **Patch #14** | **Android Compatibility 9–14 + UI/UX Polish + Stabilization**: Runtime & Static аудит Android 9–14 (API 28–34), модернизация AudioFocus, PendingIntent, локализация ошибок и полировка интерфейса (MERGED) |
 | **Patch #15** | **Release Candidate Preparation**: Финальная стабилизация, упаковка всех APK-вариантов, верификация канонической подписи, WGT-пакет Tizen, чек-лист и описание релиза `32.56-vox.8-rc1` (MERGED) |
-| **Patch #16** | **Physical TV Verification & Final Release**: Верификация на реальном Android TV оборудовании, финальное тестирование OTA и публикация официального релиза SmartTube VOX 8 |
+| **Patch #16** | **Automated Diagnostics Triage + RC1 Emulator Soak + Final Pre-TV Stabilization**: Детерминированный автоматический триаж диагностики, версионный анализ регрессий, стресс-тестирование RC1 на эмуляторе API 34 (холодный старт, память, 0 крашей) (MERGED) |
+| **Финал** | **Physical TV Verification & Official Release**: Верификация на физическом Android TV оборудовании (по явной команде пользователя) и публикация официального релиза SmartTube VOX 8 |
 | **Далее** | Корректировки и доработки на основе реальной диагностики и обратной связи пользователей |
