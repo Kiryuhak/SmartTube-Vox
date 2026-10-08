@@ -138,13 +138,83 @@ export function classifyReport(report = {}) {
   return { events, errorCategory, subsystem, stage, severity };
 }
 
+export function parseVoxVersion(value) {
+  if (!value) return null;
+  const str = String(value).trim().replace(/^v/i, '');
+  const match = str.match(/^(\d+)\.(\d+)-(?:vox|vot)\.(\d+)(?:\.(\d+))?(?:-(dev|rc\.?(\d+)))?$/i);
+  if (match) {
+    const major = Number(match[1]) || 0;
+    const minor = Number(match[2]) || 0;
+    const voxMajor = Number(match[3]) || 0;
+    const voxMinor = Number(match[4]) || 0;
+    const tag = (match[5] || '').toLowerCase();
+    const isDev = tag === 'dev';
+    const rcNum = tag.startsWith('rc') ? (Number(match[6]) || 1) : null;
+    const stage = isDev ? -1 : rcNum !== null ? rcNum : 1000000;
+    return [major, minor, voxMajor, voxMinor, stage];
+  }
+  const simpleMatch = str.match(/^(\d+)(?:\.(\d+))?(?:-(dev|rc\.?(\d+)))?$/i);
+  if (simpleMatch) {
+    const voxMajor = Number(simpleMatch[1]) || 0;
+    const voxMinor = Number(simpleMatch[2]) || 0;
+    const tag = (simpleMatch[3] || '').toLowerCase();
+    const isDev = tag === 'dev';
+    const rcNum = tag.startsWith('rc') ? (Number(simpleMatch[4]) || 1) : null;
+    const stage = isDev ? -1 : rcNum !== null ? rcNum : 1000000;
+    return [32, 56, voxMajor, voxMinor, stage];
+  }
+  return null;
+}
+
 export function compareVoxVersions(left, right) {
-  const parse = value => {
-    const match = String(value || '').match(/^(\d+)\.(\d+)-vox\.(\d+)(?:-rc(\d+))?$/i);
-    return match ? [Number(match[1]), Number(match[2]), Number(match[3]), match[4] ? -1 : 0, Number(match[4] || 0)] : null;
-  };
-  const a = parse(left), b = parse(right);
+  const a = parseVoxVersion(left);
+  const b = parseVoxVersion(right);
   if (!a || !b) return null;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1;
+  }
   return 0;
+}
+
+export function generateDeterministicIssueTitle(signature = '', report = {}) {
+  const sig = String(signature).toUpperCase();
+  const sigSubsystem = sig.split('|')[0] || '';
+  const subsystem = String(report.subsystem || report.errorCategory || sigSubsystem).toUpperCase();
+  const stage = String(report.stage || '').toUpperCase();
+  const errorCategory = String(report.error_category || report.errorCategory || '').toUpperCase();
+
+  if ((subsystem === 'DOWNLOAD' || sig.includes('DOWNLOAD')) && (stage === 'PACKAGING' || sig.includes('PACKAGING') || sig.includes('MUX'))) {
+    return 'Ошибка упаковки скачанного видео';
+  }
+  if ((subsystem === 'DOWNLOAD' || sig.includes('DOWNLOAD')) && (stage === 'RESOLVING' || sig.includes('RESOLV'))) {
+    return 'Ошибка разрешения потоков при скачивании';
+  }
+  if (subsystem === 'BACKGROUND' || sig.includes('BACKGROUND')) {
+    return 'Фоновое воспроизведение останавливается';
+  }
+  if (subsystem === 'OTA' || sig.includes('OTA')) {
+    return 'Ошибка OTA при проверке или выборе APK';
+  }
+  if (subsystem === 'OFFLINE' || sig.includes('OFFLINE')) {
+    return 'Ошибка локального воспроизведения скачанного медиа';
+  }
+  if (subsystem === 'PLAYER' && (stage === 'BUFFERING' || sig.includes('BUFFER'))) {
+    return 'Зависание буферизации видеопотока';
+  }
+  if (subsystem === 'PLAYER' && (stage === 'PREPARE' || sig.includes('DECODER'))) {
+    return 'Сбой декодера при инициализации плеера';
+  }
+  if (subsystem === 'TRANSLATION' || sig.includes('TRANSLAT')) {
+    return 'Сбой закадрового перевода звуковой дорожки';
+  }
+  if (subsystem === 'CHANNEL_GROUPS' || sig.includes('CHANNEL_GROUP')) {
+    return 'Ошибка управления локальными группами каналов';
+  }
+  if (subsystem === 'AUTO_SETUP' || sig.includes('AUTO_SETUP')) {
+    return 'Сбой модуля автонастройки кодеков';
+  }
+  if (subsystem) {
+    return `Сбой подсистемы ${subsystem}${stage ? ` на этапе ${stage}` : ''}`;
+  }
+  return `Инцидент ${errorCategory || signature || 'системного сбоя'}`;
 }

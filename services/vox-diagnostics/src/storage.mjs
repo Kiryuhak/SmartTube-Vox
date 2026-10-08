@@ -1,5 +1,7 @@
-import { DEFAULT_RETENTION_MS } from './diagnostics.mjs';
 import { classifyReport, compareVoxVersions, technicalSummary, STATUSES } from './triage.mjs';
+
+export const DEFAULT_RETENTION_DAYS = 30;
+export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 export const CANONICAL_STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'KNOWN_ISSUE', 'IGNORED_TEST'];
 
