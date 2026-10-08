@@ -48,7 +48,7 @@ test('2. GET /admin unauthorized returns 401 with login prompt', async () => {
   assert.equal(res.headers.get('www-authenticate'), 'Bearer realm="VOX-Admin"');
   const html = await res.text();
   assert.match(html, /SmartTube VOX Admin/);
-  assert.match(html, /<form method="GET" action="\/admin">/);
+  assert.match(html, /<form method="POST" action="\/admin\/session">/);
   assert.doesNotMatch(html, new RegExp(mockEnv.ADMIN_SECRET));
 });
 

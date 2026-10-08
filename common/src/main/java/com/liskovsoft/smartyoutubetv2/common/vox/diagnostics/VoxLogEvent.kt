@@ -174,7 +174,8 @@ data class VoxLogEvent(
     val category: VoxLogCategory,
     val code: String,
     val message: String,
-    val context: Map<String, String>? = null
+    val context: Map<String, String>? = null,
+    val repeatCount: Int = 1
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -183,6 +184,7 @@ data class VoxLogEvent(
         json.put("category", category.name)
         json.put("code", code)
         json.put("message", message)
+        if (repeatCount > 1) json.put("repeatCount", repeatCount)
         if (!context.isNullOrEmpty()) {
             val ctxObj = JSONObject()
             context.forEach { (k, v) -> ctxObj.put(k, v) }
@@ -212,7 +214,7 @@ data class VoxLogEvent(
                     map
                 } else null
 
-                VoxLogEvent(ts, level, category, code, message, ctxMap)
+                VoxLogEvent(ts, level, category, code, message, ctxMap, json.optInt("repeatCount", 1).coerceIn(1, 100000))
             } catch (e: Exception) {
                 null
             }

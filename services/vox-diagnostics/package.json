@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --check src/admin_app.js && node --test"
+    "build:client": "node scripts/build_admin_client.mjs",
+    "test": "node scripts/build_admin_client.mjs && node --check src/admin_app.js && node --test"
   }
 }

@@ -1,8 +1,9 @@
 import crypto from 'crypto';
 import { ReportStorage, normalizeStatus } from './storage.mjs';
-import { checkAdminAuth, renderAdminHtml } from './admin.mjs';
+import { checkAdminAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
+import { classifyReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES } from './triage.mjs';
 
 /**
  * Формирует безопасный и полный JSON объект для скачивания отчёта администратором.
@@ -11,15 +12,7 @@ import { sendReportNotification } from './notifier.mjs';
 export function prepareReportDownloadJson(report) {
   if (!report) return null;
   const p = report.payload || {};
-  // Глубокое клонирование payload
-  const sanitizedPayload = JSON.parse(JSON.stringify(p));
-  delete sanitizedPayload.ip;
-  delete sanitizedPayload.clientIp;
-  delete sanitizedPayload.token;
-  delete sanitizedPayload.secret;
-  delete sanitizedPayload.authorization;
-  delete sanitizedPayload.cookie;
-  delete sanitizedPayload.session;
+  const sanitizedPayload = sanitizePayload(p);
 
   const status = normalizeStatus(report.status);
   const developerNotes = report.developer_notes || report.developerNotes || '';
@@ -44,6 +37,25 @@ export function prepareReportDownloadJson(report) {
     safeRecentEvents: p.safeRecentEvents || [],
     payload: sanitizedPayload,
   };
+}
+
+function sanitizePayload(value, depth = 0) {
+  if (depth > 12) return '[REDACTED]';
+  if (Array.isArray(value)) return value.slice(0, 100).map(item => sanitizePayload(item, depth + 1));
+  if (value && typeof value === 'object') {
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (BANNED_PATTERNS.some(pattern => key.toLowerCase().includes(pattern)) || /(?:^|_)(?:ip|url|uri|path|trace)(?:$|_)/i.test(key) || /^(?:downloadId|channelId|groupName|groupId|videoId)$/i.test(key)) continue;
+      result[key] = sanitizePayload(item, depth + 1);
+    }
+    return result;
+  }
+  if (typeof value !== 'string') return value;
+  return value.slice(0, 1000)
+    .replace(/https?:\/\/\S+/gi, '[REDACTED_URL]')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[REDACTED_IP]')
+    .replace(/(?:bearer|token|secret|key)\s*[:=]\s*\S+/gi, '[REDACTED]');
 }
 
 export const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
@@ -168,8 +180,14 @@ function generateReportId(platform = '') {
 }
 
 export function generateErrorSignature(report = {}) {
-  if (report.errorSignature && typeof report.errorSignature === 'string') {
+  if (report.errorSignature && typeof report.errorSignature === 'string' && /^[A-Za-z0-9_|:.-]{1,160}$/.test(report.errorSignature)) {
     return report.errorSignature;
+  }
+
+  if (Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || ev.event)) {
+    const classified = classifyReport(report);
+    const event = [...classified.events].reverse().find(ev => ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)) || classified.events.at(-1);
+    if (event || classified.errorCategory) return [event?.category || 'GENERAL', classified.subsystem, classified.stage || 'GENERAL', classified.errorCategory || 'UNKNOWN', event?.safeContext?.exceptionClassSafe || 'NONE', event?.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
   }
 
   const category = report.errorCategory || '';
@@ -207,7 +225,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
   // 1. Root Service Status page
   if (request.method === 'GET' && (path === '/' || path === '')) {
     const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -273,10 +291,10 @@ export async function handleRequest(request, env = {}, customStorage = null) {
 </head>
 <body>
   <div class="card">
-    <div class="status-badge"><span class="dot"></span> Online</div>
+    <div class="status-badge"><span class="dot"></span> Работает</div>
     <h1>SmartTube VOX Diagnostics</h1>
-    <p>SmartTube VOX Diagnostics is running</p>
-    <div class="info">Telemetry &amp; error reporting endpoint. User reports are strictly confidential and protected.</div>
+    <p>Сервис диагностики SmartTube VOX работает.</p>
+    <div class="info">Отчёты отправляются только с согласия пользователя и защищены.</div>
   </div>
 </body>
 </html>`;
@@ -372,8 +390,8 @@ export async function handleRequest(request, env = {}, customStorage = null) {
   <div class="login-box">
     <h2>SmartTube VOX Admin</h2>
     <p>Для доступа к диагностическим отчётам требуется ключ администратора.</p>
-    <form method="GET" action="/admin">
-      <input type="password" name="token" placeholder="Секретный ключ (Admin Secret)" required autofocus />
+    <form method="POST" action="/admin/session">
+      <input type="password" name="secret" placeholder="Ключ администратора" autocomplete="current-password" required autofocus />
       <button type="submit">Войти</button>
     </form>
     <div class="footer">Закрытый служебный раздел разработчика</div>
@@ -390,7 +408,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       });
     }
     const [reports, stats, groupedIssues] = await Promise.all([
-      storage.listReports({ limit: 100 }),
+      storage.listReports({ limit: 50 }),
       storage.getStats(),
       storage.getGroupedIssues({ limit: 50 }),
     ]);
@@ -403,14 +421,25 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       'Content-Security-Policy': "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none';",
     };
 
-    const tokenParam = url.searchParams.get('token');
-    if (tokenParam && env.ADMIN_SECRET && tokenParam === env.ADMIN_SECRET) {
-      headers['Set-Cookie'] = `vox_admin_token=${encodeURIComponent(tokenParam)}; Path=/; HttpOnly; SameSite=Strict; Secure`;
-    }
-
     return new Response(html, {
       status: 200,
       headers,
+    });
+  }
+
+  if (request.method === 'POST' && path === '/admin/session') {
+    const form = await request.formData().catch(() => null);
+    const submitted = form?.get('secret');
+    const valid = typeof submitted === 'string' && submitted.length <= 256 && env.ADMIN_SECRET &&
+      checkAdminAuth(new Request(request.url, { headers: { authorization: `Bearer ${submitted}` } }), env);
+    if (!valid) return jsonResponse({ error: 'unauthorized' }, 401);
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: '/admin',
+        'Set-Cookie': `vox_admin_session=${createAdminSession(env.ADMIN_SECRET)}; Path=/; Max-Age=28800; HttpOnly; SameSite=Strict; Secure`,
+        'Cache-Control': 'no-store',
+      },
     });
   }
 
@@ -435,8 +464,32 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     return jsonResponse(stats);
   }
 
+  if (request.method === 'GET' && (path === '/v1/admin/metrics' || path === '/api/admin/metrics')) {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    return jsonResponse(await storage.getStats());
+  }
+
+  if (request.method === 'GET' && (path === '/v1/admin/reports/changes' || path === '/api/admin/reports/changes')) {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    try { return jsonResponse(await storage.listChanges(url.searchParams.get('cursor') || 0, url.searchParams.get('limit') || 50)); }
+    catch { return jsonResponse({ error: 'invalid_cursor' }, 400); }
+  }
+
   // 4. Admin API: Grouped issues (GET /v1/admin/issues)
-  if (request.method === 'GET' && path === '/v1/admin/issues') {
+  if (path.startsWith('/v1/admin/issues/') || path.startsWith('/api/admin/issues/')) {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    if (request.method !== 'PATCH') return jsonResponse({ error: 'method_not_allowed' }, 405);
+    const signature = decodeURIComponent(path.split('/issues/')[1] || '');
+    try {
+      const body = await request.json();
+      const issue = await storage.updateIssue(signature, body);
+      return jsonResponse({ issue });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof RangeError ? 'invalid_issue' : 'invalid_json' }, 400);
+    }
+  }
+
+  if (request.method === 'GET' && (path === '/v1/admin/issues' || path === '/api/admin/issues')) {
     if (!checkAdminAuth(request, env)) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
@@ -449,7 +502,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
   }
 
   // 5. Admin API: List reports (GET /v1/admin/reports)
-  if (request.method === 'GET' && path === '/v1/admin/reports') {
+  if (request.method === 'GET' && (path === '/v1/admin/reports' || path === '/api/admin/reports')) {
     if (!checkAdminAuth(request, env)) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
@@ -459,20 +512,41 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const status = url.searchParams.get('status') || undefined;
     const reportPurpose = url.searchParams.get('reportPurpose') || undefined;
     const search = url.searchParams.get('search') || undefined;
+    const severity = url.searchParams.get('severity') || undefined;
+    const device = url.searchParams.get('device') || undefined;
+    const signature = url.searchParams.get('signature') || undefined;
+    const hasNotes = url.searchParams.get('hasNotes') === 'true';
+    const hasDuplicates = url.searchParams.get('hasDuplicates') === 'true';
+    const attention = url.searchParams.get('attention') === 'true';
+    const sort = url.searchParams.get('sort') || 'newest';
+    let cursor = url.searchParams.get('cursor') || undefined;
+    const since = url.searchParams.get('since') || undefined;
     const limit = parseInt(url.searchParams.get('limit') || '50', 10);
-    const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+    let offset = parseInt(url.searchParams.get('offset') || '0', 10);
+    if (cursor && sort !== 'newest') {
+      if (!/^offset:\d{1,7}$/.test(cursor)) return jsonResponse({ error: 'invalid_cursor' }, 400);
+      offset = Number(cursor.slice(7));
+      cursor = undefined;
+    }
 
-    const reports = await storage.listReports({
+    let reports;
+    const pageSize = Math.min(Math.max(1, Number.isFinite(limit) ? limit : 50), 50);
+    try { reports = await storage.listReports({
       platform,
       appVersion,
       errorCategory,
       status,
       reportPurpose,
       search,
-      limit,
+      severity, device, signature, hasNotes, hasDuplicates, attention, sort, cursor, since,
+      limit: pageSize + 1,
       offset,
-    });
-    return jsonResponse({ reports });
+    }); } catch (error) { return jsonResponse({ error: 'invalid_filter' }, 400); }
+    const hasNext = reports.length > pageSize;
+    reports = reports.slice(0, pageSize);
+    const nextCursor = !hasNext ? null : sort === 'newest'
+      ? `${reports.at(-1).created_at}:${reports.at(-1).report_id}` : `offset:${offset + pageSize}`;
+    return jsonResponse({ reports, nextCursor });
   }
 
   // 5.1 Admin API: Purge all reports / Safe Purge (DELETE /v1/admin/reports)
@@ -485,11 +559,20 @@ export async function handleRequest(request, env = {}, customStorage = null) {
   }
 
   // 6. Admin API: Single report operations (GET / PATCH / DELETE /v1/admin/reports/:id and /download)
-  if (path.startsWith('/v1/admin/reports/')) {
+  if (path.startsWith('/v1/admin/reports/') || path.startsWith('/api/admin/reports/')) {
     if (!checkAdminAuth(request, env)) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
-    const subPath = path.substring('/v1/admin/reports/'.length);
+    const subPath = path.substring(path.startsWith('/api/') ? '/api/admin/reports/'.length : '/v1/admin/reports/'.length);
+
+    if (subPath.endsWith('/notes')) {
+      if (request.method !== 'POST') return jsonResponse({ error: 'method_not_allowed' }, 405);
+      try {
+        const body = await request.json();
+        const report = await storage.addNote(decodeURIComponent(subPath.slice(0, -6)), body.note);
+        return report ? jsonResponse({ report }) : jsonResponse({ error: 'not_found' }, 404);
+      } catch { return jsonResponse({ error: 'invalid_note' }, 400); }
+    }
 
     // Download single sanitized report JSON: GET /v1/admin/reports/:id/download
     if (subPath.endsWith('/download')) {
@@ -525,7 +608,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       if (!report) {
         return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
       }
-      return jsonResponse(report);
+      return jsonResponse({ ...report, payload: sanitizePayload(report.payload) });
     }
 
     if (request.method === 'PATCH') {
@@ -535,11 +618,13 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       } catch (e) {
         return jsonResponse({ error: 'invalid_json', message: 'Invalid JSON request body' }, 400);
       }
-      const updated = await storage.updateReport(reportId, body);
+      let updated;
+      try { updated = await storage.updateReport(reportId, body); }
+      catch (error) { return jsonResponse({ error: error instanceof RangeError ? 'invalid_report_patch' : 'update_failed' }, error instanceof RangeError ? 400 : 500); }
       if (!updated) {
         return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
       }
-      return jsonResponse({ status: 'ok', report: updated });
+      return jsonResponse({ status: 'ok', report: { ...updated, payload: sanitizePayload(updated.payload) } });
     }
 
     if (request.method === 'DELETE') {
@@ -643,17 +728,22 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       }
     }
 
+    if (payload.severity !== undefined && !SEVERITIES.includes(payload.severity)) return jsonResponse({ error: 'invalid_severity' }, 400);
+
+    if (payload.reportId && (typeof payload.reportId !== 'string' || !/^VOX-[A-Z0-9-]{1,40}$/.test(payload.reportId))) return jsonResponse({ error: 'invalid_report_id' }, 400);
     const reportId = payload.reportId || generateReportId(payload.platform);
     const receivedAt = Date.now();
     const errorSignature = generateErrorSignature(payload);
     const reportPurpose = payload.reportPurpose || payload.purpose || (reportId.includes('TEST') ? 'TEST' : 'USER');
 
     const sanitizedReport = {
-      ...payload,
+      ...sanitizePayload(payload),
       reportId,
       receivedAt,
       errorSignature,
       reportPurpose,
+      structuredEvents: structuredEvents(payload),
+      technicalSummary: technicalSummary(payload),
     };
 
     // Save report in persistent storage (D1 / in-memory)
