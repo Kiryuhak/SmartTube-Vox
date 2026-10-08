@@ -453,6 +453,8 @@ class VoxDownloadOverlay(private val context: Context) {
             VoxDownloadState.FAILED -> context.getString(R.string.vox_download_stage_failed)
             VoxDownloadState.CANCELLED -> context.getString(R.string.vox_download_stage_cancelled)
             VoxDownloadState.PAUSED -> context.getString(R.string.vox_download_state_paused)
+            VoxDownloadState.IDLE,
+            VoxDownloadState.QUEUED -> "В очереди"
             else -> context.getString(R.string.vox_download_notification_title)
         }
     }

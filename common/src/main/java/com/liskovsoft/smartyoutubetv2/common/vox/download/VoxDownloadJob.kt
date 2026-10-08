@@ -49,9 +49,11 @@ class VoxDownloadJob(
     var rangeResumptionsCount: Int = 0
     var bytesResumed: Long = 0L
     var stallEventsCount: Int = 0
+    var networkReconnectCount: Int = 0
     var packagingElapsedMs: Long = 0L
     var finalizeElapsedMs: Long = 0L
     var averageSpeedMbps: Double = 0.0
+    var peakSpeedMbps: Double = 0.0
 
     val generation = AtomicLong(1L)
     val isCancelledFlag = AtomicBoolean(false)
@@ -120,6 +122,10 @@ class VoxDownloadJob(
     fun bumpGeneration(): Long = generation.incrementAndGet()
 
     fun updateState(newState: VoxDownloadState, code: VoxDownloadErrorCode? = null, message: String? = null) {
+        if ((isCancelled() && newState != VoxDownloadState.CANCELLED && newState != VoxDownloadState.QUEUED) ||
+            (isPaused() && newState != VoxDownloadState.PAUSED && newState != VoxDownloadState.QUEUED)) {
+            return
+        }
         state = newState
         errorCode = code
         errorMessage = message

@@ -36,6 +36,7 @@ object VoxDownloadServicePolicy {
             VoxDownloadState.MUXED,
             VoxDownloadState.PUBLISHING -> true
             VoxDownloadState.IDLE,
+            VoxDownloadState.QUEUED,
             VoxDownloadState.PAUSED,
             VoxDownloadState.COMPLETED,
             VoxDownloadState.FAILED,
@@ -60,7 +61,7 @@ object VoxDownloadServicePolicy {
      * Определяет, нужно ли запускать/возобновлять загрузку при получении общего намерения ACTION_START_DOWNLOAD.
      *
      * - Уже активное задание: false (только наблюдение, без повторного запуска).
-     * - IDLE / активные недовыполненные состояния: true (начать или подхватить выполнение).
+     * - IDLE / QUEUED / активные недовыполненные состояния: true (начать или подхватить выполнение).
      * - PAUSED: false (требуется явное действие пользователя / ACTION_RESUME_DOWNLOAD).
      * - FAILED: false (требуется явный перезапуск через диалог / retry).
      * - CANCELLED / COMPLETED: false (терминальные состояния не перезапускаются автоматически).
@@ -69,7 +70,8 @@ object VoxDownloadServicePolicy {
     fun shouldAutoResumeOnStart(state: VoxDownloadState, isAlreadyActive: Boolean): Boolean {
         if (isAlreadyActive) return false
         return when (state) {
-            VoxDownloadState.IDLE -> true
+            VoxDownloadState.IDLE,
+            VoxDownloadState.QUEUED -> true
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
             VoxDownloadState.DOWNLOADING_MEDIA,
@@ -97,6 +99,7 @@ object VoxDownloadServicePolicy {
         return when (state) {
             VoxDownloadState.PAUSED,
             VoxDownloadState.IDLE,
+            VoxDownloadState.QUEUED,
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
             VoxDownloadState.DOWNLOADING_MEDIA,

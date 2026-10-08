@@ -114,8 +114,12 @@ object VoxDownloadManager {
 
         private fun perform(job: VoxDownloadJob, missing: Boolean, action: String) {
             when (action) {
+                "Пауза" -> {
+                    VoxDownloadService.pause(context, job.downloadId)
+                    show(context)
+                }
                 "Показать прогресс" -> VoxDownloadDialogHelper.showProgressDialog(context, job.downloadId)
-                "Открыть" -> {
+                "Открыть", "Воспроизвести" -> {
                     presenter.closeDialog()
                     if (!missing && coordinator.isPublishedFileAvailable(job)) VoxLocalPlayerHelper.playJob(context, job)
                     else MessageHelpers.showMessage(context, "Файл удалён")
@@ -125,7 +129,7 @@ object VoxDownloadManager {
                     show(context)
                 }
                 "Повторить" -> {
-                    if (coordinator.retryDownload(job.downloadId)) VoxDownloadService.start(context, job.downloadId)
+                    if (coordinator.retryDownload(job.downloadId, force = true)) VoxDownloadService.start(context, job.downloadId)
                     show(context)
                 }
                 "Скачать заново" -> {

@@ -32,7 +32,7 @@ object VoxDownloadUiMapper {
             .thenBy { it.downloadId })
 
     fun stage(state: VoxDownloadState): String = when (state) {
-        VoxDownloadState.IDLE -> "В очереди"
+        VoxDownloadState.IDLE, VoxDownloadState.QUEUED -> "В очереди"
         VoxDownloadState.PREPARING_TRANSLATION -> "Подготовка перевода"
         VoxDownloadState.RESOLVING_STREAMS -> "Подготовка загрузки"
         VoxDownloadState.DOWNLOADING_MEDIA -> "Загрузка медиа…"
@@ -61,9 +61,10 @@ object VoxDownloadUiMapper {
 
     fun actions(state: VoxDownloadState, missingFile: Boolean): List<String> = when (state) {
         VoxDownloadState.COMPLETED -> if (missingFile) listOf("Скачать заново", "Удалить запись") else listOf("Открыть", "Скачать заново", "Удалить")
-        VoxDownloadState.PAUSED -> listOf("Продолжить", "Удалить")
-        VoxDownloadState.FAILED, VoxDownloadState.CANCELLED -> listOf("Повторить", "Удалить")
-        else -> listOf("Показать прогресс", "Отменить загрузку")
+        VoxDownloadState.PAUSED -> listOf("Продолжить", "Отменить загрузку", "Удалить")
+        VoxDownloadState.FAILED, VoxDownloadState.CANCELLED -> listOf("Повторить", "Отменить загрузку", "Удалить")
+        VoxDownloadState.IDLE, VoxDownloadState.QUEUED -> listOf("Пауза", "Отменить загрузку")
+        else -> listOf("Пауза", "Показать прогресс", "Отменить загрузку")
     }
 
     fun formatSize(bytes: Long): String {

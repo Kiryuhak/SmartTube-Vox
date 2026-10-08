@@ -65,9 +65,11 @@
 | **Patch #6** | **Live Audio Capture & PTS Sync**: Захват фрагментов из аудиотракта и вторичный AudioTrack с синхронизацией по PTS (MERGED) |
 | **Patch #7** | **User Feedback & Downloads Reliability**: Устранение инцидента VOX-A-DF6567 (DuneHD), надежность загрузок (Diagnostics 2.0, типизированные ошибки, упаковка MKV), исправление фокуса и сортировки каналов (MERGED) |
 | **Patch #8** | **Live Provider Strategy & Audio Integration**: Исследование провайдеров, аудит Yandex VOT (VOD_ONLY), стандартизация контракта провайдера, детерминированный аудио-ресемплер и маршрутизация шлюза (MERGED) |
-| **Patch #10** | **Downloads 2.0 Performance & Local Real Live Translation Backend Prototype**: Ускорение загрузок (буферизация, connection pooling, троттлинг, параллельные потоки, Range resumption) и подготовка локального бэкенда инференса с честным профилированием хост-машины (MERGED) |
-| **Patch #11** | **Android Compatibility**: Runtime-тестирование API 28–34 |
-| **Patch #12** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
-| **Patch #13** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |
-| **Patch #14** | **Performance & UI Polish**: Оптимизация памяти, полировка оверлея, бейджей и экрана «Что нового» |
+| **Patch #9** | **Production Backend Strategy & Auto Setup 2.0**: Архитектура server-side ML инференса (Faster-Whisper + Marian + Piper), Auto Setup 2.0 с динамическим анализом dropped frames (MERGED) |
+| **Patch #10** | **Downloads 2.0 Performance & Local Real Live Translation Backend Prototype**: Ускорение загрузок (буферизация 128 KiB, connection pooling, троттлинг прогресса, параллельные треки, Range resumption) и подготовка локального бэкенда инференса с честным профилированием хост-машины (MERGED) |
+| **Patch #11** | **Downloads 2.0 Queue & Real Validation**: Однопоточная очередь загрузок (FIFO, concurrency 1, пауза/возобновление/повторы, storage pre-check), 3-прогонный бенчмарк и доказательство ускорения (MERGED) |
+| **Patch #12** | **Android Compatibility & Runtime Tests**: Сквозное runtime-тестирование API 28–34 |
+| **Patch #13** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
+| **Patch #14** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |
+| **Patch #15** | **Performance & UI Polish**: Оптимизация памяти, полировка оверлея, бейджей и экрана «Что нового» |
 | **Далее** | Корректировки и доработки на основе реальной диагностики и обратной связи |

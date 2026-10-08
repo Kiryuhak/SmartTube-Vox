@@ -69,6 +69,8 @@ class VoxDownloadRepository(
                 VoxDownloadState.READY_FOR_MUX,
                 VoxDownloadState.CANCELLED,
                 VoxDownloadState.FAILED -> stored.state
+                VoxDownloadState.PAUSED -> VoxDownloadState.PAUSED
+                VoxDownloadState.IDLE, VoxDownloadState.QUEUED -> VoxDownloadState.QUEUED
                 else -> VoxDownloadState.PAUSED
             }
 
@@ -117,7 +119,16 @@ class VoxDownloadRepository(
             it.state != VoxDownloadState.COMPLETED &&
             it.state != VoxDownloadState.FAILED &&
             it.state != VoxDownloadState.PAUSED &&
-            it.state != VoxDownloadState.CANCELLED
+            it.state != VoxDownloadState.CANCELLED &&
+            it.state != VoxDownloadState.QUEUED &&
+            it.state != VoxDownloadState.IDLE
+        }
+    }
+
+    fun findQueuedJobByVideoId(videoId: String): VoxDownloadJob? {
+        return jobs.values.firstOrNull {
+            it.request.videoId == videoId &&
+            (it.state == VoxDownloadState.QUEUED || it.state == VoxDownloadState.IDLE)
         }
     }
 
