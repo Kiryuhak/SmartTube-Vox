@@ -32,6 +32,28 @@ class VoxOtaTest {
         // 8-dev vs 7: already ahead, no update
         assertFalse(VoxVersionComparator.isUpdateAvailable("32.56-vox.8-dev", "32.56-vox.7"))
         assertTrue(VoxVersionComparator.compare("32.56-vox.8-dev", "32.56-vox.7") > 0)
+
+        // RC tests (Patch #15)
+        // 7 < 8-rc1
+        assertTrue(VoxVersionComparator.compare("32.56-vox.7", "32.56-vox.8-rc1") < 0)
+        // 8-dev < 8-rc1
+        assertTrue(VoxVersionComparator.compare("32.56-vox.8-dev", "32.56-vox.8-rc1") < 0)
+        // 8-rc1 < 8
+        assertTrue(VoxVersionComparator.compare("32.56-vox.8-rc1", "32.56-vox.8") < 0)
+        // 8-rc1 == 8-rc1
+        assertEquals(0, VoxVersionComparator.compare("32.56-vox.8-rc1", "32.56-vox.8-rc1"))
+        // 8-rc1 < 8-rc2
+        assertTrue(VoxVersionComparator.compare("32.56-vox.8-rc1", "32.56-vox.8-rc2") < 0)
+
+        // Stable channel: 7 ignores 8-rc1
+        assertFalse(VoxVersionComparator.isUpdateAvailable("32.56-vox.7", "32.56-vox.8-rc1", isBetaChannel = false))
+        // Beta channel: 7 sees 8-rc1
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.7", "32.56-vox.8-rc1", isBetaChannel = true))
+
+        // Pre-release users (8-dev) get update to 8-rc1
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.8-dev", "32.56-vox.8-rc1", isBetaChannel = false))
+        // 8-rc1 users get update to final 8
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.8-rc1", "32.56-vox.8", isBetaChannel = false))
     }
 
     @Test

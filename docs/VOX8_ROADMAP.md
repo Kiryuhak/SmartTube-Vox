@@ -71,5 +71,6 @@
 | **Patch #12** | **Critical Regression Hotfix + OTA + Background Playback + Download Packaging + Offline Playback**: Исправление фонового воспроизведения (TUVIO TD50UFBSV1), упаковки загрузок (DuneHD Pro Vision 4K), надежного OTA-обновления и локального воспроизведения (MERGED) |
 | **Patch #13** | **Channel Groups & Collections**: Локальные группы каналов, TV UI управление подписками без изменения YouTube, фильтрация внутри раздела «Каналы» (MERGED) |
 | **Patch #14** | **Android Compatibility 9–14 + UI/UX Polish + Stabilization**: Runtime & Static аудит Android 9–14 (API 28–34), модернизация AudioFocus, PendingIntent, локализация ошибок и полировка интерфейса (MERGED) |
-| **Patch #15** | **Release Candidate Preparation**: Финальная стабилизация, упаковка и подготовка Release Candidate |
-| **Далее** | Корректировки и доработки на основе реальной диагностики и обратной связи |
+| **Patch #15** | **Release Candidate Preparation**: Финальная стабилизация, упаковка всех APK-вариантов, верификация канонической подписи, WGT-пакет Tizen, чек-лист и описание релиза `32.56-vox.8-rc1` (MERGED) |
+| **Patch #16** | **Physical TV Verification & Final Release**: Верификация на реальном Android TV оборудовании, финальное тестирование OTA и публикация официального релиза SmartTube VOX 8 |
+| **Далее** | Корректировки и доработки на основе реальной диагностики и обратной связи пользователей |

@@ -94,3 +94,4 @@ node_modules/
 .env.*
 .dev.vars
 .dev.vars.*
+/release_staging/
