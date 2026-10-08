@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.SplashView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData;
 import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupDialogs;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -96,6 +97,7 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
         appendRefreshButton();
         appendUnpinVideoFromSidebarButton();
         appendUnpinSectionFromSidebarButton();
+        appendChannelGroupsButton();
         appendMarkAllChannelsWatchedButton();
         appendAccountSelectionButton();
         appendMoveSectionButton();
@@ -127,6 +129,7 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
         appendRefreshButton();
         appendUnpinVideoFromSidebarButton();
         appendUnpinSectionFromSidebarButton();
+        appendChannelGroupsButton();
         appendAccountSelectionButton();
         appendMoveSectionButton();
         appendRenameSectionButton();
@@ -221,6 +224,23 @@ public class SectionMenuPresenter extends BaseMenuPresenter {
                         // Assume that the Playback view already blocked and remembered.
                         optionItem -> getViewManager().startView(SplashView.class)
                 )
+        );
+    }
+
+    private void appendChannelGroupsButton() {
+        if (mSection == null || mSection.getId() != MediaGroup.TYPE_CHANNEL_UPLOADS) {
+            return;
+        }
+
+        mDialogPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.vox_channel_groups), optionItem -> {
+                    mDialogPresenter.closeDialog();
+                    VoxChannelGroupDialogs.showGroupSelectorDialog(getContext(), () -> {
+                        BrowsePresenter presenter = BrowsePresenter.instance(getContext());
+                        presenter.updateChannelSorting();
+                        presenter.refreshCurrentSection();
+                    });
+                })
         );
     }
 

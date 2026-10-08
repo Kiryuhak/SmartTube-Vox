@@ -1037,4 +1037,23 @@
     <string name="vox_diagnostics_send_failed_retry">Failed to send report.\n\nJournal is saved locally on device.</string>
     <string name="vox_diagnostics_btn_copy_code">Copy code</string>
     <string name="vox_diagnostics_btn_retry">Retry</string>
+
+    <!-- VOX Channel Groups -->
+    <string name="vox_channel_groups">Channel groups</string>
+    <string name="vox_channel_groups_all">All channels</string>
+    <string name="vox_channel_group_create">Create group</string>
+    <string name="vox_channel_group_create_title">New channel group</string>
+    <string name="vox_channel_group_rename_title">Rename group</string>
+    <string name="vox_channel_group_delete_title">Delete group \"%s\"?</string>
+    <string name="vox_channel_group_delete_confirm">Channels will remain in your YouTube subscriptions.</string>
+    <string name="vox_channel_group_delete_btn">Delete group</string>
+    <string name="vox_channel_group_manage">Manage groups</string>
+    <string name="vox_channel_group_add_to">Add to group</string>
+    <string name="vox_channel_group_remove_from">Remove from \"%s\"</string>
+    <string name="vox_channel_group_empty">No channels in this group yet</string>
+    <string name="vox_channel_group_empty_hint">Add channels via channel card menu (long press)</string>
+    <string name="vox_channel_group_channels_count">%d channels</string>
+    <string name="vox_channel_group_name_exists">A group with this name already exists</string>
+    <string name="vox_channel_group_name_empty">Name cannot be empty</string>
+    <string name="vox_channel_group_name_too_long">Name cannot exceed 50 characters</string>
 </resources>

@@ -69,8 +69,9 @@
 | **Patch #10** | **Downloads 2.0 Performance & Local Real Live Translation Backend Prototype**: Ускорение загрузок (буферизация 128 KiB, connection pooling, троттлинг прогресса, параллельные треки, Range resumption) и подготовка локального бэкенда инференса с честным профилированием хост-машины (MERGED) |
 | **Patch #11** | **Downloads 2.0 Queue & Real Validation**: Однопоточная очередь загрузок (FIFO, concurrency 1, пауза/возобновление/повторы, storage pre-check), 3-прогонный бенчмарк и доказательство ускорения (MERGED) |
 | **Patch #12** | **Critical Regression Hotfix + OTA + Background Playback + Download Packaging + Offline Playback**: Исправление фонового воспроизведения (TUVIO TD50UFBSV1), упаковки загрузок (DuneHD Pro Vision 4K), надежного OTA-обновления и локального воспроизведения (MERGED) |
-| **Patch #13** | **Android Compatibility & Runtime Tests**: Сквозное runtime-тестирование API 28–34 |
-| **Patch #14** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
-| **Patch #15** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |
-| **Patch #16** | **Performance & UI Polish**: Оптимизация памяти, полировка оверлея, бейджей и экрана «Что нового» |
+| **Patch #13** | **Channel Groups & Collections**: Локальные группы каналов, TV UI управление подписками без изменения YouTube, фильтрация внутри раздела «Каналы» (MERGED) |
+| **Patch #14** | **Android Compatibility & Runtime Tests**: Сквозное runtime-тестирование API 28–34 |
+| **Patch #15** | **Tizen Emulator**: Тестирование жизненного цикла и WGT на Tizen TV Emulator |
+| **Patch #16** | **Diagnostics 2.0 Cloud**: Группировка инцидентов и привязка к версиям/патчам на сервере |
+| **Patch #17** | **Performance & UI Polish**: Оптимизация памяти, полировка оверлея, бейджей и экрана «Что нового» |
 | **Далее** | Корректировки и доработки на основе реальной диагностики и обратной связи |

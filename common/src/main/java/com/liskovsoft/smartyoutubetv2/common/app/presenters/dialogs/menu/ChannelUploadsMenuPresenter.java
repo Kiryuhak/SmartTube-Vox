@@ -11,10 +11,14 @@ import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.ChannelPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.ChannelUploadsPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.menu.VideoMenuPresenter.VideoMenuCallback;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroup;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupDialogs;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import io.reactivex.disposables.Disposable;
 
@@ -76,11 +80,49 @@ public class ChannelUploadsMenuPresenter extends BaseMenuPresenter {
         // Doesn't need this since this is the main action.
         //appendOpenChannelUploadsButton();
         appendOpenChannelButton();
+        appendChannelGroupButtons();
         appendUnsubscribeButton();
         appendMarkAsWatched();
         appendTogglePinVideoToSidebarButton();
 
         mDialogPresenter.showDialog(mVideo.getTitle());
+    }
+
+    private void appendChannelGroupButtons() {
+        if (mVideo == null) {
+            return;
+        }
+
+        VoxChannelGroupManager manager = VoxChannelGroupManager.instance(getContext());
+        VoxChannelGroup activeGroup = manager.getSelectedGroup();
+        String channelId = mVideo.getChannelIdOrName();
+
+        if (activeGroup != null && channelId != null && manager.isChannelInGroup(activeGroup.getId(), channelId)) {
+            String removeTitle = String.format(getContext().getString(R.string.vox_channel_group_remove_from), activeGroup.getName());
+            mDialogPresenter.appendSingleButton(
+                    UiOptionItem.from(removeTitle, optionItem -> {
+                        manager.removeChannelFromGroup(activeGroup.getId(), channelId);
+                        mDialogPresenter.closeDialog();
+                        if (mCallback != null) {
+                            mCallback.onItemAction(mVideo, VideoMenuCallback.ACTION_REMOVE_FROM_GROUP);
+                        }
+                        MessageHelpers.showMessage(getContext(), R.string.msg_done);
+                    })
+            );
+        }
+
+        mDialogPresenter.appendSingleButton(
+                UiOptionItem.from(getContext().getString(R.string.vox_channel_groups), optionItem -> {
+                    mDialogPresenter.closeDialog();
+                    VoxChannelGroupDialogs.showAddToGroupDialog(getContext(), mVideo, () -> {
+                        if (manager.getSelectedGroupId() != null) {
+                            BrowsePresenter presenter = BrowsePresenter.instance(getContext());
+                            presenter.updateChannelSorting();
+                            presenter.refreshCurrentSection();
+                        }
+                    });
+                })
+        );
     }
 
     private void appendOpenChannelUploadsButton() {
