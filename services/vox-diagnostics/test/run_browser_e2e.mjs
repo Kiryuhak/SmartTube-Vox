@@ -2,18 +2,14 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { handleRequest } from '../src/diagnostics.mjs';
 import { ReportStorage } from '../src/storage.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const screenshotsDir = path.resolve(__dirname, '../screenshots');
+const screenshotsDir = 'C:/Users/user/.codex/artifacts/diagnostics-admin-2.2';
 fs.mkdirSync(screenshotsDir, { recursive: true });
-
-const brainArtifactDir = 'C:\\Users\\user\\.gemini\\antigravity\\brain\\4dc79d69-418f-4710-80df-f85411654131';
-if (fs.existsSync(brainArtifactDir)) {
-  fs.mkdirSync(brainArtifactDir, { recursive: true });
-}
 
 // 1. Initialize local in-memory storage with test reports including VOX-A-9BB2D7
 const storage = new ReportStorage();
@@ -110,7 +106,7 @@ console.log(`[E2E Server] Pre-loaded ${fixtures.length} fixture reports into tes
 
 const TEST_SECRET = 'e2e_secret_token_12345';
 const env = {
-  ADMIN_SECRET: TEST_SECRET,
+  ALLOW_DEV_AUTH: true,
 };
 
 // 2. Start local HTTP server bridging to handleRequest
@@ -160,8 +156,7 @@ console.log(`[E2E Server] Running at http://127.0.0.1:${PORT}`);
 
 // 3. Launch Chrome with CDP
 const chromePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const userDataDir = path.resolve(__dirname, '../temp_chrome_profile');
-fs.mkdirSync(userDataDir, { recursive: true });
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vox-admin-e2e-'));
 
 const chromePort = 9222;
 const chromeProc = spawn(chromePath, [
@@ -172,7 +167,7 @@ const chromeProc = spawn(chromePath, [
   '--no-default-browser-check',
   '--disable-gpu',
   '--window-size=1280,900',
-  `http://127.0.0.1:${PORT}/admin?token=${TEST_SECRET}`
+  `http://127.0.0.1:${PORT}/admin`
 ], { stdio: 'ignore' });
 
 console.log('[E2E] Chrome process spawned.');
@@ -198,6 +193,7 @@ for (let i = 0; i < 20; i++) {
 
 if (!wsUrl) {
   chromeProc.kill();
+  await new Promise(resolve => { if (chromeProc.exitCode !== null) resolve(); else chromeProc.once('exit', resolve); });
   server.close();
   throw new Error('Failed to connect to Chrome CDP endpoint.');
 }
@@ -331,10 +327,6 @@ async function takeScreenshot(filename) {
   const filePath1 = path.join(screenshotsDir, filename);
   fs.writeFileSync(filePath1, buffer);
 
-  if (fs.existsSync(brainArtifactDir)) {
-    const filePath2 = path.join(brainArtifactDir, filename);
-    fs.writeFileSync(filePath2, buffer);
-  }
   console.log(`[E2E Screenshot] Saved ${filename} (${buffer.length} bytes)`);
   return filePath1;
 }
@@ -373,6 +365,42 @@ try {
   // Screenshot 1: Reports list
   await takeScreenshot('screenshot_1_reports_list.png');
 
+  // Admin 2.2: inline status, toast, rollback and note without opening the drawer.
+  const inlineId = 'VOX-A-A108BB';
+  await evalInPage(`(() => {
+    const select = document.querySelector('tr[data-report-id="${inlineId}"] .status-select');
+    select.value = 'IN_PROGRESS';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await sleep(300);
+  const inlineSaved = await evalInPage(`document.querySelector('tr[data-report-id="${inlineId}"]').dataset.status === 'IN_PROGRESS' && document.getElementById('toast').textContent === 'Статус сохранён' && document.getElementById('modalOverlay').style.display !== 'flex'`);
+  if (!inlineSaved) throw new Error('Inline status save or toast failed');
+  await takeScreenshot('admin22_inline_status.png');
+
+  await evalInPage(`(() => {
+    window.__originalFetch = window.fetch;
+    window.fetch = (...args) => String(args[0]).includes('${inlineId}') && args[1]?.method === 'PATCH'
+      ? Promise.reject(new Error('simulated offline')) : window.__originalFetch(...args);
+    const select = document.querySelector('tr[data-report-id="${inlineId}"] .status-select');
+    select.value = 'RESOLVED';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await sleep(200);
+  const rollback = await evalInPage(`(() => {
+    window.fetch = window.__originalFetch;
+    const select = document.querySelector('tr[data-report-id="${inlineId}"] .status-select');
+    return select.value === 'IN_PROGRESS' && document.getElementById('toast').textContent === 'Не удалось изменить статус';
+  })()`);
+  if (!rollback) throw new Error('Inline status rollback failed');
+
+  await evalInPage(`document.querySelector('tr[data-report-id="${inlineId}"] [data-action="quick-note"]').click()`);
+  const noteOpened = await evalInPage(`document.getElementById('noteDialog').style.display === 'flex'`);
+  if (!noteOpened) throw new Error('Quick note dialog did not open');
+  await evalInPage(`(() => { document.getElementById('quickNoteText').value = 'Исправлено в Patch #12'; document.getElementById('noteSave').click(); })()`);
+  await sleep(300);
+  const noteSaved = await evalInPage(`document.querySelector('tr[data-report-id="${inlineId}"] .note-preview')?.textContent.includes('Patch #12') && document.getElementById('noteDialog').style.display === 'none'`);
+  if (!noteSaved) throw new Error('Quick note was not saved inline');
+
   // 3-4. Click "Скачать" and verify download endpoint responds
   console.log('[E2E Step 3-4] Testing individual report download...');
   const dlFetchStatus = await evalInPage(`
@@ -408,9 +436,18 @@ try {
   `);
   console.log('[E2E Step 5] Modal opened state:', modalState);
   if (modalState.overlayDisplay !== 'flex') throw new Error('Modal overlay should be flex');
+  const drawerWidth = await evalInPage(`document.querySelector('#modalOverlay .modal').getBoundingClientRect().width / window.innerWidth`);
+  if (drawerWidth < 0.35 || drawerWidth > 0.5) throw new Error('Drawer width outside expected desktop range: ' + drawerWidth);
 
   // Screenshot 2: Detail modal (status + developer notes)
   await takeScreenshot('screenshot_2_report_detail.png');
+  await pageSend('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await sleep(250);
+  const mobileDrawerWidth = await evalInPage(`document.querySelector('#modalOverlay .modal').getBoundingClientRect().width / window.innerWidth`);
+  if (mobileDrawerWidth < 0.98) throw new Error('Mobile drawer is not full width');
+  await takeScreenshot('admin22_mobile_drawer.png');
+  await pageSend('Emulation.clearDeviceMetricsOverride');
+  await sleep(250);
 
   // 6-9. Status: NEW -> IN_PROGRESS, save, verify persistence
   console.log('[E2E Step 6-7] Changing status to IN_PROGRESS...');
@@ -476,6 +513,7 @@ try {
 
   // Screenshot 3: Common Issues
   await takeScreenshot('screenshot_3_issues_tab.png');
+  await takeScreenshot('admin22_issues.png');
 
   // 16. Metrics Tab
   console.log('[E2E Step 16] Switching to "Сводка и метрики"...');
@@ -566,7 +604,7 @@ try {
   }
 
   console.log('\n==================================================');
-  console.log('ALL 25 BROWSER E2E TESTS PASSED WITH ZERO CONSOLE ERRORS!');
+  console.log('BROWSER E2E PASSED WITH ZERO CONSOLE ERRORS!');
   console.log('==================================================\n');
 } finally {
   pageWs.close();
@@ -574,6 +612,9 @@ try {
   chromeProc.kill();
   server.close();
   try {
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    const resolved = fs.realpathSync(userDataDir);
+    const tempRoot = fs.realpathSync(os.tmpdir());
+    if (resolved.startsWith(tempRoot + path.sep) && path.basename(resolved).startsWith('vox-admin-e2e-'))
+      fs.rmSync(resolved, { recursive: true, force: true });
   } catch (e) {}
 }

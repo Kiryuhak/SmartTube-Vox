@@ -89,7 +89,7 @@ test('GET / returns 200 with service status HTML card without leaking reports', 
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'text/html; charset=utf-8');
   const html = await res.text();
-  assert.match(html, /SmartTube VOX Diagnostics is running/);
+  assert.match(html, /Сервис диагностики SmartTube VOX работает/);
   assert.ok(!html.includes('VOX-A-'));
   assert.ok(!html.includes('safeRecentEvents'));
 });
@@ -303,7 +303,8 @@ test('Admin UI and Admin API list, auth check, stats, issues, PATCH status and D
 
   // 2. GET /admin with auth -> 200 HTML
   const authAdminReq = createRequest(null, {
-    url: 'https://diagnostics.example.com/admin?token=test_admin_secret_123',
+    url: 'https://diagnostics.example.com/admin',
+    headers: { Authorization: 'Bearer test_admin_secret_123' },
     method: 'GET',
   });
   const authAdminRes = await handleRequest(authAdminReq, env, customStorage);

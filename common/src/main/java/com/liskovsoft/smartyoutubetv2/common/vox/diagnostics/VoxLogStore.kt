@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Ограниченное кольцевое хранилище безопасных событий диагностики (VoxLogStore).
- * 
+ *
  * Особенности:
  * - Кольцевой буфер в памяти (максимум 500 событий);
  * - Ограниченный размер файла на диске (~256 КБ);
@@ -59,9 +59,24 @@ class VoxLogStore private constructor(private val appContext: Context) {
             val now = System.currentTimeMillis()
             pruneExpiredEventsLocked(now)
 
+            // Coalesce only low-priority repeats. Every ERROR stays as an individual event.
+            val lastIndex = memoryEvents.lastIndex
+            if (lastIndex >= 0 && event.level != VoxLogLevel.ERROR) {
+                val last = memoryEvents[lastIndex]
+                if (last.level == event.level && last.category == event.category &&
+                    last.code == event.code && last.message == event.message &&
+                    last.context == event.context && event.timestamp - last.timestamp in 0..10_000L) {
+                    memoryEvents[lastIndex] = last.copy(timestamp = event.timestamp,
+                        repeatCount = (last.repeatCount + 1).coerceAtMost(100000))
+                    saveToDiskLocked()
+                    return
+                }
+            }
+
             // Ring buffer eviction
             if (memoryEvents.size >= MAX_EVENTS) {
-                memoryEvents.removeAt(0)
+                val lowPriority = memoryEvents.indexOfFirst { it.level != VoxLogLevel.ERROR }
+                memoryEvents.removeAt(if (lowPriority >= 0) lowPriority else 0)
             }
             memoryEvents.add(event)
 
@@ -86,9 +101,14 @@ class VoxLogStore private constructor(private val appContext: Context) {
             val now = System.currentTimeMillis()
             pruneExpiredEventsLocked(now)
 
-            return memoryEvents
-                .takeLast(maxCount)
-                .reversed() // Newest first
+            val recent = memoryEvents.takeLast(maxCount)
+            val errors = memoryEvents.filter { it.level == VoxLogLevel.ERROR }.takeLast(maxCount)
+            val remaining = (maxCount - errors.size).coerceAtLeast(0)
+            val selected = (errors +
+                recent.filter { it.level != VoxLogLevel.ERROR }.takeLast(remaining))
+                .sortedByDescending { it.timestamp }
+                .take(maxCount)
+            return selected // Newest first
         }
     }
 
