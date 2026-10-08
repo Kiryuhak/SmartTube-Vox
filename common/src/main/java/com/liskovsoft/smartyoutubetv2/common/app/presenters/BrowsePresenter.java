@@ -10,6 +10,10 @@ import androidx.annotation.Nullable;
 
 import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItem;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroup;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager;
+import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxFilteredMediaGroup;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.locale.LocaleUtility;
 import com.liskovsoft.sharedutils.mylogger.Log;
@@ -54,6 +58,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -453,21 +458,82 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     public void updateChannelSorting() {
         int sortingType = getMainUIData().getChannelCategorySorting();
 
+        Observable<MediaGroup> observable;
         switch (sortingType) {
-            case MainUIData.CHANNEL_SORTING_DEFAULT:
-                mGridMapping.put(MediaGroup.TYPE_CHANNEL_UPLOADS, getContentService().getSubscribedChannelsObserve());
-                break;
             case MainUIData.CHANNEL_SORTING_NAME2:
             case MainUIData.CHANNEL_SORTING_NAME:
-                mGridMapping.put(MediaGroup.TYPE_CHANNEL_UPLOADS, getContentService().getSubscribedChannelsByNameObserve());
+                observable = getContentService().getSubscribedChannelsByNameObserve();
                 break;
             case MainUIData.CHANNEL_SORTING_NEW_CONTENT:
-                mGridMapping.put(MediaGroup.TYPE_CHANNEL_UPLOADS, getContentService().getSubscribedChannelsByNewContentObserve());
+                observable = getContentService().getSubscribedChannelsByNewContentObserve();
                 break;
             case MainUIData.CHANNEL_SORTING_LAST_VIEWED:
-                mGridMapping.put(MediaGroup.TYPE_CHANNEL_UPLOADS, getContentService().getSubscribedChannelsByLastViewedObserve());
+                observable = getContentService().getSubscribedChannelsByLastViewedObserve();
+                break;
+            case MainUIData.CHANNEL_SORTING_DEFAULT:
+            default:
+                observable = getContentService().getSubscribedChannelsObserve();
                 break;
         }
+
+        mGridMapping.put(MediaGroup.TYPE_CHANNEL_UPLOADS, wrapChannelGroupFilter(observable));
+        updateChannelSectionTitle();
+    }
+
+    private Observable<MediaGroup> wrapChannelGroupFilter(Observable<MediaGroup> source) {
+        if (source == null) {
+            return null;
+        }
+        return source.map(this::filterChannelMediaGroup);
+    }
+
+    private MediaGroup filterChannelMediaGroup(MediaGroup group) {
+        if (group == null || group.getMediaItems() == null) {
+            return group;
+        }
+        VoxChannelGroupManager manager = VoxChannelGroupManager.instance(getContext());
+        String selectedGroupId = manager.getSelectedGroupId();
+        if (selectedGroupId == null) {
+            return group;
+        }
+
+        Set<String> channelIds = manager.getChannelIdsInGroup(selectedGroupId);
+        List<MediaItem> filtered = new ArrayList<>();
+        for (MediaItem item : group.getMediaItems()) {
+            if (item == null) {
+                continue;
+            }
+            String id = item.getChannelId();
+            String title = item.getTitle();
+            String author = item.getAuthor();
+            if ((id != null && channelIds.contains(id)) ||
+                (title != null && channelIds.contains(title)) ||
+                (author != null && channelIds.contains(author))) {
+                filtered.add(item);
+            }
+        }
+
+        return new VoxFilteredMediaGroup(group, filtered);
+    }
+
+    public void updateChannelSectionTitle() {
+        BrowseSection section = findSectionById(MediaGroup.TYPE_CHANNEL_UPLOADS);
+        if (section != null) {
+            VoxChannelGroup group = VoxChannelGroupManager.instance(getContext()).getSelectedGroup();
+            if (group != null) {
+                section.setTitle(getContext().getString(R.string.header_channels) + " • " + group.getName());
+            } else {
+                section.setTitle(getContext().getString(R.string.header_channels));
+            }
+            BrowseSection mapped = mSectionsMapping.get(MediaGroup.TYPE_CHANNEL_UPLOADS);
+            if (mapped != null) {
+                mapped.setTitle(section.getTitle());
+            }
+        }
+    }
+
+    public void refreshCurrentSection() {
+        updateCurrentSection();
     }
 
     public void updatePlaylistsStyle() {
@@ -567,7 +633,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
 
         if (belongsToChannelUploads(item)) { // We need to be sure we exactly on Channels section
             ChannelUploadsMenuPresenter.instance(getContext()).showMenu(item, (videoItem, action) -> {
-                if (action == VideoMenuCallback.ACTION_UNSUBSCRIBE) { // works with any uploads section look
+                if (action == VideoMenuCallback.ACTION_UNSUBSCRIBE || action == VideoMenuCallback.ACTION_REMOVE_FROM_GROUP) { // works with any uploads section look
                     removeItem(item);
                 }
             });

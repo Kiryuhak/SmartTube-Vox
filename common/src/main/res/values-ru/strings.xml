@@ -958,4 +958,23 @@
     <string name="vox_diagnostics_send_failed_retry">Не удалось отправить отчёт.\n\nЖурнал сохранён на устройстве.</string>
     <string name="vox_diagnostics_btn_copy_code">Скопировать код</string>
     <string name="vox_diagnostics_btn_retry">Повторить</string>
+
+    <!-- VOX Channel Groups -->
+    <string name="vox_channel_groups">Группы каналов</string>
+    <string name="vox_channel_groups_all">Все каналы</string>
+    <string name="vox_channel_group_create">Создать группу</string>
+    <string name="vox_channel_group_create_title">Новая группа каналов</string>
+    <string name="vox_channel_group_rename_title">Переименовать группу</string>
+    <string name="vox_channel_group_delete_title">Удалить группу «%s»?</string>
+    <string name="vox_channel_group_delete_confirm">Каналы останутся в ваших подписках YouTube.</string>
+    <string name="vox_channel_group_delete_btn">Удалить группу</string>
+    <string name="vox_channel_group_manage">Управление группами</string>
+    <string name="vox_channel_group_add_to">Добавить в группу</string>
+    <string name="vox_channel_group_remove_from">Удалить из группы «%s»</string>
+    <string name="vox_channel_group_empty">В этой группе пока нет каналов</string>
+    <string name="vox_channel_group_empty_hint">Добавьте каналы через меню канала (долгое нажатие)</string>
+    <string name="vox_channel_group_channels_count">%d каналов</string>
+    <string name="vox_channel_group_name_exists">Группа с таким названием уже существует</string>
+    <string name="vox_channel_group_name_empty">Название не может быть пустым</string>
+    <string name="vox_channel_group_name_too_long">Название не может превышать 50 символов</string>
 </resources>

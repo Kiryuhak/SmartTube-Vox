@@ -24,7 +24,8 @@ enum class VoxLogCategory(val displayNameRu: String) {
     TIZEN("Tizen"),
     DIAGNOSTICS("Диагностика"),
     BACKGROUND("Фоновый режим"),
-    OTA("Обновление ПО")
+    OTA("Обновление ПО"),
+    CHANNEL_GROUP("Группы каналов")
 }
 
 object VoxLogCode {
@@ -152,6 +153,14 @@ object VoxLogCode {
     const val OTA_SIGNATURE_VERIFIED = "OTA_SIGNATURE_VERIFIED"
     const val OTA_INSTALL_REQUESTED = "OTA_INSTALL_REQUESTED"
     const val OTA_FAILED = "OTA_FAILED"
+
+    // Channel Groups
+    const val CHANNEL_GROUP_CREATED = "CHANNEL_GROUP_CREATED"
+    const val CHANNEL_GROUP_RENAMED = "CHANNEL_GROUP_RENAMED"
+    const val CHANNEL_GROUP_DELETED = "CHANNEL_GROUP_DELETED"
+    const val CHANNEL_GROUP_MEMBER_ADDED = "CHANNEL_GROUP_MEMBER_ADDED"
+    const val CHANNEL_GROUP_MEMBER_REMOVED = "CHANNEL_GROUP_MEMBER_REMOVED"
+    const val CHANNEL_GROUP_STORAGE_ERROR = "CHANNEL_GROUP_STORAGE_ERROR"
 
     const val UNKNOWN = "UNKNOWN"
 }

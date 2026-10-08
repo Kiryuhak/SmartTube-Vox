@@ -93,6 +93,7 @@ public class VideoMenuPresenter extends BaseMenuPresenter {
         int ACTION_ADD_TO_QUEUE = 5;
         int ACTION_PLAY_NEXT = 6;
         int ACTION_REMOVE_AUTHOR = 7;
+        int ACTION_REMOVE_FROM_GROUP = 8;
         void onItemAction(Video videoItem, int action);
     }
 
