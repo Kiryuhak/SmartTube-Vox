@@ -210,11 +210,11 @@ object VoxChannelGroupDialogs {
                 if (e.errorCode == VoxChannelGroupErrorCode.DUPLICATE_NAME) {
                     MessageHelpers.showMessage(context, R.string.vox_channel_group_name_exists)
                 } else {
-                    MessageHelpers.showMessage(context, e.message)
+                    MessageHelpers.showMessage(context, e.userMessageRu)
                 }
                 false
             } catch (e: Exception) {
-                MessageHelpers.showMessage(context, e.message)
+                MessageHelpers.showMessage(context, R.string.vox_channel_group_save_error)
                 false
             }
         }
@@ -255,11 +255,11 @@ object VoxChannelGroupDialogs {
                 if (e.errorCode == VoxChannelGroupErrorCode.DUPLICATE_NAME) {
                     MessageHelpers.showMessage(context, R.string.vox_channel_group_name_exists)
                 } else {
-                    MessageHelpers.showMessage(context, e.message)
+                    MessageHelpers.showMessage(context, e.userMessageRu)
                 }
                 false
             } catch (e: Exception) {
-                MessageHelpers.showMessage(context, e.message)
+                MessageHelpers.showMessage(context, R.string.vox_channel_group_save_error)
                 false
             }
         }

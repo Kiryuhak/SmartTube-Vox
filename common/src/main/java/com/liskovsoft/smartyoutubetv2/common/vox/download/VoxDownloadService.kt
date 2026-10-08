@@ -245,6 +245,13 @@ class VoxDownloadService : Service(), VoxDownloadListener {
         }
     }
 
+    private val pendingIntentFlags: Int
+        get() = if (Build.VERSION.SDK_INT >= 23) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
     private fun buildProgressNotification(progress: VoxDownloadProgress): Notification {
         val job = coordinator.getJob(progress.downloadId)
         val title = job?.request?.videoTitle?.ifBlank { getString(R.string.vox_download_notification_title) }
@@ -259,7 +266,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
             this,
             progress.downloadId.hashCode(),
             cancelIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            pendingIntentFlags
         )
 
         val contentIntent = packageManager.getLaunchIntentForPackage(packageName)?.let {
@@ -267,7 +274,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
                 this,
                 0,
                 it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                pendingIntentFlags
             )
         }
 
@@ -327,7 +334,7 @@ class VoxDownloadService : Service(), VoxDownloadListener {
                 this,
                 0,
                 it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                pendingIntentFlags
             )
         }
 

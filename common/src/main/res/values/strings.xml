@@ -1056,4 +1056,5 @@
     <string name="vox_channel_group_name_exists">A group with this name already exists</string>
     <string name="vox_channel_group_name_empty">Name cannot be empty</string>
     <string name="vox_channel_group_name_too_long">Name cannot exceed 50 characters</string>
+    <string name="vox_channel_group_save_error">Failed to save channel group</string>
 </resources>
