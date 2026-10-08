@@ -59,6 +59,16 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         Arrays.fill(mRenderers, null);
     }
 
+    public void setVideoTrackEnabled(boolean enabled) {
+        if (mTrackSelector != null) {
+            try {
+                mTrackSelector.setRendererDisabled(RENDERER_INDEX_VIDEO, !enabled);
+            } catch (Exception e) {
+                Log.e(TAG, "Error setting video track enabled %s: %s", enabled, e.getMessage());
+            }
+        }
+    }
+
     /**
      * Shows the selection dialog for a given renderer.
      * @param rendererIndex The index of the renderer. <br/>

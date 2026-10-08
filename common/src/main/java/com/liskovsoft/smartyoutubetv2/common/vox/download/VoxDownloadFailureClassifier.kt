@@ -90,10 +90,12 @@ object VoxDownloadFailureClassifier {
                 VoxDownloadErrorCode.STORAGE_PERMISSION -> VoxDownloadFailureCategory.STORAGE_PERMISSION
                 VoxDownloadErrorCode.STORAGE_ERROR -> {
                     val rootCat = root?.let { classifyThrowable(it).first }
-                    if (rootCat == VoxDownloadFailureCategory.STORAGE_FULL || rootCat == VoxDownloadFailureCategory.STORAGE_PERMISSION) {
-                        rootCat
-                    } else {
-                        VoxDownloadFailureCategory.STORAGE_FULL
+                    when (rootCat) {
+                        VoxDownloadFailureCategory.STORAGE_FULL,
+                        VoxDownloadFailureCategory.STORAGE_PERMISSION,
+                        VoxDownloadFailureCategory.FINALIZE_FAILED,
+                        VoxDownloadFailureCategory.OUTPUT_MOVE_FAILED -> rootCat
+                        else -> VoxDownloadFailureCategory.FINALIZE_FAILED
                     }
                 }
                 VoxDownloadErrorCode.TEMP_FILE_FAILED -> VoxDownloadFailureCategory.TEMP_FILE_FAILED

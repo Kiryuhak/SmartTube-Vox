@@ -27,7 +27,9 @@ import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
@@ -263,6 +265,24 @@ public class VideoLoaderController extends BasePlayerController {
         return url.startsWith("content://") || url.startsWith("file://") || url.startsWith("/");
     }
 
+    private void handleLocalPlaybackError(Video video, String reason) {
+        if (getPlayer() != null) {
+            getPlayer().showProgressBar(false);
+        }
+        Map<String, String> ctx = new HashMap<>();
+        ctx.put("reason", reason);
+        ctx.put("sourceType", "LOCAL_FILE");
+        ctx.put("isDownloadedItem", "true");
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.error(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.PLAYER_LOCAL_SOURCE_ERROR,
+                "Локальный файл не найден или повреждён",
+                ctx,
+                null
+        );
+        MessageHelpers.showMessage(getContext(), "Локальный файл не найден или повреждён");
+    }
+
     private void loadFormatInfo(Video video) {
         if (getPlayer() == null) {
             return;
@@ -270,22 +290,35 @@ public class VideoLoaderController extends BasePlayerController {
 
         // Fix no progress on next video (the engine may still buffering a bit)
         //getPlayer().showProgressBar(true);
-        if (isValidLocalPlayback(video)) {
-            String mediaUrl = video.mediaUrl.trim();
-            if (mediaUrl.startsWith("/")) {
-                mediaUrl = android.net.Uri.fromFile(new java.io.File(mediaUrl)).toString();
-                video.mediaUrl = mediaUrl;
+        if (video != null && video.isLocal) {
+            if (isValidLocalPlayback(video)) {
+                String mediaUrl = video.mediaUrl.trim();
+                if (mediaUrl.startsWith("/")) {
+                    mediaUrl = android.net.Uri.fromFile(new java.io.File(mediaUrl)).toString();
+                    video.mediaUrl = mediaUrl;
+                }
+                if (mediaUrl.startsWith("file://")) {
+                    android.net.Uri u = android.net.Uri.parse(mediaUrl);
+                    java.io.File f = u.getPath() != null ? new java.io.File(u.getPath()) : null;
+                    if (f == null || !f.exists() || f.length() <= 0) {
+                        handleLocalPlaybackError(video, "Local file not found or empty");
+                        return;
+                    }
+                }
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_PLAYBACK_OPENED,
+                        "Offline playback opened"
+                );
+                getPlayer().openUrlList(java.util.Collections.singletonList(mediaUrl));
+                getPlayer().setTitle(video.getTitle());
+                getPlayer().showProgressBar(false);
+                getPlayer().showBackground(null);
+                return;
+            } else {
+                handleLocalPlaybackError(video, "Invalid local playback source");
+                return;
             }
-            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.OFFLINE_PLAYBACK_OPENED,
-                    "Offline playback opened for videoId=" + video.videoId
-            );
-            getPlayer().openUrlList(java.util.Collections.singletonList(mediaUrl));
-            getPlayer().setTitle(video.getTitle());
-            getPlayer().showProgressBar(false);
-            getPlayer().showBackground(null);
-            return;
         }
 
         Utils.post(mShowProgressBar);

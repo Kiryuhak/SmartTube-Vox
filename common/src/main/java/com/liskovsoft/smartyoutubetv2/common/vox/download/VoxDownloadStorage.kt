@@ -407,9 +407,33 @@ class VoxDownloadStorage(private val context: Context) {
                 val file = uri.path?.let { File(it) }
                 if (file != null && file.exists()) file.length() else 0L
             } else {
-                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                    pfd.statSize.coerceAtLeast(0L)
-                } ?: 0L
+                var size = try {
+                    context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                        val stat = pfd.statSize
+                        if (stat > 0L) {
+                            stat
+                        } else {
+                            try {
+                                java.io.FileInputStream(pfd.fileDescriptor).channel.size().coerceAtLeast(0L)
+                            } catch (e: Exception) {
+                                0L
+                            }
+                        }
+                    } ?: 0L
+                } catch (e: Exception) {
+                    0L
+                }
+                if (size <= 0L) {
+                    try {
+                        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                            val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (sizeIndex != -1 && cursor.moveToFirst() && !cursor.isNull(sizeIndex)) {
+                                size = cursor.getLong(sizeIndex).coerceAtLeast(0L)
+                            }
+                        }
+                    } catch (ignored: Exception) {}
+                }
+                size
             }
         } catch (e: Exception) {
             0L

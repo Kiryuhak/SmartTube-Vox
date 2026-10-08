@@ -64,7 +64,9 @@
             android:foregroundServiceType="mediaPlayback"/>
         <service
             android:name="com.liskovsoft.smartyoutubetv2.common.misc.BackgroundPlaybackService"
-            android:enabled="true"/>
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <activity android:name=".misc.BackupReceiverActivity"
             android:exported="true">

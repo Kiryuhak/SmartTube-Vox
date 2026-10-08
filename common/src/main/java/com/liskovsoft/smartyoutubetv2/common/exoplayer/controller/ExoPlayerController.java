@@ -264,6 +264,12 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
     }
 
+    public void setVideoTrackEnabled(boolean enabled) {
+        if (mTrackSelectorManager != null) {
+            mTrackSelectorManager.setVideoTrackEnabled(enabled);
+        }
+    }
+
     public void setVideo(Video video) {
         mVideo = new WeakReference<>(video);
         if (video != null) {
@@ -397,24 +403,65 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
     }
 
+    public String getSourceType() {
+        if (getVideo() != null && getVideo().isLocal) {
+            String url = getVideo().mediaUrl;
+            if (url != null) {
+                if (url.startsWith("content://")) return "CONTENT_URI";
+                if (url.startsWith("file://") || url.startsWith("/")) return "LOCAL_FILE";
+            }
+            return "LOCAL_FILE";
+        }
+        if (getVideo() != null && getVideo().mediaUrl != null) {
+            String url = getVideo().mediaUrl;
+            if (url.startsWith("content://")) return "CONTENT_URI";
+            if (url.startsWith("file://") || url.startsWith("/")) return "LOCAL_FILE";
+            if (url.startsWith("http://") || url.startsWith("https://")) return "HTTP";
+        }
+        return "HTTP";
+    }
+
     @Override
     public void onPlayerError(ExoPlaybackException error) {
         Throwable nested = error.getCause() != null ? error.getCause() : error;
-        // Data-source exception messages contain complete signed media URLs.
+        while (nested.getCause() != null && nested.getCause() != nested) {
+            if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.HttpDataSourceException) {
+                break;
+            }
+            nested = nested.getCause();
+        }
+
         // Keep diagnostics useful without leaking query tokens into logcat.
         Log.e(TAG, "onPlayerError: type=%s, renderer=%s, cause=%s",
                 error.type, error.rendererIndex, nested.getClass().getSimpleName());
+
+        String sourceType = getSourceType();
+        boolean isLocalSource = "LOCAL_FILE".equals(sourceType) || "CONTENT_URI".equals(sourceType);
 
         Map<String, String> errorCtx = new HashMap<>();
         errorCtx.put("errorType", String.valueOf(error.type));
         errorCtx.put("rendererIndex", String.valueOf(error.rendererIndex));
         errorCtx.put("causeClass", nested.getClass().getSimpleName());
+        errorCtx.put("sourceType", sourceType);
+        errorCtx.put("isDownloadedItem", String.valueOf(getVideo() != null && getVideo().isLocal));
+
+        if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) {
+            int httpCode = ((com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) nested).responseCode;
+            errorCtx.put("responseCode", String.valueOf(httpCode));
+        }
 
         String logCode = VoxLogCode.PLAYER_RENDERER_ERROR;
         if (error.type == ExoPlaybackException.TYPE_RENDERER) {
             logCode = VoxLogCode.PLAYER_DECODER_ERROR;
         } else if (error.type == ExoPlaybackException.TYPE_SOURCE) {
-            logCode = VoxLogCode.PLAYER_LOCAL_SOURCE_ERROR;
+            if (isLocalSource) {
+                logCode = VoxLogCode.PLAYER_LOCAL_SOURCE_ERROR;
+            } else if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException ||
+                       nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.HttpDataSourceException) {
+                logCode = VoxLogCode.PLAYER_HTTP_ERROR;
+            } else {
+                logCode = VoxLogCode.PLAYER_SOURCE_ERROR;
+            }
         }
         VoxSafeLogger.e(VoxLogCategory.PLAYER, logCode, "Сбой воспроизведения ExoPlayer", errorCtx, null);
 
@@ -465,18 +512,26 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                         Map<String, String> ctx = new HashMap<>();
                         ctx.put("latencyMs", String.valueOf((startupLatency / 100) * 100));
                         ctx.put("startupLatencyMs", String.valueOf(startupLatency));
+                        String srcType = getSourceType();
+                        ctx.put("sourceType", srcType);
+                        boolean isLocalSrc = "LOCAL_FILE".equals(srcType) || "CONTENT_URI".equals(srcType);
+                        String codecStr = "unknown";
                         FormatItem vf = getVideoFormat();
                         if (vf != null) {
                             ctx.put("selectedHeight", String.valueOf(vf.getHeight()));
                             MediaTrack tr = vf.getTrack();
                             if (tr != null && tr.format != null && tr.format.codecs != null) {
-                                ctx.put("selectedCodec", tr.format.codecs);
+                                codecStr = tr.format.codecs;
+                                ctx.put("selectedCodec", codecStr);
                             }
                         }
+                        ctx.put("codec", codecStr);
                         long pos = getPositionMs();
                         long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
                         ctx.put("initialBufferMs", String.valueOf(buffered));
                         ctx.put("isLive", String.valueOf(isLive));
+                        String networkConfidence = isLocalSrc ? "0.0" : (buffered < 1000 ? "0.85" : "0.4");
+                        ctx.put("networkLimitedConfidence", networkConfidence);
                         VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_STARTUP_SLOW, "Замедленный старт воспроизведения", ctx);
                     }
                 }
