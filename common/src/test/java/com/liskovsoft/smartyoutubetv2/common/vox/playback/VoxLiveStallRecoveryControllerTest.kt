@@ -180,4 +180,98 @@ class VoxLiveStallRecoveryControllerTest {
         val notHandled = controller.handleNetworkTransportError(genericError, 0, engines)
         assertFalse(notHandled)
     }
+
+    @Test
+    fun testShortBufferingIgnored() {
+        controller.onPlaybackStart(isLive = true)
+        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        assertEquals(VoxLiveStallState.BUFFERING_OBSERVED, controller.getState())
+
+        // Buffer recovers in 1.5 seconds (under 3.5s threshold)
+        shadowOf(Looper.getMainLooper()).idleFor(1_500L, TimeUnit.MILLISECONDS)
+        controller.onBufferingEnded()
+
+        assertEquals(VoxLiveStallState.IDLE, controller.getState())
+        assertEquals(0, controller.getRecoveryAttempts())
+        assertEquals(0, actionHandler.refreshManifestCallCount)
+        assertEquals(0, actionHandler.reseekCallCount)
+        assertEquals(0, actionHandler.recreateSourceCallCount)
+    }
+
+    @Test
+    fun testMaxRecoveryAttemptsExceededTransitionsToFailed() {
+        controller.onPlaybackStart(isLive = true)
+
+        // Attempt 1 -> REFRESHING_MANIFEST
+        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        assertEquals(1, controller.getRecoveryAttempts())
+
+        // Attempt 2 -> RESEEKING
+        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        assertEquals(2, controller.getRecoveryAttempts())
+
+        // Attempt 3 -> RECREATING_SOURCE
+        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        assertEquals(3, controller.getRecoveryAttempts())
+
+        // Attempt 4 -> FAILED (bounded retry)
+        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        assertEquals(VoxLiveStallState.FAILED, controller.getState())
+        assertEquals(4, controller.getRecoveryAttempts())
+        assertEquals(2, actionHandler.recreateSourceCallCount) // called again as final fallback
+    }
+
+    @Test
+    fun testNetworkEngineAntiThrashingCooldown() {
+        controller.onPlaybackStart(isLive = true)
+        val engines = intArrayOf(0, 1, 2)
+        val transportError = SocketTimeoutException("Connection reset")
+
+        // 1. In-place retry
+        assertFalse(controller.handleNetworkTransportError(transportError, 0, engines))
+
+        // 2. Switch 0 -> 1
+        assertTrue(controller.handleNetworkTransportError(transportError, 0, engines))
+        assertEquals(1, actionHandler.networkFallbackEngine)
+
+        // 3. Immediate repeated error on new engine must not thrash during grace period
+        assertFalse(controller.handleNetworkTransportError(transportError, 1, engines))
+    }
+
+    @Test
+    fun testTinyWindowSeekClamping() {
+        // Window duration smaller than min clamp buffer
+        val tinyDuration = 1_500L
+        val clamped = controller.onSeekRequested(1_000L, tinyDuration, 0L, true)
+        // Must safely clamp without negative values or throwing
+        assertTrue(clamped >= 0L)
+    }
+
+    @Test
+    fun testResetOnPlaybackStartClearsAllState() {
+        controller.onPlaybackStart(isLive = true)
+        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        assertEquals(1, controller.getRecoveryAttempts())
+
+        // Start new stream
+        controller.onPlaybackStart(isLive = true)
+        assertEquals(VoxLiveStallState.IDLE, controller.getState())
+        assertEquals(0, controller.getRecoveryAttempts())
+    }
+
+    @Test
+    fun testVodPlaybackDoesNotTriggerLiveBuffering() {
+        controller.onPlaybackStart(isLive = false)
+        controller.onBufferingStarted(false, 100_000L, 120_000L, 0L)
+        assertEquals(VoxLiveStallState.IDLE, controller.getState())
+
+        shadowOf(Looper.getMainLooper()).idleFor(10_000L, TimeUnit.MILLISECONDS)
+        assertEquals(VoxLiveStallState.IDLE, controller.getState())
+        assertEquals(0, actionHandler.refreshManifestCallCount)
+    }
 }
