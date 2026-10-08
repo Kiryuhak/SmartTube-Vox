@@ -33,15 +33,16 @@ public class VoxBadgeLayoutTest {
         View marker = card.findViewById(R.id.local_badge_icon);
         View age = card.findViewById(R.id.age_badge);
         View duration = card.findViewById(R.id.extra_text_badge);
+        View topContainer = card.findViewById(R.id.top_badges_container);
+        View bottomContainer = card.findViewById(R.id.clip_info);
         assertEquals(View.VISIBLE, quality.getVisibility());
         assertEquals(View.VISIBLE, marker.getVisibility());
         assertEquals(View.VISIBLE, age.getVisibility());
         assertEquals(View.VISIBLE, duration.getVisibility());
-        assertTrue(quality.getTop() < marker.getTop());
-        assertTrue(quality.getBottom() <= marker.getTop());
+        assertTrue("Marker must be to the left of quality badge", marker.getLeft() < quality.getLeft());
+        assertTrue("Top badges container must be above bottom info container", topContainer.getBottom() <= bottomContainer.getTop());
         assertTrue(age.getLeft() < duration.getLeft());
-        assertTrue(age.getBottom() <= 135);
-        assertTrue(duration.getBottom() <= 135);
+        assertTrue(bottomContainer.getBottom() <= 135);
     }
 
     @Test public void missingAgeOrQualityLeavesTheirCornersFree() {

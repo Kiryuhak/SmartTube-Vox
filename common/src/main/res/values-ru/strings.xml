@@ -722,10 +722,12 @@
     <string name="alt_app_icon">Альтернативный значок приложения (требуется перезагрузка)</string>
     <string name="network_stack">Предпочитать сетевой стек %s</string>
     <string name="player_network_stack">Сетевой движок</string>
-    <string name="cronet_desc">Сетевой стек Chromium с поддержкой протоколов HTTP/2 и QUIC. Оптимален для скоростных подключений.</string>
+    <string name="cronet_desc">Сетевой движок Chromium с хорошей производительностью. Может помочь при проблемах с задержками и буферизацией.</string>
     <string name="unlock_all_formats">Разблокировать все видео форматы</string>
     <string name="unlock_all_formats_desc">Разблокировать форматы, которые, вероятно, не поддерживаются вашим устройством.</string>
-    <string name="okhttp_desc">Альтернативный сетевой стек с поддержкой пользовательского DNS и гибкой маршрутизации.</string>
+    <string name="okhttp_desc">Совместимый и стабильный сетевой режим. Попробуйте его, если с Cronet возникают ошибки.</string>
+    <string name="network_engine_auto">Авто (рекомендуется)</string>
+    <string name="network_engine_hint">Если видео работает нормально — оставьте «Авто». Менять сетевой движок стоит только при проблемах с загрузкой или буферизацией.</string>
     <string name="select_channel_section">Открывать соответствующий раздел при запуске приложения с каналов ATV.</string>
     <string name="enable_voice_search_desc">Официальное приложение будет заменено так называемым мостом. Мост помогает передавать глобальные поисковые запросы в наше приложение.</string>
     <string name="enable_master_password">Включить мастер-пароль</string>
@@ -752,7 +754,7 @@
     <string name="sidebar_notification">Показать уведомление на боковой панели</string>
     <string name="dialog_notification">Уведомлять про обновление всплывающим диалогом</string>
     <string name="mark_as_watched">Отметить как просмотренное</string>
-    <string name="player_ui_animations">Включить анимацию интерфейса плеера</string>
+    <string name="player_ui_animations">Включить анимация интерфейса плеера</string>
     <string name="player_likes_count">Отображать количество лайков/дислайков</string>
     <string name="sorting_alphabetically2">По алфавиту (быстро, анимированные превью)</string>
     <string name="sorting_default">По умолчанию (быстро, анимированные превью)</string>
@@ -763,7 +765,7 @@
     <string name="subtitle_remember">Запомнить включенные субтитры для каждого канала</string>
     <string name="amazon_frame_drop_fix">Исправление выпадения кадров #2</string>
     <string name="amazon_frame_drop_fix_desc">Исправляет лаги на Amazon Stick и некоторых других устройствах.</string>
-    <string name="default_stack_desc">Стандартный сетевой стек ExoPlayer. Сбалансированная совместимость для большинства трансляций.</string>
+    <string name="default_stack_desc">SmartTube VOX сам выберет наиболее подходящий сетевой режим для текущего соединения.</string>
     <string name="vox_live_return_to_live_prompt">Возврат в прямой эфир</string>
     <string name="item_postion">Позиция</string>
     <string name="player_screen_off_dimming">Величина затемнения экрана</string>

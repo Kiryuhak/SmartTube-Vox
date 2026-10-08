@@ -728,10 +728,12 @@
     <string name="alt_app_icon">Alternative app icon (needs reboot)</string>
     <string name="network_stack">Prefer %s network stack</string>
     <string name="player_network_stack">Network engine</string>
-    <string name="cronet_desc">Chromium network stack with HTTP/2 and QUIC protocol support. Recommended for high-speed connections.</string>
+    <string name="cronet_desc">Chromium network engine with high performance. May help with latency and buffering issues.</string>
     <string name="unlock_all_formats">Unlock all video formats</string>
     <string name="unlock_all_formats_desc">On some devices the firmware incorrectly reports some formats as unsupported, even if they are.\n(e.g. 1080p smart TVs tend to report 4k as not supported).</string>
-    <string name="okhttp_desc">Alternative HTTP client with custom DNS support and flexible connection routing.</string>
+    <string name="okhttp_desc">Compatible and stable network mode. Try it if you encounter issues with Cronet.</string>
+    <string name="network_engine_auto">Auto (recommended)</string>
+    <string name="network_engine_hint">If video playback works normally, leave on \'Auto\'. Change the network engine only when facing loading or buffering problems.</string>
     <string name="select_channel_section">Open corresponding section when the app launched from ATV Channels</string>
     <string name="enable_voice_search_desc">The official app will be replaced with a so-called \"bridge\". A bridge helps to transfer global search requests to our app.</string>
     <string name="enable_master_password">Enable master password</string>
@@ -768,7 +770,7 @@
     <string name="subtitle_remember">Enable subtitles only on the current channel</string>
     <string name="amazon_frame_drop_fix">Frame drop fix #2</string>
     <string name="amazon_frame_drop_fix_desc">Intended for Amazon Stick devices. May work on other devices too.</string>
-    <string name="default_stack_desc">Default ExoPlayer network stack. Balanced compatibility for standard playback.</string>
+    <string name="default_stack_desc">SmartTube VOX will automatically select the best network mode for the current connection.</string>
     <string name="vox_live_return_to_live_prompt">Returned to live stream</string>
     <string name="item_postion">Position of</string>
     <string name="player_screen_off_dimming">Screen off dimming amount</string>
