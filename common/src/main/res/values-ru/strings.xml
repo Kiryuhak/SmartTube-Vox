@@ -973,8 +973,9 @@
     <string name="vox_channel_group_remove_from">Удалить из группы «%s»</string>
     <string name="vox_channel_group_empty">В этой группе пока нет каналов</string>
     <string name="vox_channel_group_empty_hint">Добавьте каналы через меню канала (долгое нажатие)</string>
-    <string name="vox_channel_group_channels_count">%d каналов</string>
+    <string name="vox_channel_group_channels_count">Каналов: %d</string>
     <string name="vox_channel_group_name_exists">Группа с таким названием уже существует</string>
     <string name="vox_channel_group_name_empty">Название не может быть пустым</string>
     <string name="vox_channel_group_name_too_long">Название не может превышать 50 символов</string>
+    <string name="vox_channel_group_save_error">Не удалось сохранить группу каналов</string>
 </resources>

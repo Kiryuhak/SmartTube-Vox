@@ -79,14 +79,17 @@ data class VoxChannelGroupMembership(
     }
 }
 
-enum class VoxChannelGroupErrorCode {
-    INVALID_NAME,
-    DUPLICATE_NAME,
-    GROUP_NOT_FOUND,
-    STORAGE_ERROR
+enum class VoxChannelGroupErrorCode(val userMessageRu: String) {
+    INVALID_NAME("Недопустимое название группы"),
+    DUPLICATE_NAME("Группа с таким названием уже существует"),
+    GROUP_NOT_FOUND("Группа не найдена"),
+    STORAGE_ERROR("Не удалось сохранить группу каналов")
 }
 
 class VoxChannelGroupException(
     val errorCode: VoxChannelGroupErrorCode,
     message: String
-) : Exception(message)
+) : Exception(message) {
+    val userMessageRu: String
+        get() = errorCode.userMessageRu
+}

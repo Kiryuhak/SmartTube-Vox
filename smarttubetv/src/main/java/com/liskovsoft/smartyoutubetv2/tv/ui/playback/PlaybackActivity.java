@@ -3,6 +3,8 @@ package com.liskovsoft.smartyoutubetv2.tv.ui.playback;
 import android.annotation.TargetApi;
 import android.app.PictureInPictureParams;
 import android.content.Context;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -340,6 +342,7 @@ public class PlaybackActivity extends LeanbackActivity {
     }
 
     private AudioManager.OnAudioFocusChangeListener mAudioFocusListener;
+    private AudioFocusRequest mAudioFocusRequest;
 
     private void enterBackgroundAudioOnly() {
         if (mPlaybackFragment == null) return;
@@ -402,7 +405,22 @@ public class PlaybackActivity extends LeanbackActivity {
         }
         AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (am != null) {
-            int res = am.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+            int res;
+            if (Build.VERSION.SDK_INT >= 26) {
+                if (mAudioFocusRequest == null) {
+                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build();
+                    mAudioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                            .setAudioAttributes(playbackAttributes)
+                            .setOnAudioFocusChangeListener(mAudioFocusListener)
+                            .build();
+                }
+                res = am.requestAudioFocus(mAudioFocusRequest);
+            } else {
+                res = am.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+            }
             if (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 VoxSafeLogger.info(
                         VoxLogCategory.BACKGROUND,
@@ -414,9 +432,11 @@ public class PlaybackActivity extends LeanbackActivity {
     }
 
     private void unregisterAudioFocusListener() {
-        if (mAudioFocusListener != null) {
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            if (am != null) {
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am != null) {
+            if (Build.VERSION.SDK_INT >= 26 && mAudioFocusRequest != null) {
+                am.abandonAudioFocusRequest(mAudioFocusRequest);
+            } else if (mAudioFocusListener != null) {
                 am.abandonAudioFocus(mAudioFocusListener);
             }
         }
