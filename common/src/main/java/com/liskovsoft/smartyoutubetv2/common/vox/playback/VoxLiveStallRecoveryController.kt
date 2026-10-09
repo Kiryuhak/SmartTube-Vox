@@ -261,6 +261,9 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
             }
             2 -> {
                 currentState = VoxLiveStallState.RESEEKING
+                try {
+                    actionHandler.showMessage("Восстанавливаем трансляцию…")
+                } catch (ignored: Exception) {}
                 val target = if (lastObservedDurationMs > SAFE_LIVE_OFFSET_MS) {
                     lastObservedDurationMs - SAFE_LIVE_OFFSET_MS
                 } else {

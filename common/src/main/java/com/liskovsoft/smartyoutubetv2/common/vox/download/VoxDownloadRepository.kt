@@ -177,4 +177,27 @@ class VoxDownloadRepository(
         jobs.remove(downloadId)
         return storage.deleteJobDir(downloadId)
     }
+
+    /**
+     * Ограничивает количество записей завершенных/отмененных заданий для защиты памяти и приватности.
+     */
+    @Synchronized
+    fun pruneOldHistory(maxTerminalRecords: Int = 50): Int {
+        val terminalJobs = jobs.values
+            .filter { it.state == VoxDownloadState.COMPLETED || it.state == VoxDownloadState.FAILED || it.state == VoxDownloadState.CANCELLED }
+            .sortedBy { it.request.createdAt }
+
+        val excess = terminalJobs.size - maxTerminalRecords
+        if (excess <= 0) return 0
+
+        var deletedCount = 0
+        terminalJobs.take(excess).forEach { oldJob ->
+            // При удалении старой записи истории не удаляем опубликованный MKV файл, только временные метаданные
+            jobs.remove(oldJob.downloadId)
+            storage.deleteJobDir(oldJob.downloadId)
+            deletedCount++
+        }
+        return deletedCount
+    }
 }
+

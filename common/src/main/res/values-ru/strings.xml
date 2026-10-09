@@ -771,6 +771,7 @@
     <string name="amazon_frame_drop_fix_desc">Исправляет лаги на Amazon Stick и некоторых других устройствах.</string>
     <string name="default_stack_desc">SmartTube VOX сам выберет наиболее подходящий сетевой режим для текущего соединения.</string>
     <string name="vox_live_return_to_live_prompt">Возврат в прямой эфир</string>
+    <string name="vox_live_recovering_prompt">Восстанавливаем трансляцию…</string>
     <string name="item_postion">Позиция</string>
     <string name="player_screen_off_dimming">Величина затемнения экрана</string>
     <string name="screensaver_timout">Тайм-аут включения заставки</string>
