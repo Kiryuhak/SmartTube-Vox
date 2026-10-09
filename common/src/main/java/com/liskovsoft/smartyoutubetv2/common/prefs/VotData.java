@@ -17,6 +17,8 @@ public class VotData extends SharedPreferencesBase {
     private static final String ORIGINAL_VOLUME_PERCENT = "original_volume_percent";
     private static final String TRANSLATION_VOLUME_PERCENT = "translation_volume_percent";
     private static final String AUTO_TRANSLATE = "auto_translate_enabled";
+    private static final String AUTO_ACTIVATE_READY_TRANSLATION = "auto_activate_ready_translation";
+    private static final String TARGET_LANGUAGE = "target_language";
     private static final String PREFER_YOUTUBE_AUTO_DUB = "prefer_youtube_auto_dub";
     private static final String AUTH_STATE = "yandex_auth_state";
     private static final String VOX_PROXY_ENABLED = "vox_proxy_enabled";
@@ -58,10 +60,12 @@ public class VotData extends SharedPreferencesBase {
 
     @SuppressLint("StaticFieldLeak")
     private static VotData sInstance;
+    private final Context mContext;
     private final com.liskovsoft.smartyoutubetv2.common.oauth.YandexOAuthTokenStore mTokenStore;
 
     private VotData(Context context) {
         super(context.getApplicationContext(), PREFS_NAME);
+        mContext = context.getApplicationContext();
         mTokenStore = com.liskovsoft.smartyoutubetv2.common.oauth.YandexOAuthTokenStore.instance(context.getApplicationContext());
         mTokenStore.migrateFromLegacyPrefs(this);
     }
@@ -229,6 +233,39 @@ public class VotData extends SharedPreferencesBase {
 
     public void setAutoTranslateEnabled(boolean enabled) {
         putBoolean(AUTO_TRANSLATE, enabled);
+    }
+
+    /**
+     * Whether to automatically start translation audio once preparation is complete.
+     * Defaults to true.
+     */
+    public boolean isAutoActivateReadyTranslation() {
+        return getBoolean(AUTO_ACTIVATE_READY_TRANSLATION, true);
+    }
+
+    public void setAutoActivateReadyTranslation(boolean enabled) {
+        putBoolean(AUTO_ACTIVATE_READY_TRANSLATION, enabled);
+    }
+
+    /**
+     * Target language for VOT. For Russian locale defaults to "ru".
+     */
+    public String getTargetLanguage() {
+        String saved = getString(TARGET_LANGUAGE, null);
+        if (!TextUtils.isEmpty(saved)) {
+            return saved;
+        }
+        if (mContext != null) {
+            String appLang = com.liskovsoft.sharedutils.locale.LocaleUtility.getCurrentLanguage(mContext);
+            if ("ru".equalsIgnoreCase(appLang) || "rus".equalsIgnoreCase(appLang)) {
+                return "ru";
+            }
+        }
+        return "ru";
+    }
+
+    public void setTargetLanguage(String language) {
+        putString(TARGET_LANGUAGE, language != null ? language.trim().toLowerCase(java.util.Locale.US) : "");
     }
 
     public boolean isPreferYoutubeAutoDub() {

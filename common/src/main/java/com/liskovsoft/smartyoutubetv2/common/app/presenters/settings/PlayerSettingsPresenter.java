@@ -227,6 +227,12 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 mVotData.isAutoTranslateEnabled()));
 
         settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_auto_activate_ready),
+                getContext().getString(R.string.vot_auto_activate_ready_desc),
+                option -> mVotData.setAutoActivateReadyTranslation(option.isSelected()),
+                mVotData.isAutoActivateReadyTranslation()));
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
                 getContext().getString(R.string.vot_prefer_youtube_dub),
                 getContext().getString(R.string.vot_prefer_youtube_dub_desc),
                 option -> mVotData.setPreferYoutubeAutoDub(option.isSelected()),

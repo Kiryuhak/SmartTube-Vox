@@ -64,6 +64,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private static final int STATE_OFF = 0;
     private static final int STATE_PENDING = 1;
     private static final int STATE_ACTIVE = 2;
+    private static final int STATE_READY = 3;
 
     private static final long SYNC_INTERVAL_MS = 1500L;
     private static final long SYNC_THRESHOLD_MS = 1800L;
@@ -106,6 +107,10 @@ public class VoiceTranslateController extends BasePlayerController {
     private FormatItem mSavedAudioFormat;
     private boolean mUserArmed;
     private boolean mArmed;
+    private boolean mTranslationRequestedByUser;
+    private boolean mUserExplicitlySelectedOriginal;
+    private String mPendingReadyAudioUrl;
+    private YandexVotState mPendingReadyNewState;
     private int mState = STATE_OFF;
     private int mPendingEtaSec;
     private boolean mPendingToastShown;
@@ -177,6 +182,11 @@ public class VoiceTranslateController extends BasePlayerController {
         public void onPlaybackActive(long generationId) {
             runOnMainThread(() -> {
                 if (!isCurrentNewBackendSession(generationId)) return;
+                if (mUserExplicitlySelectedOriginal) {
+                    YandexVotLog.w(TAG, "Ignoring playback active because user explicitly selected original");
+                    if (mYandexPlaybackAdapter != null) mYandexPlaybackAdapter.stop();
+                    return;
+                }
                 mNewBackendPlaybackStarted = true;
                 YandexVotLog.i(TAG, "VOT NEW backend: audible playback active, ducking original audio");
                 duckMainAudio();
@@ -185,7 +195,7 @@ public class VoiceTranslateController extends BasePlayerController {
                     mTrackSwitchState = TrackSwitchState.VOT_ACTIVE;
                 }
                 if (mUserArmed && progressOverlay() != null) {
-                    progressOverlay().showReady(getActivity());
+                    progressOverlay().showActivated(getActivity());
                 }
                 Utils.removeCallbacks(mSyncRunnable);
                 Utils.postDelayed(mSyncRunnable, INITIAL_SYNC_GRACE_PERIOD_MS);
@@ -373,6 +383,10 @@ public class VoiceTranslateController extends BasePlayerController {
         mIsNewBackendActive = false;
         mFallbackTriggered = false;
         mNewBackendPlaybackStarted = false;
+        mPendingReadyAudioUrl = null;
+        mPendingReadyNewState = null;
+        mUserExplicitlySelectedOriginal = false;
+        mTranslationRequestedByUser = false;
         resetTrackSwitch();
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
@@ -396,13 +410,9 @@ public class VoiceTranslateController extends BasePlayerController {
         mRequestWasAutoTranslate = false;
         mUserSeekedDuringPreparation = false;
 
-        if (mUserArmed) {
-            mArmed = true;
-            setState(STATE_PENDING);
-        } else {
-            mArmed = false;
-            setState(STATE_OFF);
-        }
+        mArmed = false;
+        mUserArmed = false;
+        setState(STATE_OFF);
     }
 
     @Override
@@ -564,13 +574,38 @@ public class VoiceTranslateController extends BasePlayerController {
         if (getPlayer() != null && getPlayer().getVideo() != null && (getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated())) {
             return;
         }
-        if (mState == STATE_OFF || buttonState == BTN_OFF || buttonState == BTN_ERROR) {
+        if (mState == STATE_READY) {
+            Log.i(TAG, "Trigger: manual activate from READY state");
+            activateReadyTranslation();
+        } else if (mState == STATE_OFF || buttonState == BTN_OFF || buttonState == BTN_ERROR) {
             Utils.removeCallbacks(mResetErrorButtonRunnable);
+            mUserExplicitlySelectedOriginal = false;
             armAndStart();
         } else {
             Log.i(TAG, "Trigger: manual stop");
+            mUserExplicitlySelectedOriginal = true;
             disarm();
             MessageHelpers.showMessage(getContext(), R.string.vot_disabled);
+        }
+    }
+
+    private void activateReadyTranslation() {
+        mUserArmed = true;
+        mArmed = true;
+        mUserExplicitlySelectedOriginal = false;
+        mTranslationRequestedByUser = true;
+        if (mIsNewBackendActive && mPendingReadyNewState != null) {
+            YandexVotState state = mPendingReadyNewState;
+            mPendingReadyNewState = null;
+            if (mYandexPlaybackAdapter != null) {
+                mYandexPlaybackAdapter.onStateChanged(state);
+            }
+        } else if (mPendingReadyAudioUrl != null) {
+            String audioUrl = mPendingReadyAudioUrl;
+            mPendingReadyAudioUrl = null;
+            prepareAndStartTranslationAudio(audioUrl);
+        } else {
+            armAndStart();
         }
     }
 
@@ -583,6 +618,8 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void armAndStart() {
         Log.i(TAG, "Trigger: manual start (Yandex authorized=" + votData().hasOAuthToken() + ")");
+        mUserExplicitlySelectedOriginal = false;
+        mTranslationRequestedByUser = true;
         TrackInfo info = resolveAudioInfo();
         Log.i(TAG, "VOT manual: selected audio=" + (info != null ? info.rawLabel : "null"));
         if (info != null && VotAudioTrackHelper.isRussianLang(info.langCode)) {
@@ -621,6 +658,8 @@ public class VoiceTranslateController extends BasePlayerController {
                         resetTrackSwitch();
                         return;
                     }
+                    mUserExplicitlySelectedOriginal = false;
+                    mTranslationRequestedByUser = true;
                     mRestorableDubFormat = currentDub;
                     mPendingOriginalFormat = original;
                     mTrackSwitchVideoId = videoId;
@@ -657,6 +696,8 @@ public class VoiceTranslateController extends BasePlayerController {
         mTrackSwitchState = TrackSwitchState.STARTING_VOT;
         VotAudioTrackHelper.TrackInfo info = VotAudioTrackHelper.from(track);
         Log.i(TAG, "VOT manual: starting Yandex VOT from=" + (info != null && info.langCode != null ? info.langCode : "unknown"));
+        mUserExplicitlySelectedOriginal = false;
+        mTranslationRequestedByUser = true;
         mUserArmed = true;
         mArmed = true;
         if (progressOverlay() != null) {
@@ -892,13 +933,14 @@ public class VoiceTranslateController extends BasePlayerController {
         String videoTitle = getPlayer().getVideo().getTitle();
         TrackInfo audioInfo = resolveAudioInfo();
         String sourceLang = audioInfo != null && audioInfo.langCode != null && !audioInfo.langCode.isEmpty() ? audioInfo.langCode : "";
+        String targetLang = votData().getTargetLanguage();
 
         YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
                 videoId,
                 videoUrl,
                 durationSec,
                 sourceLang,
-                "ru",
+                targetLang != null && !targetLang.isEmpty() ? targetLang : "ru",
                 videoTitle,
                 useLively,
                 oauthToken
@@ -1139,8 +1181,21 @@ public class VoiceTranslateController extends BasePlayerController {
                 mTranslationRetryCount = 0;
                 mRetrySecondsRemaining = 0;
                 mProgressTimer.clear();
-                if (mYandexPlaybackAdapter != null) {
-                    mYandexPlaybackAdapter.onStateChanged(state);
+                if (mUserExplicitlySelectedOriginal) {
+                    YandexVotLog.i(TAG, "User explicitly selected original audio; not activating ready translation");
+                    break;
+                }
+                boolean autoActivateNew = votData().isAutoActivateReadyTranslation();
+                if (autoActivateNew) {
+                    if (mYandexPlaybackAdapter != null) {
+                        mYandexPlaybackAdapter.onStateChanged(state);
+                    }
+                } else {
+                    mPendingReadyNewState = state;
+                    setState(STATE_READY);
+                    if (mUserArmed && progressOverlay() != null) {
+                        progressOverlay().showReady(getActivity());
+                    }
                 }
                 break;
             case ERROR:
@@ -1350,8 +1405,21 @@ public class VoiceTranslateController extends BasePlayerController {
                 Utils.removeCallbacks(mRetryCountdownRunnable);
                 mTranslationRetryCount = 0;
                 mRetrySecondsRemaining = 0;
+                if (mUserExplicitlySelectedOriginal) {
+                    Log.i(TAG, "User explicitly selected original audio; ignoring ready translation");
+                    break;
+                }
                 if (progress.audioUrl != null) {
-                    prepareAndStartTranslationAudio(progress.audioUrl);
+                    boolean autoActivateOld = votData().isAutoActivateReadyTranslation();
+                    if (autoActivateOld) {
+                        prepareAndStartTranslationAudio(progress.audioUrl);
+                    } else {
+                        mPendingReadyAudioUrl = progress.audioUrl;
+                        setState(STATE_READY);
+                        if (mUserArmed && progressOverlay() != null) {
+                            progressOverlay().showReady(getActivity());
+                        }
+                    }
                 }
                 break;
             case VotProgress.TYPE_FAILED:
@@ -1515,6 +1583,12 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
+        if (mUserExplicitlySelectedOriginal) {
+            Log.w(TAG, "Ignoring initial sync complete because user explicitly selected original");
+            releaseTranslationPlayer();
+            return;
+        }
+
         if (mTranslationPlayer.isPlaying()) {
             Log.i(TAG, "VOT_AUDIO session=" + sessionId + " duplicate_play_ignored");
             return;
@@ -1538,7 +1612,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         if (mUserArmed && progressOverlay() != null) {
-            progressOverlay().showReady(getActivity());
+            progressOverlay().showActivated(getActivity());
         }
 
         mLastSyncSeekTimestamp = System.currentTimeMillis();
@@ -1655,6 +1729,9 @@ public class VoiceTranslateController extends BasePlayerController {
         mIsNewBackendActive = false;
         mFallbackTriggered = false;
         mNewBackendPlaybackStarted = false;
+        mPendingReadyAudioUrl = null;
+        mPendingReadyNewState = null;
+        mTranslationRequestedByUser = false;
         mUserArmed = false;
         mArmed = false;
         mTranslationRetryCount = 0;
@@ -1788,6 +1865,7 @@ public class VoiceTranslateController extends BasePlayerController {
         int btnIndex;
         switch (state) {
             case STATE_PENDING:
+            case STATE_READY:
                 btnIndex = BTN_PENDING;
                 break;
             case STATE_ACTIVE:
@@ -1806,6 +1884,8 @@ public class VoiceTranslateController extends BasePlayerController {
                 return "OFF";
             case STATE_PENDING:
                 return "PENDING";
+            case STATE_READY:
+                return "READY";
             case STATE_ACTIVE:
                 return "ACTIVE";
             default:

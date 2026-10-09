@@ -437,6 +437,10 @@
     <string name="vot_mix_menu_hint">Видео не ставится на паузу. Подберите комфортную громкость.</string>
     <string name="vot_auto_translate">Автоперевод (если язык не русский)</string>
     <string name="vot_auto_translate_desc">Автоматически включать перевод для видео с нерусской аудиодорожкой (английский и др.).</string>
+    <string name="vot_auto_activate_ready">Автоматически включать готовый перевод</string>
+    <string name="vot_auto_activate_ready_desc">Включать перевод сразу после завершения подготовки</string>
+    <string name="vot_translation_activated">Перевод включён</string>
+    <string name="vot_progress_subtitle_press_to_enable">Нажмите кнопку перевода для включения</string>
     <string name="vot_pending_eta">Перевод через %d мин</string>
     <string name="vot_pending_eta_short">~%d мин</string>
     <string name="vot_pending_long">Ожидание…</string>
