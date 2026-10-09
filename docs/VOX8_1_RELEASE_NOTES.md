@@ -41,12 +41,12 @@
 
 ## 📦 Файлы для загрузки
 
-| Файл APK | Архитектура | Описание |
-| :--- | :--- | :--- |
-| `SmartTube_vot_32.56-vox.8.1_universal.apk` | Universal | Универсальный APK (включает все библиотеки, рекомендуется при сомнениях). |
-| `SmartTube_vot_32.56-vox.8.1_armeabi-v7a.apk` | 32-bit ARM | Для большинства телевизоров Android TV и ТВ-приставок (Mi Box, TCL, realme и др.). |
-| `SmartTube_vot_32.56-vox.8.1_arm64-v8a.apk` | 64-bit ARM | Для современных 64-битных ТВ и медиаплееров (Nvidia Shield TV, Fire TV Cube). |
-| `SmartTube_vot_32.56-vox.8.1_x86.apk` | x86 | Для эмуляторов и устройств на архитектуре Intel/AMD x86. |
+| Файл APK | Архитектура | Размер | SHA-256 контрольная сумма | Описание |
+| :--- | :--- | :--- | :--- | :--- |
+| `SmartTube_vot_32.56-vox.8.1_universal.apk` | Universal | 39.00 МБ | `aacb6f9880cc6b66882a43c95c69819d005441b0decf898ad7a6793f4a33ef99` | Универсальный APK (включает все библиотеки, рекомендуется при сомнениях). |
+| `SmartTube_vot_32.56-vox.8.1_armeabi-v7a.apk` | 32-bit ARM | 27.07 МБ | `5bbb96e06a10f92e0ee4edad4bef1fb3473d20f3b425d4a210dc357635530ee6` | Для большинства телевизоров Android TV и ТВ-приставок (Mi Box, TCL, realme и др.). |
+| `SmartTube_vot_32.56-vox.8.1_arm64-v8a.apk` | 64-bit ARM | 28.76 МБ | `9d3c1c442fbdc384aef80a1d31add52d58f492749539762730285cf6a474be24` | Для современных 64-битных ТВ и медиаплееров (Nvidia Shield TV, Fire TV Cube). |
+| `SmartTube_vot_32.56-vox.8.1_x86.apk` | x86 | 29.70 МБ | `7984334b49e7ad7449c3400c95a8377d005453d623e69efc5f997fa06aa46125` | Для эмуляторов и устройств на архитектуре Intel/AMD x86. |
 
 ---
 
