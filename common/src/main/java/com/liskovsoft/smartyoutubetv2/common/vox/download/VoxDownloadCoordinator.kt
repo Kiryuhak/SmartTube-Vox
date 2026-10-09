@@ -44,13 +44,33 @@ class VoxDownloadCoordinator(
     private val progressLock = Any()
     private val trackExecutor: ExecutorService = Executors.newFixedThreadPool(3) { runnable ->
         Thread(runnable, "VoxTrackDownloader").apply {
-            priority = Thread.MIN_PRIORITY
+            priority = getOptimalDownloadThreadPriority()
+        }
+    }
+    private val persistenceExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "VoxDownloadPersistence").apply {
+            priority = Thread.NORM_PRIORITY - 1
         }
     }
     private var lastProgressPersistedAt = 0L
 
     @Volatile
     private var activeJobId: String? = null
+
+    private fun getOptimalDownloadThreadPriority(): Int {
+        return try {
+            val presenter = com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter.instance(storage.context)
+            if (presenter?.isPlaying == true) {
+                // When player is active, use slightly reduced priority (4) to guarantee zero buffer drops in player
+                Thread.NORM_PRIORITY - 1
+            } else {
+                // When player is idle/background/menu, use standard normal priority (5) for maximum throughput
+                Thread.NORM_PRIORITY
+            }
+        } catch (ignored: Throwable) {
+            Thread.NORM_PRIORITY
+        }
+    }
 
     companion object {
         private const val TAG = "VoxDownloadCoordinator"
@@ -80,7 +100,7 @@ class VoxDownloadCoordinator(
                     val streamResolver = DefaultVoxStreamResolver()
                     val downloadExecutor = Executors.newSingleThreadExecutor { runnable ->
                         Thread(runnable, "VoxDownloadWorker").apply {
-                            priority = Thread.MIN_PRIORITY
+                            priority = Thread.NORM_PRIORITY
                         }
                     }
                     VoxDownloadCoordinator(
@@ -1147,19 +1167,21 @@ class VoxDownloadCoordinator(
     }
 
     private fun notifyProgress(job: VoxDownloadJob) {
-        synchronized(progressLock) {
-            val now = android.os.SystemClock.elapsedRealtime()
-            if (now - lastProgressPersistedAt >= 1_000L) {
-                repository.persistJob(job)
-                lastProgressPersistedAt = now
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastProgressPersistedAt >= 1_000L) {
+            lastProgressPersistedAt = now
+            persistenceExecutor.submit {
+                try {
+                    repository.persistJob(job)
+                } catch (ignored: Exception) {}
             }
-            val snapshot = job.getSnapshot()
-            listeners[job.downloadId]?.forEach {
-                try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
-            }
-            globalListeners.forEach {
-                try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
-            }
+        }
+        val snapshot = job.getSnapshot()
+        listeners[job.downloadId]?.forEach {
+            try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
+        }
+        globalListeners.forEach {
+            try { it.onProgressUpdated(snapshot) } catch (ignored: Exception) {}
         }
     }
 

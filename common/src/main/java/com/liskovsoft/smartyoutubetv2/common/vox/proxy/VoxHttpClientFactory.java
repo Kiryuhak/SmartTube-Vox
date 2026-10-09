@@ -169,7 +169,7 @@ public final class VoxHttpClientFactory {
             sCachedDirectMediaDownloadClient = new OkHttpClient.Builder()
                     .connectionPool(getSharedDownloadConnectionPool())
                     .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(25, TimeUnit.SECONDS)
                     .writeTimeout(30, TimeUnit.SECONDS)
                     .followRedirects(true)
                     .retryOnConnectionFailure(true)
