@@ -1094,6 +1094,7 @@ class VoxDownloadCoordinator(
 
                 // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
                 storage.cleanInternalSourcesAfterPublication(downloadId)
+                repository.pruneOldHistory()
 
                 notifyStateChange(job)
                 VoxLog.d(TAG, "Download job $downloadId published successfully to MediaStore: $pubUri")
@@ -1104,6 +1105,7 @@ class VoxDownloadCoordinator(
                 repository.persistJob(job, VoxDownloadState.COMPLETED)
                 job.updateState(VoxDownloadState.COMPLETED)
                 VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка видео успешно завершена", mapOf("downloadId" to downloadId))
+                repository.pruneOldHistory()
                 notifyStateChange(job)
             }
     }
