@@ -1065,4 +1065,37 @@
     <string name="vox_channel_group_name_empty">Name cannot be empty</string>
     <string name="vox_channel_group_name_too_long">Name cannot exceed 50 characters</string>
     <string name="vox_channel_group_save_error">Failed to save channel group</string>
+
+    <!-- VOX Update Channels & Diagnostics Policy -->
+    <string name="vox_update_channel">Update Channel</string>
+    <string name="vox_update_channel_stable">Stable</string>
+    <string name="vox_update_channel_stable_desc">Only verified stable releases</string>
+    <string name="vox_update_channel_test">Test (Beta)</string>
+    <string name="vox_update_channel_test_desc">Early access to new features and fixes (may be unstable)</string>
+
+    <string name="vox_update_channel_test_warning_title">Enable Test Channel</string>
+    <string name="vox_update_channel_test_warning_message">Test versions (Beta/RC) contain new features and fixes, but may be unstable.\n\nYou can switch back to the stable channel at any time.</string>
+    <string name="vox_update_channel_test_opt_in_diag">Send anonymous diagnostics (every 6h)</string>
+    <string name="vox_update_channel_test_enable_btn">Enable Test Channel</string>
+
+    <string name="vox_update_channel_stable_switch_title">Return to Stable Channel</string>
+    <string name="vox_update_channel_stable_switch_message">You switched to the stable update channel. Allow sending rare anonymous diagnostics (every 72h) to help developers detect critical issues?</string>
+    <string name="vox_update_channel_stable_opt_in_diag">Allow rare anonymous diagnostics</string>
+
+    <string name="vox_diagnostics_mode_title">Auto-Diagnostics Mode</string>
+    <string name="vox_diagnostics_mode_disabled">Disabled</string>
+    <string name="vox_diagnostics_mode_test">Test Channel (Active, every 6h)</string>
+    <string name="vox_diagnostics_mode_stable">Stable Channel (Active, every 72h)</string>
+    <string name="vox_diagnostics_auto_toggle">Automatic diagnostics submission</string>
+    <string name="vox_diagnostics_auto_toggle_desc">Anonymous collection of technical errors without personal data</string>
+
+    <string name="vox_ota_error_no_update">You have the latest version installed</string>
+    <string name="vox_ota_error_dns">DNS error while reaching update server</string>
+    <string name="vox_ota_error_timeout">Update server request timed out</string>
+    <string name="vox_ota_error_tls">Secure connection error (TLS/SSL)</string>
+    <string name="vox_ota_error_http">Update server HTTP error</string>
+    <string name="vox_ota_error_rate_limit">Update server rate limit exceeded</string>
+    <string name="vox_ota_error_release_not_found">Update data not found on server</string>
+    <string name="vox_ota_error_invalid_release">Invalid update data format</string>
+    <string name="vox_ota_error_version_not_newer">Found version is not newer than current</string>
 </resources>

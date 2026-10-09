@@ -138,29 +138,39 @@ export function classifyReport(report = {}) {
   return { events, errorCategory, subsystem, stage, severity };
 }
 
+function parseStageTag(tagStr = '') {
+  const tag = String(tagStr).toLowerCase().replace(/^[-.]/, '');
+  if (!tag) return 1000000; // STABLE / FINAL
+  if (tag === 'dev') return -2;
+  if (tag.startsWith('alpha')) return -1;
+  if (tag.startsWith('beta')) {
+    const num = Number(tag.match(/\d+/)?.[0]) || 1;
+    return 100 + num;
+  }
+  if (tag.startsWith('rc')) {
+    const num = Number(tag.match(/\d+/)?.[0]) || 1;
+    return 1000 + num;
+  }
+  return 1000000;
+}
+
 export function parseVoxVersion(value) {
   if (!value) return null;
   const str = String(value).trim().replace(/^v/i, '');
-  const match = str.match(/^(\d+)\.(\d+)-(?:vox|vot)\.(\d+)(?:\.(\d+))?(?:-(dev|rc\.?(\d+)))?$/i);
+  const match = str.match(/^(\d+)\.(\d+)-(?:vox|vot)\.(\d+)(?:\.(\d+))?(?:-([a-zA-Z0-9.]+))?$/i);
   if (match) {
     const major = Number(match[1]) || 0;
     const minor = Number(match[2]) || 0;
     const voxMajor = Number(match[3]) || 0;
     const voxMinor = Number(match[4]) || 0;
-    const tag = (match[5] || '').toLowerCase();
-    const isDev = tag === 'dev';
-    const rcNum = tag.startsWith('rc') ? (Number(match[6]) || 1) : null;
-    const stage = isDev ? -1 : rcNum !== null ? rcNum : 1000000;
+    const stage = parseStageTag(match[5]);
     return [major, minor, voxMajor, voxMinor, stage];
   }
-  const simpleMatch = str.match(/^(\d+)(?:\.(\d+))?(?:-(dev|rc\.?(\d+)))?$/i);
+  const simpleMatch = str.match(/^(\d+)(?:\.(\d+))?(?:-([a-zA-Z0-9.]+))?$/i);
   if (simpleMatch) {
     const voxMajor = Number(simpleMatch[1]) || 0;
     const voxMinor = Number(simpleMatch[2]) || 0;
-    const tag = (simpleMatch[3] || '').toLowerCase();
-    const isDev = tag === 'dev';
-    const rcNum = tag.startsWith('rc') ? (Number(simpleMatch[4]) || 1) : null;
-    const stage = isDev ? -1 : rcNum !== null ? rcNum : 1000000;
+    const stage = parseStageTag(simpleMatch[3]);
     return [32, 56, voxMajor, voxMinor, stage];
   }
   return null;

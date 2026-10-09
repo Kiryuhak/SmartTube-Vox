@@ -66,6 +66,12 @@ object VoxDiagnosticSanitizer {
     )
 
     @JvmStatic
+    fun isForbiddenKey(key: String?): Boolean {
+        if (key.isNullOrBlank()) return false
+        return FORBIDDEN_JSON_KEYS.contains(key.lowercase().trim())
+    }
+
+    @JvmStatic
     fun sanitize(input: String?): String {
         if (input.isNullOrBlank()) return ""
 

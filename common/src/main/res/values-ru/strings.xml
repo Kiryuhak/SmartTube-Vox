@@ -986,4 +986,37 @@
     <string name="vox_channel_group_name_empty">Название не может быть пустым</string>
     <string name="vox_channel_group_name_too_long">Название не может превышать 50 символов</string>
     <string name="vox_channel_group_save_error">Не удалось сохранить группу каналов</string>
+
+    <!-- VOX Update Channels & Diagnostics Policy -->
+    <string name="vox_update_channel">Канал обновлений</string>
+    <string name="vox_update_channel_stable">Стабильный</string>
+    <string name="vox_update_channel_stable_desc">Только проверенные стабильные релизы</string>
+    <string name="vox_update_channel_test">Тестовый (Beta)</string>
+    <string name="vox_update_channel_test_desc">Ранний доступ к новым функциям и исправлениям (возможна нестабильная работа)</string>
+
+    <string name="vox_update_channel_test_warning_title">Включение тестового канала</string>
+    <string name="vox_update_channel_test_warning_message">Тестовые версии (Beta/RC) содержат новые функции и исправления, но могут работать нестабильно.\n\nВы можете в любой момент вернуться на стабильный канал.</string>
+    <string name="vox_update_channel_test_opt_in_diag">Отправлять анонимную диагностику (раз в 6 ч)</string>
+    <string name="vox_update_channel_test_enable_btn">Включить тестовый канал</string>
+
+    <string name="vox_update_channel_stable_switch_title">Возврат на стабильный канал</string>
+    <string name="vox_update_channel_stable_switch_message">Вы переключились на стабильный канал обновлений. Разрешить отправку редкой анонимной диагностики (раз в 72 ч) для помощи разработчикам в поиске критических ошибок?</string>
+    <string name="vox_update_channel_stable_opt_in_diag">Разрешить редкую анонимную диагностику</string>
+
+    <string name="vox_diagnostics_mode_title">Режим автодиагностики</string>
+    <string name="vox_diagnostics_mode_disabled">Выключена</string>
+    <string name="vox_diagnostics_mode_test">Тестовый канал (активна, раз в 6 ч)</string>
+    <string name="vox_diagnostics_mode_stable">Стабильный канал (активна, раз в 72 ч)</string>
+    <string name="vox_diagnostics_auto_toggle">Автоматическая отправка диагностики</string>
+    <string name="vox_diagnostics_auto_toggle_desc">Анонимный сбор технических ошибок без личных данных</string>
+
+    <string name="vox_ota_error_no_update">У вас установлена последняя версия</string>
+    <string name="vox_ota_error_dns">Ошибка DNS при подключении к серверу обновлений</string>
+    <string name="vox_ota_error_timeout">Превышено время ожидания ответа сервера</string>
+    <string name="vox_ota_error_tls">Ошибка защищенного соединения (TLS/SSL)</string>
+    <string name="vox_ota_error_http">Ошибка HTTP-сервера обновлений</string>
+    <string name="vox_ota_error_rate_limit">Превышен лимит запросов к серверу обновлений</string>
+    <string name="vox_ota_error_release_not_found">Данные обновления не найдены на сервере</string>
+    <string name="vox_ota_error_invalid_release">Некорректный формат данных обновления</string>
+    <string name="vox_ota_error_version_not_newer">Найдена версия не новее текущей</string>
 </resources>

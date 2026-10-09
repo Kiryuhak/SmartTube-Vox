@@ -270,11 +270,7 @@ class VoxOtaUpdateManager(private val context: Context) {
             return VoxOtaReleaseParser.parseRelease(content)
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
-            throw VoxOtaException(
-                VoxOtaErrorCode.NETWORK_ERROR,
-                "Failed to reach update servers: ${e.message}",
-                e
-            )
+            throw mapThrowableToOtaException(e, "Failed to reach update servers: ${e.message}")
         }
     }
 
@@ -283,12 +279,18 @@ class VoxOtaUpdateManager(private val context: Context) {
         try {
             val code = conn.responseCode
             if (code !in 200..299) {
-                throw VoxOtaException(
-                    VoxOtaErrorCode.NETWORK_ERROR,
-                    "HTTP error $code while fetching $urlStr"
-                )
+                val errorCode = when (code) {
+                    429 -> VoxOtaErrorCode.RATE_LIMIT
+                    404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
+                    in 500..599 -> VoxOtaErrorCode.HTTP_ERROR
+                    else -> VoxOtaErrorCode.HTTP_ERROR
+                }
+                throw VoxOtaException(errorCode, "HTTP error $code while fetching $urlStr")
             }
             return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            if (e is VoxOtaException) throw e
+            throw mapThrowableToOtaException(e, "Network error fetching $urlStr")
         } finally {
             conn.disconnect()
         }
@@ -303,8 +305,13 @@ class VoxOtaUpdateManager(private val context: Context) {
         try {
             val code = conn.responseCode
             if (code !in 200..299) {
+                val errorCode = when (code) {
+                    429 -> VoxOtaErrorCode.RATE_LIMIT
+                    404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
+                    else -> VoxOtaErrorCode.ASSET_DOWNLOAD_FAILED
+                }
                 throw VoxOtaException(
-                    VoxOtaErrorCode.ASSET_DOWNLOAD_FAILED,
+                    errorCode,
                     "HTTP error $code while downloading APK"
                 )
             }
@@ -329,11 +336,7 @@ class VoxOtaUpdateManager(private val context: Context) {
             }
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
-            throw VoxOtaException(
-                VoxOtaErrorCode.ASSET_DOWNLOAD_FAILED,
-                "Failed to download update APK: ${e.message}",
-                e
-            )
+            throw mapThrowableToOtaException(e, "Failed to download update APK: ${e.message}")
         } finally {
             conn.disconnect()
         }
@@ -372,11 +375,7 @@ class VoxOtaUpdateManager(private val context: Context) {
         val otaError = if (throwable is VoxOtaException) {
             throwable
         } else {
-            VoxOtaException(
-                VoxOtaErrorCode.UNKNOWN,
-                "Unexpected update error: ${throwable.message ?: throwable.javaClass.simpleName}",
-                throwable
-            )
+            mapThrowableToOtaException(throwable)
         }
 
         VoxSafeLogger.error(
@@ -387,5 +386,28 @@ class VoxOtaUpdateManager(private val context: Context) {
         )
 
         mainHandler.post { callback.onError(otaError) }
+    }
+
+    private fun mapThrowableToOtaException(throwable: Throwable, customMessage: String? = null): VoxOtaException {
+        val msg = customMessage ?: throwable.message ?: throwable.javaClass.simpleName
+        val code = when (throwable) {
+            is java.net.UnknownHostException -> VoxOtaErrorCode.DNS_ERROR
+            is java.net.SocketTimeoutException -> VoxOtaErrorCode.TIMEOUT
+            is java.net.ConnectException -> VoxOtaErrorCode.NETWORK_ERROR
+            is javax.net.ssl.SSLException -> VoxOtaErrorCode.TLS_ERROR
+            is org.json.JSONException -> VoxOtaErrorCode.INVALID_RELEASE
+            else -> {
+                val m = throwable.message?.lowercase() ?: ""
+                when {
+                    m.contains("429") -> VoxOtaErrorCode.RATE_LIMIT
+                    m.contains("404") -> VoxOtaErrorCode.RELEASE_NOT_FOUND
+                    m.contains("dns") || m.contains("unknown host") -> VoxOtaErrorCode.DNS_ERROR
+                    m.contains("timeout") -> VoxOtaErrorCode.TIMEOUT
+                    m.contains("ssl") || m.contains("tls") -> VoxOtaErrorCode.TLS_ERROR
+                    else -> VoxOtaErrorCode.NETWORK_ERROR
+                }
+            }
+        }
+        return VoxOtaException(code, msg, throwable)
     }
 }
