@@ -547,6 +547,14 @@ public class AppDialogUtil {
                 },
                 votData.isAutoTranslateEnabled()));
         toggles.add(UiOptionItem.from(
+                context.getString(R.string.vot_auto_activate_ready),
+                context.getString(R.string.vot_auto_activate_ready_desc),
+                optionItem -> {
+                    votData.setAutoActivateReadyTranslation(optionItem.isSelected());
+                    callback.run();
+                },
+                votData.isAutoActivateReadyTranslation()));
+        toggles.add(UiOptionItem.from(
                 context.getString(R.string.vot_prefer_youtube_dub),
                 context.getString(R.string.vot_prefer_youtube_dub_desc),
                 optionItem -> {

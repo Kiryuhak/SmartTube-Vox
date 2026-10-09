@@ -956,6 +956,10 @@
     <string name="vot_progress_subtitle_ready" translatable="false"></string>
     <string name="vot_progress_retry_title" translatable="false"></string>
     <string name="vot_progress_retry_countdown" translatable="false"></string>
+    <string name="vot_auto_activate_ready" translatable="false"></string>
+    <string name="vot_auto_activate_ready_desc" translatable="false"></string>
+    <string name="vot_translation_activated" translatable="false"></string>
+    <string name="vot_progress_subtitle_press_to_enable" translatable="false"></string>
     <!-- Device Code Flow placeholders — overridden in stvot flavor -->
     <string name="vot_device_auth_title" translatable="false"></string>
     <string name="vot_device_auth_step1" translatable="false"></string>

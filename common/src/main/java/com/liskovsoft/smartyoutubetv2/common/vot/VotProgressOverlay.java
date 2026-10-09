@@ -134,6 +134,18 @@ public class VotProgressOverlay {
         Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
     }
 
+    public void showActivated(@Nullable Activity activity) {
+        if (!ensureAttached(activity)) return;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        mCurrentState = STATE_READY;
+        showIconMode(R.drawable.ic_vot_ready);
+        setTitle(getStringSafe(R.string.vot_translation_activated));
+        hideSubtitle();
+        hideTimer();
+        fadeIn();
+        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
+    }
+
     public void showError(@Nullable Activity activity) {
         showError(activity, null);
     }

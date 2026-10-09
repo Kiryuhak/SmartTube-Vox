@@ -72,8 +72,12 @@
     <string name="vot_progress_ready">Перевод готов</string>
     <string name="vot_progress_error">Не удалось подготовить перевод</string>
     <string name="vot_progress_timeout">Перевод не был подготовлен</string>
+    <string name="vot_auto_activate_ready">Автоматически включать готовый перевод</string>
+    <string name="vot_auto_activate_ready_desc">Включать перевод сразу после завершения подготовки</string>
+    <string name="vot_translation_activated">Перевод включён</string>
     <string name="vot_progress_subtitle_default">Индикатор остаётся до завершения</string>
-    <string name="vot_progress_subtitle_ready">Можно включить в настройках</string>
+    <string name="vot_progress_subtitle_ready">Нажмите кнопку перевода для включения</string>
+    <string name="vot_progress_subtitle_press_to_enable">Нажмите кнопку перевода для включения</string>
     <string name="vot_progress_retry_title">Повторная попытка %1$d/%2$d</string>
     <string name="vot_progress_retry_countdown">через %d с</string>
 
