@@ -12,10 +12,14 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.ATVBridgePresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.AmazonBridgePresenter;
-import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.AppUpdatePresenter;
+import android.app.Activity;
+import androidx.appcompat.app.AlertDialog;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.AppUpdatePresenter;
 import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +49,8 @@ public class AboutSettingsPresenter extends BasePresenter<Void> {
         String country = LocaleUtility.getCurrentLocale(getContext()).getCountry();
 
         appendUpdateCheckButton(settingsPresenter);
+
+        appendUpdateChannelSelector(settingsPresenter);
 
         appendAutoUpdateSwitch(settingsPresenter);
 
@@ -209,6 +215,116 @@ public class AboutSettingsPresenter extends BasePresenter<Void> {
                 option -> startBridgePresenter());
 
         settingsPresenter.appendSingleButton(installBridgeOption);
+    }
+
+    private void appendUpdateChannelSelector(AppDialogPresenter settingsPresenter) {
+        VoxUpdateChannelManager channelManager = VoxUpdateChannelManager.instance(getContext());
+        VoxUpdateChannel currentChannel = channelManager.getUpdateChannel();
+
+        List<OptionItem> channelOptions = new ArrayList<>();
+
+        // 1. Стабильный канал
+        channelOptions.add(UiOptionItem.from(
+                getContext().getString(R.string.vox_update_channel_stable),
+                getContext().getString(R.string.vox_update_channel_stable_desc),
+                optionItem -> {
+                    if (currentChannel != VoxUpdateChannel.STABLE) {
+                        channelManager.setUpdateChannel(VoxUpdateChannel.STABLE);
+                        showReturnToStableDialog(channelManager, settingsPresenter);
+                    }
+                },
+                currentChannel == VoxUpdateChannel.STABLE
+        ));
+
+        // 2. Тестовый (Beta) канал
+        channelOptions.add(UiOptionItem.from(
+                getContext().getString(R.string.vox_update_channel_test),
+                getContext().getString(R.string.vox_update_channel_test_desc),
+                optionItem -> {
+                    if (currentChannel != VoxUpdateChannel.TEST) {
+                        showTestChannelConsentDialog(channelManager, settingsPresenter);
+                    }
+                },
+                currentChannel == VoxUpdateChannel.TEST
+        ));
+
+        settingsPresenter.appendRadioCategory(getContext().getString(R.string.vox_update_channel), channelOptions);
+    }
+
+    private void showTestChannelConsentDialog(VoxUpdateChannelManager channelManager, AppDialogPresenter settingsPresenter) {
+        Context context = getContext();
+        if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
+            channelManager.setUpdateChannel(VoxUpdateChannel.TEST);
+            show();
+            return;
+        }
+
+        Activity activity = (Activity) context;
+        boolean[] optInDiag = new boolean[]{false}; // Default OFF
+
+        String[] choices = new String[]{activity.getString(R.string.vox_update_channel_test_opt_in_diag)};
+        boolean[] checkedItems = new boolean[]{false};
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+        builder.setTitle(R.string.vox_update_channel_test_warning_title)
+                .setMessage(R.string.vox_update_channel_test_warning_message)
+                .setMultiChoiceItems(choices, checkedItems, (dialog, which, isChecked) -> {
+                    optInDiag[0] = isChecked;
+                })
+                .setPositiveButton(R.string.vox_update_channel_test_enable_btn, (dialog, which) -> {
+                    dialog.dismiss();
+                    channelManager.setUpdateChannel(VoxUpdateChannel.TEST);
+                    channelManager.setBetaDiagnosticsEnabled(optInDiag[0]);
+                    channelManager.setSeenTestChannelWarning(true);
+                    settingsPresenter.closeDialog();
+                    show();
+                })
+                .setNegativeButton(R.string.cancel_dialog, (dialog, which) -> {
+                    dialog.dismiss();
+                    show();
+                })
+                .setCancelable(true);
+
+        try {
+            builder.create().show();
+        } catch (Exception e) {
+            channelManager.setUpdateChannel(VoxUpdateChannel.TEST);
+            show();
+        }
+    }
+
+    private void showReturnToStableDialog(VoxUpdateChannelManager channelManager, AppDialogPresenter settingsPresenter) {
+        Context context = getContext();
+        if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
+            show();
+            return;
+        }
+
+        Activity activity = (Activity) context;
+        boolean[] optInDiag = new boolean[]{false}; // Default OFF
+
+        String[] choices = new String[]{activity.getString(R.string.vox_update_channel_stable_opt_in_diag)};
+        boolean[] checkedItems = new boolean[]{false};
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+        builder.setTitle(R.string.vox_update_channel_stable_switch_title)
+                .setMessage(R.string.vox_update_channel_stable_switch_message)
+                .setMultiChoiceItems(choices, checkedItems, (dialog, which, isChecked) -> {
+                    optInDiag[0] = isChecked;
+                })
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    dialog.dismiss();
+                    channelManager.setStableDiagnosticsEnabled(optInDiag[0]);
+                    settingsPresenter.closeDialog();
+                    show();
+                })
+                .setCancelable(true);
+
+        try {
+            builder.create().show();
+        } catch (Exception e) {
+            show();
+        }
     }
 
     private void startBridgePresenter() {

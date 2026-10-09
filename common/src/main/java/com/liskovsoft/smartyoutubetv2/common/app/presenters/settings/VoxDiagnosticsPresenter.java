@@ -18,6 +18,8 @@ import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsClien
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogEvent;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogLevel;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -54,15 +56,39 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         AppDialogPresenter presenter = AppDialogPresenter.instance(context);
         String title = context.getString(R.string.settings_diagnostics_and_logs);
 
+        VoxUpdateChannelManager channelManager = VoxUpdateChannelManager.instance(context);
+        boolean isBeta = channelManager.isBetaChannel();
+        boolean isAutoDiagActive = channelManager.isDiagnosticsActive();
+
+        String diagModeStatus = isAutoDiagActive
+                ? (isBeta ? context.getString(R.string.vox_diagnostics_mode_test) : context.getString(R.string.vox_diagnostics_mode_stable))
+                : context.getString(R.string.vox_diagnostics_mode_disabled);
+
+        // 1. Статус автодиагностики и переключатель
+        presenter.appendSingleSwitch(UiOptionItem.from(
+                context.getString(R.string.vox_diagnostics_auto_toggle),
+                diagModeStatus,
+                optionItem -> {
+                    if (isBeta) {
+                        channelManager.setBetaDiagnosticsEnabled(optionItem.isSelected());
+                    } else {
+                        channelManager.setStableDiagnosticsEnabled(optionItem.isSelected());
+                    }
+                    presenter.closeDialog();
+                    show();
+                },
+                isAutoDiagActive
+        ));
+
         List<OptionItem> options = new ArrayList<>();
 
-        // 1. Просмотреть отчёт диагностики
+        // 2. Просмотреть отчёт диагностики
         options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_view), option -> {
             presenter.closeDialog();
             showReportDialog();
         }));
 
-        // 2. Журнал ошибок
+        // 3. Журнал ошибок
         int eventCount = VoxLogStore.instance(context).getJournalEventCount();
         String journalTitle = eventCount > 0
                 ? context.getString(R.string.vox_logs_journal) + " (" + eventCount + ")"
@@ -73,25 +99,25 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
             showJournalDialog();
         }));
 
-        // 3. Скопировать журнал
+        // 4. Скопировать журнал
         options.add(UiOptionItem.from(context.getString(R.string.vox_logs_copy), option -> {
             presenter.closeDialog();
             copyJournalToClipboard();
         }));
 
-        // 4. Отправить отчёт разработчику
+        // 5. Отправить отчёт разработчику
         options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_send), option -> {
             presenter.closeDialog();
             showSendConsentDialog();
         }));
 
-        // 5. Очистить журнал
+        // 6. Очистить журнал
         options.add(UiOptionItem.from(context.getString(R.string.vox_logs_clear), option -> {
             presenter.closeDialog();
             showClearLogsConfirmDialog();
         }));
 
-        // 6. Отмена / Назад
+        // 7. Отмена / Назад
         options.add(UiOptionItem.from(context.getString(R.string.cancel_dialog), option -> {
             presenter.closeDialog();
         }));

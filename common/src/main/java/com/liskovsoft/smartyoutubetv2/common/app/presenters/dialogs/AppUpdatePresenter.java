@@ -23,6 +23,7 @@ import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo;
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -65,7 +66,8 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         }
 
         String currentVersion = AppInfoHelpers.getAppVersionName(getContext());
-        boolean isBeta = getContext() != null && getContext().getPackageName() != null && getContext().getPackageName().contains("beta");
+        boolean isBeta = (getContext() != null && getContext().getPackageName() != null && getContext().getPackageName().contains("beta"))
+                || (getContext() != null && VoxUpdateChannelManager.instance(getContext()).isBetaChannel());
 
         VoxOtaUpdateManager.instance(getContext()).checkForUpdates(
                 currentVersion,
