@@ -72,10 +72,17 @@ class VoxBadgeHelperTest {
     @Test
     fun testDimensionsMapping() {
         assertEquals("4K", VoxBadgeHelper.getQualityBadgeFromDimensions(3840, 2160))
+        assertEquals("4K", VoxBadgeHelper.getQualityBadgeFromDimensions(2160, 3840)) // Portrait 4K
         assertEquals("1440p", VoxBadgeHelper.getQualityBadgeFromDimensions(2560, 1440))
+        assertEquals("1440p", VoxBadgeHelper.getQualityBadgeFromDimensions(1440, 2560)) // Portrait 2K
         assertEquals("1080p", VoxBadgeHelper.getQualityBadgeFromDimensions(1920, 1080))
+        assertEquals("1080p", VoxBadgeHelper.getQualityBadgeFromDimensions(1080, 1920)) // Portrait Shorts
         assertEquals("720p", VoxBadgeHelper.getQualityBadgeFromDimensions(1280, 720))
+        assertEquals("720p", VoxBadgeHelper.getQualityBadgeFromDimensions(720, 1280)) // Portrait 720p
         assertEquals("480p", VoxBadgeHelper.getQualityBadgeFromDimensions(854, 480))
+        assertEquals("480p", VoxBadgeHelper.getQualityBadgeFromDimensions(480, 854)) // Portrait 480p
+        assertNull(VoxBadgeHelper.getQualityBadgeFromDimensions(0, 0))
+        assertNull(VoxBadgeHelper.getQualityBadgeFromDimensions(-1, -1))
         assertNull(VoxBadgeHelper.getQualityBadgeFromDimensions(0, 0))
     }
 
@@ -96,10 +103,18 @@ class VoxBadgeHelperTest {
         assertEquals("4K", VoxBadgeHelper.getQualityBadge(videoWithSecondTitle))
 
         val videoWithDimensions = Video().apply {
+            isLocal = true
             width = 3840
             height = 2160
         }
         assertEquals("4K", VoxBadgeHelper.getQualityBadge(videoWithDimensions))
+
+        val videoRemoteDummyDimensions = Video().apply {
+            isLocal = false
+            width = 1280
+            height = 720
+        }
+        assertNull(VoxBadgeHelper.getQualityBadge(videoRemoteDummyDimensions))
 
         val videoWithTitleQuality = Video().apply {
             title = "[4K HDR] Nature in 60FPS"

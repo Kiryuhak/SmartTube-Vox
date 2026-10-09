@@ -136,6 +136,21 @@ public class YandexVotApiClient {
         }
     }
 
+    public static boolean hasValidCachedResult(String videoUrl, String sourceLang, String targetLang, boolean useLiveVoices) {
+        if (videoUrl == null) return false;
+        String cacheKey = getCacheKey(videoUrl, sourceLang, targetLang, useLiveVoices);
+        CachedResult cached = translationCache.get(cacheKey);
+        return cached != null && !cached.isExpired();
+    }
+
+    @Nullable
+    public static TranslationResult getCachedResult(String videoUrl, String sourceLang, String targetLang, boolean useLiveVoices) {
+        if (videoUrl == null) return null;
+        String cacheKey = getCacheKey(videoUrl, sourceLang, targetLang, useLiveVoices);
+        CachedResult cached = translationCache.get(cacheKey);
+        return (cached != null && !cached.isExpired()) ? cached.getResult() : null;
+    }
+
     public static final class TranslationResult {
         private final int status;
         private final String audioUrl;

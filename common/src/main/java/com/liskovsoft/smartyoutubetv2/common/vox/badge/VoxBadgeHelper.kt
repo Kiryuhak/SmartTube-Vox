@@ -32,16 +32,19 @@ object VoxBadgeHelper {
     @JvmStatic
     fun getQualityBadgeFromDimensions(width: Int, height: Int): String? {
         if (width <= 0 && height <= 0) return null
-        val effectiveHeight = when {
+        val effectiveRes = when {
+            width > 0 && height > 0 -> kotlin.math.min(width, height)
             height > 0 -> height
             width >= 3840 -> 2160
             width >= 2560 -> 1440
             width >= 1920 -> 1080
             width >= 1280 -> 720
-            width > 0 -> 480
+            width >= 854 -> 480
+            width > 0 -> width
             else -> 0
         }
-        return VoxQualityBadgeFormatter.formatFromHeight(effectiveHeight)
+        if (effectiveRes <= 0) return null
+        return VoxQualityBadgeFormatter.formatFromHeight(effectiveRes)
     }
 
     @JvmStatic
@@ -51,19 +54,13 @@ object VoxBadgeHelper {
         // 1. Для локально скачанных видео качество известно точно из параметров загрузки
         if (video.isLocal) {
             normalizeQuality(video.badge)?.let { return it }
+            if (video.width > 0 || video.height > 0) {
+                getQualityBadgeFromDimensions(video.width, video.height)?.let { return it }
+            }
         }
 
         // 2. Явный бейдж в модели видео (например, YouTube descBadge "4K" или "HD")
         normalizeQuality(video.badge)?.let { return it }
-
-        // 3. Габариты видео (width / height) из Video или MediaItem
-        if (video.width > 0 || video.height > 0) {
-            getQualityBadgeFromDimensions(video.width, video.height)?.let { return it }
-        }
-        val mediaItem = video.mediaItem
-        if (mediaItem != null && (mediaItem.width > 0 || mediaItem.height > 0)) {
-            getQualityBadgeFromDimensions(mediaItem.width, mediaItem.height)?.let { return it }
-        }
 
         // 4. Проверка метаданных описания/второй строки (например "4K · Автор · 1 млн")
         val second = video.secondTitle?.toString()

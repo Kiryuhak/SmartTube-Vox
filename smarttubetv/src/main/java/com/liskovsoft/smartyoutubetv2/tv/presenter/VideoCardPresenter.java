@@ -148,12 +148,6 @@ public class VideoCardPresenter extends LongClickPresenter {
             qualityBadge = resolver.cached(video.videoId);
         }
         cardView.setQualityBadge(qualityBadge);
-        if (qualityBadge == null && canResolveQuality(video)) {
-            QualityBinding binding = new QualityBinding(cardView, video.videoId, resolver);
-            mQualityBindings.put(viewHolder, binding);
-            cardView.addOnAttachStateChangeListener(binding);
-            if (cardView.getWindowToken() != null) binding.schedule();
-        }
         if (qualityBadge != null) {
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,

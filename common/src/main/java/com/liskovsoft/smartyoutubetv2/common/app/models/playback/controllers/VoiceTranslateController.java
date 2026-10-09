@@ -44,6 +44,8 @@ import android.os.Looper;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotHttpException;
 
 import io.reactivex.android.schedulers.AndroidSchedulers;
@@ -917,8 +919,35 @@ public class VoiceTranslateController extends BasePlayerController {
         Utils.removeCallbacks(mProgressTickRunnable);
         Utils.postDelayed(mProgressTickRunnable, PROGRESS_TICK_INTERVAL_MS);
 
-        if (mUserArmed && progressOverlay() != null) {
-            progressOverlay().showPreparing(getActivity());
+        double durationSec = Math.max(1, getPlayer().getDurationMs() / 1000.0);
+        boolean useLively = votData().isLivelyVoiceEnabled();
+        String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
+        String videoTitle = getPlayer().getVideo().getTitle();
+        TrackInfo audioInfo = resolveAudioInfo();
+        String sourceLang = audioInfo != null && audioInfo.langCode != null && !audioInfo.langCode.isEmpty() ? audioInfo.langCode : "";
+        String targetLang = votData().getTargetLanguage();
+        if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
+
+        boolean isCachedHit = (mYandexOrchestrator != null &&
+                mYandexOrchestrator.getCurrentState().getStatus() == YandexVotState.Status.READY &&
+                Objects.equals(mYandexOrchestrator.getCurrentState().getVideoUrl(), videoUrl)) ||
+                YandexVotApiClient.hasValidCachedResult(videoUrl, sourceLang, targetLang, useLively);
+
+        if (isCachedHit) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_CACHE_HIT_LOCAL,
+                    "Translation local cache hit for video: " + videoId
+            );
+        } else {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_CACHE_MISS,
+                    "Translation cache miss, requesting from network: " + videoId
+            );
+            if (mUserArmed && progressOverlay() != null) {
+                progressOverlay().showPreparing(getActivity());
+            }
         }
 
         ensureNewBackendComponents();
@@ -927,26 +956,18 @@ public class VoiceTranslateController extends BasePlayerController {
             mYandexPlaybackAdapter.stop();
         }
 
-        double durationSec = Math.max(1, getPlayer().getDurationMs() / 1000.0);
-        boolean useLively = votData().isLivelyVoiceEnabled();
-        String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
-        String videoTitle = getPlayer().getVideo().getTitle();
-        TrackInfo audioInfo = resolveAudioInfo();
-        String sourceLang = audioInfo != null && audioInfo.langCode != null && !audioInfo.langCode.isEmpty() ? audioInfo.langCode : "";
-        String targetLang = votData().getTargetLanguage();
-
         YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
                 videoId,
                 videoUrl,
                 durationSec,
                 sourceLang,
-                targetLang != null && !targetLang.isEmpty() ? targetLang : "ru",
+                targetLang,
                 videoTitle,
                 useLively,
                 oauthToken
         );
 
-        YandexVotLog.i(TAG, "VOT request started: backend=NEW, videoId=" + videoId + ", duration=" + ((long) durationSec) + "s, useLively=" + useLively);
+        YandexVotLog.i(TAG, "VOT request started: backend=NEW, videoId=" + videoId + ", duration=" + ((long) durationSec) + "s, useLively=" + useLively + ", cached=" + isCachedHit);
 
         mNewBackendGenerationId = 0;
         mNewBackendGenerationId = mYandexOrchestrator.startTranslation(params);
@@ -1185,6 +1206,11 @@ public class VoiceTranslateController extends BasePlayerController {
                     YandexVotLog.i(TAG, "User explicitly selected original audio; not activating ready translation");
                     break;
                 }
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_REUSE_ACTIVE,
+                        "Translation ready/active for video: " + state.getVideoId()
+                );
                 boolean autoActivateNew = votData().isAutoActivateReadyTranslation();
                 if (autoActivateNew) {
                     if (mYandexPlaybackAdapter != null) {
