@@ -22,17 +22,18 @@ class VoxSegmentDownloader(
 ) {
 
     companion object {
-        const val BUFFER_SIZE = 128 * 1024 // 128 KiB memory read buffer
-        const val IO_BUFFER_SIZE = 128 * 1024 // 128 KiB disk write buffer
+        const val BUFFER_SIZE = 256 * 1024 // 256 KiB memory read buffer
+        const val IO_BUFFER_SIZE = 256 * 1024 // 256 KiB disk write buffer
         const val PROGRESS_NOTIFY_MIN_INTERVAL_MS = 250L // Throttle UI notifications to max 4/sec
         const val PROGRESS_NOTIFY_MIN_BYTES = 256 * 1024L // Or at least 256 KiB written
         private const val MAX_RETRIES = 3
         private const val INITIAL_BACKOFF_MS = 1000L
+        private const val SPACE_CHECK_INTERVAL_BYTES = 32 * 1024 * 1024L // 32 MiB space check interval
 
         private fun createDefaultHttpClient(): OkHttpClient {
             return OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS) // 15s timeout for fast stall detection
+                .readTimeout(25, TimeUnit.SECONDS) // 25s timeout for fast stall detection without jitter drops
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .followRedirects(true)
                 .retryOnConnectionFailure(true)
@@ -139,7 +140,10 @@ class VoxSegmentDownloader(
         isCancelled: () -> Boolean,
         onProgress: ((bytesDownloaded: Long, totalBytes: Long?) -> Unit)?
     ) {
-        val requestBuilder = Request.Builder().url(url)
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .header("Connection", "keep-alive")
+            .header("Accept-Encoding", "identity")
 
         if (existingOffset > 0) {
             requestBuilder.header("Range", "bytes=$existingOffset-")
@@ -329,9 +333,9 @@ class VoxSegmentDownloader(
                     lastNotifiedTimeMs = now
                 }
 
-                // Периодическая проверка дискового пространства каждые ~2 МБ
+                // Периодическая проверка дискового пространства каждые ~32 МБ (минимизация системных вызовов statfs)
                 spaceCheckCounter += read
-                if (spaceCheckCounter >= 2 * 1024 * 1024) {
+                if (spaceCheckCounter >= SPACE_CHECK_INTERVAL_BYTES) {
                     spaceCheckCounter = 0
                     checkStorageSpace(10 * 1024 * 1024L)
                 }

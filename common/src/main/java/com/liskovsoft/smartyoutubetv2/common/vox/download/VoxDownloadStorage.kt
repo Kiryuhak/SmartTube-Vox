@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets
 /**
  * Безопасное хранилище временных файлов и состояния заданий скачивания VOX 5.
  */
-class VoxDownloadStorage(private val context: Context) {
+class VoxDownloadStorage(val context: Context) {
 
     companion object {
         private const val DOWNLOADS_DIR = "vox-downloads"
