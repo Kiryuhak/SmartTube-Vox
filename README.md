@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest"><img src="https://img.shields.io/badge/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D1%8F-32.56--vox.8-success" alt="Версия 32.56-vox.8"></a>
+  <a href="https://github.com/Kiryuhak/SmartTube-Vox/releases/latest"><img src="https://img.shields.io/badge/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D1%8F-32.56--vox.8.1-success" alt="Версия 32.56-vox.8.1"></a>
   <img src="https://img.shields.io/badge/%D0%9F%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0-Android%20TV%20%7C%20Google%20TV-blue" alt="Платформы">
   <a href="https://github.com/Kiryuhak/SmartTube-Vox/actions/workflows/CI.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kiryuhak/SmartTube-Vox/CI.yml?branch=main&amp;label=%D0%9F%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8" alt="Статус CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Kiryuhak/SmartTube-Vox?label=%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F" alt="Лицензия MIT"></a>

@@ -38,7 +38,7 @@ public class VoxFeedQualityResolverTest {
         assertEquals("1080p", resolver.cached("played"));
         resolver.rememberBadge("feed", "4K", VoxFeedQualityResolver.Source.FEED);
         resolver.remember("feed", 720, VoxFeedQualityResolver.Source.PLAYBACK);
-        assertEquals("4K", resolver.cached("feed"));
+        assertEquals("720p", resolver.cached("feed"));
         resolver.rememberBadge("download", "360p", VoxFeedQualityResolver.Source.DOWNLOAD);
         resolver.remember("download", 480, VoxFeedQualityResolver.Source.PLAYER_RESOLVE);
         assertEquals("360p", resolver.cached("download"));

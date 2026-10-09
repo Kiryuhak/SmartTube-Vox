@@ -29,7 +29,7 @@ public final class VoxFeedQualityResolver {
     private static final long POSITIVE_TTL_MS = TimeUnit.DAYS.toMillis(7);
     private static final long NEGATIVE_TTL_MS = TimeUnit.HOURS.toMillis(3);
     private static final long RATE_LIMIT_MS = TimeUnit.MINUTES.toMillis(30);
-    private static final String PREFS = "vox_feed_quality";
+    private static final String PREFS = "vox_feed_quality_v2";
     private static final String TAG = "VoxFeedQuality";
     private static volatile VoxFeedQualityResolver instance;
 
@@ -88,7 +88,7 @@ public final class VoxFeedQualityResolver {
         String badge = VoxQualityBadgeFormatter.formatFromHeight(height);
         if (badge == null) return;
         Entry previous = cache.get(videoId);
-        if (previous != null && previous.height > 0 && priority(previous.source) < priority(source)) return;
+        if (previous != null && previous.height > 0 && getPriority(previous.source) > getPriority(source)) return;
         cache.put(videoId, new Entry(height, badge, source, clock.now()));
         trimAndPersist();
     }
@@ -98,7 +98,7 @@ public final class VoxFeedQualityResolver {
         if (videoId == null || videoId.isEmpty() || parsed == null || parsed.getResolutionP() == null) return;
         String badge = VoxQualityBadgeFormatter.format(parsed);
         Entry previous = cache.get(videoId);
-        if (previous != null && previous.height > 0 && priority(previous.source) < priority(source)) return;
+        if (previous != null && previous.height > 0 && getPriority(previous.source) > getPriority(source)) return;
         if (previous != null && previous.height == parsed.getResolutionP() &&
                 previous.source == source && badge.equals(previous.badge)) return;
         cache.put(videoId, new Entry(parsed.getResolutionP(), badge, source, clock.now()));
@@ -173,10 +173,10 @@ public final class VoxFeedQualityResolver {
         synchronized (this) {
             // Playback or explicit feed metadata may have supplied a stronger value meanwhile.
             Entry previous = cache.get(id);
-            if (!rateLimited && (previous == null || priority(previous.source) >= priority(Source.PLAYER_RESOLVE))) {
+            if (!rateLimited && (previous == null || getPriority(previous.source) <= getPriority(Source.PLAYER_RESOLVE))) {
                 cache.put(id, new Entry(height, badge, height > 0 ? Source.PLAYER_RESOLVE : Source.UNKNOWN, clock.now()));
                 trimAndPersist();
-            } else {
+            } else if (previous != null) {
                 badge = previous.badge;
             }
             listeners = inFlight.remove(id);
@@ -209,13 +209,14 @@ public final class VoxFeedQualityResolver {
         return false;
     }
 
-    private static int priority(Source source) {
+    public static int getPriority(Source source) {
+        if (source == null) return 0;
         switch (source) {
-            case FEED: return 0;
-            case PLAYBACK: return 1;
-            case DOWNLOAD: return 2;
-            case PLAYER_RESOLVE: return 3;
-            default: return 4;
+            case PLAYBACK: return 40;
+            case DOWNLOAD: return 30;
+            case PLAYER_RESOLVE: return 20;
+            case FEED: return 10;
+            default: return 0;
         }
     }
 
@@ -228,6 +229,7 @@ public final class VoxFeedQualityResolver {
         JSONArray array = new JSONArray();
         for (Map.Entry<String, Entry> item : cache.entrySet()) {
             Entry entry = item.getValue();
+            if (entry.source == Source.FEED) continue;
             try {
                 array.put(new JSONObject().put("id", item.getKey()).put("height", entry.height)
                         .put("badge", entry.badge).put("source", entry.source.name())
@@ -242,8 +244,10 @@ public final class VoxFeedQualityResolver {
             JSONArray array = new JSONArray(prefs.getString("entries", "[]"));
             for (int i = 0; i < array.length(); i++) {
                 JSONObject obj = array.getJSONObject(i);
+                Source source = Source.valueOf(obj.getString("source"));
+                if (source == Source.FEED) continue;
                 Entry entry = new Entry(obj.getInt("height"), obj.optString("badge", null),
-                        Source.valueOf(obj.getString("source")), obj.getLong("at"));
+                        source, obj.getLong("at"));
                 long age = clock.now() - entry.resolvedAt;
                 if (age >= 0 && age <= (entry.height > 0 ? POSITIVE_TTL_MS : NEGATIVE_TTL_MS))
                     cache.put(obj.getString("id"), entry);
