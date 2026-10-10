@@ -1,4 +1,14 @@
-export const STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'KNOWN_ISSUE', 'IGNORED_TEST'];
+export const STATUSES = [
+  'NEW',
+  'IN_PROGRESS',
+  'NEEDS_INFO',
+  'FIXED_PENDING_VERIFICATION',
+  'CLOSED',
+  'RESOLVED',
+  'KNOWN_ISSUE',
+  'IGNORED_TEST',
+  'IGNORED',
+];
 export const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const SUBSYSTEMS = ['DOWNLOAD', 'PLAYER', 'BACKGROUND', 'OTA', 'OFFLINE', 'CHANNEL_GROUPS', 'AUTO_SETUP', 'TRANSLATION', 'NETWORK', 'SYSTEM'];
 const SAFE_CONTEXT_KEYS = new Set([
@@ -18,7 +28,7 @@ const SAFE_CONTEXT_KEYS = new Set([
   'queueLength', 'activeJobs', 'pausedJobs', 'failedJobs', 'freeStorageMb',
   'selectedHeight', 'totalRebufferMs', 'maxRebufferMs', 'averageBufferedMs',
   'averageBandwidthKbps', 'manifestErrorCount', 'segmentErrorCount',
-  'errorCategory',
+  'errorCategory', 'liveOffsetMs',
 ]);
 const SAFE_ENUM = /^[A-Za-z][A-Za-z0-9_+.-]{0,63}$/;
 
@@ -63,26 +73,37 @@ function severityForEvent(code, rawLevel, repeats = 1) {
 }
 
 export function technicalSummary(report = {}) {
-  const download = report.downloadDiagnostics || {};
+  const download = report.downloadDiagnostics || report.downloadState || {};
   const perf = download.downloadPerformance || {};
-  const player = report.livePlayback || {};
+  const player = report.livePlayback || report.playbackStats || report.playerPlayback || {};
+  const recentEvents = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
+  const eventRebuffers = recentEvents.filter(e => (e.event || e.code) === 'PLAYER_REBUFFER').length;
+  const rebufferCount = player.rebufferCount !== undefined ? player.rebufferCount : (eventRebuffers > 0 ? eventRebuffers : undefined);
+
   return {
     download: safeContext({
-      queueLength: download.queueLength, activeJobs: download.activeJobs,
-      pausedJobs: download.pausedJobs, failedJobs: download.failedJobs,
-      stage: download.lastStage, retryCount: download.retryCount,
-      bytes: perf.totalBytes, speed: perf.averageBytesPerSecond,
-      stallCount: perf.stallCount, resumeCount: perf.resumeCount,
+      queueLength: download.queueLength ?? download.activeTasks,
+      activeJobs: download.activeJobs ?? download.activeTasks,
+      pausedJobs: download.pausedJobs,
+      failedJobs: download.failedJobs,
+      stage: download.lastStage,
+      retryCount: download.retryCount,
+      bytes: perf.totalBytes,
+      speed: perf.averageBytesPerSecond,
+      stallCount: perf.stallCount,
+      resumeCount: perf.resumeCount,
       packagingState: download.packagingCompleted ? 'COMPLETED' : download.packagingStarted ? 'STARTED' : undefined,
       finalizeState: download.finalizeCompleted ? 'COMPLETED' : undefined,
-      freeStorageMb: download.freeStorageMb,
+      freeStorageMb: download.freeStorageMb ?? download.storageSpaceAvailableMb,
       errorCategory: download.lastErrorCategory,
     }),
     player: safeContext({
-      sourceType: report.sourceType || (report.livePlayback ? 'LIVE' : undefined),
-      isLive: report.livePlayback ? true : undefined, selectedCodec: player.selectedCodec,
-      selectedResolution: player.selectedHeight,
-      rebufferCount: player.rebufferCount,
+      sourceType: report.sourceType || (report.livePlayback ? 'LIVE' : (report.playbackStats ? 'VOD' : undefined)),
+      isLive: report.livePlayback ? true : (report.sourceType === 'LIVE' ? true : false),
+      selectedCodec: player.selectedCodec,
+      selectedResolution: player.selectedHeight ?? player.selectedResolution,
+      liveOffsetMs: player.liveOffsetMs,
+      rebufferCount: rebufferCount,
       rebufferDuration: player.totalRebufferMs,
       averageBufferedMs: player.averageBufferedMs,
       averageBandwidthKbps: player.averageBandwidthKbps,
@@ -216,6 +237,15 @@ export function generateDeterministicIssueTitle(signature = '', report = {}) {
   }
   if (subsystem === 'TRANSLATION' || sig.includes('TRANSLAT')) {
     return 'Сбой закадрового перевода звуковой дорожки';
+  }
+  if (sig.includes('LIVE_SEEK') || (subsystem === 'PLAYER' && stage === 'LIVE_SEEK')) {
+    return 'Истекло окно прямого эфира при перемотке';
+  }
+  if (sig.includes('FINALIZE_INCONSISTENT') || (subsystem === 'DOWNLOAD' && stage === 'FINALIZE_INCONSISTENT')) {
+    return 'Несогласованное состояние завершения скачивания';
+  }
+  if (sig.includes('DNS') || subsystem === 'NETWORK') {
+    return sig.includes('OTA') ? 'Сбой DNS при проверке обновлений' : 'Сбой сетевого соединения или DNS';
   }
   if (subsystem === 'CHANNEL_GROUPS' || sig.includes('CHANNEL_GROUP')) {
     return 'Ошибка управления локальными группами каналов';

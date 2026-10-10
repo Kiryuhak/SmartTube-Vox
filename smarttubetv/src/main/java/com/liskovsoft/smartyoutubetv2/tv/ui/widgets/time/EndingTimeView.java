@@ -108,7 +108,10 @@ public class EndingTimeView extends TextView implements TickleListener, OnDataCh
     }
 
     static String formatEndingTime(String endingTime) {
-        return endingTime != null && !endingTime.isEmpty() ? endingTime : null;
+        if (endingTime == null || endingTime.isEmpty()) {
+            return null;
+        }
+        return com.liskovsoft.smartyoutubetv2.common.vox.player.PlayerClockFormatter.normalizeTimeString(endingTime);
     }
 
     @Override
@@ -133,7 +136,7 @@ public class EndingTimeView extends TextView implements TickleListener, OnDataCh
             return null;
         }
 
-        return DateHelper.toShortTime(System.currentTimeMillis() + remainingTimeMs);
+        return com.liskovsoft.smartyoutubetv2.common.vox.player.PlayerClockFormatter.formatEndingTime(System.currentTimeMillis() + remainingTimeMs);
     }
 
     private String getRemainingTime() {

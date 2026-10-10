@@ -166,4 +166,17 @@ data class VoxPlaybackHealthSummary(
                 "Пропуск кадров/сек: ${"%.2f".format(droppedFrameRate)}, " +
                 "Уверенность: ${confidence.labelRu}"
     }
+
+    fun toMap(): Map<String, Any> {
+        return mapOf(
+            "sampleCount" to sampleCount,
+            "liveSampleCount" to liveSampleCount,
+            "vodSampleCount" to vodSampleCount,
+            "bestStableHeight" to bestStableHeight,
+            "stableVideoCodec" to stableVideoCodec,
+            "droppedFrameRate" to droppedFrameRate,
+            "rebufferRate" to rebufferRate,
+            "confidence" to confidence.name
+        )
+    }
 }

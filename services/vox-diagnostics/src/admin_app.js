@@ -8,11 +8,23 @@
   'use strict';
 
   // Canonical Statuses & UI Labels
-  const CANONICAL_STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'KNOWN_ISSUE', 'IGNORED_TEST'];
+  const CANONICAL_STATUSES = [
+    'NEW',
+    'IN_PROGRESS',
+    'NEEDS_INFO',
+    'FIXED_PENDING_VERIFICATION',
+    'CLOSED',
+    'KNOWN_ISSUE',
+    'IGNORED_TEST',
+    'RESOLVED',
+  ];
 
   const STATUS_LABELS = {
     NEW: 'Новый',
     IN_PROGRESS: 'В работе',
+    NEEDS_INFO: 'Нужны данные',
+    FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
+    CLOSED: 'Закрыто',
     RESOLVED: 'Решено',
     KNOWN_ISSUE: 'Известная проблема',
     IGNORED_TEST: 'Тест / игнор',
@@ -20,14 +32,17 @@
 
   /**
    * Нормализует статус к одному из канонических значений:
-   * NEW, IN_PROGRESS, RESOLVED, KNOWN_ISSUE, IGNORED_TEST
+   * NEW, IN_PROGRESS, NEEDS_INFO, FIXED_PENDING_VERIFICATION, CLOSED, RESOLVED, KNOWN_ISSUE, IGNORED_TEST
    */
   function normalizeStatus(rawStatus) {
     if (!rawStatus) return 'NEW';
     const s = String(rawStatus).toUpperCase().trim();
     if (s === 'REVIEWED' || s === 'TRIAGED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
-    if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
+    if (s === 'NEEDS_INFO' || s === 'INFO_NEEDED') return 'NEEDS_INFO';
+    if (s === 'FIXED' || s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION') return 'FIXED_PENDING_VERIFICATION';
+    if (s === 'CLOSED') return 'CLOSED';
     if (s === 'RESOLVED') return 'RESOLVED';
+    if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
     if (s === 'IGNORED_TEST' || s === 'TEST' || s === 'IGNORED') return 'IGNORED_TEST';
     if (s === 'NEW') return 'NEW';
     return s;
@@ -574,6 +589,9 @@
       const codecs = p.videoCodecs || {};
       const safeEvents = p.safeRecentEvents || [];
       const errorEvents = safeEvents.filter(e => e.level === 'ERROR');
+      const player = p.playbackStats || p.livePlayback || {};
+      const download = p.downloadDiagnostics || p.downloadState || {};
+      const network = p.networkState || {};
 
       modalContent.innerHTML = `
         <div class="section-card">
@@ -595,19 +613,50 @@
           <div style="font-size:13px;line-height:1.6;">
             <div><span style="color:var(--text-muted);">Категория:</span> <span class="tag tag-error">${escapeHtml(report.error_category || report.errorCategory || 'UNKNOWN')}</span></div>
             <div style="margin-top:4px;"><span style="color:var(--text-muted);">Сигнатура:</span> <code style="font-family:monospace;color:#93c5fd;">${escapeHtml(report.error_signature || report.errorSignature || '-')}</code></div>
-            ${errorEvents.length > 0 ? `<div style="margin-top:6px;color:#fca5a5;">Последнее сообщение: <strong>${escapeHtml(errorEvents[errorEvents.length - 1].message || '')}</strong></div>` : ''}
+            ${errorEvents.length > 0 ? `<div style="margin-top:6px;color:#fca5a5;">Последнее сообщение: <strong>${escapeHtml(errorEvents[errorEvents.length - 1].message || errorEvents[errorEvents.length - 1].code || '')}</strong></div>` : ''}
           </div>
         </div>
 
-        ${p.downloadState ? `
+        ${(player.rebufferCount !== undefined || player.selectedCodec || player.selectedHeight) ? `
+        <div class="section-card">
+          <div class="section-title">Воспроизведение (Playback)</div>
+          <div style="font-size:13px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+            <div>Тип источника: <strong>${escapeHtml(report.sourceType || (p.livePlayback ? 'LIVE' : 'VOD'))}</strong></div>
+            <div>Кодек: <strong>${escapeHtml(player.selectedCodec || '-')}</strong></div>
+            <div>Разрешение: <strong>${escapeHtml(player.selectedHeight || player.selectedResolution || '-')}p</strong></div>
+            <div>Буферизаций (rebuffer): <strong>${escapeHtml(player.rebufferCount ?? 0)}</strong></div>
+            <div>Длительность сталла: <strong>${player.totalRebufferMs ? (player.totalRebufferMs + ' мс') : '-'}</strong></div>
+            <div>Битрейт сети: <strong>${player.averageBandwidthKbps ? (player.averageBandwidthKbps + ' kbps') : '-'}</strong></div>
+          </div>
+        </div>` : ''}
+
+        ${(download.activeTasks !== undefined || download.activeJobs !== undefined || download.engine) ? `
         <div class="section-card">
           <div class="section-title">Состояние загрузок (Downloads)</div>
           <div style="font-size:13px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-            <div>Активные задачи: <strong>${escapeHtml(p.downloadState.activeTasks ?? 0)}</strong></div>
-            <div>Движок: <strong>${escapeHtml(p.downloadState.engine || 'MKV_MUXER')}</strong></div>
-            <div>Свободно памяти: <strong>${escapeHtml(p.downloadState.storageSpaceAvailableMb ?? '-')} МБ</strong></div>
+            <div>Активные задачи: <strong>${escapeHtml(download.activeJobs ?? download.activeTasks ?? 0)}</strong></div>
+            <div>Движок: <strong>${escapeHtml(download.engine || 'MKV_MUXER')}</strong></div>
+            <div>Свободно памяти: <strong>${escapeHtml(download.storageSpaceAvailableMb ?? download.freeStorageMb ?? '-')} МБ</strong></div>
+            <div>Упаковка завершена: <strong>${download.packagingCompleted ? 'Да' : (download.packagingStarted ? 'В процессе' : 'Нет')}</strong></div>
+            <div>Финализация: <strong>${download.finalizeCompleted ? 'Да' : 'Нет'}</strong></div>
           </div>
         </div>` : ''}
+
+        ${p.translationState || p.translatedTrackPresent !== undefined ? `
+        <div class="section-card">
+          <div class="section-title">Закадровый перевод (Translation)</div>
+          <div style="font-size:13px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+            <div>Переведённая дорожка: <strong>${p.translatedTrackPresent ? 'Присутствует' : 'Отсутствует'}</strong></div>
+            <div>Статус сессии: <strong>${escapeHtml(p.translationState?.status || '-')}</strong></div>
+          </div>
+        </div>` : ''}
+
+        <div class="mobile-sticky-actions">
+          <button class="btn btn-sm btn-primary" data-quick-status="IN_PROGRESS">В работу</button>
+          <button class="btn btn-sm" data-quick-status="NEEDS_INFO">Нужны данные</button>
+          <button class="btn btn-sm" data-quick-status="FIXED_PENDING_VERIFICATION">Исправлено</button>
+          <button class="btn btn-sm" data-quick-status="CLOSED">Закрыто</button>
+        </div>
       `;
     } else if (activeModalTab === 'codecs') {
       const vCodecs = p.videoCodecs || {};
@@ -656,15 +705,54 @@
         </div>
       `;
     } else if (activeModalTab === 'ops') {
-      const history = report.history || [];
+      const statusHist = report.statusHistory || report.history || [];
+      const auditHist = report.auditHistory || [];
+      const notesList = report.notes || [];
       modalContent.innerHTML = `
         <div class="section-card">
-          <div class="section-title">История обработки инцидента</div>
-          ${history.length === 0 ? '<p style="color:var(--text-muted);">История изменений пуста.</p>' : `
+          <div class="section-title">Переходы статусов</div>
+          ${statusHist.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;">История статусов пуста.</p>' : `
           <table>
-            <thead><tr><th>Время</th><th>Действие</th><th>Детали</th></tr></thead>
+            <thead><tr><th>Время</th><th>Откуда</th><th>Куда</th><th>Автор</th><th>Причина</th></tr></thead>
             <tbody>
-              ${history.map(h => `<tr><td>${formatDateTime(h.timestamp)}</td><td><span class="tag tag-status-${(h.action || '').toLowerCase()}">${escapeHtml(h.action || '')}</span></td><td>${escapeHtml(h.details || '-')}</td></tr>`).join('')}
+              ${statusHist.map(h => `<tr>
+                <td>${formatDateTime(h.changedAt || h.timestamp)}</td>
+                <td><span class="tag tag-status-${(h.fromStatus || '').toLowerCase()}">${escapeHtml(STATUS_LABELS[h.fromStatus] || h.fromStatus || '-')}</span></td>
+                <td><span class="tag tag-status-${(h.toStatus || '').toLowerCase()}">${escapeHtml(STATUS_LABELS[h.toStatus] || h.toStatus || '-')}</span></td>
+                <td><strong style="color:var(--accent);font-size:11px;">${escapeHtml(h.actor || 'ADMIN')}</strong></td>
+                <td>${escapeHtml(h.reason || '-')}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>`}
+        </div>
+
+        <div class="section-card">
+          <div class="section-title">Заметки разработчиков</div>
+          ${notesList.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;">Заметок пока нет.</p>' : `
+          <table>
+            <thead><tr><th>Время</th><th>Автор</th><th>Заметка</th></tr></thead>
+            <tbody>
+              ${notesList.map(n => `<tr>
+                <td>${formatDateTime(n.createdAt || n.timestamp)}</td>
+                <td><strong style="color:var(--accent);font-size:11px;">${escapeHtml(n.actor || 'ADMIN')}</strong></td>
+                <td>${escapeHtml(n.note || '')}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>`}
+        </div>
+
+        <div class="section-card">
+          <div class="section-title">Журнал аудита действий</div>
+          ${auditHist.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;">Журнал аудита пуст.</p>' : `
+          <table>
+            <thead><tr><th>Время</th><th>Действие</th><th>Автор</th><th>Цель</th></tr></thead>
+            <tbody>
+              ${auditHist.map(a => `<tr>
+                <td>${formatDateTime(a.createdAt || a.created_at)}</td>
+                <td><span class="tag tag-status-${(a.action || '').toLowerCase()}">${escapeHtml(a.action || '')}</span></td>
+                <td><strong style="color:var(--accent);font-size:11px;">${escapeHtml(a.actor || 'ADMIN')}</strong></td>
+                <td>${escapeHtml(a.targetId || a.target_id || '-')}</td>
+              </tr>`).join('')}
             </tbody>
           </table>`}
         </div>
@@ -1084,6 +1172,15 @@
     if (detailSaveBtn) {
       detailSaveBtn.addEventListener('click', saveReportOperations);
     }
+
+    document.addEventListener('click', (e) => {
+      const quickBtn = e.target.closest('[data-quick-status]');
+      if (quickBtn && currentReport) {
+        const nextStatus = quickBtn.getAttribute('data-quick-status');
+        if (detailStatusSelect) detailStatusSelect.value = nextStatus;
+        saveReportOperations();
+      }
+    });
 
     const detailDownloadBtn = document.getElementById('detailDownloadJsonBtn');
     if (detailDownloadBtn) {

@@ -97,6 +97,9 @@ class VoxDownloadRepository(
             job.processingSourceBytes = stored.processingSourceBytes
             job.processingSamples = stored.processingSamples
             job.lastProgressAt = stored.lastProgressAt
+            job.packagingStarted = stored.packagingStarted
+            job.packagingCompleted = stored.packagingCompleted
+            job.finalizeCompleted = stored.finalizeCompleted
             jobs[id] = job
         }
     }
@@ -169,7 +172,10 @@ class VoxDownloadRepository(
             processingTimeMs = job.processingTimeMs,
             processingSourceBytes = job.processingSourceBytes,
             processingSamples = job.processingSamples,
-            lastProgressAt = job.lastProgressAt
+            lastProgressAt = job.lastProgressAt,
+            packagingStarted = job.packagingStarted,
+            packagingCompleted = job.packagingCompleted,
+            finalizeCompleted = job.finalizeCompleted
         )
     }
 

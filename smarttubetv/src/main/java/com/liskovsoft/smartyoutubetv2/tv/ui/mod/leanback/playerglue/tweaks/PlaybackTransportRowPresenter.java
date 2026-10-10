@@ -773,7 +773,7 @@ public class PlaybackTransportRowPresenter extends PlaybackRowPresenter {
                     mEndingTime.setVisibility(View.VISIBLE);
                 } else if (mPlayerData.isEndingTimeEnabled()) {
                     mEndingTime.setText(String.format(mEndingTimeFormat,
-                            DateHelper.toShortTime(System.currentTimeMillis() + remainingTimeMs)));
+                            com.liskovsoft.smartyoutubetv2.common.vox.player.PlayerClockFormatter.formatEndingTime(System.currentTimeMillis() + remainingTimeMs)));
                     mEndingTime.setVisibility(View.VISIBLE);
                 } else {
                     mEndingTime.setVisibility(View.GONE);

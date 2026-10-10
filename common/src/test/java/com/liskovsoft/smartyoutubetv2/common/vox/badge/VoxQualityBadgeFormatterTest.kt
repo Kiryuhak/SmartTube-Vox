@@ -41,8 +41,8 @@ class VoxQualityBadgeFormatterTest {
         val b4k = VoxQualityBadgeFormatter.parse("4K")
         assertEquals("4K", VoxQualityBadgeFormatter.format(b4k))
 
-        val bhd = VoxQualityBadgeFormatter.parse("HD")
-        assertEquals("720p", VoxQualityBadgeFormatter.format(bhd))
+        // Generic HD without explicit resolution returns null to avoid false 720p
+        assertNull(VoxQualityBadgeFormatter.parse("HD"))
 
         val bfhd = VoxQualityBadgeFormatter.parse("Full HD")
         assertEquals("1080p", VoxQualityBadgeFormatter.format(bfhd))
@@ -53,7 +53,7 @@ class VoxQualityBadgeFormatterTest {
         assertTrue(VoxQualityBadgeFormatter.isQualityString("720p"))
         assertTrue(VoxQualityBadgeFormatter.isQualityString("1080p"))
         assertTrue(VoxQualityBadgeFormatter.isQualityString("4K"))
-        assertTrue(VoxQualityBadgeFormatter.isQualityString("HD"))
+        assertFalse(VoxQualityBadgeFormatter.isQualityString("HD"))
         assertTrue(VoxQualityBadgeFormatter.isQualityString("HD · 720p"))
         assertFalse(VoxQualityBadgeFormatter.isQualityString("LIVE"))
         assertFalse(VoxQualityBadgeFormatter.isQualityString("NEW"))

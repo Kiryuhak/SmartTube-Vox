@@ -574,7 +574,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 mHasStartedPlayback = true;
                 if (mPrepareStartTimeMs > 0) {
                     long startupLatency = System.currentTimeMillis() - mPrepareStartTimeMs;
-                    if (startupLatency > 3500) {
+                    long thresholdMs = isLive ? 6000L : 3500L;
+                    if (startupLatency > thresholdMs) {
                         Map<String, String> ctx = new HashMap<>();
                         ctx.put("latencyMs", String.valueOf((startupLatency / 100) * 100));
                         ctx.put("startupLatencyMs", String.valueOf(startupLatency));

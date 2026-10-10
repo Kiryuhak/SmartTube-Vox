@@ -26,7 +26,7 @@ public class VoiceTranslateAction extends MultiAction {
         mContext = context;
         mBaseLabel = context.getString(com.liskovsoft.smartyoutubetv2.common.R.string.action_voice_translate);
 
-        int highlightColor = ActionHelpers.getIconHighlightColor(context);
+        int voxAccentColor = androidx.core.content.ContextCompat.getColor(context, R.color.vox_accent);
         int orangeAccent = 0xFFFFA726; // Material Orange / Amber accent for WAITING state
         int errorColor = 0xFFFF5252;   // Red accent for ERROR state
 
@@ -35,8 +35,7 @@ public class VoiceTranslateAction extends MultiAction {
         BitmapDrawable pendingDrawable = rawPending == null ? null
                 : ActionHelpers.createDrawable(context, rawPending, orangeAccent);
         BitmapDrawable onDrawable = offDrawable == null ? null
-                : new BitmapDrawable(context.getResources(),
-                ActionHelpers.createBitmap(offDrawable.getBitmap(), highlightColor));
+                : ActionHelpers.createDrawable(context, offDrawable, voxAccentColor);
         BitmapDrawable errorDrawable = offDrawable == null ? null
                 : ActionHelpers.createDrawable(context, offDrawable, errorColor);
 

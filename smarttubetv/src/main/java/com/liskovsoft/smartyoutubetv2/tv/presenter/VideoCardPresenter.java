@@ -154,6 +154,11 @@ public class VideoCardPresenter extends LongClickPresenter {
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.QUALITY_BADGE_BOUND,
                     "Quality badge bound: " + qualityBadge
             );
+        } else if (canResolveQuality(video)) {
+            QualityBinding binding = new QualityBinding(cardView, video.videoId, resolver);
+            cardView.addOnAttachStateChangeListener(binding);
+            mQualityBindings.put(viewHolder, binding);
+            binding.schedule();
         }
 
         String ageBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getAgeBadge(video);
@@ -351,6 +356,7 @@ public class VideoCardPresenter extends LongClickPresenter {
         @Override
         public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
             Log.e(TAG, "Glide load failed: " + e);
+            com.liskovsoft.smartyoutubetv2.common.vox.image.VoxImageRetryPolicy.logFailure(e, 1, "card_thumbnail");
             return false;
         }
 
@@ -364,6 +370,7 @@ public class VideoCardPresenter extends LongClickPresenter {
         @Override
         public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Bitmap> target, boolean isFirstResource) {
             Log.e(TAG, "Glide load failed: " + e);
+            com.liskovsoft.smartyoutubetv2.common.vox.image.VoxImageRetryPolicy.logFailure(e, 1, "card_bitmap");
             return false;
         }
 

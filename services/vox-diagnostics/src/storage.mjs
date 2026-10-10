@@ -3,26 +3,42 @@ import { classifyReport, compareVoxVersions, technicalSummary, STATUSES } from '
 export const DEFAULT_RETENTION_DAYS = 30;
 export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-export const CANONICAL_STATUSES = ['NEW', 'IN_PROGRESS', 'RESOLVED', 'KNOWN_ISSUE', 'IGNORED_TEST'];
+export const CANONICAL_STATUSES = [
+  'NEW',
+  'IN_PROGRESS',
+  'NEEDS_INFO',
+  'FIXED_PENDING_VERIFICATION',
+  'CLOSED',
+  'KNOWN_ISSUE',
+  'IGNORED_TEST',
+  'RESOLVED',
+];
 
 export const STATUS_LABELS = {
   NEW: 'Новый',
   IN_PROGRESS: 'В работе',
+  NEEDS_INFO: 'Нужны данные',
+  FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
+  CLOSED: 'Закрыто',
   RESOLVED: 'Решено',
   KNOWN_ISSUE: 'Известная проблема',
+  IGNORED: 'Тест / игнор',
   IGNORED_TEST: 'Тест / игнор',
 };
 
 /**
  * Нормализует строковый статус к каноническому виду:
- * NEW, IN_PROGRESS, RESOLVED, KNOWN_ISSUE, IGNORED_TEST
+ * NEW, IN_PROGRESS, NEEDS_INFO, FIXED_PENDING_VERIFICATION, CLOSED, RESOLVED, KNOWN_ISSUE, IGNORED_TEST
  */
 export function normalizeStatus(rawStatus) {
   if (!rawStatus) return 'NEW';
   const s = String(rawStatus).toUpperCase().trim();
   if (s === 'REVIEWED' || s === 'TRIAGED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
-  if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
+  if (s === 'NEEDS_INFO' || s === 'INFO_NEEDED') return 'NEEDS_INFO';
+  if (s === 'FIXED' || s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION') return 'FIXED_PENDING_VERIFICATION';
+  if (s === 'CLOSED') return 'CLOSED';
   if (s === 'RESOLVED') return 'RESOLVED';
+  if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
   if (s === 'IGNORED_TEST' || s === 'TEST' || s === 'IGNORED') return 'IGNORED_TEST';
   if (s === 'NEW') return 'NEW';
   return s;
@@ -156,17 +172,19 @@ export class ReportStorage {
       );
       const row = await stmt.bind(reportId).first();
       if (!row) return null;
-      const [history, notes, related, relatedIssue] = await Promise.all([
+      const [history, notes, related, relatedIssue, audit] = await Promise.all([
         this.db.prepare('SELECT from_status AS fromStatus, to_status AS toStatus, changed_at AS changedAt, actor, reason FROM report_status_history WHERE report_id = ? ORDER BY id DESC LIMIT 50').bind(reportId).all(),
         this.db.prepare('SELECT note, created_at AS createdAt, actor FROM report_notes WHERE report_id = ? ORDER BY id DESC LIMIT 50').bind(reportId).all(),
         row.error_signature ? this.db.prepare('SELECT COUNT(*) AS count FROM reports WHERE error_signature = ?').bind(row.error_signature).first() : Promise.resolve({ count: 0 }),
         this.getIssue(row.error_signature),
+        this.db.prepare('SELECT action, target_type AS targetType, target_id AS targetId, created_at AS createdAt, actor FROM admin_audit WHERE target_id = ? ORDER BY id DESC LIMIT 50').bind(reportId).all(),
       ]);
       return {
         ...row,
         payload: JSON.parse(row.payload_json),
         statusHistory: history.results || [],
         notes: notes.results || [],
+        auditHistory: audit.results || [],
         relatedReportsCount: Math.max(0, Number(related?.count || 0) - 1),
         relatedIssue,
       };
@@ -178,6 +196,7 @@ export class ReportStorage {
         payload: JSON.parse(row.payload_json),
         statusHistory: this.statusHistory.filter(x => x.reportId === reportId).slice(-50).reverse(),
         notes: this.notes.filter(x => x.reportId === reportId).slice(-50).reverse(),
+        auditHistory: this.audit.filter(x => x.target_id === reportId).slice(-50).reverse(),
         relatedReportsCount: row.error_signature ? [...this.inMemoryReports.values()].filter(x => x.error_signature === row.error_signature).length - 1 : 0,
         relatedIssue: await this.getIssue(row.error_signature),
       };
@@ -187,7 +206,7 @@ export class ReportStorage {
   /**
    * Обновляет статус и/или заметки разработчика для отчёта.
    */
-  async updateReport(reportId, { status, developerNotes, reason = '' } = {}) {
+  async updateReport(reportId, { status, developerNotes, reason = '', actor = 'ADMIN', patch = '', commit = '' } = {}) {
     if (!reportId) return null;
     const before = await this.getReportById(reportId);
     if (!before) return null;
@@ -204,24 +223,24 @@ export class ReportStorage {
 
     if (this.db) {
       const statements = [this.db.prepare('UPDATE reports SET status = ?, developer_notes = ?, updated_at = ? WHERE report_id = ?').bind(status ?? before.status, developerNotes ?? before.developer_notes, now, reportId)];
-      if (statusChanged) statements.push(this.db.prepare('INSERT INTO report_status_history (report_id, from_status, to_status, changed_at, actor, reason) VALUES (?, ?, ?, ?, ?, ?)').bind(reportId, normalizeStatus(before.status), status, now, 'ADMIN', reason));
-      if (noteChanged && developerNotes) statements.push(this.db.prepare('INSERT INTO report_notes (report_id, note, created_at, actor) VALUES (?, ?, ?, ?)').bind(reportId, developerNotes, now, 'ADMIN'));
+      if (statusChanged) statements.push(this.db.prepare('INSERT INTO report_status_history (report_id, from_status, to_status, changed_at, actor, reason) VALUES (?, ?, ?, ?, ?, ?)').bind(reportId, normalizeStatus(before.status), status, now, actor, reason));
+      if (noteChanged && developerNotes) statements.push(this.db.prepare('INSERT INTO report_notes (report_id, note, created_at, actor) VALUES (?, ?, ?, ?)').bind(reportId, developerNotes, now, actor));
       statements.push(this.db.prepare('INSERT INTO report_changes (report_id, kind, changed_at) VALUES (?, ?, ?)').bind(reportId, statusChanged ? 'STATUS_CHANGED' : 'NOTE_ADDED', now));
-      if (statusChanged) statements.push(this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind('STATUS_CHANGED', 'REPORT', reportId, now, 'ADMIN'));
-      if (noteChanged) statements.push(this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind('NOTE_ADDED', 'REPORT', reportId, now, 'ADMIN'));
+      if (statusChanged) statements.push(this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind('STATUS_CHANGED', 'REPORT', reportId, now, actor));
+      if (noteChanged) statements.push(this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind('NOTE_ADDED', 'REPORT', reportId, now, actor));
       await this.db.batch(statements);
       return this.getReportById(reportId);
     } else {
       const existing = this.inMemoryReports.get(reportId);
       if (statusChanged) {
-        this.statusHistory.push({ reportId, fromStatus: normalizeStatus(existing.status), toStatus: status, changedAt: now, actor: 'ADMIN', reason });
+        this.statusHistory.push({ reportId, fromStatus: normalizeStatus(existing.status), toStatus: status, changedAt: now, actor, reason });
         existing.status = status;
-        this.audit.push({ action: 'STATUS_CHANGED', target_type: 'REPORT', target_id: reportId, created_at: now, actor: 'ADMIN' });
+        this.audit.push({ action: 'STATUS_CHANGED', target_type: 'REPORT', target_id: reportId, created_at: now, actor });
       }
       if (noteChanged) {
         existing.developer_notes = developerNotes;
-        if (developerNotes) this.notes.push({ reportId, note: developerNotes, createdAt: now, actor: 'ADMIN' });
-        this.audit.push({ action: 'NOTE_ADDED', target_type: 'REPORT', target_id: reportId, created_at: now, actor: 'ADMIN' });
+        if (developerNotes) this.notes.push({ reportId, note: developerNotes, createdAt: now, actor });
+        this.audit.push({ action: 'NOTE_ADDED', target_type: 'REPORT', target_id: reportId, created_at: now, actor });
       }
       existing.updated_at = now;
       this.changes.push({ id: this.changes.length + 1, report_id: reportId, kind: statusChanged ? 'STATUS_CHANGED' : 'NOTE_ADDED', changed_at: now });
@@ -229,11 +248,11 @@ export class ReportStorage {
     }
   }
 
-  async addNote(reportId, note) {
+  async addNote(reportId, note, actor = 'ADMIN') {
     if (typeof note !== 'string' || !note.trim() || note.length > 4000) throw new RangeError('Invalid note');
     const report = await this.getReportById(reportId);
     if (!report) return null;
-    return this.updateReport(reportId, { developerNotes: note.trim() });
+    return this.updateReport(reportId, { developerNotes: note.trim(), actor });
   }
 
   /**
@@ -547,15 +566,17 @@ export class ReportStorage {
     return this.issues.get(signature) || blank;
   }
 
-  async updateIssue(signature, patch) {
+  async updateIssue(signature, patch, actor = 'ADMIN') {
     if (!signature || typeof signature !== 'string' || signature.length > 256) throw new RangeError('Invalid signature');
-    const allowed = ['status', 'fixedInVersion', 'fixPatch', 'fixCommit', 'title'];
+    const allowed = ['status', 'fixedInVersion', 'fixPatch', 'fixCommit', 'title', 'actor'];
     if (!patch || typeof patch !== 'object' || Object.keys(patch).some(key => !allowed.includes(key))) throw new RangeError('Invalid issue patch');
-    if (patch.status !== undefined && !STATUSES.includes(patch.status)) throw new RangeError('Invalid issue status');
-    for (const key of allowed.filter(key => key !== 'status')) if (patch[key] !== undefined && (typeof patch[key] !== 'string' || patch[key].length > 256)) throw new RangeError(`Invalid ${key}`);
+    const effectiveActor = patch.actor || actor;
+    const normStatus = patch.status !== undefined ? normalizeStatus(patch.status) : undefined;
+    if (normStatus !== undefined && !STATUSES.includes(normStatus)) throw new RangeError('Invalid issue status');
+    for (const key of allowed.filter(key => key !== 'status' && key !== 'actor')) if (patch[key] !== undefined && (typeof patch[key] !== 'string' || patch[key].length > 256)) throw new RangeError(`Invalid ${key}`);
     const before = await this.getIssue(signature);
     const next = {
-      issue_status: patch.status ?? before.issue_status,
+      issue_status: normStatus ?? before.issue_status,
       fixed_in_version: patch.fixedInVersion ?? before.fixed_in_version,
       fix_patch: patch.fixPatch ?? before.fix_patch,
       fix_commit: patch.fixCommit ?? before.fix_commit,
@@ -563,14 +584,15 @@ export class ReportStorage {
       reopened_at: before.reopened_at || 0,
     };
     const now = Date.now();
+    const action = (next.issue_status === 'RESOLVED' || next.issue_status === 'CLOSED') ? 'ISSUE_RESOLVED' : 'ISSUE_LINKED';
     if (this.db) {
       await this.db.batch([
         this.db.prepare('INSERT INTO issues (signature, status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(signature) DO UPDATE SET status=excluded.status, fixed_in_version=excluded.fixed_in_version, fix_patch=excluded.fix_patch, fix_commit=excluded.fix_commit, title=excluded.title, updated_at=excluded.updated_at').bind(signature, next.issue_status, next.fixed_in_version, next.fix_patch, next.fix_commit, next.title, next.reopened_at, now),
-        this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind(next.issue_status === 'RESOLVED' ? 'ISSUE_RESOLVED' : 'ISSUE_LINKED', 'ISSUE', signature, now, 'ADMIN'),
+        this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind(action, 'ISSUE', signature, now, effectiveActor),
       ]);
     } else {
       this.issues.set(signature, next);
-      this.audit.push({ action: next.issue_status === 'RESOLVED' ? 'ISSUE_RESOLVED' : 'ISSUE_LINKED', target_type: 'ISSUE', target_id: signature, created_at: now, actor: 'ADMIN' });
+      this.audit.push({ action, target_type: 'ISSUE', target_id: signature, created_at: now, actor: effectiveActor });
     }
     return next;
   }

@@ -6,6 +6,13 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
  * Помощник для сопоставления и форматирования бейджей качества видео (4K · 2160p, 2K · 1440p, FHD · 1080p, HD · 720p, SD · 480p).
  * Гарантирует, что при отсутствии достоверных метаданных бейдж не отображается.
  */
+enum class QualityConfidence {
+    UNKNOWN,
+    METADATA,
+    PLAYBACK_CONFIRMED,
+    DOWNLOAD_CONFIRMED
+}
+
 object VoxBadgeHelper {
 
     const val BADGE_4K = "4K"
@@ -13,6 +20,21 @@ object VoxBadgeHelper {
     const val BADGE_FHD = "1080p"
     const val BADGE_HD = "720p"
     const val BADGE_SD = "480p"
+
+    @JvmStatic
+    fun resolveQualityBadgeWithConfidence(video: Video?): Pair<String?, QualityConfidence> {
+        if (video == null) return Pair(null, QualityConfidence.UNKNOWN)
+        if (video.isLocal) {
+            val badge = getQualityBadge(video)
+            return if (badge != null) Pair(badge, QualityConfidence.DOWNLOAD_CONFIRMED) else Pair(null, QualityConfidence.UNKNOWN)
+        }
+        val badge = getQualityBadge(video)
+        return if (badge != null) {
+            Pair(badge, QualityConfidence.METADATA)
+        } else {
+            Pair(null, QualityConfidence.UNKNOWN)
+        }
+    }
 
     @JvmStatic
     fun normalizeQuality(raw: String?): String? {

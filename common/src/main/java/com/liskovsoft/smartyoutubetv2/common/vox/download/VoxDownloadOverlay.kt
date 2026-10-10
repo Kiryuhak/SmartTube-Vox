@@ -294,8 +294,8 @@ class VoxDownloadOverlay(private val context: Context) {
 
     private fun fadeIn() {
         overlayView?.let { view ->
-            if (!com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.claim(view,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.DOWNLOAD)) return
+            if (!com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.claim(view,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.DOWNLOAD)) return
             if (view.visibility == View.VISIBLE && view.alpha == 1f) return
             view.bringToFront()
             view.animate().cancel()
@@ -310,7 +310,10 @@ class VoxDownloadOverlay(private val context: Context) {
     fun hide() {
         mainHandler.removeCallbacks(autoDismissRunnable)
         overlayView?.let { view ->
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(view)
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
+                view,
+                com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.DOWNLOAD
+            )
             view.animate().cancel()
             view.animate()
                 .alpha(0f)
@@ -325,7 +328,10 @@ class VoxDownloadOverlay(private val context: Context) {
     fun dismissImmediately() {
         mainHandler.removeCallbacks(autoDismissRunnable)
         overlayView?.let { view ->
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(view)
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
+                view,
+                com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.DOWNLOAD
+            )
             view.animate().cancel()
             view.visibility = View.GONE
             view.alpha = 0f
