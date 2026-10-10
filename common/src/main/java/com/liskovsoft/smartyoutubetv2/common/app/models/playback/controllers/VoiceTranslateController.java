@@ -350,10 +350,12 @@ public class VoiceTranslateController extends BasePlayerController {
             if (mUserArmed && progressOverlay() != null) {
                 if (remainingSec > 0) {
                     progressOverlay().showWaitingWithEta(getActivity(), VotProgressTimer.formatMmSs(remainingSec));
-                } else {
+                } else if (mProgressTimer.isEtaExpired(now)) {
                     long elapsedAfterEtaSec = mProgressTimer.getElapsedAfterEtaSec(now);
                     Log.d(TAG, "VOT ETA expired, polling continues: elapsed=%ds, video=%s", elapsedAfterEtaSec, mCurrentVideoId);
-                    progressOverlay().showStillWaiting(getActivity(), VotProgressTimer.formatMmSs(elapsedAfterEtaSec));
+                    progressOverlay().showDelayedWaiting(getActivity());
+                } else {
+                    progressOverlay().showWaitingWithoutEta(getActivity());
                 }
             }
 
@@ -1293,6 +1295,9 @@ public class VoiceTranslateController extends BasePlayerController {
                 );
                 boolean autoActivateNew = votData().isAutoActivateReadyTranslation();
                 if (autoActivateNew) {
+                    if (mUserArmed && progressOverlay() != null) {
+                        progressOverlay().showAttaching(getActivity());
+                    }
                     if (mYandexPlaybackAdapter != null) {
                         mYandexPlaybackAdapter.onStateChanged(state);
                     }

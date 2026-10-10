@@ -305,6 +305,8 @@ class VoxDownloadStorage(val context: Context) {
             var effectiveState = state
             var effectiveErrorCode = errorCode
             var effectiveErrorMessage = errorMessage
+            var effectivePackagingCompleted = packagingCompleted
+            var effectiveFinalizeCompleted = finalizeCompleted
 
             if (state == VoxDownloadState.COMPLETED) {
                 val hasOutputFile = getOutputFile(downloadId).exists() && getOutputFile(downloadId).length() > 0L
@@ -314,15 +316,30 @@ class VoxDownloadStorage(val context: Context) {
                 val translationValid = req.translationMode == VoxTranslationMode.NONE || hasTranslatedAudio
                 val packagingValid = packagingCompleted && finalizeCompleted
 
-                if (!fileValid || !translationValid || !packagingValid) {
+                if (!fileValid || !translationValid) {
                     effectiveState = VoxDownloadState.FAILED
                     effectiveErrorCode = VoxDownloadErrorCode.STORAGE_ERROR
-                    effectiveErrorMessage = "DOWNLOAD_STATE_INCONSISTENT: invariant check failed (fileValid=$fileValid, translationValid=$translationValid, packagingValid=$packagingValid)"
+                    effectiveErrorMessage = "DOWNLOAD_STATE_INCONSISTENT: invariant check failed (fileValid=$fileValid, translationValid=$translationValid)"
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
                         "Download completed state invariant violated for $downloadId: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
                     )
+                } else if (!packagingValid) {
+                    effectivePackagingCompleted = true
+                    effectiveFinalizeCompleted = true
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_REPAIRED,
+                        "Download completed state metadata repaired for $downloadId: valid file found, restored packaging flags"
+                    )
+                    try {
+                        json.put("packagingCompleted", true)
+                        json.put("finalizeCompleted", true)
+                        file.writeText(json.toString(2), StandardCharsets.UTF_8)
+                    } catch (e: Exception) {
+                        // ignore write error on repair
+                    }
                 }
             }
 
@@ -346,8 +363,8 @@ class VoxDownloadStorage(val context: Context) {
                 processingSamples = json.optLong("processingSamples", 0L),
                 lastProgressAt = json.optLong("lastProgressAt", 0L),
                 packagingStarted = packagingStarted,
-                packagingCompleted = packagingCompleted,
-                finalizeCompleted = finalizeCompleted,
+                packagingCompleted = effectivePackagingCompleted,
+                finalizeCompleted = effectiveFinalizeCompleted,
                 ageRating = ageRating,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),

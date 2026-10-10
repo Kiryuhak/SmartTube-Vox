@@ -46,7 +46,7 @@
         <Space
             android:id="@+id/top_badges_gap"
             android:visibility="gone"
-            android:layout_width="4dp"
+            android:layout_width="6dp"
             android:layout_height="1dp" />
 
         <!-- Quality badge -->

@@ -28,6 +28,11 @@ public final class VotProgressTimer {
 
     public void reconcileEta(int backendRemainingSec, long nowMs) {
         int safeRemainingSec = Math.max(0, backendRemainingSec);
+        if (safeRemainingSec == 0) {
+            mLastBackendEtaSec = 0;
+            mExpectedReadyAtMs = 0;
+            return;
+        }
         if (mExpectedReadyAtMs > 0 && safeRemainingSec == mLastBackendEtaSec) {
             return;
         }
@@ -39,6 +44,14 @@ public final class VotProgressTimer {
         }
         mLastBackendEtaSec = safeRemainingSec;
         mExpectedReadyAtMs = nowMs + safeRemainingSec * 1000L;
+    }
+
+    public boolean hasKnownEta() {
+        return mLastBackendEtaSec > 0 && mExpectedReadyAtMs > 0;
+    }
+
+    public boolean isEtaExpired(long nowMs) {
+        return mLastBackendEtaSec > 0 && mExpectedReadyAtMs > 0 && nowMs >= mExpectedReadyAtMs;
     }
 
     public int getRemainingTimeSec(long nowMs) {

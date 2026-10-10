@@ -512,7 +512,17 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
         VoxSafeLogger.e(VoxLogCategory.PLAYER, logCode, "Сбой воспроизведения ExoPlayer", errorCtx, null);
 
-        if (nested instanceof com.google.android.exoplayer2.source.BehindLiveWindowException) {
+        Throwable curr = error;
+        boolean isBehindLiveWindow = false;
+        while (curr != null) {
+            if (curr instanceof com.google.android.exoplayer2.source.BehindLiveWindowException) {
+                isBehindLiveWindow = true;
+                break;
+            }
+            curr = curr.getCause();
+        }
+
+        if (isBehindLiveWindow) {
             mStallRecoveryController.handleBehindLiveWindow(mContext, () -> {
                 if (mPlayer != null) {
                     mPlayer.seekToDefaultPosition();

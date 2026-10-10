@@ -68,7 +68,9 @@
     <string name="vot_progress_starting">Запуск перевода…</string>
     <string name="vot_progress_waiting_title">Перевод готовится</string>
     <string name="vot_progress_waiting_eta">~ %s</string>
-    <string name="vot_progress_still_waiting">+%s</string>
+    <string name="vot_progress_delayed">Перевод задерживается…</string>
+    <string name="vot_progress_attaching">Подключаем перевод…</string>
+    <string name="vot_progress_still_waiting">Перевод задерживается…</string>
     <string name="vot_progress_ready">Перевод готов</string>
     <string name="vot_progress_error">Не удалось подготовить перевод</string>
     <string name="vot_progress_timeout">Перевод не был подготовлен</string>

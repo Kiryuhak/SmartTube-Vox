@@ -275,6 +275,9 @@ class VoxDownloadCoordinator(
         if (wasActive) {
             processNextQueuedJob()
         }
+        if (!hasActiveDownloads()) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.notifyDownloadActive(false)
+        }
     }
 
     /**
@@ -322,6 +325,9 @@ class VoxDownloadCoordinator(
         if (wasActive) {
             processNextQueuedJob()
         }
+        if (!hasActiveDownloads()) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.notifyDownloadActive(false)
+        }
     }
 
     /**
@@ -359,6 +365,8 @@ class VoxDownloadCoordinator(
     }
 
     fun isJobActive(downloadId: String): Boolean = scheduledJobs.contains(downloadId)
+
+    fun hasActiveDownloads(): Boolean = activeJobId != null || scheduledJobs.isNotEmpty() || pendingQueue.isNotEmpty()
 
     fun getProcessingJob(): VoxDownloadJob? = activeJobId?.let { repository.getJob(it) }
 
@@ -431,6 +439,7 @@ class VoxDownloadCoordinator(
     }
 
     private fun scheduleJobExecution(job: VoxDownloadJob) {
+        com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.notifyDownloadActive(true)
         val added = scheduledJobs.add(job.downloadId)
         val generation = job.generation.get()
         if (!added) return
@@ -439,7 +448,12 @@ class VoxDownloadCoordinator(
                 val stale = isStale(job, generation)
                 if (!stale) executeJob(job)
             }
-            finally { scheduledJobs.remove(job.downloadId) }
+            finally {
+                scheduledJobs.remove(job.downloadId)
+                if (!hasActiveDownloads()) {
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.notifyDownloadActive(false)
+                }
+            }
         }
     }
 
@@ -893,6 +907,9 @@ class VoxDownloadCoordinator(
             }
             if (wasActive) {
                 processNextQueuedJob()
+            }
+            if (!hasActiveDownloads()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.notifyDownloadActive(false)
             }
         }
     }

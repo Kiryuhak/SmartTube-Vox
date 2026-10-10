@@ -773,7 +773,7 @@
     <string name="vox_live_return_to_live_prompt">Этот участок эфира уже недоступен. Возвращаемся к прямому эфиру</string>
     <string name="vox_live_recovering_prompt">Восстанавливаем трансляцию…</string>
     <string name="vox_fixing_connection">Восстанавливаем соединение…</string>
-    <string name="vox_fixing_dns">Восстанавливаем DNS…</string>
+    <string name="vox_fixing_dns">Восстанавливаем соединение…</string>
     <string name="vox_fixing_playback">Восстанавливаем воспроизведение…</string>
     <string name="item_postion">Позиция</string>
     <string name="player_screen_off_dimming">Величина затемнения экрана</string>

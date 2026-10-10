@@ -62,8 +62,8 @@ class DownloadStateInvariantTest {
     }
 
     @Test
-    fun completedJobWithoutPackagingFailsInvariantCheck() {
-        // Create file but set packagingCompleted = false
+    fun completedJobWithoutPackagingIsRepairedWhenFileIsValid() {
+        // Create valid file on disk but job.json has packagingCompleted = false (legacy/interrupted metadata)
         val outputFile = storage.getOutputFile(downloadId)
         outputFile.parentFile?.mkdirs()
         outputFile.writeBytes(ByteArray(1024))
@@ -72,7 +72,7 @@ class DownloadStateInvariantTest {
         val oProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, 512, 512, VoxTrackState.COMPLETED)
         val tProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, 256, 256, VoxTrackState.COMPLETED)
 
-        // Write directly inconsistent json to disk simulating old corrupt report
+        // Write directly inconsistent json to disk simulating legacy report
         val jobDir = storage.getJobDir(downloadId)
         val json = org.json.JSONObject().apply {
             put("downloadId", downloadId)
@@ -86,8 +86,8 @@ class DownloadStateInvariantTest {
             put("hasTranslatedAudio", true)
             put("finalFileBytes", 1024L)
             put("packagingStarted", true)
-            put("packagingCompleted", false) // INCONSISTENT!
-            put("finalizeCompleted", false)  // INCONSISTENT!
+            put("packagingCompleted", false) // legacy/interrupted metadata
+            put("finalizeCompleted", false)
             put("durationMs", 60_000L)
             put("video", org.json.JSONObject().apply {
                 put("bytes", 1024L); put("total", 1024L); put("state", "COMPLETED")
@@ -103,7 +103,46 @@ class DownloadStateInvariantTest {
 
         val loaded = storage.loadJobMetadata(downloadId)
         assertNotNull(loaded)
-        // Must NOT be COMPLETED because invariants are broken!
+        // Must be REPAIRED to COMPLETED because file is physically valid on disk!
+        assertEquals(VoxDownloadState.COMPLETED, loaded!!.state)
+        assertTrue(loaded.packagingCompleted)
+        assertTrue(loaded.finalizeCompleted)
+    }
+
+    @Test
+    fun completedJobWithoutFileFailsInvariantCheck() {
+        // File does NOT exist on disk and finalFileBytes is 0
+        val jobDir = storage.getJobDir(downloadId)
+        jobDir.mkdirs()
+        val json = org.json.JSONObject().apply {
+            put("downloadId", downloadId)
+            put("videoId", "vid_123")
+            put("videoTitle", "Test Video")
+            put("qualityPreference", "QUALITY_1080P")
+            put("translationMode", "STANDARD")
+            put("translationState", "DOWNLOADED_TRANSLATED")
+            put("createdAt", System.currentTimeMillis())
+            put("state", "COMPLETED")
+            put("hasTranslatedAudio", true)
+            put("finalFileBytes", 0L)
+            put("packagingStarted", true)
+            put("packagingCompleted", true)
+            put("finalizeCompleted", true)
+            put("durationMs", 60_000L)
+            put("video", org.json.JSONObject().apply {
+                put("bytes", 1024L); put("total", 1024L); put("state", "COMPLETED")
+            })
+            put("originalAudio", org.json.JSONObject().apply {
+                put("bytes", 512L); put("total", 512L); put("state", "COMPLETED")
+            })
+            put("translatedAudio", org.json.JSONObject().apply {
+                put("bytes", 256L); put("total", 256L); put("state", "COMPLETED")
+            })
+        }
+        File(jobDir, "job.json").writeText(json.toString())
+
+        val loaded = storage.loadJobMetadata(downloadId)
+        assertNotNull(loaded)
         assertEquals(VoxDownloadState.FAILED, loaded!!.state)
         assertEquals(VoxDownloadErrorCode.STORAGE_ERROR, loaded.errorCode)
         assertTrue(loaded.errorMessage?.contains("DOWNLOAD_STATE_INCONSISTENT") == true)

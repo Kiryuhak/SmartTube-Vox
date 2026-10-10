@@ -207,19 +207,18 @@ public class VideoCardPresenter extends LongClickPresenter {
         Glide.with(context)
                 //.asBitmap() // disable animation (webp, gif)
                 .load(ClickbaitRemover.updateThumbnail(video, mThumbQuality))
-                //.placeholder(mDefaultCardImage)
+                .placeholder(R.drawable.card_placeholder)
                 .apply(ViewUtil.glideOptions())
                 // improve image compression on low end devices
                 .override(mWidth, mHeight)
                 // com.liskovsoft.smartyoutubetv2.tv.util.CacheGlideModule
                 // Cache makes app crashing on old android versions
                 .diskCacheStrategy(VERSION.SDK_INT > 21 ? DiskCacheStrategy.ALL : DiskCacheStrategy.NONE)
-                .listener(mErrorListener)
                 .error(
-                    // Updated thumbnail url not found
+                    // Updated thumbnail url not found, fallback to original cardImageUrl
                     Glide.with(context)
                         .load(video.cardImageUrl) // always working
-                        //.placeholder(mDefaultCardImage)
+                        .placeholder(R.drawable.card_placeholder)
                         .apply(ViewUtil.glideOptions())
                         .listener(mErrorListener)
                         .error(R.drawable.card_placeholder) // R.color.lb_grey

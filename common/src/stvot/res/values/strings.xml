@@ -67,7 +67,9 @@
     <string name="vot_progress_starting">Starting translation…</string>
     <string name="vot_progress_waiting_title">Preparing translation</string>
     <string name="vot_progress_waiting_eta">~ %s</string>
-    <string name="vot_progress_still_waiting">+%s</string>
+    <string name="vot_progress_delayed">Translation delayed…</string>
+    <string name="vot_progress_attaching">Connecting translation…</string>
+    <string name="vot_progress_still_waiting">Translation delayed…</string>
     <string name="vot_progress_ready">Translation ready</string>
     <string name="vot_progress_error">Failed to prepare translation</string>
     <string name="vot_progress_timeout">Translation was not prepared</string>

@@ -16,7 +16,6 @@ object VoxQualityBadgeFormatter {
 
     // Matches e.g. "720p", "1080p", "1080p60", "2160p", "1440p HDR"
     private val EXPLICIT_P_PATTERN = Pattern.compile("(?i)\\b(2160|1440|1080|720|480|360|240|144)p(?:(\\d{2}))?\\b")
-    private val STANDALONE_RES_PATTERN = Pattern.compile("(?i)\\b(4320|2160|1440|1080|720|480|360)\\b")
 
     @JvmStatic
     fun format(badge: VoxQualityBadge?): String? {
@@ -96,15 +95,6 @@ object VoxQualityBadgeFormatter {
         // Generic YouTube "HD" label is omitted to avoid falsely marking 1080p/1440p/4K videos as 720p.
         if (upper == "SD") {
             return VoxQualityBadge(QualityTier.TIER_SD, 480, isHdr = isHdr)
-        }
-
-        // 3. Standalone known resolution numbers (only exact matches, not parts of words/views)
-        val standaloneMatcher = STANDALONE_RES_PATTERN.matcher(upper)
-        if (standaloneMatcher.matches()) {
-            val height = standaloneMatcher.group(1)?.toIntOrNull()
-            if (height != null) {
-                return fromHeight(height)?.copy(isHdr = isHdr)
-            }
         }
 
         return null

@@ -92,15 +92,41 @@ public class VotProgressOverlay {
         fadeIn();
     }
 
-    public void showStillWaiting(@Nullable Activity activity, String timeElapsedFormatted) {
+    public void showWaitingWithoutEta(@Nullable Activity activity) {
+        if (!ensureAttached(activity)) return;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        mCurrentState = STATE_PREPARING;
+        showSpinnerMode();
+        setTitle(getStringSafe(R.string.vot_progress_waiting_title));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        hideTimer();
+        fadeIn();
+    }
+
+    public void showDelayedWaiting(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_ETA_EXPIRED_STILL_WAITING;
         showSpinnerMode();
-        setTitle(getStringSafe(R.string.vot_progress_waiting_title));
+        setTitle(getStringSafe(R.string.vot_progress_delayed));
         setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
-        setTimer("+" + timeElapsedFormatted);
+        hideTimer();
         fadeIn();
+    }
+
+    public void showAttaching(@Nullable Activity activity) {
+        if (!ensureAttached(activity)) return;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        mCurrentState = STATE_PREPARING;
+        showSpinnerMode();
+        setTitle(getStringSafe(R.string.vot_progress_attaching));
+        hideSubtitle();
+        hideTimer();
+        fadeIn();
+    }
+
+    public void showStillWaiting(@Nullable Activity activity, String timeElapsedFormatted) {
+        showDelayedWaiting(activity);
     }
 
     public void showRetryWait(@Nullable Activity activity, int attempt, int maxAttempts, int secondsRemaining) {

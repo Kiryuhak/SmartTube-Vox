@@ -634,15 +634,28 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
             if (downloadAction != null) primary.remove(downloadAction);
         } else if (isLocal) {
             if (downloadAction != null) primary.remove(downloadAction);
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE) && translateAction != null && primary.indexOf(translateAction) == -1) {
-                primary.add(translateAction);
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
+                if (translateAction != null && primary.indexOf(translateAction) == -1) {
+                    primary.add(translateAction);
+                }
+            } else if (translateAction != null) {
+                primary.remove(translateAction);
             }
         } else {
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE) && translateAction != null && primary.indexOf(translateAction) == -1) {
-                primary.add(translateAction);
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
+                if (translateAction != null && primary.indexOf(translateAction) == -1) {
+                    primary.add(translateAction);
+                }
+            } else if (translateAction != null) {
+                primary.remove(translateAction);
             }
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD) && downloadAction != null && primary.indexOf(downloadAction) == -1) {
-                primary.add(downloadAction);
+
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)) {
+                if (downloadAction != null && primary.indexOf(downloadAction) == -1) {
+                    primary.add(downloadAction);
+                }
+            } else if (downloadAction != null) {
+                primary.remove(downloadAction);
             }
         }
     }
