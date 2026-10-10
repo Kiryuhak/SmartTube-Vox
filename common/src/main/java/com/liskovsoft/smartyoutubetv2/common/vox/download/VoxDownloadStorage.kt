@@ -138,10 +138,18 @@ class VoxDownloadStorage(val context: Context) {
         processingTimeMs: Long = 0L,
         processingSourceBytes: Long = 0L,
         processingSamples: Long = 0L,
-        lastProgressAt: Long = 0L
+        lastProgressAt: Long = 0L,
+        packagingStarted: Boolean = false,
+        packagingCompleted: Boolean = false,
+        finalizeCompleted: Boolean = false
     ) {
         val jobDir = getJobDir(request.downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
+
+        val isCompleted = state == VoxDownloadState.COMPLETED
+        val effectivePackagingStarted = packagingStarted || isCompleted
+        val effectivePackagingCompleted = packagingCompleted || isCompleted
+        val effectiveFinalizeCompleted = finalizeCompleted || isCompleted
 
         val json = JSONObject().apply {
             put("downloadId", request.downloadId)
@@ -158,6 +166,9 @@ class VoxDownloadStorage(val context: Context) {
             put("processingSourceBytes", processingSourceBytes)
             put("processingSamples", processingSamples)
             put("lastProgressAt", lastProgressAt)
+            put("packagingStarted", effectivePackagingStarted)
+            put("packagingCompleted", effectivePackagingCompleted)
+            put("finalizeCompleted", effectiveFinalizeCompleted)
             if (durationMs > 0) put("durationMs", durationMs)
             if (!ageRating.isNullOrBlank()) put("ageRating", ageRating)
             if (actualVideoHeight > 0) put("actualVideoHeight", actualVideoHeight)
@@ -285,12 +296,41 @@ class VoxDownloadStorage(val context: Context) {
             val fallbackReason = if (json.has("fallbackReason")) json.getString("fallbackReason") else null
             val durationMs = json.optLong("durationMs", 0L)
             val ageRating = if (json.has("ageRating")) json.getString("ageRating") else null
+            val hasTranslatedAudio = json.optBoolean("hasTranslatedAudio", false)
+            val finalFileBytes = json.optLong("finalFileBytes", 0L)
+            val packagingStarted = json.optBoolean("packagingStarted", false)
+            val packagingCompleted = json.optBoolean("packagingCompleted", false)
+            val finalizeCompleted = json.optBoolean("finalizeCompleted", false)
+
+            var effectiveState = state
+            var effectiveErrorCode = errorCode
+            var effectiveErrorMessage = errorMessage
+
+            if (state == VoxDownloadState.COMPLETED) {
+                val hasOutputFile = getOutputFile(downloadId).exists() && getOutputFile(downloadId).length() > 0L
+                val hasPublishedFile = !rawPublishedUri.isNullOrBlank() && getPublishedFileSize(rawPublishedUri) > 0L
+                val fileValid = hasPublishedFile || hasOutputFile || finalFileBytes > 0L
+
+                val translationValid = req.translationMode == VoxTranslationMode.NONE || hasTranslatedAudio
+                val packagingValid = packagingCompleted && finalizeCompleted
+
+                if (!fileValid || !translationValid || !packagingValid) {
+                    effectiveState = VoxDownloadState.FAILED
+                    effectiveErrorCode = VoxDownloadErrorCode.STORAGE_ERROR
+                    effectiveErrorMessage = "DOWNLOAD_STATE_INCONSISTENT: invariant check failed (fileValid=$fileValid, translationValid=$translationValid, packagingValid=$packagingValid)"
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
+                        "Download completed state invariant violated for $downloadId: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
+                    )
+                }
+            }
 
             StoredJobData(
                 request = req,
-                state = state,
-                errorCode = errorCode,
-                errorMessage = errorMessage,
+                state = effectiveState,
+                errorCode = effectiveErrorCode,
+                errorMessage = effectiveErrorMessage,
                 publishedUri = rawPublishedUri,
                 publishedFilePath = rawPublishedFilePath,
                 actualVideoHeight = json.optInt("actualVideoHeight", 0),
@@ -299,12 +339,15 @@ class VoxDownloadStorage(val context: Context) {
                 fallbackReason = fallbackReason,
                 translationState = translationState,
                 durationMs = durationMs,
-                hasTranslatedAudio = json.optBoolean("hasTranslatedAudio", false),
-                finalFileBytes = json.optLong("finalFileBytes", 0L),
+                hasTranslatedAudio = hasTranslatedAudio,
+                finalFileBytes = finalFileBytes,
                 processingTimeMs = json.optLong("processingTimeMs", 0L),
                 processingSourceBytes = json.optLong("processingSourceBytes", 0L),
                 processingSamples = json.optLong("processingSamples", 0L),
                 lastProgressAt = json.optLong("lastProgressAt", 0L),
+                packagingStarted = packagingStarted,
+                packagingCompleted = packagingCompleted,
+                finalizeCompleted = finalizeCompleted,
                 ageRating = ageRating,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
@@ -482,6 +525,9 @@ data class StoredJobData(
     val processingSourceBytes: Long = 0L,
     val processingSamples: Long = 0L,
     val lastProgressAt: Long = 0L,
+    val packagingStarted: Boolean = false,
+    val packagingCompleted: Boolean = false,
+    val finalizeCompleted: Boolean = false,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,
     val translatedAudioProgress: VoxTrackProgress

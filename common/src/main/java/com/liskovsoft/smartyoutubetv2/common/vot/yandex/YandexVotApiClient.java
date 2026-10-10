@@ -140,7 +140,13 @@ public class YandexVotApiClient {
         if (videoUrl == null) return false;
         String cacheKey = getCacheKey(videoUrl, sourceLang, targetLang, useLiveVoices);
         CachedResult cached = translationCache.get(cacheKey);
-        return cached != null && !cached.isExpired();
+        if (cached != null && !cached.isExpired()) return true;
+        if (sourceLang != null && !sourceLang.isEmpty()) {
+            String fallbackKey = getCacheKey(videoUrl, "", targetLang, useLiveVoices);
+            CachedResult fb = translationCache.get(fallbackKey);
+            return fb != null && !fb.isExpired();
+        }
+        return false;
     }
 
     @Nullable
@@ -148,7 +154,17 @@ public class YandexVotApiClient {
         if (videoUrl == null) return null;
         String cacheKey = getCacheKey(videoUrl, sourceLang, targetLang, useLiveVoices);
         CachedResult cached = translationCache.get(cacheKey);
-        return (cached != null && !cached.isExpired()) ? cached.getResult() : null;
+        if (cached != null && !cached.isExpired()) {
+            return cached.getResult();
+        }
+        if (sourceLang != null && !sourceLang.isEmpty()) {
+            String fallbackKey = getCacheKey(videoUrl, "", targetLang, useLiveVoices);
+            CachedResult fb = translationCache.get(fallbackKey);
+            if (fb != null && !fb.isExpired()) {
+                return fb.getResult();
+            }
+        }
+        return null;
     }
 
     public static final class TranslationResult {
@@ -226,19 +242,21 @@ public class YandexVotApiClient {
             String videoTitle, boolean useLiveVoices,
             @Nullable String oauthToken, boolean firstRequest
     ) {
-        if (!ensureSession()) {
-            YandexVotLog.d(TAG, "VOT: unable to establish session, network may be unavailable");
-            return null;
+        TranslationResult cachedResult = getCachedResult(videoUrl, sourceLang, targetLang, useLiveVoices);
+        if (cachedResult != null) {
+            YandexVotLog.d(TAG, "VOT translation cache hit");
+            return cachedResult;
         }
 
         String cacheKey = getCacheKey(videoUrl, sourceLang, targetLang, useLiveVoices);
         CachedResult cached = translationCache.get(cacheKey);
-        if (cached != null && !cached.isExpired()) {
-            YandexVotLog.d(TAG, "VOT translation cache hit");
-            return cached.getResult();
-        }
         if (cached != null) {
             translationCache.remove(cacheKey);
+        }
+
+        if (!ensureSession()) {
+            YandexVotLog.d(TAG, "VOT: unable to establish session, network may be unavailable");
+            return null;
         }
 
         String effectiveToken = useLiveVoices ? oauthToken : null;

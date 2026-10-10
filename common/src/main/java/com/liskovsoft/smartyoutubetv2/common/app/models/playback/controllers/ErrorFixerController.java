@@ -65,12 +65,22 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 && !getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
                 // Wrong DNS resolving could cause hanging at start
                 // Do switch to only engine that respects custom DNS settings
-                MessageHelpers.showLongMessage(getContext(), "Fixing wrong DNS resolving...");
+                MessageHelpers.showLongMessage(getContext(), R.string.vox_fixing_connection);
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.NETWORK,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DNS_RECOVERY_STARTED,
+                        "DNS resolution recovery started: switching network engine to OKHTTP"
+                );
                 getPlayerTweaksData().setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP);
                 mVideoLoaderController.restartEngine();
             } else {
                 // Also, some clients like ANDROID_REEL may just hang at start
-                MessageHelpers.showLongMessage(getContext(), "Fixing stalled client...");
+                MessageHelpers.showLongMessage(getContext(), R.string.vox_fixing_connection);
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.NETWORK,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.NETWORK_ERROR,
+                        "Stalled client detected: switching next client"
+                );
                 YouTubeServiceManager.instance().switchNextClientNow();
                 mVideoLoaderController.reloadVideo();
             }

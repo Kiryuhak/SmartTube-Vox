@@ -10,6 +10,8 @@ class VoxDownloadCompletionValidatorTest {
         durationMs = 240_000
         finalFileBytes = 300
         publishedUri = "content://media/external/video/media/123"
+        packagingCompleted = true
+        finalizeCompleted = true
     }
 
     @Test fun completionRequiresEveryArtifact() {
@@ -19,7 +21,9 @@ class VoxDownloadCompletionValidatorTest {
             ready().apply { hasTranslatedAudio = false },
             ready().apply { durationMs = 0 },
             ready().apply { finalFileBytes = 0 },
-            ready().apply { updateTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, 99, 100, VoxTrackState.IN_PROGRESS) }
+            ready().apply { updateTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, 99, 100, VoxTrackState.IN_PROGRESS) },
+            ready().apply { packagingCompleted = false },
+            ready().apply { finalizeCompleted = false }
         )
         for (job in invalid) {
             try { VoxDownloadCompletionValidator.check(job, 300); fail("Incomplete artifact accepted") }
@@ -41,6 +45,8 @@ class VoxDownloadCompletionValidatorTest {
             durationMs = 240_000
             finalFileBytes = 300
             publishedUri = "content://media/external/video/media/124"
+            packagingCompleted = true
+            finalizeCompleted = true
         }
         assertEquals(VoxDownloadTranslationState.NONE, job.translationState)
         assertEquals(300L, job.getSnapshot().totalBytesExpected)

@@ -93,9 +93,7 @@ object VoxQualityBadgeFormatter {
         if (upper == "FHD" || upper == "FULL HD" || upper == "FULLHD") {
             return VoxQualityBadge(QualityTier.TIER_FHD, 1080, isHdr = isHdr)
         }
-        if (upper == "HD" || upper.startsWith("HD ") || upper.endsWith(" HD")) {
-            return VoxQualityBadge(QualityTier.TIER_HD, 720, isHdr = isHdr)
-        }
+        // Generic YouTube "HD" label is omitted to avoid falsely marking 1080p/1440p/4K videos as 720p.
         if (upper == "SD") {
             return VoxQualityBadge(QualityTier.TIER_SD, 480, isHdr = isHdr)
         }

@@ -8,8 +8,9 @@ internal object VoxDownloadCompletionValidator {
             if (translated) listOf(job.translatedAudioProgress) else emptyList()
         if (tracks.any { it.state != VoxTrackState.COMPLETED || it.bytesDownloaded <= 0 } ||
             job.hasTranslatedAudio != translated || job.durationMs <= 0 || job.publishedUri.isNullOrBlank() ||
-            job.finalFileBytes <= 0 || readableBytes != job.finalFileBytes) {
-            throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Final download validation failed")
+            job.finalFileBytes <= 0 || readableBytes != job.finalFileBytes ||
+            !job.packagingCompleted || !job.finalizeCompleted) {
+            throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "DOWNLOAD_STATE_INCONSISTENT: Final download validation failed")
         }
     }
 }

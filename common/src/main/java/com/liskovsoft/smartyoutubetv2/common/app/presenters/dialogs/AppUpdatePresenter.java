@@ -153,7 +153,8 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         mSettingsPresenter.appendSingleButton(
                 UiOptionItem.from(getContext().getString(R.string.install_update), optionItem -> {
                     GeneralData.instance(getContext()).setChangelog(release.getChangelog());
-                    LoadingManager.showLoading(getContext(), true);
+                    final com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgressEstimator estimator =
+                            new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgressEstimator(0.3f, 1000L);
                     VoxOtaUpdateManager.instance(getContext()).downloadAndVerify(
                             asset,
                             release,
@@ -165,7 +166,10 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
                                 public void onNoUpdateAvailable(String v) {}
 
                                 @Override
-                                public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {}
+                                public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {
+                                    com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgress p =
+                                            estimator.update(bytesRead, totalBytes > 0 ? totalBytes : null, System.currentTimeMillis());
+                                }
 
                                 @Override
                                 public void onDownloadCompleted(File apkFile) {

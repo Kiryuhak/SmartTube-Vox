@@ -47,7 +47,8 @@ class VoxBadgeHelperTest {
 
         assertEquals("720p", VoxBadgeHelper.normalizeQuality("720p"))
         assertEquals("720p60", VoxBadgeHelper.normalizeQuality("720p60"))
-        assertEquals("720p", VoxBadgeHelper.normalizeQuality("HD"))
+        // Generic "HD" does not map to 720p
+        assertNull(VoxBadgeHelper.normalizeQuality("HD"))
 
         assertEquals("480p", VoxBadgeHelper.normalizeQuality("480p"))
         assertEquals("360p", VoxBadgeHelper.normalizeQuality("360p"))
@@ -157,5 +158,33 @@ class VoxBadgeHelperTest {
             secondTitle = "Artist · 672 тыс. просмотров"
         }
         assertNull(VoxBadgeHelper.getAgeBadge(titleOnly))
+    }
+
+    @Test
+    fun testQualityConfidenceModel() {
+        val unknownVideo = Video().apply {
+            badge = "HD"
+            title = "Generic Video"
+        }
+        val (badgeUnknown, confUnknown) = VoxBadgeHelper.resolveQualityBadgeWithConfidence(unknownVideo)
+        assertNull(badgeUnknown)
+        assertEquals(QualityConfidence.UNKNOWN, confUnknown)
+
+        val metaVideo = Video().apply {
+            badge = "4K"
+            title = "Documentary in 4K"
+        }
+        val (badgeMeta, confMeta) = VoxBadgeHelper.resolveQualityBadgeWithConfidence(metaVideo)
+        assertEquals("4K", badgeMeta)
+        assertEquals(QualityConfidence.METADATA, confMeta)
+
+        val localVideo = Video().apply {
+            isLocal = true
+            width = 1920
+            height = 1080
+        }
+        val (badgeLocal, confLocal) = VoxBadgeHelper.resolveQualityBadgeWithConfidence(localVideo)
+        assertEquals("1080p", badgeLocal)
+        assertEquals(QualityConfidence.DOWNLOAD_CONFIRMED, confLocal)
     }
 }

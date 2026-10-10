@@ -79,6 +79,8 @@ class VoxDownloadPackagingDuneTest {
             updateTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, 500L, 500L, VoxTrackState.COMPLETED)
             finalFileBytes = 1500L
             publishedUri = "file:///tmp/test.mkv"
+            packagingCompleted = true
+            finalizeCompleted = true
         }
 
         // Valid completion

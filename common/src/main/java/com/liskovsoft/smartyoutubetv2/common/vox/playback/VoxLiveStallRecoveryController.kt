@@ -82,6 +82,8 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
     fun getState(): VoxLiveStallState = currentState
     fun getRecoveryAttempts(): Int = recoveryAttemptsCount
 
+    private var lastObservedOffsetWasInvalid: Boolean = false
+
     @Synchronized
     fun onPlaybackStart(isLive: Boolean) {
         reset()
@@ -99,7 +101,15 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         if (!isLive) return
 
         isLiveSession = true
+        val sanity = VoxLiveOffsetSanityPolicy.validateLiveOffset(
+            rawOffsetMs = liveOffsetMs,
+            windowDurationMs = durationMs,
+            isSeekable = true,
+            isDynamic = true,
+            currentPositionMs = currentPositionMs
+        )
         lastObservedLiveOffsetMs = liveOffsetMs
+        lastObservedOffsetWasInvalid = !sanity.isValid
         lastObservedDurationMs = durationMs
         bufferingStartMs = System.currentTimeMillis()
 
@@ -264,12 +274,28 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
                 try {
                     actionHandler.showMessage("Восстанавливаем трансляцию…")
                 } catch (ignored: Exception) {}
-                val target = if (lastObservedDurationMs > SAFE_LIVE_OFFSET_MS) {
-                    lastObservedDurationMs - SAFE_LIVE_OFFSET_MS
+                val sanity = VoxLiveOffsetSanityPolicy.validateLiveOffset(
+                    rawOffsetMs = lastObservedLiveOffsetMs,
+                    windowDurationMs = lastObservedDurationMs,
+                    isSeekable = true,
+                    isDynamic = true,
+                    currentPositionMs = 0L
+                )
+                if (!sanity.isValid || lastObservedOffsetWasInvalid) {
+                    VoxSafeLogger.w(
+                        VoxLogCategory.PLAYER,
+                        VoxLogCode.LIVE_OFFSET_INVALID,
+                        "Sanity check failed for reseek offset: returning directly to live edge"
+                    )
+                    actionHandler.onReturnToLiveRequested()
                 } else {
-                    0L
+                    val target = VoxLiveOffsetSanityPolicy.computeSafeReseekTarget(
+                        windowDurationMs = lastObservedDurationMs,
+                        windowStartMs = 0L,
+                        safeLiveOffsetMs = SAFE_LIVE_OFFSET_MS
+                    )
+                    actionHandler.onReseekRequested(target)
                 }
-                actionHandler.onReseekRequested(target)
             }
             else -> {
                 currentState = VoxLiveStallState.RECREATING_SOURCE
@@ -286,6 +312,7 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         recoveryAttemptsCount = 0
         bufferingStartMs = 0L
         lastObservedLiveOffsetMs = 0L
+        lastObservedOffsetWasInvalid = false
         lastObservedDurationMs = 0L
         networkRecoveryPolicy.reset()
     }

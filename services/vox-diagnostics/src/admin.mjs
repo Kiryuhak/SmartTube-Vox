@@ -11,27 +11,68 @@ import crypto from 'crypto';
  * Доступ разрешается только при валидном ADMIN_SECRET (Bearer или подписанная сессия)
  * либо явном ALLOW_DEV_AUTH без секрета в тестовом окружении.
  */
-export function checkAdminAuth(request, env = {}) {
+export const SERVICE_SCOPES = [
+  'reports:read',
+  'reports:download',
+  'reports:update_status',
+  'reports:add_note',
+  'issues:read',
+  'issues:update',
+  'issues:add_note',
+];
+
+/**
+ * Разрешает аутентификацию запроса и возвращает атрибуты:
+ * { authorized, actor: 'ADMIN' | 'ANTIGRAVITY' | 'ANONYMOUS', scopes: string[] }
+ */
+export function resolveAuth(request, env = {}) {
+  // Категорически запрещено передавать секрет в query-параметрах URL
+  const url = new URL(request.url, 'http://localhost');
+  if (url.searchParams.has('token') || url.searchParams.has('secret') || url.searchParams.has('admin_token')) {
+    return { authorized: false, actor: 'ANONYMOUS', scopes: [] };
+  }
+
   const secret = env.ADMIN_SECRET;
+  const serviceToken = env.VOX_DIAGNOSTICS_SERVICE_TOKEN || env.SERVICE_TOKEN;
 
-  // Разрешено без секрета ТОЛЬКО если явно включен режим локального тестирования
-  if (!secret) {
-    if (env.ALLOW_DEV_AUTH === true || env.ALLOW_DEV_AUTH === 'true') {
-      return true;
-    }
-    return false; // Fail closed in production if secret is not configured
-  }
-
-  // API clients may use a bearer token. Browser sessions use a short-lived HMAC cookie.
+  // 1. Bearer токен в заголовке Authorization
   const authHeader = request.headers.get('authorization') || '';
-  if (authHeader.startsWith('Bearer ') && secureEqual(authHeader.substring(7).trim(), secret)) {
-    return true;
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+    if (serviceToken && secureEqual(token, serviceToken)) {
+      return { authorized: true, actor: 'ANTIGRAVITY', scopes: [...SERVICE_SCOPES] };
+    }
+    if (secret && secureEqual(token, secret)) {
+      return { authorized: true, actor: 'ADMIN', scopes: [...SERVICE_SCOPES, 'admin:all'] };
+    }
   }
+
+  // 2. Подписанная HttpOnly cookie-сессия браузера
   const cookieHeader = request.headers.get('cookie') || '';
   const match = cookieHeader.match(/(?:^|;\s*)vox_admin_session=([^;]+)/);
-  if (match) return verifyAdminSession(match[1], secret);
+  if (match && secret && verifyAdminSession(match[1], secret)) {
+    return { authorized: true, actor: 'ADMIN', scopes: [...SERVICE_SCOPES, 'admin:all'] };
+  }
 
-  return false;
+  // 3. Режим локального тестирования без настроенных секретов
+  if (!secret && !serviceToken && (env.ALLOW_DEV_AUTH === true || env.ALLOW_DEV_AUTH === 'true')) {
+    return { authorized: true, actor: 'ADMIN', scopes: [...SERVICE_SCOPES, 'admin:all'] };
+  }
+
+  return { authorized: false, actor: 'ANONYMOUS', scopes: [] };
+}
+
+/**
+ * Проверяет права администратора или сервисного вызова.
+ * Защита по умолчанию: FAIL CLOSED.
+ */
+export function checkAdminAuth(request, env = {}, requiredScope = null) {
+  const auth = resolveAuth(request, env);
+  if (!auth.authorized) return false;
+  if (requiredScope && !auth.scopes.includes(requiredScope) && !auth.scopes.includes('admin:all')) {
+    return false;
+  }
+  return true;
 }
 
 function secureEqual(left, right) {
@@ -450,9 +491,12 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     .tag-error { background: rgba(239, 68, 68, 0.15); color: #f87171; }
     .tag-status-new { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
     .tag-status-in_progress, .tag-status-reviewed { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
-    .tag-status-known, .tag-status-known_issue { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+    .tag-status-needs_info { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+    .tag-status-fixed_pending_verification { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
+    .tag-status-closed { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .tag-status-known, .tag-status-known_issue { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
     .tag-status-resolved { background: rgba(16, 185, 129, 0.15); color: #34d399; }
-    .tag-status-test, .tag-status-ignored_test { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+    .tag-status-test, .tag-status-ignored, .tag-status-ignored_test { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
     .tag-purpose-test { background: rgba(156, 163, 175, 0.2); color: var(--text-muted); font-size: 10px; }
 
     /* Tables */
@@ -513,9 +557,12 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     }
     .status-select[data-status="NEW"] { color: #93c5fd; border-color: rgba(147, 197, 253, 0.3); }
     .status-select[data-status="IN_PROGRESS"] { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); }
+    .status-select[data-status="NEEDS_INFO"] { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); }
+    .status-select[data-status="FIXED_PENDING_VERIFICATION"] { color: #2dd4bf; border-color: rgba(45, 212, 191, 0.3); }
+    .status-select[data-status="CLOSED"] { color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
     .status-select[data-status="RESOLVED"] { color: #6ee7b7; border-color: rgba(110, 231, 183, 0.3); }
-    .status-select[data-status="KNOWN_ISSUE"] { color: #c4b5fd; border-color: rgba(196, 181, 253, 0.3); }
-    .status-select[data-status="IGNORED_TEST"] { color: #d1d5db; border-color: rgba(209, 213, 219, 0.3); }
+    .status-select[data-status="KNOWN_ISSUE"] { color: #cbd5e1; border-color: rgba(203, 213, 225, 0.3); }
+    .status-select[data-status="IGNORED_TEST"], .status-select[data-status="IGNORED"] { color: #9ca3af; border-color: rgba(156, 163, 175, 0.3); }
     .note-preview {
       display: block;
       max-width: 180px;
@@ -853,6 +900,9 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
           <option value="">Все статусы</option>
           <option value="NEW">Новый</option>
           <option value="IN_PROGRESS">В работе</option>
+          <option value="NEEDS_INFO">Нужны данные</option>
+          <option value="FIXED_PENDING_VERIFICATION">Исправлено — ждёт проверки</option>
+          <option value="CLOSED">Закрыто</option>
           <option value="RESOLVED">Решено</option>
           <option value="KNOWN_ISSUE">Известная проблема</option>
           <option value="IGNORED_TEST">Тест / игнор</option>
@@ -1119,6 +1169,9 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
                 <select id="detailStatusSelect" class="select-filter" style="font-weight: 600;">
                   <option value="NEW">Новый</option>
                   <option value="IN_PROGRESS">В работе</option>
+                  <option value="NEEDS_INFO">Нужны данные</option>
+                  <option value="FIXED_PENDING_VERIFICATION">Исправлено — ждёт проверки</option>
+                  <option value="CLOSED">Закрыто</option>
                   <option value="RESOLVED">Решено</option>
                   <option value="KNOWN_ISSUE">Известная проблема</option>
                   <option value="IGNORED_TEST">Тест / игнор</option>

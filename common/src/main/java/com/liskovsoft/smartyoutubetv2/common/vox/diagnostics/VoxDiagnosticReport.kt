@@ -133,6 +133,12 @@ data class VoxDiagnosticReport(
                 null
             }
 
+            val playbackSummary = try {
+                VoxCompatibilityManager.instance(context).getPlaybackHealthTracker().getHealthSummary().toMap()
+            } catch (e: Exception) {
+                null
+            }
+
             return VoxDiagnosticReport(
                 schema = SCHEMA_V2,
                 reportId = reportId,
@@ -152,7 +158,7 @@ data class VoxDiagnosticReport(
                 currentPolicy = currentPolicyMap,
                 recommendedSettings = recommendedMap,
                 riskWarning = risk?.messageRu,
-                playbackStats = null,
+                playbackStats = playbackSummary,
                 livePlayback = liveMetrics,
                 downloadDiagnostics = downloadDiag,
                 safeRecentEvents = recentEvents

@@ -182,7 +182,9 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_IDLE;
         if (mOverlayView != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(mOverlayView);
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
+                    mOverlayView,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
             mOverlayView.animate().cancel();
             mOverlayView.animate()
                     .alpha(0f)
@@ -200,7 +202,9 @@ public class VotProgressOverlay {
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_IDLE;
         if (mOverlayView != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.release(mOverlayView);
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
+                    mOverlayView,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
             mOverlayView.animate().cancel();
             mOverlayView.setVisibility(View.GONE);
             mOverlayView.setAlpha(0f);
@@ -272,8 +276,9 @@ public class VotProgressOverlay {
 
     private void fadeIn() {
         if (mOverlayView != null) {
-            if (!com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.claim(mOverlayView,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxStatusHost.TRANSLATION)) {
+            if (com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.shouldSuppressTranslationToast()
+                    || !com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.claim(mOverlayView,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION)) {
                 mOverlayView.animate().cancel();
                 mOverlayView.setVisibility(View.GONE);
                 mOverlayView.setAlpha(0f);

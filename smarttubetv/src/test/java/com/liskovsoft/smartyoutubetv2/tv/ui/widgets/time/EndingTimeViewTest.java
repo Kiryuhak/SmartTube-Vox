@@ -20,8 +20,11 @@ public class EndingTimeViewTest {
     @Test
     public void formatEndingTimePreserves24HourLeadingZero() {
         assertEquals("00:09", EndingTimeView.formatEndingTime("00:09"));
+        assertEquals("00:09", EndingTimeView.formatEndingTime("0:09"));
         assertEquals("01:03", EndingTimeView.formatEndingTime("01:03"));
+        assertEquals("01:03", EndingTimeView.formatEndingTime("1:03"));
         assertEquals("09:07", EndingTimeView.formatEndingTime("09:07"));
+        assertEquals("09:07", EndingTimeView.formatEndingTime("9:07"));
         assertEquals("18:44", EndingTimeView.formatEndingTime("18:44"));
         assertEquals("23:59", EndingTimeView.formatEndingTime("23:59"));
     }

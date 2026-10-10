@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { ReportStorage, normalizeStatus } from './storage.mjs';
-import { checkAdminAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
+import { checkAdminAuth, resolveAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
 import { classifyReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES } from './triage.mjs';
@@ -475,22 +475,55 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     catch { return jsonResponse({ error: 'invalid_cursor' }, 400); }
   }
 
-  // 4. Admin API: Grouped issues (GET /v1/admin/issues)
+  // 4. Admin API: Grouped issues (GET /v1/admin/issues or /api/admin/issues)
   if (path.startsWith('/v1/admin/issues/') || path.startsWith('/api/admin/issues/')) {
-    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
-    if (request.method !== 'PATCH') return jsonResponse({ error: 'method_not_allowed' }, 405);
-    const signature = decodeURIComponent(path.split('/issues/')[1] || '');
-    try {
-      const body = await request.json();
-      const issue = await storage.updateIssue(signature, body);
-      return jsonResponse({ issue });
-    } catch (error) {
-      return jsonResponse({ error: error instanceof RangeError ? 'invalid_issue' : 'invalid_json' }, 400);
+    const auth = resolveAuth(request, env);
+    if (!auth.authorized) return jsonResponse({ error: 'unauthorized' }, 401);
+    const sub = path.substring(path.startsWith('/api/') ? '/api/admin/issues/'.length : '/v1/admin/issues/'.length);
+
+    if (sub.endsWith('/status')) {
+      if (request.method !== 'PATCH') return jsonResponse({ error: 'method_not_allowed' }, 405);
+      const signature = decodeURIComponent(sub.slice(0, -('/status'.length)));
+      try {
+        const body = await request.json();
+        const issue = await storage.updateIssue(signature, body, auth.actor);
+        return jsonResponse({ issue });
+      } catch (error) {
+        return jsonResponse({ error: error instanceof RangeError ? 'invalid_issue' : 'invalid_json' }, 400);
+      }
     }
+
+    if (sub.endsWith('/notes')) {
+      if (request.method !== 'POST') return jsonResponse({ error: 'method_not_allowed' }, 405);
+      const signature = decodeURIComponent(sub.slice(0, -('/notes'.length)));
+      try {
+        const body = await request.json();
+        const issue = await storage.updateIssue(signature, { title: body.note || body.title }, auth.actor);
+        return jsonResponse({ issue });
+      } catch (error) {
+        return jsonResponse({ error: error instanceof RangeError ? 'invalid_issue' : 'invalid_json' }, 400);
+      }
+    }
+
+    const signature = decodeURIComponent(sub);
+    if (request.method === 'GET') {
+      const issue = await storage.getIssue(signature);
+      return jsonResponse({ issue });
+    }
+    if (request.method === 'PATCH') {
+      try {
+        const body = await request.json();
+        const issue = await storage.updateIssue(signature, body, auth.actor);
+        return jsonResponse({ issue });
+      } catch (error) {
+        return jsonResponse({ error: error instanceof RangeError ? 'invalid_issue' : 'invalid_json' }, 400);
+      }
+    }
+    return jsonResponse({ error: 'method_not_allowed' }, 405);
   }
 
   if (request.method === 'GET' && (path === '/v1/admin/issues' || path === '/api/admin/issues')) {
-    if (!checkAdminAuth(request, env)) {
+    if (!checkAdminAuth(request, env, 'issues:read')) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
     const limit = parseInt(url.searchParams.get('limit') || '50', 10);
@@ -503,7 +536,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
 
   // 5. Admin API: List reports (GET /v1/admin/reports)
   if (request.method === 'GET' && (path === '/v1/admin/reports' || path === '/api/admin/reports')) {
-    if (!checkAdminAuth(request, env)) {
+    if (!checkAdminAuth(request, env, 'reports:read')) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
     const platform = url.searchParams.get('platform') || undefined;
@@ -551,8 +584,12 @@ export async function handleRequest(request, env = {}, customStorage = null) {
 
   // 5.1 Admin API: Purge all reports / Safe Purge (DELETE /v1/admin/reports)
   if (request.method === 'DELETE' && path === '/v1/admin/reports') {
-    if (!checkAdminAuth(request, env)) {
+    const auth = resolveAuth(request, env);
+    if (!auth.authorized) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    if (!auth.scopes.includes('admin:all')) {
+      return jsonResponse({ error: 'forbidden', message: 'Service tokens cannot purge database' }, 403);
     }
     const deleted = await storage.deleteAllReports();
     return jsonResponse({ ok: true, deleted });
@@ -560,16 +597,30 @@ export async function handleRequest(request, env = {}, customStorage = null) {
 
   // 6. Admin API: Single report operations (GET / PATCH / DELETE /v1/admin/reports/:id and /download)
   if (path.startsWith('/v1/admin/reports/') || path.startsWith('/api/admin/reports/')) {
-    if (!checkAdminAuth(request, env)) {
+    const auth = resolveAuth(request, env);
+    if (!auth.authorized) {
       return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
     }
     const subPath = path.substring(path.startsWith('/api/') ? '/api/admin/reports/'.length : '/v1/admin/reports/'.length);
+
+    if (subPath.endsWith('/status')) {
+      if (request.method !== 'PATCH') return jsonResponse({ error: 'method_not_allowed' }, 405);
+      const rawId = subPath.slice(0, -('/status'.length));
+      const reportId = decodeURIComponent(rawId);
+      try {
+        const body = await request.json();
+        const report = await storage.updateReport(reportId, { ...body, actor: auth.actor });
+        return report ? jsonResponse({ status: 'ok', report }) : jsonResponse({ error: 'not_found' }, 404);
+      } catch (error) {
+        return jsonResponse({ error: error instanceof RangeError ? 'invalid_report_patch' : 'invalid_json' }, 400);
+      }
+    }
 
     if (subPath.endsWith('/notes')) {
       if (request.method !== 'POST') return jsonResponse({ error: 'method_not_allowed' }, 405);
       try {
         const body = await request.json();
-        const report = await storage.addNote(decodeURIComponent(subPath.slice(0, -6)), body.note);
+        const report = await storage.addNote(decodeURIComponent(subPath.slice(0, -6)), body.note, auth.actor);
         return report ? jsonResponse({ report }) : jsonResponse({ error: 'not_found' }, 404);
       } catch { return jsonResponse({ error: 'invalid_note' }, 400); }
     }
@@ -619,7 +670,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         return jsonResponse({ error: 'invalid_json', message: 'Invalid JSON request body' }, 400);
       }
       let updated;
-      try { updated = await storage.updateReport(reportId, body); }
+      try { updated = await storage.updateReport(reportId, { ...body, actor: auth.actor }); }
       catch (error) { return jsonResponse({ error: error instanceof RangeError ? 'invalid_report_patch' : 'update_failed' }, error instanceof RangeError ? 400 : 500); }
       if (!updated) {
         return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
@@ -628,6 +679,9 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     }
 
     if (request.method === 'DELETE') {
+      if (!auth.scopes.includes('admin:all')) {
+        return jsonResponse({ error: 'forbidden', message: 'Service tokens cannot delete reports' }, 403);
+      }
       const deleted = await storage.deleteReportById(reportId);
       if (!deleted) {
         return jsonResponse({ error: 'not_found', message: `Report ${reportId} not found` }, 404);
