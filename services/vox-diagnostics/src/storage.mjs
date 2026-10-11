@@ -663,6 +663,19 @@ export class ReportStorage {
       const ignoredTestCount = Number(countsRes?.count_ignored_test) || 0;
       const activeIssuesCount = newCount + inProgressCount + knownIssueCount;
 
+      let liveCount = 0;
+      let translationCount = 0;
+      let downloadCount = 0;
+      let networkCount = 0;
+      for (const cat of (categoriesRes?.results || [])) {
+        const c = String(cat.error_category || '').toUpperCase();
+        if (c === 'LIVE' || c === 'PLAYBACK') liveCount += Number(cat.count) || 0;
+        if (c === 'TRANSLATION') translationCount += Number(cat.count) || 0;
+        if (c === 'DOWNLOAD') downloadCount += Number(cat.count) || 0;
+        if (c === 'NETWORK') networkCount += Number(cat.count) || 0;
+      }
+      const attentionCount = newCount + inProgressCount;
+
       const statusBreakdown = [
         { status: 'NEW', label: 'Новый', count: newCount },
         { status: 'IN_PROGRESS', label: 'В работе', count: inProgressCount },
@@ -681,6 +694,11 @@ export class ReportStorage {
         knownIssueCount,
         ignoredTestCount,
         activeIssuesCount,
+        attentionCount,
+        liveCount,
+        translationCount,
+        downloadCount,
+        networkCount,
         statusBreakdown,
         platformBreakdown: platformsRes?.results || [],
         versionDistribution: versionsRes?.results || [],
@@ -704,6 +722,12 @@ export class ReportStorage {
       const categoriesMap = new Map();
       const issuesMap = new Map();
 
+      let liveCount = 0;
+      let translationCount = 0;
+      let downloadCount = 0;
+      let networkCount = 0;
+      let attentionCount = 0;
+
       for (const r of all) {
         const normStatus = normalizeStatus(r.status);
         if (normStatus === 'NEW') newCount++;
@@ -711,6 +735,17 @@ export class ReportStorage {
         else if (normStatus === 'RESOLVED') resolvedCount++;
         else if (normStatus === 'KNOWN_ISSUE') knownIssueCount++;
         else if (normStatus === 'IGNORED_TEST') ignoredTestCount++;
+
+        const c = String(r.error_category || '').toUpperCase();
+        if (c === 'LIVE' || c === 'PLAYBACK') liveCount++;
+        if (c === 'TRANSLATION') translationCount++;
+        if (c === 'DOWNLOAD') downloadCount++;
+        if (c === 'NETWORK') networkCount++;
+
+        const sig = String(r.error_signature || '').toUpperCase();
+        if (sig.includes('LIVE_SEEK') || sig.includes('PACKAGING') || sig.includes('FALLBACK') || sig.includes('TRANSLAT') || sig.includes('IMAGE') || r.severity === 'CRITICAL' || r.severity === 'HIGH' || Number(r.related_count || 0) >= 2) {
+          attentionCount++;
+        }
 
         platformsMap.set(r.platform, (platformsMap.get(r.platform) || 0) + 1);
         versionsMap.set(r.app_version, (versionsMap.get(r.app_version) || 0) + 1);
@@ -741,6 +776,11 @@ export class ReportStorage {
         knownIssueCount,
         ignoredTestCount,
         activeIssuesCount,
+        attentionCount,
+        liveCount,
+        translationCount,
+        downloadCount,
+        networkCount,
         statusBreakdown,
         platformBreakdown: Array.from(platformsMap.entries()).map(([platform, count]) => ({ platform, count })),
         versionDistribution: Array.from(versionsMap.entries()).map(([app_version, count]) => ({ app_version, count })).slice(0, 8),

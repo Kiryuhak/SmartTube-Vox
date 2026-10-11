@@ -59,8 +59,8 @@ function sanitizePayload(value, depth = 0) {
 }
 
 export const MAX_PAYLOAD_SIZE = 256 * 1024; // 256 KB
-export const CANONICAL_SCHEMA = 'vox-diagnostic-report-v2';
-export const SUPPORTED_SCHEMAS = ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2'];
+export const CANONICAL_SCHEMA = 'vox-diagnostic-report-v3';
+export const SUPPORTED_SCHEMAS = ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2', 'vox-diagnostic-report-v3'];
 export const MAX_EVENTS_COUNT = 50;
 export const MAX_EVENT_MESSAGE_LEN = 500;
 export const DEFAULT_RETENTION_DAYS = 30;

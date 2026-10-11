@@ -20,10 +20,10 @@ class DiagnosticSummaryConsistencyTest {
     }
 
     @Test
-    fun reportSchemaIsV2() {
+    fun reportSchemaIsV3() {
         val context = RuntimeEnvironment.getApplication()
         val report = VoxDiagnosticReport.create(context, "test-rep-1", includeEvents = true)
-        assertEquals(VoxDiagnosticReport.SCHEMA_V2, report.schema)
+        assertEquals(VoxDiagnosticReport.SCHEMA_V3, report.schema)
         assertEquals("test-rep-1", report.reportId)
     }
 

@@ -263,6 +263,78 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     .kpi-card[data-metric="IN_PROGRESS"]::before { background: var(--warning); }
     .kpi-card[data-metric="attention"]::before { background: var(--danger); }
     .kpi-card[data-metric="RESOLVED"]::before { background: var(--success); }
+    .kpi-card[data-metric="LIVE"]::before { background: #38bdf8; }
+    .kpi-card[data-metric="TRANSLATION"]::before { background: #c084fc; }
+    .kpi-card[data-metric="DOWNLOAD"]::before { background: #f59e0b; }
+    .kpi-card[data-metric="NETWORK"]::before { background: #2dd4bf; }
+
+    /* Attention Section */
+    .attention-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .attention-card {
+      background: rgba(239, 68, 68, 0.06);
+      border: 1px solid rgba(239, 68, 68, 0.22);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+    .attention-card:hover {
+      background: rgba(239, 68, 68, 0.14);
+      border-color: var(--danger);
+      transform: translateY(-1px);
+    }
+    .attention-card-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fca5a5;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .attention-card-desc {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Category Chips */
+    .category-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px 0 12px 0;
+      align-items: center;
+    }
+    .category-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-full);
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+    .category-chip:hover {
+      background: var(--surface-alt);
+      color: var(--text-bright);
+      border-color: var(--border-focus);
+    }
+    .category-chip.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
     .kpi-card:hover {
       border-color: var(--border-focus);
       background: var(--surface-alt);
@@ -821,22 +893,50 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     </div>
   </div>
 
-  <!-- Primary KPIs + Secondary Strip -->
+  <!-- Primary KPIs + Subsystem Cards (Dashboard 3.0) -->
   <div class="kpi-section">
     <div class="kpi-primary-grid">
       <button class="kpi-card" type="button" data-metric="NEW" title="Показать новые отчёты">
         <div>
-          <div class="kpi-title">Новые</div>
+          <div class="kpi-title">Новые инциденты</div>
           <div class="kpi-val" id="kpiNew" style="color: #60a5fa;">${newCount}</div>
         </div>
         <div class="kpi-sub">Требуют первичного анализа</div>
       </button>
       <button class="kpi-card" type="button" data-metric="IN_PROGRESS" title="Показать отчёты в работе">
         <div>
-          <div class="kpi-title">В работе</div>
+          <div class="kpi-title">Активные проблемы</div>
           <div class="kpi-val" id="kpiInProgress" style="color: var(--warning);">${inProgressCount}</div>
         </div>
-        <div class="kpi-sub">Назначены и исследуются</div>
+        <div class="kpi-sub">В процессе исследования</div>
+      </button>
+      <button class="kpi-card" type="button" data-metric="LIVE" data-filter="category:LIVE" title="Показать инциденты Live / DVR">
+        <div>
+          <div class="kpi-title">Live / DVR</div>
+          <div class="kpi-val" id="kpiLive" style="color: #38bdf8;">${stats.liveCount ?? 0}</div>
+        </div>
+        <div class="kpi-sub">Сбои прямого эфира и seek</div>
+      </button>
+      <button class="kpi-card" type="button" data-metric="TRANSLATION" data-filter="category:TRANSLATION" title="Показать инциденты перевода">
+        <div>
+          <div class="kpi-title">Перевод</div>
+          <div class="kpi-val" id="kpiTranslation" style="color: #c084fc;">${stats.translationCount ?? 0}</div>
+        </div>
+        <div class="kpi-sub">Кэш, VOT сессии, задержки</div>
+      </button>
+      <button class="kpi-card" type="button" data-metric="DOWNLOAD" data-filter="category:DOWNLOAD" title="Показать инциденты загрузок">
+        <div>
+          <div class="kpi-title">Загрузки</div>
+          <div class="kpi-val" id="kpiDownload" style="color: #f59e0b;">${stats.downloadCount ?? 0}</div>
+        </div>
+        <div class="kpi-sub">Упаковка, muxing, диск</div>
+      </button>
+      <button class="kpi-card" type="button" data-metric="NETWORK" data-filter="category:NETWORK" title="Показать сетевые инциденты">
+        <div>
+          <div class="kpi-title">Сеть</div>
+          <div class="kpi-val" id="kpiNetwork" style="color: #2dd4bf;">${stats.networkCount ?? 0}</div>
+        </div>
+        <div class="kpi-sub">Движок, fallback, probe</div>
       </button>
       <button class="kpi-card" type="button" data-metric="attention" title="Показать критические и повторяющиеся проблемы">
         <div>
@@ -872,6 +972,30 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
         <span>Всего в базе:</span> <strong id="kpiTotal">${totalReports}</strong>
       </div>
     </div>
+
+    <!-- Attention Cards (Operations Dashboard 3.0) -->
+    <div class="attention-grid">
+      <div class="attention-card" data-attention="live-seek" title="Фильтровать: Live seek recovery">
+        <span class="attention-card-title">Live seek recovery</span>
+        <span class="attention-card-desc">Восстановление позиции за пределами окна</span>
+      </div>
+      <div class="attention-card" data-attention="translation-slow" title="Фильтровать: Translation startup >60s">
+        <span class="attention-card-title">Translation startup &gt;60s</span>
+        <span class="attention-card-desc">Длительное ожидание генерации дорожки</span>
+      </div>
+      <div class="attention-card" data-attention="download-packaging" title="Фильтровать: Download packaging >120s">
+        <span class="attention-card-title">Download packaging &gt;120s</span>
+        <span class="attention-card-desc">Узкое место этапа упаковки MKV</span>
+      </div>
+      <div class="attention-card" data-attention="network-fallback" title="Фильтровать: Network engine fallback">
+        <span class="attention-card-title">Network fallback</span>
+        <span class="attention-card-desc">Переключение OkHttp ↔ Cronet</span>
+      </div>
+      <div class="attention-card" data-attention="thumbnail-failures" title="Фильтровать: Thumbnail failures">
+        <span class="attention-card-title">Thumbnail failures</span>
+        <span class="attention-card-desc">Сбои загрузки обложек и постеров</span>
+      </div>
+    </div>
   </div>
 
   <!-- Navigation Tabs -->
@@ -883,6 +1007,19 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
 
   <!-- VIEW 1: ВСЕ ОТЧЁТЫ -->
   <div id="viewReports">
+    <!-- Category Chips (Operations Dashboard 3.0) -->
+    <div class="category-chips" id="categoryChips">
+      <button class="category-chip active" type="button" data-chip-category="">ALL</button>
+      <button class="category-chip" type="button" data-chip-category="LIVE">LIVE</button>
+      <button class="category-chip" type="button" data-chip-category="TRANSLATION">TRANSLATION</button>
+      <button class="category-chip" type="button" data-chip-category="DOWNLOAD">DOWNLOAD</button>
+      <button class="category-chip" type="button" data-chip-category="NETWORK">NETWORK</button>
+      <button class="category-chip" type="button" data-chip-category="PLAYER">PLAYER</button>
+      <button class="category-chip" type="button" data-chip-category="OTA">OTA</button>
+      <button class="category-chip" type="button" data-chip-category="BACKGROUND">BACKGROUND</button>
+      <button class="category-chip" type="button" data-chip-category="IMAGE">IMAGE</button>
+    </div>
+
     <div class="toolbar-container">
       <div class="toolbar-main">
         <div class="search-wrapper">
@@ -1184,18 +1321,25 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
             <div style="display: flex; flex-direction: column; gap: 6px; min-width: 170px;">
               <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Действия:</span>
               <button class="btn btn-sm" id="detailDownloadJsonBtn" data-action="download-json">💾 Скачать JSON</button>
-              <button class="btn btn-sm" id="detailCopyMdBtn" data-action="copy-markdown">📋 Скопировать MD</button>
+              <button class="btn btn-sm" id="detailCopyTechBtn" data-action="copy-technical-summary">📋 Тех. резюме</button>
+              <button class="btn btn-sm" id="detailCopyAgBtn" data-action="copy-antigravity-summary">📋 Antigravity</button>
+              <button class="btn btn-sm" id="detailCopyMdBtn" data-action="copy-markdown">📋 GitHub Issue</button>
               <button class="btn btn-sm btn-danger" id="detailDeleteBtn" data-action="delete-report">🗑️ Удалить отчёт</button>
             </div>
           </div>
         </div>
 
         <div class="modal-tabs">
-          <button class="modal-tab-btn active" id="mTabBtnOverview" data-modal-tab="overview">Общее</button>
+          <button class="modal-tab-btn active" id="mTabBtnOverview" data-modal-tab="overview">Обзор</button>
+          <button class="modal-tab-btn" id="mTabBtnTimeline" data-modal-tab="timeline">Timeline</button>
+          <button class="modal-tab-btn" id="mTabBtnNetwork" data-modal-tab="network">Сеть</button>
+          <button class="modal-tab-btn" id="mTabBtnPlayer" data-modal-tab="player">Плеер</button>
+          <button class="modal-tab-btn" id="mTabBtnTranslation" data-modal-tab="translation">Перевод</button>
+          <button class="modal-tab-btn" id="mTabBtnDownloads" data-modal-tab="downloads">Downloads</button>
+          <button class="modal-tab-btn" id="mTabBtnDevice" data-modal-tab="device">Устройство</button>
           <button class="modal-tab-btn" id="mTabBtnCodecs" data-modal-tab="codecs">Кодеки</button>
-          <button class="modal-tab-btn" id="mTabBtnTimeline" data-modal-tab="timeline">События</button>
           <button class="modal-tab-btn" id="mTabBtnOps" data-modal-tab="ops">Разработчик</button>
-          <button class="modal-tab-btn" id="mTabBtnRaw" data-modal-tab="raw">Тех. JSON</button>
+          <button class="modal-tab-btn" id="mTabBtnRaw" data-modal-tab="raw">Raw JSON</button>
         </div>
 
         <div id="modalContent">

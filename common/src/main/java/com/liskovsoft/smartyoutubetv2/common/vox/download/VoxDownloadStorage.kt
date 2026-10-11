@@ -20,6 +20,7 @@ class VoxDownloadStorage(val context: Context) {
         private const val OUTPUT_MEDIA_FILE = "output.mkv"
         private const val TMP_OUTPUT_MEDIA_FILE = "output.mkv.tmp"
         private const val MIN_SAFETY_MARGIN_BYTES = 25 * 1024 * 1024L // 25 MB safety margin
+        private val reportedInconsistentJobs = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     }
 
     /**
@@ -141,7 +142,19 @@ class VoxDownloadStorage(val context: Context) {
         lastProgressAt: Long = 0L,
         packagingStarted: Boolean = false,
         packagingCompleted: Boolean = false,
-        finalizeCompleted: Boolean = false
+        finalizeCompleted: Boolean = false,
+        downloadElapsedMs: Long = 0L,
+        videoElapsedMs: Long = 0L,
+        audioElapsedMs: Long = 0L,
+        translationElapsedMs: Long = 0L,
+        packagingElapsedMs: Long = 0L,
+        finalizeElapsedMs: Long = 0L,
+        averageSpeedMbps: Double = 0.0,
+        peakSpeedMbps: Double = 0.0,
+        stallEventsCount: Int = 0,
+        rangeResumptionsCount: Int = 0,
+        networkReconnectCount: Int = 0,
+        retryCount: Int = 0
     ) {
         val jobDir = getJobDir(request.downloadId)
         val file = File(jobDir, JOB_METADATA_FILE)
@@ -169,6 +182,18 @@ class VoxDownloadStorage(val context: Context) {
             put("packagingStarted", effectivePackagingStarted)
             put("packagingCompleted", effectivePackagingCompleted)
             put("finalizeCompleted", effectiveFinalizeCompleted)
+            if (downloadElapsedMs > 0) put("downloadElapsedMs", downloadElapsedMs)
+            if (videoElapsedMs > 0) put("videoElapsedMs", videoElapsedMs)
+            if (audioElapsedMs > 0) put("audioElapsedMs", audioElapsedMs)
+            if (translationElapsedMs > 0) put("translationElapsedMs", translationElapsedMs)
+            if (packagingElapsedMs > 0) put("packagingElapsedMs", packagingElapsedMs)
+            if (finalizeElapsedMs > 0) put("finalizeElapsedMs", finalizeElapsedMs)
+            if (averageSpeedMbps > 0.0) put("averageSpeedMbps", averageSpeedMbps)
+            if (peakSpeedMbps > 0.0) put("peakSpeedMbps", peakSpeedMbps)
+            if (stallEventsCount > 0) put("stallEventsCount", stallEventsCount)
+            if (rangeResumptionsCount > 0) put("rangeResumptionsCount", rangeResumptionsCount)
+            if (networkReconnectCount > 0) put("networkReconnectCount", networkReconnectCount)
+            if (retryCount > 0) put("retryCount", retryCount)
             if (durationMs > 0) put("durationMs", durationMs)
             if (!ageRating.isNullOrBlank()) put("ageRating", ageRating)
             if (actualVideoHeight > 0) put("actualVideoHeight", actualVideoHeight)
@@ -320,11 +345,13 @@ class VoxDownloadStorage(val context: Context) {
                     effectiveState = VoxDownloadState.FAILED
                     effectiveErrorCode = VoxDownloadErrorCode.STORAGE_ERROR
                     effectiveErrorMessage = "DOWNLOAD_STATE_INCONSISTENT: invariant check failed (fileValid=$fileValid, translationValid=$translationValid)"
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
-                        "Download completed state invariant violated for $downloadId: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
-                    )
+                    if (reportedInconsistentJobs.add(downloadId)) {
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
+                            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
+                            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
+                            "Download completed state invariant violated for $downloadId: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
+                        )
+                    }
                 } else if (!packagingValid) {
                     effectivePackagingCompleted = true
                     effectiveFinalizeCompleted = true
@@ -368,7 +395,19 @@ class VoxDownloadStorage(val context: Context) {
                 ageRating = ageRating,
                 videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, vBytes, vTotal, vState),
                 originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, oBytes, oTotal, oState),
-                translatedAudioProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, tBytes, tTotal, tState)
+                translatedAudioProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, tBytes, tTotal, tState),
+                downloadElapsedMs = json.optLong("downloadElapsedMs", 0L),
+                videoElapsedMs = json.optLong("videoElapsedMs", 0L),
+                audioElapsedMs = json.optLong("audioElapsedMs", 0L),
+                translationElapsedMs = json.optLong("translationElapsedMs", 0L),
+                packagingElapsedMs = json.optLong("packagingElapsedMs", 0L),
+                finalizeElapsedMs = json.optLong("finalizeElapsedMs", 0L),
+                averageSpeedMbps = json.optDouble("averageSpeedMbps", 0.0),
+                peakSpeedMbps = json.optDouble("peakSpeedMbps", 0.0),
+                stallEventsCount = json.optInt("stallEventsCount", 0),
+                rangeResumptionsCount = json.optInt("rangeResumptionsCount", 0),
+                networkReconnectCount = json.optInt("networkReconnectCount", 0),
+                retryCount = json.optInt("retryCount", 0)
             )
         } catch (e: Exception) {
             null
@@ -547,5 +586,17 @@ data class StoredJobData(
     val finalizeCompleted: Boolean = false,
     val videoProgress: VoxTrackProgress,
     val originalAudioProgress: VoxTrackProgress,
-    val translatedAudioProgress: VoxTrackProgress
+    val translatedAudioProgress: VoxTrackProgress,
+    val downloadElapsedMs: Long = 0L,
+    val videoElapsedMs: Long = 0L,
+    val audioElapsedMs: Long = 0L,
+    val translationElapsedMs: Long = 0L,
+    val packagingElapsedMs: Long = 0L,
+    val finalizeElapsedMs: Long = 0L,
+    val averageSpeedMbps: Double = 0.0,
+    val peakSpeedMbps: Double = 0.0,
+    val stallEventsCount: Int = 0,
+    val rangeResumptionsCount: Int = 0,
+    val networkReconnectCount: Int = 0,
+    val retryCount: Int = 0
 )

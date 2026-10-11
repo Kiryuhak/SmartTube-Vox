@@ -66,6 +66,19 @@ const validReportV2 = {
   })),
 };
 
+const validReportV3 = {
+  ...validReportV2,
+  schema: 'vox-diagnostic-report-v3',
+  startupProfile: {
+    totalStartupMs: 420,
+    stages: {
+      coldStartMs: 120,
+      networkInitMs: 80,
+      firstFrameMs: 220,
+    },
+  },
+};
+
 function createRequest(body, options = {}) {
   const url = options.url ?? 'https://diagnostics.example.com/v1/report';
   const method = options.method ?? 'POST';
@@ -112,7 +125,7 @@ test('GET /healthz returns 200 healthy status with canonical schema', async () =
   const json = await res.json();
   assert.equal(json.status, 'healthy');
   assert.equal(json.canonicalSchema, CANONICAL_SCHEMA);
-  assert.deepEqual(json.supportedSchemas, ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2']);
+  assert.deepEqual(json.supportedSchemas, ['vox-diagnostic-report-v1', 'vox-diagnostic-report-v2', 'vox-diagnostic-report-v3']);
 });
 
 test('POST /v1/report accepts valid v1 report and returns 201 with VOX- prefix reportId', async () => {
@@ -131,6 +144,16 @@ test('POST /v1/report accepts valid v2 report with 50 safeRecentEvents', async (
   const json = await res.json();
   assert.equal(json.status, 'ok');
   assert.equal(json.schema, 'vox-diagnostic-report-v2');
+  assert.match(json.reportId, /^VOX-A-[A-Z0-9]+$/);
+});
+
+test('POST /v1/report accepts valid v3 report with startupProfile', async () => {
+  const req = createRequest(validReportV3);
+  const res = await handleRequest(req);
+  assert.equal(res.status, 201);
+  const json = await res.json();
+  assert.equal(json.status, 'ok');
+  assert.equal(json.schema, 'vox-diagnostic-report-v3');
   assert.match(json.reportId, /^VOX-A-[A-Z0-9]+$/);
 });
 

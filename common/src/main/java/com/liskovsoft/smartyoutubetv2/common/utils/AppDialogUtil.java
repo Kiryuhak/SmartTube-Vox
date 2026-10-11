@@ -1027,7 +1027,11 @@ public class AppDialogUtil {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
         List<OptionItem> options = new ArrayList<>();
 
-        options.add(UiOptionItem.from(context.getString(R.string.network_engine_auto),
+        String autoRec = com.liskovsoft.smartyoutubetv2.common.vox.network.VoxNetworkEngineProbe.getAutoRecommendation();
+        String cronetStatus = com.liskovsoft.smartyoutubetv2.common.vox.network.VoxNetworkEngineProbe.getCronetStatus();
+        String okHttpStatus = com.liskovsoft.smartyoutubetv2.common.vox.network.VoxNetworkEngineProbe.getOkHttpStatus();
+
+        options.add(UiOptionItem.from(context.getString(R.string.network_engine_auto) + " — " + autoRec,
                 context.getString(R.string.default_stack_desc),
                 option -> {
                     playerTweaksData.setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT);
@@ -1035,7 +1039,7 @@ public class AppDialogUtil {
                 },
                 playerTweaksData.getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT));
 
-        options.add(UiOptionItem.from("Cronet",
+        options.add(UiOptionItem.from("Cronet — " + cronetStatus,
                 context.getString(R.string.cronet_desc),
                 option -> {
                     playerTweaksData.setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET);
@@ -1043,13 +1047,15 @@ public class AppDialogUtil {
                 },
                 playerTweaksData.getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET));
 
-        options.add(UiOptionItem.from("OkHttp",
+        options.add(UiOptionItem.from("OkHttp — " + okHttpStatus,
                 context.getString(R.string.okhttp_desc),
                 option -> {
                     playerTweaksData.setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP);
                     onModeSelected.run();
                 },
                 playerTweaksData.getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP));
+
+        com.liskovsoft.smartyoutubetv2.common.vox.network.VoxNetworkEngineProbe.runProbe(context, onModeSelected);
 
         return OptionCategory.from(
                 PLAYER_ENGINE_ID,

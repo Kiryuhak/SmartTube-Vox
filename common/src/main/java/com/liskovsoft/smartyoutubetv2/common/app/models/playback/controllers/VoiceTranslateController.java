@@ -128,6 +128,8 @@ public class VoiceTranslateController extends BasePlayerController {
     private long mRequestStartPositionMs;
     private boolean mRequestWasAutoTranslate;
     private boolean mUserSeekedDuringPreparation;
+    private final com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine mStateMachine =
+            new com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine();
 
     private static volatile boolean sUseNewYandexBackend = true;
     private static volatile VoiceTranslateController sInstance;
@@ -349,8 +351,10 @@ public class VoiceTranslateController extends BasePlayerController {
             }
 
             if (mUserArmed && progressOverlay() != null) {
+                int countdownSec = (int) remainingSec;
                 if (remainingSec > 0) {
-                    progressOverlay().showWaitingWithEta(getActivity(), VotProgressTimer.formatMmSs(remainingSec));
+                    countdownSec = mStateMachine.reconcileEtaSec((int) remainingSec, System.currentTimeMillis());
+                    progressOverlay().showWaitingWithEta(getActivity(), VotProgressTimer.formatMmSs(countdownSec > 0 ? countdownSec : remainingSec));
                 } else if (mProgressTimer.isEtaExpired(now)) {
                     long elapsedAfterEtaSec = mProgressTimer.getElapsedAfterEtaSec(now);
                     Log.d(TAG, "VOT ETA expired, polling continues: elapsed=%ds, video=%s", elapsedAfterEtaSec, mCurrentVideoId);
@@ -640,6 +644,14 @@ public class VoiceTranslateController extends BasePlayerController {
     public void onButtonLongClicked(int buttonId, int buttonState) {
          if (buttonId == ACTION_VOICE_TRANSLATE) {
             AppDialogUtil.showVotMixDialog(getContext(), this::applyCurrentMix);
+        }
+    }
+
+    @Override
+    public void onControlsShown(boolean shown) {
+        super.onControlsShown(shown);
+        if (mProgressOverlay != null) {
+            mProgressOverlay.updateControlsVisibility(shown);
         }
     }
 
@@ -998,6 +1010,45 @@ public class VoiceTranslateController extends BasePlayerController {
             targetLang = "ru";
         }
 
+        mStateMachine.reset();
+        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.LOOKUP, System.currentTimeMillis());
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(getContext());
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult sessionLookup =
+                com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.lookup(videoId, videoUrl, sourceLang, targetLang, useLively);
+
+        if (sessionLookup instanceof com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit) {
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit hit =
+                    (com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit) sessionLookup;
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource rSrc =
+                    com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.MEMORY_CACHE;
+            try {
+                rSrc = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.valueOf(hit.getSource());
+            } catch (Exception ignored) {}
+            mStateMachine.markLookupReady(rSrc, System.currentTimeMillis());
+            if (mUserArmed && progressOverlay() != null) {
+                progressOverlay().showLookupReady(getActivity());
+            }
+            Map<String, String> reuseCtx = new HashMap<>();
+            reuseCtx.put("source", hit.getSource());
+            reuseCtx.put("finalPath", "CACHE");
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_REUSED,
+                    "Translation reused from " + hit.getSource(),
+                    reuseCtx
+            );
+            prepareAndStartTranslationAudio(hit.getRecord().getAudioUrl());
+            return;
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.registerPendingJob(
+                videoId, videoUrl, sourceLang, targetLang, useLively
+        );
+        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.REQUESTING, System.currentTimeMillis());
+
         boolean isCachedHit = (mYandexOrchestrator != null &&
                 mYandexOrchestrator.getCurrentState().getStatus() == YandexVotState.Status.READY &&
                 Objects.equals(mYandexOrchestrator.getCurrentState().getVideoUrl(), videoUrl)) ||
@@ -1314,6 +1365,26 @@ public class VoiceTranslateController extends BasePlayerController {
                 }
                 long elapsedMs = Math.max(0L, SystemClock.elapsedRealtime() - mRequestStartTimestamp);
                 boolean isLiveVoice = votData().isLivelyVoiceEnabled();
+                mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, System.currentTimeMillis());
+                if (state.getAudioUrl() != null && !state.getAudioUrl().isEmpty()) {
+                    TrackInfo audioInfo = resolveAudioInfo();
+                    String srcLang = audioInfo != null && audioInfo.langCode != null ? audioInfo.langCode : "";
+                    String tgtLang = votData().getTargetLanguage();
+                    if (tgtLang == null || tgtLang.isEmpty()) tgtLang = "ru";
+                    if (VotAudioTrackHelper.isUkrainianLang(srcLang)) {
+                        tgtLang = "ru";
+                    }
+                    double durSec = (getPlayer() != null && getPlayer().getDurationMs() > 0) ? (getPlayer().getDurationMs() / 1000.0) : 1.0;
+                    com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.storeReadyTranslation(
+                            state.getVideoId() != null ? state.getVideoId() : (mCurrentVideoId != null ? mCurrentVideoId : ""),
+                            state.getVideoUrl() != null ? state.getVideoUrl() : (mPendingVideoUrl != null ? mPendingVideoUrl : ""),
+                            srcLang,
+                            tgtLang,
+                            state.getAudioUrl(),
+                            durSec,
+                            isLiveVoice
+                    );
+                }
                 Map<String, String> readyCtx = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.createSafeDiagnosticsContext(
                         elapsedMs,
                         elapsedMs < 500 ? "cache" : "api",

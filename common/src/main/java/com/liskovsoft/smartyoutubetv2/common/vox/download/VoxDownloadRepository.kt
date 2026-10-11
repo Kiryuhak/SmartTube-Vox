@@ -100,6 +100,18 @@ class VoxDownloadRepository(
             job.packagingStarted = stored.packagingStarted
             job.packagingCompleted = stored.packagingCompleted
             job.finalizeCompleted = stored.finalizeCompleted
+            job.downloadElapsedMs = stored.downloadElapsedMs
+            job.videoElapsedMs = stored.videoElapsedMs
+            job.audioElapsedMs = stored.audioElapsedMs
+            job.translationElapsedMs = stored.translationElapsedMs
+            job.packagingElapsedMs = stored.packagingElapsedMs
+            job.finalizeElapsedMs = stored.finalizeElapsedMs
+            job.averageSpeedMbps = stored.averageSpeedMbps
+            job.peakSpeedMbps = stored.peakSpeedMbps
+            job.stallEventsCount = stored.stallEventsCount
+            job.rangeResumptionsCount = stored.rangeResumptionsCount
+            job.networkReconnectCount = stored.networkReconnectCount
+            job.retryCount = stored.retryCount
             jobs[id] = job
         }
     }
@@ -175,7 +187,19 @@ class VoxDownloadRepository(
             lastProgressAt = job.lastProgressAt,
             packagingStarted = job.packagingStarted,
             packagingCompleted = job.packagingCompleted,
-            finalizeCompleted = job.finalizeCompleted
+            finalizeCompleted = job.finalizeCompleted,
+            downloadElapsedMs = job.downloadElapsedMs,
+            videoElapsedMs = job.videoElapsedMs,
+            audioElapsedMs = job.audioElapsedMs,
+            translationElapsedMs = job.translationElapsedMs,
+            packagingElapsedMs = job.packagingElapsedMs,
+            finalizeElapsedMs = job.finalizeElapsedMs,
+            averageSpeedMbps = job.averageSpeedMbps,
+            peakSpeedMbps = job.peakSpeedMbps,
+            stallEventsCount = job.stallEventsCount,
+            rangeResumptionsCount = job.rangeResumptionsCount,
+            networkReconnectCount = job.networkReconnectCount,
+            retryCount = job.retryCount
         )
     }
 

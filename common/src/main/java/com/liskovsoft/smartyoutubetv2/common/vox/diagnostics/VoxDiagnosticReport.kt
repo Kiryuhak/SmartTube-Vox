@@ -38,11 +38,13 @@ data class VoxDiagnosticReport(
     val playbackStats: Map<String, Any>? = null,
     val livePlayback: Map<String, Any>? = null,
     val downloadDiagnostics: Map<String, Any>? = null,
+    val startupProfile: Map<String, Any>? = null,
     val safeRecentEvents: List<VoxLogEvent> = emptyList()
 ) {
     companion object {
         const val SCHEMA_V1 = "vox-diagnostic-report-v1"
         const val SCHEMA_V2 = "vox-diagnostic-report-v2"
+        const val SCHEMA_V3 = "vox-diagnostic-report-v3"
         const val MAX_REPORT_EVENTS = 50
 
         @JvmStatic
@@ -139,8 +141,14 @@ data class VoxDiagnosticReport(
                 null
             }
 
+            val startupSummary = try {
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.getCurrentProfileSummary()
+            } catch (e: Exception) {
+                null
+            }
+
             return VoxDiagnosticReport(
-                schema = SCHEMA_V2,
+                schema = SCHEMA_V3,
                 reportId = reportId,
                 timestamp = System.currentTimeMillis(),
                 appVersion = appVer,
@@ -161,6 +169,7 @@ data class VoxDiagnosticReport(
                 playbackStats = playbackSummary,
                 livePlayback = liveMetrics,
                 downloadDiagnostics = downloadDiag,
+                startupProfile = startupSummary,
                 safeRecentEvents = recentEvents
             )
         }
@@ -218,6 +227,11 @@ data class VoxDiagnosticReport(
             val ddObj = JSONObject()
             downloadDiagnostics.forEach { (k, v) -> ddObj.put(k, v) }
             root.put("downloadDiagnostics", ddObj)
+        }
+        if (startupProfile != null && startupProfile.isNotEmpty()) {
+            val spObj = JSONObject()
+            startupProfile.forEach { (k, v) -> spObj.put(k, v) }
+            root.put("startupProfile", spObj)
         }
 
         if (safeRecentEvents.isNotEmpty()) {
@@ -283,6 +297,13 @@ data class VoxDiagnosticReport(
         if (downloadDiagnostics != null && downloadDiagnostics.isNotEmpty()) {
             sb.append("\n--- ДИАГНОСТИКА СКАЧИВАНИЯ ---\n")
             downloadDiagnostics.forEach { (k, v) ->
+                sb.append(k).append(": ").append(v).append("\n")
+            }
+        }
+
+        if (startupProfile != null && startupProfile.isNotEmpty()) {
+            sb.append("\n--- ПРОФИЛЬ ЗАПУСКА ВИДЕО ---\n")
+            startupProfile.forEach { (k, v) ->
                 sb.append(k).append(": ").append(v).append("\n")
             }
         }

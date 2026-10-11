@@ -399,6 +399,11 @@
 
     const tabBtn = document.getElementById('tabBtnReports');
     if (tabBtn) tabBtn.textContent = 'Все отчёты (' + visibleCount + ')';
+
+    const activeCat = (filterCategory ? filterCategory.value : '').toUpperCase();
+    document.querySelectorAll('.category-chip').forEach(c => {
+      c.classList.toggle('active', (c.getAttribute('data-chip-category') || '').toUpperCase() === activeCat);
+    });
   }
 
   function resetAllFilters() {
@@ -528,6 +533,14 @@
     if (kpiTotal) kpiTotal.textContent = stats.totalReports ?? 0;
     const kpiAtt = document.getElementById('kpiAttention');
     if (kpiAtt) kpiAtt.textContent = stats.attentionCount ?? 0;
+    const kpiLive = document.getElementById('kpiLive');
+    if (kpiLive) kpiLive.textContent = stats.liveCount ?? 0;
+    const kpiTrans = document.getElementById('kpiTranslation');
+    if (kpiTrans) kpiTrans.textContent = stats.translationCount ?? 0;
+    const kpiDl = document.getElementById('kpiDownload');
+    if (kpiDl) kpiDl.textContent = stats.downloadCount ?? 0;
+    const kpiNet = document.getElementById('kpiNetwork');
+    if (kpiNet) kpiNet.textContent = stats.networkCount ?? 0;
   }
 
   /**
@@ -658,6 +671,152 @@
           <button class="btn btn-sm" data-quick-status="CLOSED">Закрыто</button>
         </div>
       `;
+    } else if (activeModalTab === 'timeline') {
+      const events = p.safeRecentEvents || [];
+      const sp = p.startupProfile || report.startupProfile;
+      modalContent.innerHTML = `
+        ${sp ? `
+        <div class="section-card" style="border-left: 3px solid var(--accent);">
+          <div class="section-title">Startup Profiler Timeline (Cold Start)</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;font-size:13px;margin-bottom:8px;">
+            <div>Cold Start: <strong>${escapeHtml(sp.stages?.coldStartMs ?? sp.coldStartMs ?? '-')} мс</strong></div>
+            <div>Network Init: <strong>${escapeHtml(sp.stages?.networkInitMs ?? sp.networkInitMs ?? '-')} мс</strong></div>
+            <div>First Frame: <strong>${escapeHtml(sp.stages?.firstFrameMs ?? sp.firstFrameMs ?? '-')} мс</strong></div>
+            <div>Total Startup: <strong style="color:var(--accent);">${escapeHtml(sp.totalStartupMs ?? '-')} мс</strong></div>
+          </div>
+        </div>` : ''}
+
+        <div class="section-card">
+          <div class="section-title">Хронология событий (Safe Timeline)</div>
+          ${events.length === 0 ? '<p style="color:var(--text-muted);">Событий не зафиксировано.</p>' : `
+          <div style="margin-top:10px;">
+            ${events.map(e => {
+              const lvl = (e.level || 'INFO').toLowerCase();
+              const lifecycle = e.lifecycle || (e.safeContext?.lifecycle) || '';
+              return `
+              <div class="timeline-item ${lvl}">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);margin-bottom:2px;">
+                  <span>${formatDateTime(e.timestamp)}</span>
+                  <div style="display:flex;gap:4px;">
+                    ${lifecycle ? `<span class="tag ${lifecycle === 'CURRENT_SESSION' ? 'tag-status-new' : 'tag-status-test'}">${escapeHtml(lifecycle)}</span>` : ''}
+                    <span class="tag ${lvl === 'error' ? 'tag-error' : (lvl === 'warn' ? 'tag-status-in_progress' : 'tag-status-new')}">${escapeHtml(e.level || 'INFO')}</span>
+                  </div>
+                </div>
+                <div style="font-size:13px;color:var(--text-bright);"><strong>${escapeHtml(e.category || '')}</strong>: ${escapeHtml(e.code || e.event || '')}</div>
+                ${e.message ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escapeHtml(e.message)}</div>` : ''}
+                ${e.safeContext && Object.keys(e.safeContext).length > 0 ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px;font-family:monospace;">${escapeHtml(JSON.stringify(e.safeContext))}</div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>`}
+        </div>
+      `;
+    } else if (activeModalTab === 'network') {
+      const net = p.networkState || {};
+      const pol = p.currentPolicy || {};
+      modalContent.innerHTML = `
+        <div class="section-card">
+          <div class="section-title">Сетевой движок (Network Engine 2.0)</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px;">
+            <div>Активный движок: <strong>${escapeHtml(net.engine || net.networkEngine || pol.networkEngine || 'AUTO (OkHttp / Cronet)')}</strong></div>
+            <div>Статус охлаждения: <strong>${net.cooldownActive ? 'Активно (Anti-ping-pong)' : 'Готов к переключению'}</strong></div>
+            <div>Счётчик переключений: <strong>${escapeHtml(net.switchCount ?? 0)} (бюджет: ${escapeHtml(net.budgetRemaining ?? 2)})</strong></div>
+            <div>Время удержания (Hold time): <strong>${net.holdTimeMs ? (net.holdTimeMs + ' мс') : '-'}</strong></div>
+            <div>Health score: <strong>${escapeHtml(net.healthScore ?? 100)} / 100</strong></div>
+            <div>Probe Latency: <strong>${net.probeLatencyMs ? (net.probeLatencyMs + ' мс') : (net.latencyMs ? (net.latencyMs + ' мс') : '-')}</strong></div>
+          </div>
+        </div>
+      `;
+    } else if (activeModalTab === 'player') {
+      const pl = p.playbackStats || p.livePlayback || {};
+      modalContent.innerHTML = `
+        <div class="section-card">
+          <div class="section-title">Воспроизведение и плеер (Playback)</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px;">
+            <div>Тип источника: <strong>${escapeHtml(report.sourceType || (p.livePlayback ? 'LIVE' : (p.playbackStats ? 'VOD' : '-')))}</strong></div>
+            <div>Выбранный кодек: <strong>${escapeHtml(pl.selectedCodec || '-')}</strong></div>
+            <div>Разрешение: <strong>${escapeHtml(pl.selectedHeight || pl.selectedResolution || '-')}p</strong></div>
+            <div>Смещение Live (DVR offset): <strong>${pl.liveOffsetMs ? (Math.round(pl.liveOffsetMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Буферизаций (Rebuffer count): <strong>${escapeHtml(pl.rebufferCount ?? 0)}</strong></div>
+            <div>Общее время сталла: <strong>${pl.totalRebufferMs ? (pl.totalRebufferMs + ' мс') : '-'}</strong></div>
+            <div>Средний буфер вперед: <strong>${pl.averageBufferedMs ? (pl.averageBufferedMs + ' мс') : '-'}</strong></div>
+            <div>Битрейт: <strong>${pl.averageBandwidthKbps ? (pl.averageBandwidthKbps + ' kbps') : '-'}</strong></div>
+          </div>
+        </div>
+      `;
+    } else if (activeModalTab === 'translation') {
+      const tr = p.translationState || {};
+      const tc = p.translationCache || {};
+      modalContent.innerHTML = `
+        <div class="section-card">
+          <div class="section-title">Закадровый перевод (Translation Reuse 2.0)</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px;">
+            <div>Кэш перевода: <strong>${tc.isReused || tr.isReused ? 'HIT (переиспользован)' : 'MISS (запрос к backend)'}</strong></div>
+            <div>Языковая пара: <strong>${escapeHtml(tr.sourceLang || 'auto')} → ${escapeHtml(tr.targetLang || 'ru')}</strong></div>
+            <div>Текущий этап (State): <strong>${escapeHtml(tr.status || tr.stage || 'IDLE')}</strong></div>
+            <div>Монотонный ETA отсчёт: <strong>${tr.etaRemainingSeconds ? (tr.etaRemainingSeconds + ' сек') : '-'}</strong></div>
+            <div>Общее время запуска: <strong>${tr.totalStartupMs ? (tr.totalStartupMs + ' мс') : '-'}</strong></div>
+            <div>Ожидание провайдера: <strong>${tr.providerWaitMs ? (tr.providerWaitMs + ' мс') : '-'}</strong></div>
+            <div>Скачивание аудиодорожки: <strong>${tr.audioDownloadMs ? (tr.audioDownloadMs + ' мс') : '-'}</strong></div>
+            <div>Дорожка подключена: <strong>${p.translatedTrackPresent ? 'Да' : 'Нет'}</strong></div>
+          </div>
+        </div>
+      `;
+    } else if (activeModalTab === 'downloads') {
+      const dl = p.downloadDiagnostics || p.downloadState || {};
+      const perf = dl.downloadPerformance || {};
+      modalContent.innerHTML = `
+        <div class="section-card">
+          <div class="section-title">Производительность загрузок (Downloads 3.0)</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px;">
+            <div>Активные задачи: <strong>${escapeHtml(dl.activeJobs ?? dl.activeTasks ?? 0)}</strong></div>
+            <div>Движок: <strong>${escapeHtml(dl.engine || 'MKV_MUXER')}</strong></div>
+            <div>Свободно на диске: <strong>${escapeHtml(dl.storageSpaceAvailableMb ?? dl.freeStorageMb ?? '-')} МБ</strong></div>
+            <div>Сетевая загрузка (Всего): <strong>${perf.totalElapsedMs ? (Math.round(perf.totalElapsedMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Видеопоток: <strong>${perf.videoElapsedMs ? (Math.round(perf.videoElapsedMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Аудиопоток: <strong>${perf.audioElapsedMs ? (Math.round(perf.audioElapsedMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Дорожка перевода: <strong>${perf.translationElapsedMs ? (Math.round(perf.translationElapsedMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Этап упаковки (Packaging): <strong style="${Number(perf.packagingElapsedMs || 0) > 30000 ? 'color:var(--danger);' : ''}">${perf.packagingElapsedMs ? (Math.round(perf.packagingElapsedMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Финализация: <strong>${perf.finalizeElapsedMs ? (Math.round(perf.finalizeElapsedMs / 1000) + ' сек') : '-'}</strong></div>
+            <div>Чтение / Запись на диск: <strong>${perf.diskReadMs ? (perf.diskReadMs + ' мс') : '-'} / ${perf.diskWriteMs ? (perf.diskWriteMs + ' мс') : '-'}</strong></div>
+            <div>Средняя скорость: <strong>${perf.averageMbps ? (perf.averageMbps + ' Mbps') : '-'}</strong></div>
+            <div>Пиковая скорость: <strong>${perf.peakMbps ? (perf.peakMbps + ' Mbps') : '-'}</strong></div>
+          </div>
+        </div>
+      `;
+    } else if (activeModalTab === 'device') {
+      const vCodecs = p.videoCodecs || {};
+      const aCodecs = p.audioCodecs || {};
+      modalContent.innerHTML = `
+        <div class="section-card">
+          <div class="section-title">Характеристики устройства</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px;margin-bottom:14px;">
+            <div>Производитель: <strong>${escapeHtml(p.manufacturer || '-')}</strong></div>
+            <div>Модель: <strong>${escapeHtml(p.model || report.device_family || '-')}</strong></div>
+            <div>Класс устройства: <strong>${escapeHtml(p.deviceTier || '-')}</strong></div>
+            <div>ОС / SDK: <strong>${escapeHtml(p.osName || 'Android')} ${escapeHtml(p.osVersion || '')} (API ${escapeHtml(p.sdkInt || '-')})</strong></div>
+            <div>Экран: <strong>${escapeHtml(p.display?.resolution || '-')} @ ${escapeHtml(p.display?.refreshRateHz || '-')}Hz</strong></div>
+            <div>HDR10: <strong>${escapeHtml(p.display?.hdr10 || '-')}</strong></div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="section-title">Видеодекодеры устройства</div>
+          <table>
+            <thead><tr><th>Кодек</th><th>Поддержка</th></tr></thead>
+            <tbody>
+              ${Object.entries(vCodecs).map(([k, v]) => `<tr><td><strong>${escapeHtml(k)}</strong></td><td><span class="tag ${String(v).includes('HW') ? 'tag-android' : 'tag-status-test'}">${escapeHtml(v)}</span></td></tr>`).join('') || '<tr><td colspan="2">Информация отсутствует</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        <div class="section-card">
+          <div class="section-title">Аудиодекодеры</div>
+          <table>
+            <thead><tr><th>Формат</th><th>Статус</th></tr></thead>
+            <tbody>
+              ${Object.entries(aCodecs).map(([k, v]) => `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(v)}</td></tr>`).join('') || '<tr><td colspan="2">Информация отсутствует</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
     } else if (activeModalTab === 'codecs') {
       const vCodecs = p.videoCodecs || {};
       const aCodecs = p.audioCodecs || {};
@@ -680,28 +839,6 @@
               ${Object.entries(aCodecs).map(([k, v]) => `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(v)}</td></tr>`).join('') || '<tr><td colspan="2">Информация отсутствует</td></tr>'}
             </tbody>
           </table>
-        </div>
-      `;
-    } else if (activeModalTab === 'timeline') {
-      const events = p.safeRecentEvents || [];
-      modalContent.innerHTML = `
-        <div class="section-card">
-          <div class="section-title">Хронология событий (Safe Timeline)</div>
-          ${events.length === 0 ? '<p style="color:var(--text-muted);">Событий не зафиксировано.</p>' : `
-          <div style="margin-top:10px;">
-            ${events.map(e => {
-              const lvl = (e.level || 'INFO').toLowerCase();
-              return `
-              <div class="timeline-item ${lvl}">
-                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);margin-bottom:2px;">
-                  <span>${formatDateTime(e.timestamp)}</span>
-                  <span class="tag ${lvl === 'error' ? 'tag-error' : (lvl === 'warn' ? 'tag-status-in_progress' : 'tag-status-new')}">${escapeHtml(e.level || 'INFO')}</span>
-                </div>
-                <div style="font-size:13px;color:var(--text-bright);"><strong>${escapeHtml(e.category || '')}</strong>: ${escapeHtml(e.code || '')}</div>
-                ${e.message ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${escapeHtml(e.message)}</div>` : ''}
-              </div>`;
-            }).join('')}
-          </div>`}
         </div>
       `;
     } else if (activeModalTab === 'ops') {
@@ -872,6 +1009,51 @@
       showToast('Markdown скопирован в буфер');
     }).catch(() => {
       showToast('Не удалось скопировать Markdown', true);
+    });
+  }
+
+  function copyTechnicalSummary(report) {
+    if (!report) return;
+    const p = report.payload || {};
+    const text = [
+      `[VOX TECHNICAL SUMMARY]`,
+      `ID: ${report.report_id || report.reportId}`,
+      `Status: ${normalizeStatus(report.status)}`,
+      `Platform: ${report.platform || p.platform || 'Android TV'}`,
+      `Version: ${report.app_version || p.appVersion || '-'} (Code: ${p.appVersionCode || '-'})`,
+      `Device: ${p.manufacturer || ''} ${p.model || report.device_family || ''} (Tier: ${p.deviceTier || '-'}, API: ${p.sdkInt || '-'})`,
+      `Category: ${report.error_category || report.errorCategory || '-'}`,
+      `Signature: ${report.error_signature || report.errorSignature || '-'}`,
+      report.developer_notes ? `Notes: ${report.developer_notes}` : '',
+      `Events Count: ${(p.safeRecentEvents || []).length}`,
+    ].filter(Boolean).join('\n');
+
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Техническое резюме скопировано');
+    }).catch(() => {
+      showToast('Не удалось скопировать', true);
+    });
+  }
+
+  function copyAntigravitySummary(report) {
+    if (!report) return;
+    const p = report.payload || {};
+    const text = [
+      `### VOX Diagnostic Incident: ${report.report_id || report.reportId}`,
+      `- **Device Family**: ${p.manufacturer || ''} ${p.model || report.device_family || ''} (Tier: ${p.deviceTier || '-'})`,
+      `- **Platform / OS**: ${report.platform || p.platform || 'Android TV'} Android ${p.osVersion || ''} (API ${p.sdkInt || '-'})`,
+      `- **Version**: ${report.app_version || p.appVersion || '-'} (${p.appVersionCode || '-'})`,
+      `- **Error Category**: \`${report.error_category || report.errorCategory || '-'}\``,
+      `- **Error Signature**: \`${report.error_signature || report.errorSignature || '-'}\``,
+      `- **Status**: ${normalizeStatus(report.status)}`,
+      `- **Recent Events Summary**: ${(p.safeRecentEvents || []).slice(-5).map(e => `${e.level || 'INFO'}: ${e.code || e.event || ''} - ${e.message || ''}`).join('; ')}`,
+      report.developer_notes ? `- **Developer Notes**: ${report.developer_notes}` : '',
+    ].filter(Boolean).join('\n');
+
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Antigravity резюме скопировано');
+    }).catch(() => {
+      showToast('Не удалось скопировать', true);
     });
   }
 
@@ -1083,11 +1265,48 @@
           resetAllFilters();
           if (filterSpecial) filterSpecial.value = 'attention';
           filterReportsTable();
+        } else if (['LIVE', 'TRANSLATION', 'DOWNLOAD', 'NETWORK'].includes(metric)) {
+          resetAllFilters();
+          if (filterCategory) filterCategory.value = metric;
+          filterReportsTable();
         } else if (CANONICAL_STATUSES.includes(metric)) {
           resetAllFilters();
           if (filterStatus) filterStatus.value = metric;
           filterReportsTable();
         }
+      });
+    });
+
+    // Category Chips
+    document.querySelectorAll('.category-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const cat = chip.getAttribute('data-chip-category') || '';
+        document.querySelectorAll('.category-chip').forEach(c => c.classList.toggle('active', c === chip));
+        if (filterCategory) filterCategory.value = cat;
+        filterReportsTable();
+      });
+    });
+
+    // Attention Cards
+    document.querySelectorAll('.attention-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const att = card.getAttribute('data-attention');
+        switchMainTab('reports');
+        resetAllFilters();
+        if (att === 'live-seek') {
+          if (filterSignature) filterSignature.value = 'LIVE_SEEK';
+        } else if (att === 'translation-slow') {
+          if (filterCategory) filterCategory.value = 'TRANSLATION';
+        } else if (att === 'download-packaging') {
+          if (filterCategory) filterCategory.value = 'DOWNLOAD';
+          if (filterSignature) filterSignature.value = 'PACKAGING';
+        } else if (att === 'network-fallback') {
+          if (filterCategory) filterCategory.value = 'NETWORK';
+          if (filterSignature) filterSignature.value = 'FALLBACK';
+        } else if (att === 'thumbnail-failures') {
+          if (filterSignature) filterSignature.value = 'IMAGE';
+        }
+        filterReportsTable();
       });
     });
 
@@ -1189,6 +1408,20 @@
       });
     }
 
+    const detailCopyTechBtn = document.getElementById('detailCopyTechBtn');
+    if (detailCopyTechBtn) {
+      detailCopyTechBtn.addEventListener('click', () => {
+        if (currentReport) copyTechnicalSummary(currentReport);
+      });
+    }
+
+    const detailCopyAgBtn = document.getElementById('detailCopyAgBtn');
+    if (detailCopyAgBtn) {
+      detailCopyAgBtn.addEventListener('click', () => {
+        if (currentReport) copyAntigravitySummary(currentReport);
+      });
+    }
+
     const detailCopyMdBtn = document.getElementById('detailCopyMdBtn');
     if (detailCopyMdBtn) {
       detailCopyMdBtn.addEventListener('click', () => {
@@ -1258,6 +1491,12 @@
         filterReportsTable();
       } else if (action === 'save-issue') {
         saveIssueItem(target.closest('tr'));
+      } else if (action === 'copy-technical-summary') {
+        copyTechnicalSummary(currentReport);
+      } else if (action === 'copy-antigravity-summary') {
+        copyAntigravitySummary(currentReport);
+      } else if (action === 'copy-markdown') {
+        copyGitHubMarkdown(currentReport);
       } else if (action === 'copy-raw-json') {
         copyRawJson();
       }

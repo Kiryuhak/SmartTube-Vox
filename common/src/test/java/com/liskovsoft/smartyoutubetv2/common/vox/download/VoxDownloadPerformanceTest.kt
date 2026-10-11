@@ -200,4 +200,48 @@ class VoxDownloadPerformanceTest {
         assertEquals(24_000_000L, progress.totalBytesExpected)
         assertEquals(50, progress.overallPercent)
     }
+
+    @Test
+    fun testStoredJobDataPerformanceFieldsPersistence() {
+        val request = VoxDownloadRequest(
+            videoId = "perf_persisted_test",
+            videoTitle = "Perf Persisted Test"
+        )
+
+        val stored = StoredJobData(
+            request = request,
+            state = VoxDownloadState.COMPLETED,
+            errorCode = null,
+            errorMessage = null,
+            publishedUri = "content://media/external/video/media/42",
+            videoProgress = VoxTrackProgress(VoxDownloadTrack.VIDEO, 1000L, 1000L),
+            originalAudioProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, 200L, 200L),
+            translatedAudioProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, 150L, 150L),
+            downloadElapsedMs = 15_000L,
+            videoElapsedMs = 12_000L,
+            audioElapsedMs = 4_000L,
+            translationElapsedMs = 5_500L,
+            packagingElapsedMs = 3_200L,
+            finalizeElapsedMs = 800L,
+            averageSpeedMbps = 24.5,
+            peakSpeedMbps = 38.2,
+            stallEventsCount = 2,
+            rangeResumptionsCount = 1,
+            networkReconnectCount = 0,
+            retryCount = 1
+        )
+
+        assertEquals(15_000L, stored.downloadElapsedMs)
+        assertEquals(12_000L, stored.videoElapsedMs)
+        assertEquals(4_000L, stored.audioElapsedMs)
+        assertEquals(5_500L, stored.translationElapsedMs)
+        assertEquals(3_200L, stored.packagingElapsedMs)
+        assertEquals(800L, stored.finalizeElapsedMs)
+        assertEquals(24.5, stored.averageSpeedMbps, 0.001)
+        assertEquals(38.2, stored.peakSpeedMbps, 0.001)
+        assertEquals(2, stored.stallEventsCount)
+        assertEquals(1, stored.rangeResumptionsCount)
+        assertEquals(0, stored.networkReconnectCount)
+        assertEquals(1, stored.retryCount)
+    }
 }

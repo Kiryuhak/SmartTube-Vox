@@ -31,6 +31,13 @@ const SAFE_CONTEXT_KEYS = new Set([
   'averageBandwidthKbps', 'manifestErrorCount', 'segmentErrorCount',
   'errorCategory', 'liveOffsetMs',
   'bufferAheadMs', 'playbackSessionId', 'bitrate', 'networkEngine', 'reason',
+  'sourceLang', 'targetLang', 'finalPath', 'reuseSource', 'isReused', 'lookupElapsedMs',
+  'requestElapsedMs', 'providerWaitElapsedMs', 'processingElapsedMs', 'audioAttachElapsedMs',
+  'totalTranslationStartupMs', 'firstSeen', 'lastSeen', 'engine', 'candidateEngine',
+  'cooldownMs', 'budgetRemaining', 'switchCount', 'failureClass', 'nearestPositionMs',
+  'requestedPositionMs', 'windowStartMs', 'windowEndMs', 'holdTimeMs', 'averageMbps',
+  'peakMbps', 'videoElapsedMs', 'audioElapsedMs', 'translationElapsedMs', 'packagingElapsedMs',
+  'finalizeElapsedMs', 'diskReadMs', 'diskWriteMs', 'downloadId', 'sessionId', 'mode',
 ]);
 const SAFE_ENUM = /^[A-Za-z][A-Za-z0-9_+.-]{0,63}$/;
 
@@ -150,15 +157,145 @@ export function structuredEvents(report = {}) {
 
 export function classifyReport(report = {}) {
   const events = structuredEvents(report);
+  const now = Number(report.timestamp) || Date.now();
+  const currentSessionId = report.playbackSessionId || report.livePlayback?.playbackSessionId || report.playbackStats?.playbackSessionId;
+
+  // Annotate events with lifecycle: CURRENT_SESSION, RECENT, HISTORICAL
+  for (const ev of events) {
+    const evSessionId = ev.safeContext?.playbackSessionId || ev.safeContext?.sessionId;
+    if (currentSessionId && evSessionId && evSessionId === currentSessionId) {
+      ev.lifecycle = 'CURRENT_SESSION';
+    } else if (Math.abs(now - ev.timestamp) <= 180000) { // within last 3 minutes
+      ev.lifecycle = 'RECENT';
+    } else {
+      ev.lifecycle = 'HISTORICAL';
+    }
+  }
+
   const rank = { INFO: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
-  const last = [...events].reverse().find(e => e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)) || events.at(-1);
-  const errorCategory = enumValue(last?.errorCategory || report.errorCategory);
-  const subsystem = enumValue(report.subsystem || last?.subsystem, 'SYSTEM');
-  const stage = enumValue(report.stage || last?.stage);
+
+  // Priority 1: Error in CURRENT_SESSION
+  const currentError = [...events].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+  // Priority 2: Error in RECENT
+  const recentError = [...events].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+  const primary = currentError || recentError;
+
+  let last = primary;
+  if (!last) {
+    if (report.errorCategory || report.reportPurpose === 'TEST') {
+      last = [...events].reverse().find(e => (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity))) || events.at(-1);
+    } else {
+      last = events.at(-1);
+    }
+  }
+
+  const errorCategory = enumValue(primary?.errorCategory || report.errorCategory || (last?.level === 'ERROR' ? last?.errorCategory : ''));
+  const subsystem = enumValue(report.subsystem || primary?.subsystem || last?.subsystem, 'SYSTEM');
+  const stage = enumValue(report.stage || primary?.stage || last?.stage);
   const explicit = enumValue(report.severity);
   const severity = SEVERITIES.includes(explicit) ? explicit :
     events.reduce((best, event) => rank[event.severity] > rank[best] ? event.severity : best, errorCategory ? 'MEDIUM' : 'INFO');
-  return { events, errorCategory, subsystem, stage, severity };
+  return { events, errorCategory, subsystem, stage, severity, primaryEvent: primary };
+}
+
+export function generateDeterministicSummary(report = {}) {
+  const classified = classifyReport(report);
+  const dl = report.downloadDiagnostics || report.downloadState || {};
+  const perf = dl.downloadPerformance || {};
+  const lp = report.livePlayback || {};
+  const primary = classified.primaryEvent;
+
+  // 1. Download packaging bottleneck
+  const packMs = Number(perf.packagingElapsedMs || 0);
+  const dlMs = Number(perf.totalElapsedMs || 0);
+  if (packMs > 30000 || (packMs > 5000 && dlMs > 0 && packMs > dlMs * 2)) {
+    return {
+      primary: 'DOWNLOAD_PACKAGING_SLOW',
+      evidence: [
+        `download network: ${Math.round(dlMs / 1000)}s`,
+        `packaging: ${Math.round(packMs / 1000)}s`,
+        `finalize: ${Math.round(Number(perf.finalizeElapsedMs || 0) / 1000)}s`,
+      ],
+      conclusion: 'bottleneck = packaging',
+      confidence: 'HIGH',
+      descriptionRu: 'Скачивание завершилось быстро, но этап упаковки контейнера занял основное время.'
+    };
+  }
+
+  // 2. Live seek recovery
+  const liveOffset = Number(lp.liveOffsetMs || 0);
+  const seekClampEv = classified.events.find(e => e.event === 'LIVE_SEEK_CLAMPED');
+  const liveRecoveryEv = classified.events.find(e => e.event === 'LIVE_RECOVERY_STARTED' || e.event === 'LIVE_RECOVERY_SUCCEEDED');
+  if (seekClampEv || liveRecoveryEv || (lp.isLive && liveOffset > 300000)) {
+    return {
+      primary: 'LIVE_SEEK_RECOVERY',
+      evidence: [
+        `live window offset: ${Math.round(liveOffset / 1000)}s`,
+        `seek clamped: ${Boolean(seekClampEv)}`,
+        `recovery attempted: ${Boolean(liveRecoveryEv)}`,
+      ],
+      conclusion: 'live position adjusted to safe window',
+      confidence: 'HIGH',
+      descriptionRu: 'Позиция прямого эфира была скорректирована в доступное окно воспроизведения.'
+    };
+  }
+
+  // 3. Translation startup slow or reused
+  const transEv = classified.events.find(e => e.category === 'TRANSLATION' && (e.event === 'TRANSLATION_REUSED' || e.event === 'TRANSLATION_READY' || e.event === 'TRANSLATION_STARTUP_SLOW'));
+  if (transEv) {
+    const isReused = transEv.event === 'TRANSLATION_REUSED' || transEv.safeContext?.isReused === 'true';
+    const totalMs = Number(transEv.safeContext?.totalTranslationStartupMs || transEv.safeContext?.elapsedMs || 0);
+    return {
+      primary: isReused ? 'TRANSLATION_REUSED' : (totalMs > 30000 ? 'TRANSLATION_STARTUP_SLOW' : 'TRANSLATION_READY'),
+      evidence: [
+        `reused: ${isReused}`,
+        `total startup: ${Math.round(totalMs / 1000)}s`,
+        `source: ${transEv.safeContext?.source || 'api'}`,
+      ],
+      conclusion: isReused ? 'audio track reused from cache' : (totalMs > 30000 ? 'provider processing delay' : 'normal startup'),
+      confidence: 'HIGH',
+      descriptionRu: isReused ? 'Готовый перевод был найден в кэше и воспроизведён без повторного запроса.' : 'Перевод был успешно получен от внешнего сервиса.'
+    };
+  }
+
+  // 4. Network engine fallback
+  const fallbackEv = classified.events.find(e => e.event === 'NETWORK_ENGINE_FALLBACK');
+  if (fallbackEv) {
+    return {
+      primary: 'NETWORK_ENGINE_FALLBACK',
+      evidence: [
+        `engine: ${fallbackEv.safeContext?.engine || 'UNKNOWN'}`,
+        `reason: ${fallbackEv.safeContext?.reason || 'consecutive timeouts'}`,
+      ],
+      conclusion: 'controlled engine switch with cooldown active',
+      confidence: 'HIGH',
+      descriptionRu: 'Сетевой движок был переключён на резервный с соблюдением периода охлаждения.'
+    };
+  }
+
+  // 5. Primary event from current session
+  if (primary) {
+    return {
+      primary: primary.event,
+      evidence: [
+        `category: ${primary.category}`,
+        `subsystem: ${primary.subsystem}`,
+        `stage: ${primary.stage}`,
+        `severity: ${primary.severity}`,
+      ],
+      conclusion: `issue detected in ${primary.subsystem}`,
+      confidence: primary.lifecycle === 'CURRENT_SESSION' ? 'HIGH' : 'MEDIUM',
+      descriptionRu: `Зафиксировано событие ${primary.event} на этапе ${primary.stage}.`
+    };
+  }
+
+  return {
+    primary: 'NO_ACTIVE_ISSUES',
+    evidence: ['all current session checks normal'],
+    conclusion: 'stable operation',
+    confidence: 'HIGH',
+    descriptionRu: 'В текущей сессии активных сбоев не зафиксировано.'
+  };
 }
 
 function parseStageTag(tagStr = '') {

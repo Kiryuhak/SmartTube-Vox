@@ -237,6 +237,7 @@ object VoxLivePlaybackMonitor {
         segmentErrorCount = 0
         lastErrorCategory = "NONE"
         lastHttpStatusCategory = "NONE"
+        currentLiveOffsetMs = 0L
 
         if (isLive) {
             notifyEvent(VoxLivePlaybackEvent.VOX_LIVE_PLAYBACK_START, "streamMarker=$currentStreamMarker")

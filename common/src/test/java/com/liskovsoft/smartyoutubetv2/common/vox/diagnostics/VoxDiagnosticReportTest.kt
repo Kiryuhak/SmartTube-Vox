@@ -36,7 +36,7 @@ class VoxDiagnosticReportTest {
         val report = VoxDiagnosticReport.create(context, "VOX-TEST01", true)
 
         assertNotNull(report)
-        assertEquals("vox-diagnostic-report-v2", report.schema)
+        assertEquals(VoxDiagnosticReport.SCHEMA_V3, report.schema)
         assertEquals("VOX-TEST01", report.reportId)
         assertTrue(report.appVersion.isNotBlank())
         assertTrue(report.appVersionCode > 0)
@@ -50,7 +50,7 @@ class VoxDiagnosticReportTest {
 
         val jsonString = report.toJson()
         val json = JSONObject(jsonString)
-        assertEquals("vox-diagnostic-report-v2", json.getString("schema"))
+        assertEquals(VoxDiagnosticReport.SCHEMA_V3, json.getString("schema"))
         assertEquals("VOX-TEST01", json.getString("reportId"))
         assertEquals(report.appVersion, json.getString("appVersion"))
         assertTrue(json.has("videoCodecs"))

@@ -31,6 +31,8 @@ public class VotProgressOverlay {
     public static final int STATE_ERROR = 5;
     public static final int STATE_TIMEOUT = 6;
     public static final int STATE_RETRY = 7;
+    public static final int STATE_LOOKING_UP = 8;
+    public static final int STATE_LOOKUP_READY = 9;
 
     private static final long DISMISS_DELAY_READY_MS = 2000L;
     private static final long DISMISS_DELAY_ERROR_MS = 3500L;
@@ -57,6 +59,29 @@ public class VotProgressOverlay {
 
     public boolean isShown() {
         return mOverlayView != null && mOverlayView.getVisibility() == View.VISIBLE && mCurrentState != STATE_IDLE;
+    }
+
+    public void showLookingUp(@Nullable Activity activity) {
+        if (!ensureAttached(activity)) return;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        mCurrentState = STATE_LOOKING_UP;
+        showSpinnerMode();
+        setTitle(getStringSafe(R.string.vot_progress_looking_up));
+        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        hideTimer();
+        fadeIn();
+    }
+
+    public void showLookupReady(@Nullable Activity activity) {
+        if (!ensureAttached(activity)) return;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        mCurrentState = STATE_LOOKUP_READY;
+        showIconMode(R.drawable.ic_vot_ready);
+        setTitle(getStringSafe(R.string.vot_progress_lookup_ready));
+        hideSubtitle();
+        hideTimer();
+        fadeIn();
+        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
     }
 
     public void showPreparing(@Nullable Activity activity) {
@@ -87,7 +112,8 @@ public class VotProgressOverlay {
         mCurrentState = STATE_WAITING_WITH_ETA;
         showSpinnerMode();
         setTitle(getStringSafe(R.string.vot_progress_waiting_title));
-        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        String etaText = formatStringSafe(R.string.vot_progress_waiting_eta_format, timeRemainingFormatted);
+        setSubtitle(etaText.isEmpty() ? getStringSafe(R.string.vot_progress_subtitle_default) : etaText);
         setTimer("~ " + timeRemainingFormatted);
         fadeIn();
     }
@@ -356,7 +382,9 @@ public class VotProgressOverlay {
 
             int playbackRootId = activity.getResources().getIdentifier("playback_fragment_root", "id", activity.getPackageName());
             boolean isPlayback = (playbackRootId != 0 && (targetContainer.getId() == playbackRootId || targetContainer.findViewById(playbackRootId) != null));
-            int bottomMargin = isPlayback ? dpToPx(132) : dpToPx(72);
+            int bottomMarginDp = com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.calculateBottomMarginDp(isPlayback, false);
+            int bottomMargin = dpToPx(bottomMarginDp);
+            int overscanMargin = dpToPx(com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.DEFAULT_OVERSCAN_MARGIN_DP);
 
             if (targetContainer instanceof FrameLayout) {
                 FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
@@ -364,7 +392,7 @@ public class VotProgressOverlay {
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 );
                 lp.gravity = Gravity.BOTTOM | Gravity.END;
-                lp.rightMargin = dpToPx(48);
+                lp.rightMargin = overscanMargin;
                 lp.bottomMargin = bottomMargin;
                 mOverlayView.setLayoutParams(lp);
             } else if (targetContainer instanceof LinearLayout) {
@@ -380,7 +408,7 @@ public class VotProgressOverlay {
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                 );
-                lp.rightMargin = dpToPx(48);
+                lp.rightMargin = overscanMargin;
                 lp.bottomMargin = bottomMargin;
                 mOverlayView.setLayoutParams(lp);
             }
@@ -395,6 +423,19 @@ public class VotProgressOverlay {
         } catch (Exception e) {
             Log.e(TAG, "Failed to inflate VOT progress overlay: %s", e.getMessage());
             return false;
+        }
+    }
+
+    public void updateControlsVisibility(boolean isControlsShown) {
+        if (mOverlayView != null && mOverlayView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) mOverlayView.getLayoutParams();
+            boolean isPlayback = mParentView != null;
+            int bottomMarginDp = com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.calculateBottomMarginDp(isPlayback, isControlsShown);
+            int newMargin = dpToPx(bottomMarginDp);
+            if (lp.bottomMargin != newMargin) {
+                lp.bottomMargin = newMargin;
+                mOverlayView.setLayoutParams(lp);
+            }
         }
     }
 

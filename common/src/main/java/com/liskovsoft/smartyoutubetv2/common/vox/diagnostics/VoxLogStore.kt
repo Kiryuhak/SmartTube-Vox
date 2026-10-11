@@ -80,16 +80,25 @@ class VoxLogStore private constructor(private val appContext: Context) {
                         memoryEvents.removeAt(oldestSidebarIndex)
                     }
                 }
-            } else if (event.level != VoxLogLevel.ERROR) {
-                // Coalesce only low-priority repeats. Every ERROR stays as an individual event.
+            } else if (event.level != VoxLogLevel.ERROR || event.code == VoxLogCode.IMAGE_REQUEST_FAILED || event.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT) {
+                // Coalesce repeated events (including frequent IMAGE_REQUEST_FAILED and DOWNLOAD_STATE_INCONSISTENT)
                 val lastIndex = memoryEvents.lastIndex
                 if (lastIndex >= 0) {
                     val last = memoryEvents[lastIndex]
-                    if (last.level == event.level && last.category == event.category &&
-                        last.code == event.code && last.message == event.message &&
-                        last.context == event.context && event.timestamp - last.timestamp in 0..10_000L) {
-                        memoryEvents[lastIndex] = last.copy(timestamp = event.timestamp,
-                            repeatCount = (last.repeatCount + 1).coerceAtMost(100000))
+                    val isSameEvent = last.category == event.category && last.code == event.code &&
+                        (last.message == event.message || event.code == VoxLogCode.IMAGE_REQUEST_FAILED || event.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT)
+                    if (isSameEvent && event.timestamp - last.timestamp in 0..60_000L) {
+                        val updatedContext = (last.context ?: emptyMap()).toMutableMap()
+                        if (!updatedContext.containsKey("firstSeen")) {
+                            updatedContext["firstSeen"] = last.timestamp.toString()
+                        }
+                        updatedContext["lastSeen"] = event.timestamp.toString()
+                        event.context?.forEach { (k, v) -> updatedContext[k] = v }
+                        memoryEvents[lastIndex] = last.copy(
+                            timestamp = event.timestamp,
+                            repeatCount = (last.repeatCount + 1).coerceAtMost(100000),
+                            context = updatedContext
+                        )
                         saveToDiskLocked()
                         return
                     }
