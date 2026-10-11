@@ -984,6 +984,10 @@
     <string name="vot_device_auth_broker_unavailable" translatable="false"></string>
     <string name="vot_player_button_switch" translatable="false"></string>
     <string name="vot_player_button_switch_desc" translatable="false"></string>
+    <string name="settings_download_button" translatable="false"></string>
+    <string name="settings_download_button_desc" translatable="false"></string>
+    <string name="vot_target_language" translatable="false"></string>
+    <string name="vot_error_unsupported_language" translatable="false"></string>
     <string name="vot_player_hud_hint" translatable="false"></string>
     <string name="vot_onboarding_ok" translatable="false"></string>
     <string name="vot_onboarding_never" translatable="false"></string>

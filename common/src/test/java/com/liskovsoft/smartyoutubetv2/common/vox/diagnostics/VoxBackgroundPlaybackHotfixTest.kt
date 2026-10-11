@@ -22,10 +22,12 @@ class VoxBackgroundPlaybackHotfixTest {
             VoxLogCode.BACKGROUND_AUDIO_FOCUS_GAIN,
             VoxLogCode.BACKGROUND_AUDIO_FOCUS_LOSS,
             VoxLogCode.BACKGROUND_MEDIASESSION_ACTIVE,
-            VoxLogCode.BACKGROUND_MEDIASESSION_RELEASED
+            VoxLogCode.BACKGROUND_MEDIASESSION_RELEASED,
+            VoxLogCode.BACKGROUND_UI_DETACHED,
+            VoxLogCode.BACKGROUND_MEDIA_NOTIFICATION_CREATED
         )
 
-        assertEquals("Must contain all 13 background diagnostic codes", 13, backgroundCodes.size)
+        assertEquals("Must contain all 15 background diagnostic codes", 15, backgroundCodes.size)
         backgroundCodes.forEach { code ->
             assertNotNull(code)
             assertTrue(code.startsWith("BACKGROUND_"))

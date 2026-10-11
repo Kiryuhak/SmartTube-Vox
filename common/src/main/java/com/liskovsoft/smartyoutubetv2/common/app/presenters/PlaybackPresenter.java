@@ -139,12 +139,24 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
     }
 
     public boolean isRunningInBackground() {
-        return getView() != null &&
-                getView().isEngineBlocked() &&
-                //getView().getBackgroundMode() != PlayerEngine.BACKGROUND_MODE_DEFAULT &&
-                getView().isEngineInitialized() &&
-                !getViewManager().isPlayerInForeground() &&
-                getContext() instanceof Activity && Utils.checkActivity((Activity) getContext()); // Check that activity is not in Finishing state
+        if (com.liskovsoft.smartyoutubetv2.common.misc.BackgroundPlaybackService.isRunning()) {
+            return true;
+        }
+
+        if (getView() == null || !getView().isEngineBlocked() || !getView().isEngineInitialized()) {
+            return false;
+        }
+
+        if (getViewManager().isPlayerInForeground()) {
+            return false;
+        }
+
+        Context ctx = getContext();
+        if (ctx instanceof Activity) {
+            return Utils.checkActivity((Activity) ctx);
+        }
+
+        return true;
     }
 
     public boolean isInPipMode() {

@@ -16,6 +16,10 @@
     <string name="vot_player_button_switch">\"Translation\" button on player bar</string>
     <string name="vot_player_button_switch_desc">Display translation button in primary player controls</string>
     <string name="vot_player_hud_hint">Press OK on remote during video to open controls and translation</string>
+    <string name="settings_download_button">Download video button</string>
+    <string name="settings_download_button_desc">Show download button in player panel</string>
+    <string name="vot_target_language">Target translation language</string>
+    <string name="vot_error_unsupported_language">Translation from this language is not yet available</string>
 
     <!-- Pulse: Yandex ID UX -->
     <string name="vot_yandex_status_authorized">Yandex ID: Authorized</string>

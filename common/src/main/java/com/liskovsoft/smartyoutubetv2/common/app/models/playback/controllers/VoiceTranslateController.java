@@ -43,6 +43,7 @@ import androidx.annotation.NonNull;
 import android.os.Looper;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -666,6 +667,19 @@ public class VoiceTranslateController extends BasePlayerController {
                 return;
             }
         }
+        if (info != null && VotAudioTrackHelper.isArabicLang(info.langCode)) {
+            Map<String, String> errCtx = new HashMap<>();
+            errCtx.put("sourceLang", info.langCode);
+            errCtx.put("reason", "BLOCKED_EXTERNAL_BACKEND");
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_UNSUPPORTED_SOURCE_LANGUAGE,
+                    "Translation from Arabic source language is not supported by external backend",
+                    errCtx
+            );
+            disarmWithMessage(R.string.vot_error_unsupported_language);
+            return;
+        }
         mUserArmed = true;
         mArmed = true;
         if (progressOverlay() != null) {
@@ -900,12 +914,41 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
+        if (info != null && VotAudioTrackHelper.isArabicLang(info.langCode)) {
+            Map<String, String> errCtx = new HashMap<>();
+            errCtx.put("sourceLang", info.langCode);
+            errCtx.put("reason", "BLOCKED_EXTERNAL_BACKEND");
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_UNSUPPORTED_SOURCE_LANGUAGE,
+                    "Translation from Arabic source language is not supported by external backend",
+                    errCtx
+            );
+            disarmWithMessage(R.string.vot_error_unsupported_language);
+            return;
+        }
+
         String videoId = getPlayer().getVideo().videoId;
         if (videoId == null) {
             MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
             return;
         }
         String videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+
+        boolean useLively = votData().isLivelyVoiceEnabled();
+        if (mIsNewBackendActive && mState == STATE_PENDING && Objects.equals(mCurrentVideoId, videoId)) {
+            Log.d(TAG, "Translation request already pending for current video, skipping duplicate");
+            Map<String, String> dupCtx = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.createSafeDiagnosticsContext(
+                    0L, "api", true, useLively ? "live_voice" : "standard"
+            );
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_REQUEST_SKIPPED_DUPLICATE,
+                    "Duplicate translation request skipped",
+                    dupCtx
+            );
+            return;
+        }
 
         // Double-start protection: cancel old backend if running
         cancelTranslationJob();
@@ -943,21 +986,6 @@ public class VoiceTranslateController extends BasePlayerController {
         Utils.removeCallbacks(mProgressTickRunnable);
         Utils.postDelayed(mProgressTickRunnable, PROGRESS_TICK_INTERVAL_MS);
 
-        boolean useLively = votData().isLivelyVoiceEnabled();
-        if (mIsNewBackendActive && mState == STATE_PENDING && Objects.equals(mCurrentVideoId, videoId)) {
-            Log.d(TAG, "Translation request already pending for current video, skipping duplicate");
-            Map<String, String> dupCtx = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.createSafeDiagnosticsContext(
-                    0L, "api", true, useLively ? "live_voice" : "standard"
-            );
-            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_REQUEST_SKIPPED_DUPLICATE,
-                    "Duplicate translation request skipped",
-                    dupCtx
-            );
-            return;
-        }
-
         double durationSec = Math.max(1, getPlayer().getDurationMs() / 1000.0);
         String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
         String videoTitle = getPlayer().getVideo().getTitle();
@@ -965,6 +993,10 @@ public class VoiceTranslateController extends BasePlayerController {
         String sourceLang = audioInfo != null && audioInfo.langCode != null && !audioInfo.langCode.isEmpty() ? audioInfo.langCode : "";
         String targetLang = votData().getTargetLanguage();
         if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
+
+        if (VotAudioTrackHelper.isUkrainianLang(sourceLang)) {
+            targetLang = "ru";
+        }
 
         boolean isCachedHit = (mYandexOrchestrator != null &&
                 mYandexOrchestrator.getCurrentState().getStatus() == YandexVotState.Status.READY &&
@@ -1044,6 +1076,20 @@ public class VoiceTranslateController extends BasePlayerController {
         TrackInfo info = resolveAudioInfo();
         if (VotAudioTrackHelper.isRussianOriginal(info)) {
             disarmWithMessage(R.string.vot_skip_russian);
+            return;
+        }
+
+        if (info != null && VotAudioTrackHelper.isArabicLang(info.langCode)) {
+            Map<String, String> errCtx = new HashMap<>();
+            errCtx.put("sourceLang", info.langCode);
+            errCtx.put("reason", "BLOCKED_EXTERNAL_BACKEND");
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_UNSUPPORTED_SOURCE_LANGUAGE,
+                    "Translation from Arabic source language is not supported by external backend",
+                    errCtx
+            );
+            disarmWithMessage(R.string.vot_error_unsupported_language);
             return;
         }
 

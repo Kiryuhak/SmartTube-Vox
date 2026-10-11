@@ -149,6 +149,26 @@ public abstract class MediaTrack {
         sVP9Weight = prefer ? AVC_WEIGHT : VP9_WEIGHT;
     }
 
+    public static void updateCodecWeights(String preferredCodec) {
+        if ("vp9".equalsIgnoreCase(preferredCodec)) {
+            sVP9Weight = 35;
+            sAVCWeight = 25;
+            sAV1Weight = 15;
+        } else if ("av1".equalsIgnoreCase(preferredCodec)) {
+            sAV1Weight = 35;
+            sVP9Weight = 25;
+            sAVCWeight = 15;
+        } else if ("avc".equalsIgnoreCase(preferredCodec)) {
+            sAVCWeight = 35;
+            sVP9Weight = 25;
+            sAV1Weight = 15;
+        } else {
+            sVP9Weight = VP9_WEIGHT;
+            sAVCWeight = AVC_WEIGHT;
+            sAV1Weight = AV1_WEIGHT;
+        }
+    }
+
     public static boolean preferByCodec(MediaTrack prevTrack, MediaTrack nextTrack) {
         return getCodecWeight(prevTrack) - getCodecWeight(nextTrack) > 0;
     }

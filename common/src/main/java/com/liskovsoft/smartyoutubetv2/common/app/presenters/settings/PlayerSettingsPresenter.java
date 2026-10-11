@@ -67,6 +67,7 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         appendPlaybackModeCategory(settingsPresenter);
         appendVideoPresetsCategory(settingsPresenter);
         appendPlayerButtonsCategory(settingsPresenter);
+        appendDownloadButtonSwitch(settingsPresenter);
         appendVotCategory(settingsPresenter);
         appendNetworkEngineCategory(settingsPresenter);
         appendVideoBufferCategory(settingsPresenter);
@@ -337,6 +338,33 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 postWatchOptions
         );
 
+        List<OptionItem> targetLangOptions = new ArrayList<>();
+        String currentTarget = mVotData.getTargetLanguage();
+        if (currentTarget == null || currentTarget.isEmpty()) {
+            currentTarget = "ru";
+        }
+        final String effectiveTarget = currentTarget;
+
+        targetLangOptions.add(UiOptionItem.from(
+                "Русский (ru)",
+                option -> mVotData.setTargetLanguage("ru"),
+                "ru".equalsIgnoreCase(effectiveTarget)
+        ));
+        targetLangOptions.add(UiOptionItem.from(
+                "Қазақша (kk)",
+                option -> mVotData.setTargetLanguage("kk"),
+                "kk".equalsIgnoreCase(effectiveTarget)
+        ));
+        targetLangOptions.add(UiOptionItem.from(
+                "English (en)",
+                option -> mVotData.setTargetLanguage("en"),
+                "en".equalsIgnoreCase(effectiveTarget)
+        ));
+        settingsPresenter.appendRadioCategory(
+                getContext().getString(R.string.vot_target_language),
+                targetLangOptions
+        );
+
         settingsPresenter.showDialog(getContext().getString(R.string.vot_settings_category));
     }
 
@@ -444,6 +472,24 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         }
 
         settingsPresenter.appendCheckedCategory(getContext().getString(R.string.player_buttons), options);
+    }
+
+    private void appendDownloadButtonSwitch(AppDialogPresenter settingsPresenter) {
+        if (!VotOnboardingHelper.isStvot(getContext())) {
+            return;
+        }
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.settings_download_button),
+                getContext().getString(R.string.settings_download_button_desc),
+                option -> {
+                    if (option.isSelected()) {
+                        mPlayerTweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD);
+                    } else {
+                        mPlayerTweaksData.setPlayerButtonDisabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD);
+                    }
+                },
+                mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)));
     }
 
     private void appendSeekTypeCategory(AppDialogPresenter settingsPresenter) {

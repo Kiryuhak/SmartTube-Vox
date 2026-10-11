@@ -574,8 +574,41 @@ public class AppDialogUtil {
         }
         OptionCategory original = createVotOriginalVolumeCategory(context, callback);
         OptionCategory translation = createVotTranslationVolumeCategory(context, callback);
+
+        List<OptionItem> targetLangOptions = new ArrayList<>();
+        String currentTarget = votData.getTargetLanguage();
+        if (currentTarget == null || currentTarget.isEmpty()) {
+            currentTarget = "ru";
+        }
+        final String effectiveTarget = currentTarget;
+        targetLangOptions.add(UiOptionItem.from(
+                "Русский (ru)",
+                option -> {
+                    votData.setTargetLanguage("ru");
+                    callback.run();
+                },
+                "ru".equalsIgnoreCase(effectiveTarget)
+        ));
+        targetLangOptions.add(UiOptionItem.from(
+                "Қазақша (kk)",
+                option -> {
+                    votData.setTargetLanguage("kk");
+                    callback.run();
+                },
+                "kk".equalsIgnoreCase(effectiveTarget)
+        ));
+        targetLangOptions.add(UiOptionItem.from(
+                "English (en)",
+                option -> {
+                    votData.setTargetLanguage("en");
+                    callback.run();
+                },
+                "en".equalsIgnoreCase(effectiveTarget)
+        ));
+
         String title = context.getString(R.string.vot_mix_menu_title);
         presenter.appendCheckedCategory(context.getString(R.string.vot_mix_options), toggles);
+        presenter.appendRadioCategory(context.getString(R.string.vot_target_language), targetLangOptions);
         presenter.appendRadioCategory(original.title, original.options);
         presenter.appendRadioCategory(translation.title, translation.options);
         presenter.showDialog(title);

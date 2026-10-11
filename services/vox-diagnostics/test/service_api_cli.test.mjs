@@ -283,3 +283,60 @@ test('Verification of user reports VOX-A-D44EF7 and VOX-A-870711 technical summa
   assert.ok(fixture7C4082.safeRecentEvents.some((e) => e.code === 'LIVE_OFFSET_INVALID'));
 });
 
+test('Report metadata fidelity and non-contamination across devices', async () => {
+  const fixture0B2418 = {
+    reportId: 'VOX-A-0B2418',
+    schema: 'vox-diagnostic-report-v2',
+    timestamp: 1728630000000,
+    appVersion: '32.56-vox.8.1',
+    appVersionCode: 2446012,
+    platform: 'Android TV',
+    manufacturer: 'TUVIO',
+    model: 'TD50UFBSV1',
+    sdkInt: 30,
+    osVersion: '11',
+    deviceTier: 'Стандартный TV',
+    errorCategory: 'BACKGROUND',
+    errorSignature: 'BACKGROUND|PLAYBACK_EXIT',
+    status: 'NEW',
+    reportPurpose: 'USER',
+    safeRecentEvents: [
+      { timestamp: 1728630000100, level: 'INFO', category: 'BACKGROUND', code: 'BACKGROUND_PLAYBACK_REQUESTED', message: 'Requested' },
+      { timestamp: 1728630000200, level: 'INFO', category: 'BACKGROUND', code: 'BACKGROUND_AUDIO_ONLY_ENTER', message: 'Audio only' },
+      { timestamp: 1728630000300, level: 'INFO', category: 'BACKGROUND', code: 'BACKGROUND_AUDIO_FOCUS_GAIN', message: 'Focus gain' },
+      { timestamp: 1728630000400, level: 'INFO', category: 'BACKGROUND', code: 'BACKGROUND_SERVICE_STARTED', message: 'Service started' },
+      { timestamp: 1728630000500, level: 'WARN', category: 'BACKGROUND', code: 'BACKGROUND_AUDIO_ONLY_EXIT', message: 'Premature exit' },
+    ],
+  };
+
+  const storage = new ReportStorage();
+  await storage.saveReport(fixtureD44EF7);
+  await storage.saveReport(fixture870711);
+  await storage.saveReport(fixture0B2418);
+
+  const getD = await storage.getReportById('VOX-A-D44EF7');
+  const get8 = await storage.getReportById('VOX-A-870711');
+  const get0 = await storage.getReportById('VOX-A-0B2418');
+
+  // Verify strict separation of device identity
+  assert.equal(getD.payload.manufacturer, 'TCL');
+  assert.equal(getD.payload.model, 'Smart TV Pro');
+  assert.equal(getD.payload.sdkInt, 34);
+
+  assert.equal(get8.payload.manufacturer, 'VS');
+  assert.equal(get8.payload.model, 'KM1');
+  assert.equal(get8.payload.sdkInt, 29);
+
+  assert.equal(get0.payload.manufacturer, 'TUVIO');
+  assert.equal(get0.payload.model, 'TD50UFBSV1');
+  assert.equal(get0.payload.sdkInt, 30);
+  assert.equal(get0.payload.appVersion, '32.56-vox.8.1');
+
+  // Verify status update with FIXED_PENDING_VALIDATION alias
+  const updated = await storage.updateReport('VOX-A-0B2418', {
+    status: 'FIXED_PENDING_VALIDATION',
+    developerNotes: 'Patch #31: исправление подготовлено, требуется подтверждение на TUVIO/API30',
+  });
+  assert.equal(updated.status, 'FIXED_PENDING_VERIFICATION');
+});
+

@@ -16,6 +16,10 @@
     <string name="vot_player_button_switch">Кнопка «Перевод» на панели</string>
     <string name="vot_player_button_switch_desc">Отображать кнопку перевода в основном ряду управления плеера</string>
     <string name="vot_player_hud_hint">Нажмите OK на пульте во время видео для управления и перевода</string>
+    <string name="settings_download_button">Кнопка скачивания видео</string>
+    <string name="settings_download_button_desc">Показывать кнопку скачивания в панели плеера</string>
+    <string name="vot_target_language">Целевой язык перевода</string>
+    <string name="vot_error_unsupported_language">Перевод с этого языка пока недоступен</string>
 
     <!-- Pulse: Яндекс ID UX -->
     <string name="vot_yandex_status_authorized">Яндекс ID: Авторизован</string>

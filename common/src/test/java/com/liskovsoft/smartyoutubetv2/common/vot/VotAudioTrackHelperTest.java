@@ -217,4 +217,24 @@ public class VotAudioTrackHelperTest {
         assertFalse(VotAudioTrackHelper.isSameFormat(null, null));
         assertTrue(VotAudioTrackHelper.isSameFormat(item, item));
     }
+
+    @Test
+    public void testArabicAndUkrainianLanguageDetection() {
+        assertTrue(VotAudioTrackHelper.isArabicLang("ar"));
+        assertTrue(VotAudioTrackHelper.isArabicLang("ar-SA"));
+        assertTrue(VotAudioTrackHelper.isArabicLang("ar-EG"));
+        assertTrue(VotAudioTrackHelper.isArabicLang("ara"));
+        assertTrue(VotAudioTrackHelper.isArabicLang("arabic"));
+        assertFalse(VotAudioTrackHelper.isArabicLang("en"));
+        assertFalse(VotAudioTrackHelper.isArabicLang("ru"));
+        assertFalse(VotAudioTrackHelper.isArabicLang(null));
+
+        assertTrue(VotAudioTrackHelper.isUkrainianLang("uk"));
+        assertTrue(VotAudioTrackHelper.isUkrainianLang("uk-UA"));
+        assertTrue(VotAudioTrackHelper.isUkrainianLang("ukr"));
+        assertTrue(VotAudioTrackHelper.isUkrainianLang("ukrainian"));
+        assertFalse(VotAudioTrackHelper.isUkrainianLang("ru"));
+        assertFalse(VotAudioTrackHelper.isUkrainianLang("be"));
+        assertFalse(VotAudioTrackHelper.isUkrainianLang(null));
+    }
 }

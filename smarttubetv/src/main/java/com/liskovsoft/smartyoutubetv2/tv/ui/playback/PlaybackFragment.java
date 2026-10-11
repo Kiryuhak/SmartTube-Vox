@@ -118,6 +118,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     private UriBackgroundManager mBackgroundManager;
     private RowsSupportFragment mRowsSupportFragment;
     private boolean mIsUIAnimationsEnabled = false;
+    private String mMediaSessionReleaseReason = "PLAYER_RELEASE";
+
+    public void setMediaSessionReleaseReason(String reason) {
+        mMediaSessionReleaseReason = reason;
+    }
     private boolean mIsEngineBlocked;
     private MediaSessionCompat mMediaSession;
     private MediaSessionConnector mMediaSessionConnector;
@@ -428,11 +433,15 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             mMediaSession.setActive(false);
             mMediaSession.release();
             mMediaSession = null;
+            Map<String, String> ctx = new HashMap<>();
+            ctx.put("reason", mMediaSessionReleaseReason != null ? mMediaSessionReleaseReason : "PLAYER_RELEASE");
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.BACKGROUND,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.BACKGROUND_MEDIASESSION_RELEASED,
-                    "MediaSession освобождена"
+                    "MediaSession освобождена",
+                    ctx
             );
+            mMediaSessionReleaseReason = "PLAYER_RELEASE";
         }
         if (mPlayerGlue != null) {
             ((PlaybackTransportRowPresenter) mPlayerGlue.getPlaybackRowPresenter()).setOnActionLongClickedListener(null);
@@ -1226,6 +1235,15 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
         if (activity != null) {
             activity.finish();
+        }
+    }
+
+    @Override
+    public void enterBackgroundAudioOnly() {
+        LeanbackActivity activity = getLeanbackActivity();
+
+        if (activity instanceof PlaybackActivity) {
+            ((PlaybackActivity) activity).enterBackgroundAudioOnly();
         }
     }
 

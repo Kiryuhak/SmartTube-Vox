@@ -3,6 +3,7 @@ export const STATUSES = [
   'IN_PROGRESS',
   'NEEDS_INFO',
   'FIXED_PENDING_VERIFICATION',
+  'FIXED_PENDING_VALIDATION',
   'CLOSED',
   'RESOLVED',
   'KNOWN_ISSUE',
@@ -29,6 +30,7 @@ const SAFE_CONTEXT_KEYS = new Set([
   'selectedHeight', 'totalRebufferMs', 'maxRebufferMs', 'averageBufferedMs',
   'averageBandwidthKbps', 'manifestErrorCount', 'segmentErrorCount',
   'errorCategory', 'liveOffsetMs',
+  'bufferAheadMs', 'playbackSessionId', 'bitrate', 'networkEngine', 'reason',
 ]);
 const SAFE_ENUM = /^[A-Za-z][A-Za-z0-9_+.-]{0,63}$/;
 

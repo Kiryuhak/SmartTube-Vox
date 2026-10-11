@@ -567,9 +567,24 @@ public class PlayerUIController extends BasePlayerController {
             return;
         }
 
-        getPlayer().showOverlay(false);
-        getPlayer().blockEngine(true);
-        getPlayer().finish();
+        PlayerData playerData = getPlayerData();
+        int backgroundMode = playerData != null ? playerData.getBackgroundMode() : PlayerData.BACKGROUND_MODE_DEFAULT;
+        boolean pipSupported = Helpers.isPictureInPictureSupported(getContext());
+
+        if (backgroundMode == PlayerData.BACKGROUND_MODE_SOUND || !pipSupported) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.BACKGROUND,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.BACKGROUND_PLAYBACK_REQUESTED,
+                    "Запрос фонового воспроизведения по кнопке интерфейса (audio-only fallback, pipSupported=" + pipSupported + ")"
+            );
+            getPlayer().showOverlay(false);
+            getPlayer().enterBackgroundAudioOnly();
+            getPlayer().finish();
+        } else {
+            getPlayer().showOverlay(false);
+            getPlayer().blockEngine(true);
+            getPlayer().finish();
+        }
     }
 
     @Override

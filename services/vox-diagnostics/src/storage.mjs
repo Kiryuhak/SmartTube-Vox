@@ -35,7 +35,7 @@ export function normalizeStatus(rawStatus) {
   const s = String(rawStatus).toUpperCase().trim();
   if (s === 'REVIEWED' || s === 'TRIAGED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
   if (s === 'NEEDS_INFO' || s === 'INFO_NEEDED') return 'NEEDS_INFO';
-  if (s === 'FIXED' || s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION') return 'FIXED_PENDING_VERIFICATION';
+  if (s === 'FIXED' || s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION' || s === 'FIXED_PENDING_VALIDATION') return 'FIXED_PENDING_VERIFICATION';
   if (s === 'CLOSED') return 'CLOSED';
   if (s === 'RESOLVED') return 'RESOLVED';
   if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';

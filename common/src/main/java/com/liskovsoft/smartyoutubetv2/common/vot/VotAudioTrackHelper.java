@@ -156,6 +156,34 @@ public final class VotAudioTrackHelper {
         return langCode != null && langCode.startsWith("en");
     }
 
+    public static boolean isArabicLang(@Nullable String langCode) {
+        if (langCode == null) {
+            return false;
+        }
+        String normalized = langCode.trim().toLowerCase(Locale.US).replace('_', '-');
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        return normalized.equals("ar")
+                || normalized.startsWith("ar-")
+                || normalized.equals("ara")
+                || normalized.equals("arabic");
+    }
+
+    public static boolean isUkrainianLang(@Nullable String langCode) {
+        if (langCode == null) {
+            return false;
+        }
+        String normalized = langCode.trim().toLowerCase(Locale.US).replace('_', '-');
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        return normalized.equals("uk")
+                || normalized.startsWith("uk-")
+                || normalized.equals("ukr")
+                || normalized.equals("ukrainian");
+    }
+
     /** Russian source audio that does not need Yandex (original ru track). */
     public static boolean isRussianOriginal(@Nullable TrackInfo info) {
         if (info == null || !isRussianLang(info.langCode)) {

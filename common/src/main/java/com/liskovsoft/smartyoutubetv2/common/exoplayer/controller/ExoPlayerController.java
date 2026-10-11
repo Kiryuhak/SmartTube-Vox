@@ -71,6 +71,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private boolean mHasStartedPlayback = false;
     private int mRebufferCount = 0;
     private boolean mOfflineReadyLogged = false;
+    private static final java.util.concurrent.atomic.AtomicInteger sSessionSeq = new java.util.concurrent.atomic.AtomicInteger(0);
+    private int mPlaybackSessionId = 0;
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -125,7 +127,14 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
         applyShield720pFix();
         VideoTrack.sIsAltPresetsEnabled = playerTweaksData.isAltPresetsEnabled();
-        MediaTrack.setAvcOverVp9Preferred(playerTweaksData.isAvcOverVp9Preferred());
+        com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityManager voxCompat =
+                com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxCompatibilityManager.instance(mContext);
+        if (voxCompat != null && voxCompat.getCodecPolicy() != null &&
+                voxCompat.getCodecPolicy().getPreferredVideoCodec() != com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxVideoCodecPreference.AUTO) {
+            MediaTrack.updateCodecWeights(voxCompat.getCodecPolicy().getPreferredVideoCodec().getId());
+        } else {
+            MediaTrack.setAvcOverVp9Preferred(playerTweaksData.isAvcOverVp9Preferred());
+        }
     }
 
     private void applyShield720pFix() {
@@ -188,6 +197,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         mHasStartedPlayback = false;
         mOfflineReadyLogged = false;
         mRebufferCount = 0;
+        mPlaybackSessionId = sSessionSeq.incrementAndGet();
         boolean isLive = getVideo() != null && getVideo().isLive;
         mStallRecoveryController.onPlaybackStart(isLive);
         String marker = getVideo() != null && getVideo().videoId != null
@@ -648,18 +658,29 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 mRebufferCount++;
                 if (mRebufferCount <= 3) {
                     Map<String, String> ctx = new HashMap<>();
+                    ctx.put("playbackSessionId", String.valueOf(mPlaybackSessionId));
                     ctx.put("rebufferCount", String.valueOf(mRebufferCount));
                     FormatItem vf = getVideoFormat();
                     if (vf != null) {
                         ctx.put("selectedHeight", String.valueOf(vf.getHeight()));
                         MediaTrack tr = vf.getTrack();
-                        if (tr != null && tr.format != null && tr.format.codecs != null) {
-                            ctx.put("selectedCodec", tr.format.codecs);
+                        if (tr != null && tr.format != null) {
+                            if (tr.format.codecs != null) {
+                                ctx.put("selectedCodec", tr.format.codecs);
+                            }
+                            if (tr.format.bitrate > 0) {
+                                ctx.put("bitrate", String.valueOf(tr.format.bitrate));
+                            }
                         }
                     }
                     long pos = getPositionMs();
                     long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
                     ctx.put("bufferedMs", String.valueOf(buffered));
+                    ctx.put("bufferAheadMs", String.valueOf(buffered));
+                    try {
+                        int currentEngine = PlayerTweaksData.instance(mContext).getPlayerDataSource();
+                        ctx.put("networkEngine", String.valueOf(currentEngine));
+                    } catch (Throwable ignored) {}
                     ctx.put("isLive", String.valueOf(isLive));
                     VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_REBUFFER, "Буферизация потока", ctx);
                 }

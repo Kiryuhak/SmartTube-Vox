@@ -13,4 +13,5 @@ public interface PlayerManager extends PlayerEngine, PlayerUI {
     void showBackgroundColor(int colorResId);
     void resetPlayerState();
     boolean isEmbed();
+    default void enterBackgroundAudioOnly() {}
 }

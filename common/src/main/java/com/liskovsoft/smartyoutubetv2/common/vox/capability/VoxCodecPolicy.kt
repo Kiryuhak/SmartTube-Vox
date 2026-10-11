@@ -87,16 +87,16 @@ data class VoxCodecPolicy(
 
         val normalizedAvailable = availableCodecs.map { normalizeVideoCodec(it) }
 
-        when (mode) {
+        val result: VoxCodecSelectionResult<String> = when (mode) {
             VoxCodecPolicyMode.MAX_COMPATIBILITY -> {
                 // Максимальная совместимость: отдавать строгий приоритет AVC / H.264
                 if (normalizedAvailable.contains("avc")) {
-                    return VoxCodecSelectionResult("avc")
+                    VoxCodecSelectionResult("avc")
+                } else if (normalizedAvailable.contains("vp9") && profile.isVideoCodecSupported("vp9")) {
+                    VoxCodecSelectionResult("vp9", isFallback = true)
+                } else {
+                    VoxCodecSelectionResult(normalizedAvailable.first(), isFallback = true)
                 }
-                if (normalizedAvailable.contains("vp9") && profile.isVideoCodecSupported("vp9")) {
-                    return VoxCodecSelectionResult("vp9", isFallback = true)
-                }
-                return VoxCodecSelectionResult(normalizedAvailable.first(), isFallback = true)
             }
             VoxCodecPolicyMode.CUSTOM -> {
                 if (preferredVideoCodec != VoxVideoCodecPreference.AUTO) {
@@ -106,38 +106,90 @@ data class VoxCodecPolicy(
                         val warning = if (!isSupported) {
                             "Формат не заявлен как поддерживаемый устройством. Воспроизведение может не работать."
                         } else null
-                        return VoxCodecSelectionResult(target, isFallback = !isSupported, warning = warning)
+                        VoxCodecSelectionResult(target, isFallback = !isSupported, warning = warning)
+                    } else {
+                        selectAutoVideoCodec(normalizedAvailable, profile)
                     }
+                } else {
+                    selectAutoVideoCodec(normalizedAvailable, profile)
                 }
-                // Если выбранный пользователем кодек отсутствует в видео, используем логику AUTO
             }
             VoxCodecPolicyMode.MAX_QUALITY -> {
-                // Максимальное качество: наилучший из ДОСТОВЕРНО поддерживаемых устройством
-                for (codec in listOf("av1", "vp9", "avc")) {
-                    if (normalizedAvailable.contains(codec) && profile.isVideoCodecSupported(codec)) {
-                        return VoxCodecSelectionResult(codec)
+                if (preferredVideoCodec != VoxVideoCodecPreference.AUTO) {
+                    val target = preferredVideoCodec.id
+                    if (normalizedAvailable.contains(target) && profile.isVideoCodecSupported(target)) {
+                        VoxCodecSelectionResult(target)
+                    } else {
+                        selectBestSupportedQualityCodec(normalizedAvailable, profile)
                     }
+                } else {
+                    selectBestSupportedQualityCodec(normalizedAvailable, profile)
                 }
-                // Безопасный откат к AVC или первому доступному
-                val fallback = if (normalizedAvailable.contains("avc")) "avc" else normalizedAvailable.first()
-                return VoxCodecSelectionResult(fallback, isFallback = true)
             }
             VoxCodecPolicyMode.AUTO -> {
-                // Авто: проверяет поддержку от более качественных к стандартным (AV1 -> VP9 -> AVC)
-                if (normalizedAvailable.contains("av1") && profile.isVideoCodecSupported("av1")) {
-                    return VoxCodecSelectionResult("av1")
-                }
-                if (normalizedAvailable.contains("vp9") && profile.isVideoCodecSupported("vp9")) {
-                    return VoxCodecSelectionResult("vp9")
-                }
-                if (normalizedAvailable.contains("avc")) {
-                    return VoxCodecSelectionResult("avc")
-                }
-                return VoxCodecSelectionResult(normalizedAvailable.first(), isFallback = true)
+                selectAutoVideoCodec(normalizedAvailable, profile)
             }
         }
 
-        return VoxCodecSelectionResult(normalizedAvailable.first())
+        logSelectionDecision(result.selected, result.isFallback, availableCodecs)
+        return result
+    }
+
+    private fun selectAutoVideoCodec(
+        normalizedAvailable: List<String>,
+        profile: VoxDeviceProfile
+    ): VoxCodecSelectionResult<String> {
+        // Если задано явное предпочтение кодека, оно доступно и поддерживается устройством — отдаём ему приоритет
+        if (preferredVideoCodec != VoxVideoCodecPreference.AUTO) {
+            val target = preferredVideoCodec.id
+            if (normalizedAvailable.contains(target) && profile.isVideoCodecSupported(target)) {
+                return VoxCodecSelectionResult(target)
+            }
+        }
+        // Авто: проверяет поддержку от более качественных к стандартным (AV1 -> VP9 -> AVC)
+        if (normalizedAvailable.contains("av1") && profile.isVideoCodecSupported("av1")) {
+            return VoxCodecSelectionResult("av1")
+        }
+        if (normalizedAvailable.contains("vp9") && profile.isVideoCodecSupported("vp9")) {
+            return VoxCodecSelectionResult("vp9")
+        }
+        if (normalizedAvailable.contains("avc")) {
+            return VoxCodecSelectionResult("avc")
+        }
+        return VoxCodecSelectionResult(normalizedAvailable.first(), isFallback = true)
+    }
+
+    private fun selectBestSupportedQualityCodec(
+        normalizedAvailable: List<String>,
+        profile: VoxDeviceProfile
+    ): VoxCodecSelectionResult<String> {
+        for (codec in listOf("av1", "vp9", "avc")) {
+            if (normalizedAvailable.contains(codec) && profile.isVideoCodecSupported(codec)) {
+                return VoxCodecSelectionResult(codec)
+            }
+        }
+        val fallback = if (normalizedAvailable.contains("avc")) "avc" else normalizedAvailable.first()
+        return VoxCodecSelectionResult(fallback, isFallback = true)
+    }
+
+    private fun logSelectionDecision(selectedCodec: String?, isFallback: Boolean, availableCodecs: List<String>) {
+        if (selectedCodec == null) return
+        try {
+            val ctx = mapOf(
+                "selectedCodec" to selectedCodec,
+                "policyMode" to mode.id,
+                "preferredCodec" to preferredVideoCodec.id,
+                "isFallback" to isFallback.toString(),
+                "availableCodecs" to availableCodecs.joinToString(",")
+            )
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRACK_SELECTION_DECISION,
+                "Решение о выборе кодека: $selectedCodec",
+                ctx
+            )
+        } catch (ignored: Throwable) {
+        }
     }
 
     /**
