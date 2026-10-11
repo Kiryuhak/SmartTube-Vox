@@ -655,7 +655,13 @@ class VoxDownloadCoordinator(
                             onStallDetected = {
                                 job.stallEventsCount++
                                 job.networkReconnectCount++
-                            }
+                            },
+                            onForensicsCollected = { forensics ->
+                                job.videoHost = forensics.safeHost
+                                job.videoForensics = forensics
+                                job.hostFamily = forensics.hostFamily.label
+                            },
+                            resourceType = "VIDEO"
                         )
 
                         if (!targetFile.exists() || targetFile.length() <= 0L) {
@@ -671,7 +677,7 @@ class VoxDownloadCoordinator(
                             videoStream.contentLength ?: targetFile.length(),
                             VoxTrackState.COMPLETED
                         )
-                        job.videoElapsedMs = System.currentTimeMillis() - t0
+                        job.videoElapsedMs = Math.max(1L, System.currentTimeMillis() - t0)
                         VoxSafeLogger.i(
                             VoxLogCategory.DOWNLOAD,
                             VoxLogCode.DOWNLOAD_VIDEO_COMPLETED,
@@ -705,7 +711,15 @@ class VoxDownloadCoordinator(
                             onStallDetected = {
                                 job.stallEventsCount++
                                 job.networkReconnectCount++
-                            }
+                            },
+                            onForensicsCollected = { forensics ->
+                                job.audioHost = forensics.safeHost
+                                job.audioForensics = forensics
+                                if (job.hostFamily == null) {
+                                    job.hostFamily = forensics.hostFamily.label
+                                }
+                            },
+                            resourceType = "AUDIO"
                         )
 
                         if (!targetFile.exists() || targetFile.length() <= 0L) {
@@ -721,7 +735,7 @@ class VoxDownloadCoordinator(
                             originalAudioStream.contentLength ?: targetFile.length(),
                             VoxTrackState.COMPLETED
                         )
-                        job.audioElapsedMs = System.currentTimeMillis() - t0
+                        job.audioElapsedMs = Math.max(1L, System.currentTimeMillis() - t0)
                         VoxSafeLogger.i(
                             VoxLogCategory.DOWNLOAD,
                             VoxLogCode.DOWNLOAD_AUDIO_COMPLETED,
@@ -766,7 +780,12 @@ class VoxDownloadCoordinator(
                             onStallDetected = {
                                 job.stallEventsCount++
                                 job.networkReconnectCount++
-                            }
+                            },
+                            onForensicsCollected = { forensics ->
+                                job.translationHost = forensics.safeHost
+                                job.translationForensics = forensics
+                            },
+                            resourceType = "TRANSLATED_AUDIO"
                         )
 
                         if (!targetFile.exists() || targetFile.length() <= 0L) {
@@ -783,7 +802,7 @@ class VoxDownloadCoordinator(
                             VoxTrackState.COMPLETED
                         )
                         job.hasTranslatedAudio = true
-                        job.translationElapsedMs = System.currentTimeMillis() - t0
+                        job.translationElapsedMs = Math.max(1L, System.currentTimeMillis() - t0)
                         VoxSafeLogger.i(
                             VoxLogCategory.DOWNLOAD,
                             VoxLogCode.DOWNLOAD_TRANSLATION_COMPLETED,
@@ -804,7 +823,7 @@ class VoxDownloadCoordinator(
                     if (cause is Exception) throw cause else throw Exception(cause)
                 }
 
-                job.downloadElapsedMs = System.currentTimeMillis() - downloadStartMs
+                job.downloadElapsedMs = Math.max(1L, System.currentTimeMillis() - downloadStartMs)
                 val totalBytes = job.videoProgress.bytesDownloaded + job.originalAudioProgress.bytesDownloaded + job.translatedAudioProgress.bytesDownloaded
                 if (job.downloadElapsedMs > 0) {
                     val avgSpeed = (totalBytes * 8.0) / (job.downloadElapsedMs * 1000.0)
@@ -813,6 +832,11 @@ class VoxDownloadCoordinator(
                         job.peakSpeedMbps = avgSpeed
                     }
                 }
+                job.bottleneckAnalysis = VoxDownloadBottleneckClassifier.classify(
+                    forensics = job.videoForensics ?: job.audioForensics,
+                    packagingElapsedMs = job.packagingElapsedMs,
+                    finalizeElapsedMs = job.finalizeElapsedMs
+                )
                 repository.persistJob(job)
             }
 
@@ -1046,7 +1070,12 @@ class VoxDownloadCoordinator(
             job.durationMs = result.durationMs
             job.finalFileBytes = result.totalBytesWritten
             job.processingTimeMs = (System.nanoTime() - processingStart) / 1_000_000L
-            job.packagingElapsedMs = job.processingTimeMs
+            job.packagingElapsedMs = Math.max(1L, job.processingTimeMs)
+            job.bottleneckAnalysis = VoxDownloadBottleneckClassifier.classify(
+                forensics = job.videoForensics ?: job.audioForensics,
+                packagingElapsedMs = job.packagingElapsedMs,
+                finalizeElapsedMs = job.finalizeElapsedMs
+            )
             job.lastProgressAt = System.currentTimeMillis()
 
             job.updateMuxProgress(result.totalBytesWritten, result.totalBytesWritten, 100)
@@ -1096,35 +1125,72 @@ class VoxDownloadCoordinator(
 
             if (isStale(job, expectedGen)) return
 
-            job.finalizeElapsedMs = System.currentTimeMillis() - finalizeStart
+            job.finalizeElapsedMs = Math.max(1L, System.currentTimeMillis() - finalizeStart)
             job.publishedUri = pubUri.toString()
             val publishedSize = storage.getPublishedFileSize(job.publishedUri)
             val effectiveSize = if (publishedSize > 0L) publishedSize else outputFile.length()
             if (!publisher.isPublishedFileAvailable(job.publishedUri) || (publishedSize > 0L && publishedSize != job.finalFileBytes)) {
                 throw VoxDownloadException(VoxDownloadErrorCode.FINALIZE_FAILED, "Published file validation failed (publishedSize=$publishedSize, expected=${job.finalFileBytes})")
             }
+            job.bottleneckAnalysis = VoxDownloadBottleneckClassifier.classify(
+                forensics = job.videoForensics ?: job.audioForensics,
+                packagingElapsedMs = job.packagingElapsedMs,
+                finalizeElapsedMs = job.finalizeElapsedMs
+            )
+            VoxSafeLogger.i(
+                VoxLogCategory.DOWNLOAD,
+                VoxLogCode.DOWNLOAD_ROUTE_SUMMARY,
+                "Анализ сетевого маршрута загрузки",
+                mapOf(
+                    "videoHost" to (job.videoHost ?: "unknown"),
+                    "audioHost" to (job.audioHost ?: "unknown"),
+                    "hostFamily" to (job.hostFamily ?: "UNKNOWN"),
+                    "bottleneck" to (job.bottleneckAnalysis?.bottleneck?.label ?: "UNKNOWN"),
+                    "confidence" to (job.bottleneckAnalysis?.confidence?.label ?: "LOW"),
+                    "summary" to (job.bottleneckAnalysis?.developerSummary ?: "")
+                )
+            )
             // Сначала фиксируем метаданные; UI не увидит COMPLETED до успешной записи.
             VoxDownloadCompletionValidator.check(job, effectiveSize)
             repository.persistJob(job, VoxDownloadState.COMPLETED)
             job.updateState(VoxDownloadState.COMPLETED)
             VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка и сохранение видео успешно завершены", mapOf("downloadId" to downloadId))
 
-                // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
-                storage.cleanInternalSourcesAfterPublication(downloadId)
-                repository.pruneOldHistory()
+            // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
+            storage.cleanInternalSourcesAfterPublication(downloadId)
+            repository.pruneOldHistory()
 
-                notifyStateChange(job)
-                VoxLog.d(TAG, "Download job $downloadId published successfully to MediaStore: $pubUri")
-            } else {
-                job.publishedUri = android.net.Uri.fromFile(outputFile).toString()
-                job.publishedFilePath = outputFile.absolutePath
-                VoxDownloadCompletionValidator.check(job, storage.getPublishedFileSize(job.publishedUri))
-                repository.persistJob(job, VoxDownloadState.COMPLETED)
-                job.updateState(VoxDownloadState.COMPLETED)
-                VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка видео успешно завершена", mapOf("downloadId" to downloadId))
-                repository.pruneOldHistory()
-                notifyStateChange(job)
-            }
+            notifyStateChange(job)
+            VoxLog.d(TAG, "Download job $downloadId published successfully to MediaStore: $pubUri")
+        } else {
+            job.finalizeElapsedMs = Math.max(1L, System.currentTimeMillis() - finalizeStart)
+            job.publishedUri = android.net.Uri.fromFile(outputFile).toString()
+            job.publishedFilePath = outputFile.absolutePath
+            job.bottleneckAnalysis = VoxDownloadBottleneckClassifier.classify(
+                forensics = job.videoForensics ?: job.audioForensics,
+                packagingElapsedMs = job.packagingElapsedMs,
+                finalizeElapsedMs = job.finalizeElapsedMs
+            )
+            VoxSafeLogger.i(
+                VoxLogCategory.DOWNLOAD,
+                VoxLogCode.DOWNLOAD_ROUTE_SUMMARY,
+                "Анализ сетевого маршрута загрузки",
+                mapOf(
+                    "videoHost" to (job.videoHost ?: "unknown"),
+                    "audioHost" to (job.audioHost ?: "unknown"),
+                    "hostFamily" to (job.hostFamily ?: "UNKNOWN"),
+                    "bottleneck" to (job.bottleneckAnalysis?.bottleneck?.label ?: "UNKNOWN"),
+                    "confidence" to (job.bottleneckAnalysis?.confidence?.label ?: "LOW"),
+                    "summary" to (job.bottleneckAnalysis?.developerSummary ?: "")
+                )
+            )
+            VoxDownloadCompletionValidator.check(job, storage.getPublishedFileSize(job.publishedUri))
+            repository.persistJob(job, VoxDownloadState.COMPLETED)
+            job.updateState(VoxDownloadState.COMPLETED)
+            VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка видео успешно завершена", mapOf("downloadId" to downloadId))
+            repository.pruneOldHistory()
+            notifyStateChange(job)
+        }
     }
 
     private fun validateOutputFile(outputFile: File, translated: Boolean) {
@@ -1317,7 +1383,39 @@ class VoxDownloadCoordinator(
             )
         }
         val totalBytes = lastJob.videoProgress.bytesDownloaded + lastJob.originalAudioProgress.bytesDownloaded + lastJob.translatedAudioProgress.bytesDownloaded
-        val avgBytesPerSec = if (lastJob.downloadElapsedMs > 0) (totalBytes * 1000L) / lastJob.downloadElapsedMs else 0L
+        val effectiveElapsedMs = if (lastJob.downloadElapsedMs > 0L) lastJob.downloadElapsedMs else (if (totalBytes > 0L) 1L else 0L)
+        val avgBytesPerSec = if (effectiveElapsedMs > 0L) (totalBytes * 1000L) / effectiveElapsedMs else 0L
+
+        val perfMap = mutableMapOf<String, Any>(
+            "totalBytes" to totalBytes,
+            "totalElapsedMs" to (if (effectiveElapsedMs > 0L) effectiveElapsedMs else 1L),
+            "averageBytesPerSecond" to avgBytesPerSec,
+            "averageMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.averageSpeedMbps),
+            "peakMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.peakSpeedMbps),
+            "stallCount" to lastJob.stallEventsCount,
+            "resumeCount" to lastJob.rangeResumptionsCount,
+            "rangeResumeCount" to lastJob.rangeResumptionsCount,
+            "networkReconnectCount" to lastJob.networkReconnectCount,
+            "retryCount" to lastJob.retryCount,
+            "parallelConnections" to lastJob.parallelStreamsCount
+        )
+        if (lastJob.videoElapsedMs > 0L) perfMap["videoElapsedMs"] = lastJob.videoElapsedMs
+        if (lastJob.audioElapsedMs > 0L) perfMap["audioElapsedMs"] = lastJob.audioElapsedMs
+        if (lastJob.translationElapsedMs > 0L) perfMap["translationElapsedMs"] = lastJob.translationElapsedMs
+        if (lastJob.packagingElapsedMs > 0L) perfMap["packagingElapsedMs"] = lastJob.packagingElapsedMs
+        if (lastJob.finalizeElapsedMs > 0L) perfMap["finalizeElapsedMs"] = lastJob.finalizeElapsedMs
+
+        val routeMap = mutableMapOf<String, Any>(
+            "videoHost" to (lastJob.videoHost ?: "unknown"),
+            "audioHost" to (lastJob.audioHost ?: "unknown"),
+            "hostFamily" to (lastJob.hostFamily ?: "UNKNOWN"),
+            "bottleneck" to (lastJob.bottleneckAnalysis?.bottleneck?.label ?: "UNKNOWN"),
+            "confidence" to (lastJob.bottleneckAnalysis?.confidence?.label ?: "LOW"),
+            "developerSummary" to (lastJob.bottleneckAnalysis?.developerSummary ?: "Анализ сетевого маршрута завершён.")
+        )
+        lastJob.videoForensics?.let { routeMap["videoForensics"] = it.toMap() }
+        lastJob.audioForensics?.let { routeMap["audioForensics"] = it.toMap() }
+
         return mapOf(
             "queueLength" to queueLength,
             "activeJobs" to activeJobs,
@@ -1334,24 +1432,8 @@ class VoxDownloadCoordinator(
             "packagingCompleted" to lastJob.packagingCompleted,
             "finalizeCompleted" to lastJob.finalizeCompleted,
             "freeStorageMb" to freeMb,
-            "downloadPerformance" to mapOf(
-                "totalBytes" to totalBytes,
-                "totalElapsedMs" to lastJob.downloadElapsedMs,
-                "averageBytesPerSecond" to avgBytesPerSec,
-                "averageMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.averageSpeedMbps),
-                "peakMbps" to String.format(java.util.Locale.US, "%.2f", lastJob.peakSpeedMbps),
-                "videoElapsedMs" to lastJob.videoElapsedMs,
-                "audioElapsedMs" to lastJob.audioElapsedMs,
-                "translationElapsedMs" to lastJob.translationElapsedMs,
-                "packagingElapsedMs" to lastJob.packagingElapsedMs,
-                "finalizeElapsedMs" to lastJob.finalizeElapsedMs,
-                "stallCount" to lastJob.stallEventsCount,
-                "resumeCount" to lastJob.rangeResumptionsCount,
-                "rangeResumeCount" to lastJob.rangeResumptionsCount,
-                "networkReconnectCount" to lastJob.networkReconnectCount,
-                "retryCount" to lastJob.retryCount,
-                "parallelConnections" to lastJob.parallelStreamsCount
-            )
+            "downloadPerformance" to perfMap,
+            "networkRouteAnalysis" to routeMap
         )
     }
 }

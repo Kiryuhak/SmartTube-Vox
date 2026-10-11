@@ -245,10 +245,32 @@ object VoxLivePlaybackMonitor {
     }
 
     @Synchronized
-    fun onReady(bufferedDurationMs: Long, liveOffsetMs: Long, bandwidthEstimate: Long) {
-        if (!isLiveSession) return
+    fun onPlaybackStopped() {
+        isPlaying = false
+        isBuffering = false
+        isLiveSession = false
+        currentLiveOffsetMs = 0L
+        bufferingStartMs = 0L
+        lastSnapshot = null
+    }
 
-        currentLiveOffsetMs = liveOffsetMs
+    private fun sanitizeLiveOffset(offsetMs: Long): Long {
+        if (!isLiveSession || offsetMs <= 0L || offsetMs > MAX_SANE_LIVE_OFFSET_MS) {
+            return 0L
+        }
+        return offsetMs
+    }
+
+    const val MAX_SANE_LIVE_OFFSET_MS = 12 * 60 * 60 * 1000L // 12 hours
+
+    @Synchronized
+    fun onReady(bufferedDurationMs: Long, liveOffsetMs: Long, bandwidthEstimate: Long) {
+        if (!isLiveSession) {
+            currentLiveOffsetMs = 0L
+            return
+        }
+
+        currentLiveOffsetMs = sanitizeLiveOffset(liveOffsetMs)
         if (bufferedDurationMs > 0) bufferSamples.add(bufferedDurationMs)
         if (bandwidthEstimate > 0) bandwidthSamples.add(bandwidthEstimate)
 
@@ -299,15 +321,18 @@ object VoxLivePlaybackMonitor {
         selectedBitrate: Long,
         speed: Float
     ) {
-        if (!isLiveSession) return
+        if (!isLiveSession) {
+            currentLiveOffsetMs = 0L
+            return
+        }
 
-        currentLiveOffsetMs = liveOffsetMs
+        currentLiveOffsetMs = sanitizeLiveOffset(liveOffsetMs)
         currentSpeed = speed
         val manifestAge = System.currentTimeMillis() - lastManifestRefreshMs
 
         val snapshot = VoxLiveBufferingSnapshot(
             bufferedDurationMs = bufferedDurationMs,
-            liveOffsetMs = liveOffsetMs,
+            liveOffsetMs = currentLiveOffsetMs,
             bandwidthEstimate = bandwidthEstimate,
             selectedBitrate = selectedBitrate,
             networkState = if (isOnline) "ONLINE" else "DISCONNECTED",
@@ -324,7 +349,7 @@ object VoxLivePlaybackMonitor {
 
         notifyEvent(
             VoxLivePlaybackEvent.VOX_LIVE_BUFFERING_START,
-            "bufferedMs=$bufferedDurationMs, liveOffsetMs=$liveOffsetMs, statusCat=$lastHttpStatusCategory, network=${snapshot.networkState}"
+            "bufferedMs=$bufferedDurationMs, liveOffsetMs=$currentLiveOffsetMs, statusCat=$lastHttpStatusCategory, network=${snapshot.networkState}"
         )
 
         for (listener in listeners) {
@@ -383,9 +408,12 @@ object VoxLivePlaybackMonitor {
         height: Int,
         codec: String
     ) {
-        if (!isLiveSession) return
+        if (!isLiveSession) {
+            currentLiveOffsetMs = 0L
+            return
+        }
 
-        currentLiveOffsetMs = liveOffsetMs
+        currentLiveOffsetMs = sanitizeLiveOffset(liveOffsetMs)
         selectedHeight = height
         selectedCodec = codec
         if (bufferedMs > 0) bufferSamples.add(bufferedMs)
@@ -393,7 +421,7 @@ object VoxLivePlaybackMonitor {
 
         notifyEvent(
             VoxLivePlaybackEvent.VOX_LIVE_BUFFER_HEALTH,
-            "bufferedMs=$bufferedMs, offsetMs=$liveOffsetMs, bandwidthKbps=${bandwidth / 1000}, height=${height}p"
+            "bufferedMs=$bufferedMs, offsetMs=$currentLiveOffsetMs, bandwidthKbps=${bandwidth / 1000}, height=${height}p"
         )
     }
 
@@ -485,6 +513,12 @@ object VoxLivePlaybackMonitor {
         val avgBuffer = if (bufferSamples.isNotEmpty()) bufferSamples.average().toLong() else 0L
         val avgBwKbps = if (bandwidthSamples.isNotEmpty()) (bandwidthSamples.average() / 1000).toLong() else 0L
 
+        val safeLiveOffset = if (isLiveSession && currentLiveOffsetMs in 1..MAX_SANE_LIVE_OFFSET_MS) {
+            currentLiveOffsetMs
+        } else {
+            0L
+        }
+
         return VoxLivePlaybackMetrics(
             rebufferCount = count,
             totalRebufferMs = totalMs,
@@ -493,7 +527,7 @@ object VoxLivePlaybackMonitor {
             averageBandwidthKbps = avgBwKbps,
             selectedHeight = selectedHeight,
             selectedCodec = selectedCodec,
-            liveOffsetMs = currentLiveOffsetMs,
+            liveOffsetMs = safeLiveOffset,
             manifestErrorCount = manifestErrorCount,
             segmentErrorCount = segmentErrorCount,
             lastErrorCategory = lastErrorCategory

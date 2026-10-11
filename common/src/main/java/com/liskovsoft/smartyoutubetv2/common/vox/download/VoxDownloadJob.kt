@@ -55,6 +55,16 @@ class VoxDownloadJob(
     var averageSpeedMbps: Double = 0.0
     var peakSpeedMbps: Double = 0.0
 
+    // Download Speed Forensics & Host Discovery (Patch #34)
+    var videoHost: String? = null
+    var audioHost: String? = null
+    var translationHost: String? = null
+    var hostFamily: String? = null
+    var videoForensics: VoxDownloadNetworkForensics? = null
+    var audioForensics: VoxDownloadNetworkForensics? = null
+    var translationForensics: VoxDownloadNetworkForensics? = null
+    var bottleneckAnalysis: VoxBottleneckAnalysis? = null
+
     val generation = AtomicLong(1L)
     val isCancelledFlag = AtomicBoolean(false)
     val isPausedFlag = AtomicBoolean(false)

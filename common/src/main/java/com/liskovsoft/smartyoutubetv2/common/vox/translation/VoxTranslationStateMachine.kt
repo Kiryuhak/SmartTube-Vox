@@ -134,6 +134,31 @@ class VoxTranslationStateMachine {
         etaTargetMs = 0L
     }
 
+    enum class TranslationSource(val label: String) {
+        LOCAL_CACHE("LOCAL_CACHE"),
+        PERSISTED_SESSION("PERSISTED_SESSION"),
+        BACKEND_READY("BACKEND_READY"),
+        BACKEND_PENDING("BACKEND_PENDING"),
+        NEW_REQUEST("NEW_REQUEST")
+    }
+
+    fun getDiagnosticsSummary(): Map<String, Any> {
+        val src = when (reuseSource) {
+            ReuseSource.MEMORY_CACHE -> TranslationSource.LOCAL_CACHE.label
+            ReuseSource.PERSISTED_SESSION -> TranslationSource.PERSISTED_SESSION.label
+            ReuseSource.BACKEND_READY_LOOKUP -> TranslationSource.BACKEND_READY.label
+            ReuseSource.EXISTING_PROVIDER_SESSION -> TranslationSource.BACKEND_PENDING.label
+            else -> TranslationSource.NEW_REQUEST.label
+        }
+        return mapOf(
+            "translationSource" to src,
+            "translationLookupMs" to lookupElapsedMs,
+            "translationWaitMs" to (requestElapsedMs + providerWaitElapsedMs),
+            "translationAttachMs" to audioAttachElapsedMs,
+            "translationTotalMs" to totalTranslationStartupMs
+        )
+    }
+
     fun toDiagnosticsContext(): Map<String, String> {
         return mapOf(
             "state" to currentState.name,

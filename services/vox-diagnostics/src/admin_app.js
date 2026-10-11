@@ -10,6 +10,7 @@
   // Canonical Statuses & UI Labels
   const CANONICAL_STATUSES = [
     'NEW',
+    'TRIAGED',
     'IN_PROGRESS',
     'NEEDS_INFO',
     'FIXED_PENDING_VERIFICATION',
@@ -17,10 +18,12 @@
     'KNOWN_ISSUE',
     'IGNORED_TEST',
     'RESOLVED',
+    'WONT_FIX',
   ];
 
   const STATUS_LABELS = {
     NEW: 'Новый',
+    TRIAGED: 'Разобран',
     IN_PROGRESS: 'В работе',
     NEEDS_INFO: 'Нужны данные',
     FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
@@ -28,22 +31,25 @@
     RESOLVED: 'Решено',
     KNOWN_ISSUE: 'Известная проблема',
     IGNORED_TEST: 'Тест / игнор',
+    WONT_FIX: 'Не будет исправлено',
   };
 
   /**
    * Нормализует статус к одному из канонических значений:
-   * NEW, IN_PROGRESS, NEEDS_INFO, FIXED_PENDING_VERIFICATION, CLOSED, RESOLVED, KNOWN_ISSUE, IGNORED_TEST
+   * NEW, TRIAGED, IN_PROGRESS, NEEDS_INFO, FIXED_PENDING_VERIFICATION, CLOSED, RESOLVED, KNOWN_ISSUE, IGNORED_TEST, WONT_FIX
    */
   function normalizeStatus(rawStatus) {
     if (!rawStatus) return 'NEW';
     const s = String(rawStatus).toUpperCase().trim();
-    if (s === 'REVIEWED' || s === 'TRIAGED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
+    if (s === 'TRIAGED') return 'TRIAGED';
+    if (s === 'REVIEWED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
     if (s === 'NEEDS_INFO' || s === 'INFO_NEEDED') return 'NEEDS_INFO';
     if (s === 'FIXED' || s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION') return 'FIXED_PENDING_VERIFICATION';
     if (s === 'CLOSED') return 'CLOSED';
     if (s === 'RESOLVED') return 'RESOLVED';
     if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
     if (s === 'IGNORED_TEST' || s === 'TEST' || s === 'IGNORED') return 'IGNORED_TEST';
+    if (s === 'WONT_FIX' || s === 'WONTFIX') return 'WONT_FIX';
     if (s === 'NEW') return 'NEW';
     return s;
   }

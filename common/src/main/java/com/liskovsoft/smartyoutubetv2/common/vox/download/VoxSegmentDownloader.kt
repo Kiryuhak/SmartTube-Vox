@@ -41,6 +41,62 @@ class VoxSegmentDownloader(
         }
     }
 
+    private data class StreamResult(
+        val bytesStreamed: Long,
+        val peakMbps: Double
+    )
+
+    private class SegmentDownloadEventListener : okhttp3.EventListener() {
+        var dnsStartMs = 0L
+        var dnsElapsedMs = 0L
+        var connectStartMs = 0L
+        var connectElapsedMs = 0L
+        var tlsStartMs = 0L
+        var tlsElapsedMs = 0L
+        var reqHeadersEndMs = 0L
+        var ttfbMs = 0L
+
+        override fun dnsStart(call: okhttp3.Call, domainName: String) {
+            dnsStartMs = System.currentTimeMillis()
+        }
+
+        override fun dnsEnd(call: okhttp3.Call, domainName: String, inetAddressList: List<java.net.InetAddress>) {
+            if (dnsStartMs > 0) {
+                dnsElapsedMs = Math.max(1L, System.currentTimeMillis() - dnsStartMs)
+            }
+        }
+
+        override fun connectStart(call: okhttp3.Call, inetSocketAddress: java.net.InetSocketAddress, proxy: java.net.Proxy) {
+            connectStartMs = System.currentTimeMillis()
+        }
+
+        override fun connectEnd(call: okhttp3.Call, inetSocketAddress: java.net.InetSocketAddress, proxy: java.net.Proxy, protocol: okhttp3.Protocol?) {
+            if (connectStartMs > 0) {
+                connectElapsedMs = Math.max(1L, System.currentTimeMillis() - connectStartMs)
+            }
+        }
+
+        override fun secureConnectStart(call: okhttp3.Call) {
+            tlsStartMs = System.currentTimeMillis()
+        }
+
+        override fun secureConnectEnd(call: okhttp3.Call, handshake: okhttp3.Handshake?) {
+            if (tlsStartMs > 0) {
+                tlsElapsedMs = Math.max(1L, System.currentTimeMillis() - tlsStartMs)
+            }
+        }
+
+        override fun requestHeadersEnd(call: okhttp3.Call, request: okhttp3.Request) {
+            reqHeadersEndMs = System.currentTimeMillis()
+        }
+
+        override fun responseHeadersStart(call: okhttp3.Call) {
+            if (reqHeadersEndMs > 0) {
+                ttfbMs = Math.max(1L, System.currentTimeMillis() - reqHeadersEndMs)
+            }
+        }
+    }
+
     /**
      * Загружает медиа-поток в целевой файл с поддержкой докачки и защиты от зависаний.
      *
@@ -51,6 +107,8 @@ class VoxSegmentDownloader(
      * @param urlProvider Провайдер обновления URL при 403/410
      * @param onRangeResumed Коллбэк возобновления докачки с сохраненной позиции
      * @param onStallDetected Коллбэк обнаружения сетевого зависания (stall)
+     * @param onForensicsCollected Коллбэк передачи криминалистических сетевых метрик
+     * @param resourceType Тип медиа-ресурса (VIDEO, AUDIO, TRANSLATED_AUDIO)
      */
     @Throws(VoxDownloadException::class)
     fun download(
@@ -60,10 +118,13 @@ class VoxSegmentDownloader(
         onProgress: ((bytesDownloaded: Long, totalBytes: Long?) -> Unit)? = null,
         urlProvider: (() -> String)? = null,
         onRangeResumed: ((resumedFromOffset: Long) -> Unit)? = null,
-        onStallDetected: (() -> Unit)? = null
+        onStallDetected: (() -> Unit)? = null,
+        onForensicsCollected: ((VoxDownloadNetworkForensics) -> Unit)? = null,
+        resourceType: String = "MEDIA"
     ) {
         var currentUrl = initialUrl
         var attempt = 0
+        var totalStallCount = 0
         val retryPolicy = VoxYouTubeRetryPolicy()
 
         while (true) {
@@ -85,7 +146,11 @@ class VoxSegmentDownloader(
                     targetFile = targetFile,
                     existingOffset = existingBytes,
                     isCancelled = isCancelled,
-                    onProgress = onProgress
+                    onProgress = onProgress,
+                    onForensicsCollected = onForensicsCollected,
+                    resourceType = resourceType,
+                    attempt = attempt,
+                    stallCount = totalStallCount
                 )
                 // Успешно завершено
                 return
@@ -95,6 +160,7 @@ class VoxSegmentDownloader(
                 }
 
                 if (e is SocketTimeoutException || e.cause is SocketTimeoutException) {
+                    totalStallCount++
                     onStallDetected?.invoke()
                 }
 
@@ -138,7 +204,11 @@ class VoxSegmentDownloader(
         targetFile: File,
         existingOffset: Long,
         isCancelled: () -> Boolean,
-        onProgress: ((bytesDownloaded: Long, totalBytes: Long?) -> Unit)?
+        onProgress: ((bytesDownloaded: Long, totalBytes: Long?) -> Unit)?,
+        onForensicsCollected: ((VoxDownloadNetworkForensics) -> Unit)? = null,
+        resourceType: String = "MEDIA",
+        attempt: Int = 0,
+        stallCount: Int = 0
     ) {
         val requestBuilder = Request.Builder()
             .url(url)
@@ -150,21 +220,31 @@ class VoxSegmentDownloader(
         }
 
         val request = requestBuilder.build()
-        val call = httpClient.newCall(request)
+        val eventListener = SegmentDownloadEventListener()
+        val clientWithListener = try {
+            httpClient.newBuilder().eventListener(eventListener).build()
+        } catch (ignored: Exception) {
+            httpClient
+        }
+        val call = clientWithListener.newCall(request)
 
         var response: Response? = null
+        val streamStartMs = System.currentTimeMillis()
         try {
             response = call.execute()
             val code = response.code()
+
+            var streamResult: StreamResult? = null
+            var totalExpectedBytes: Long? = null
 
             when (code) {
                 200 -> {
                     // Сервер отдал полный контент
                     val contentLength = response.body()?.contentLength()
-                    val totalBytes = if (contentLength != null && contentLength > 0) contentLength else null
+                    totalExpectedBytes = if (contentLength != null && contentLength > 0) contentLength else null
 
                     // Проверка свободного места
-                    checkStorageSpace(totalBytes ?: 0L)
+                    checkStorageSpace(totalExpectedBytes ?: 0L)
 
                     // Если мы запрашивали Range, но сервер вернул 200 OK — перезаписываем файл с начала
                     val append = false
@@ -172,12 +252,12 @@ class VoxSegmentDownloader(
                         targetFile.delete()
                     }
 
-                    streamToFile(
+                    streamResult = streamToFile(
                         response = response,
                         targetFile = targetFile,
                         startOffset = 0L,
                         append = append,
-                        totalExpectedBytes = totalBytes,
+                        totalExpectedBytes = totalExpectedBytes,
                         isCancelled = isCancelled,
                         onProgress = onProgress
                     )
@@ -185,25 +265,25 @@ class VoxSegmentDownloader(
                 206 -> {
                     // Сервер отдал частичный контент
                     val contentRange = response.header("Content-Range")
-                    val totalBytes = parseTotalFromContentRange(contentRange)
+                    totalExpectedBytes = parseTotalFromContentRange(contentRange)
                     val bodyLength = response.body()?.contentLength()
 
                     val remainingBytes = if (bodyLength != null && bodyLength > 0) {
                         bodyLength
-                    } else if (totalBytes != null && totalBytes > existingOffset) {
-                        totalBytes - existingOffset
+                    } else if (totalExpectedBytes != null && totalExpectedBytes > existingOffset) {
+                        totalExpectedBytes - existingOffset
                     } else {
                         0L
                     }
 
                     checkStorageSpace(remainingBytes)
 
-                    streamToFile(
+                    streamResult = streamToFile(
                         response = response,
                         targetFile = targetFile,
                         startOffset = existingOffset,
                         append = true,
-                        totalExpectedBytes = totalBytes,
+                        totalExpectedBytes = totalExpectedBytes,
                         isCancelled = isCancelled,
                         onProgress = onProgress
                     )
@@ -251,6 +331,44 @@ class VoxSegmentDownloader(
                     )
                 }
             }
+
+            if (streamResult != null && onForensicsCollected != null) {
+                val streamElapsedMs = Math.max(1L, System.currentTimeMillis() - streamStartMs)
+                val avgMbps = (streamResult.bytesStreamed * 8.0) / (streamElapsedMs * 1000.0)
+                val peakMbps = Math.max(avgMbps, streamResult.peakMbps)
+                val safeHost = VoxHostSanitizer.sanitizeHost(url)
+                val hostFamily = VoxHostFamily.fromHost(safeHost)
+                val rangeSupported = (code == 206 || response.header("Accept-Ranges") == "bytes")
+                val rangeUsed = (existingOffset > 0L)
+                val parallelConnections = VoxBoundedParallelismPolicy.getParallelConnectionsCount(rangeSupported, totalExpectedBytes)
+                val serverThrottling = (streamResult.bytesStreamed > 10_000_000L && avgMbps in 0.01..2.0 &&
+                        eventListener.ttfbMs in 1..400L && eventListener.connectElapsedMs in 1..300L)
+
+                val forensics = VoxDownloadNetworkForensics(
+                    resourceType = resourceType,
+                    networkEngine = "OKHTTP",
+                    safeHost = safeHost,
+                    hostFamily = hostFamily,
+                    routeHint = "DIRECT",
+                    dnsMs = eventListener.dnsElapsedMs,
+                    connectMs = eventListener.connectElapsedMs,
+                    tlsMs = eventListener.tlsElapsedMs,
+                    ttfbMs = eventListener.ttfbMs,
+                    bytesDownloaded = streamResult.bytesStreamed,
+                    elapsedMs = streamElapsedMs,
+                    avgMbps = avgMbps,
+                    peakMbps = peakMbps,
+                    stallCount = stallCount,
+                    retryCount = attempt,
+                    httpStatusClass = "${code / 100}XX_${if (code in 200..299) "SUCCESS" else "ERROR"}",
+                    rangeSupported = rangeSupported,
+                    rangeUsed = rangeUsed,
+                    parallelConnections = parallelConnections,
+                    contentLength = totalExpectedBytes,
+                    serverThrottlingSuspicion = serverThrottling
+                )
+                onForensicsCollected.invoke(forensics)
+            }
         } catch (e: VoxDownloadException) {
             throw e
         } catch (e: Exception) {
@@ -278,7 +396,7 @@ class VoxSegmentDownloader(
         totalExpectedBytes: Long?,
         isCancelled: () -> Boolean,
         onProgress: ((bytesDownloaded: Long, totalBytes: Long?) -> Unit)?
-    ) {
+    ): StreamResult {
         val body = response.body()
             ?: throw VoxDownloadException(VoxDownloadErrorCode.NETWORK_ERROR, "Empty response body")
 
@@ -290,6 +408,10 @@ class VoxSegmentDownloader(
 
         var inputStream: InputStream? = null
         var outputStream: BufferedOutputStream? = null
+
+        var peakMbps = 0.0
+        var windowStartBytes = bytesWritten
+        var windowStartTimeMs = System.currentTimeMillis()
 
         try {
             inputStream = body.byteStream()
@@ -326,6 +448,17 @@ class VoxSegmentDownloader(
                 bytesWritten += read
 
                 val now = System.currentTimeMillis()
+                val windowElapsedMs = now - windowStartTimeMs
+                val windowBytes = bytesWritten - windowStartBytes
+                if (windowElapsedMs >= 250L && windowBytes > 0L) {
+                    val instantaneousMbps = (windowBytes * 8.0) / (windowElapsedMs * 1000.0)
+                    if (instantaneousMbps > peakMbps) {
+                        peakMbps = instantaneousMbps
+                    }
+                    windowStartBytes = bytesWritten
+                    windowStartTimeMs = now
+                }
+
                 if (bytesWritten - lastNotifiedBytes >= PROGRESS_NOTIFY_MIN_BYTES ||
                     now - lastNotifiedTimeMs >= PROGRESS_NOTIFY_MIN_INTERVAL_MS) {
                     onProgress?.invoke(bytesWritten, totalExpectedBytes)
@@ -353,6 +486,11 @@ class VoxSegmentDownloader(
                     "Premature stream EOF: read $bytesWritten of expected $totalExpectedBytes bytes"
                 )
             }
+
+            return StreamResult(
+                bytesStreamed = bytesWritten - startOffset,
+                peakMbps = peakMbps
+            )
         } finally {
             try { inputStream?.close() } catch (ignored: Exception) {}
             try { outputStream?.flush(); outputStream?.close() } catch (ignored: Exception) {}

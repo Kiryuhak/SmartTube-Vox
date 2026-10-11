@@ -45,7 +45,7 @@ function sanitizePayload(value, depth = 0) {
   if (value && typeof value === 'object') {
     const result = {};
     for (const [key, item] of Object.entries(value)) {
-      if (BANNED_PATTERNS.some(pattern => key.toLowerCase().includes(pattern)) || /(?:^|_)(?:ip|url|uri|path|trace)(?:$|_)/i.test(key) || /^(?:downloadId|channelId|groupName|groupId|videoId)$/i.test(key)) continue;
+      if (isKeyForbidden(key) || /(?:^|_)(?:ip|url|uri|path|trace)(?:$|_)/i.test(key) || /^(?:downloadId|channelId|groupName|groupId|videoId)$/i.test(key)) continue;
       result[key] = sanitizePayload(item, depth + 1);
     }
     return result;
@@ -128,7 +128,12 @@ const BANNED_PATTERNS = [
   'authorization',
   'proxy_authorization',
   'cookie',
-  'session',
+  'session_token',
+  'session_secret',
+  'session_key',
+  'session_cookie',
+  'user_session',
+  'auth_session',
   'account_id',
   'email',
   'android_id',
@@ -139,6 +144,29 @@ const BANNED_PATTERNS = [
   'api_key',
   'apikey',
 ];
+
+const BANNED_EXACT_KEYS = new Set([
+  'session',
+  'session_id',
+  'sessionid',
+]);
+
+const ALLOWED_SAFE_KEYS = new Set([
+  'playbacksessionid',
+  'sessionstate',
+  'mediasessionstate',
+  'gatewaysessionstate',
+  'supportssession',
+  'sessions',
+]);
+
+function isKeyForbidden(rawKey) {
+  if (!rawKey || typeof rawKey !== 'string') return false;
+  const lower = rawKey.toLowerCase();
+  if (ALLOWED_SAFE_KEYS.has(lower)) return false;
+  if (BANNED_EXACT_KEYS.has(lower)) return true;
+  return BANNED_PATTERNS.some((pattern) => lower.includes(pattern));
+}
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
@@ -157,8 +185,7 @@ function hasBannedKeys(obj) {
     return obj.some((item) => hasBannedKeys(item));
   }
   for (const [key, value] of Object.entries(obj)) {
-    const lower = key.toLowerCase();
-    if (BANNED_PATTERNS.some((pattern) => lower.includes(pattern))) {
+    if (isKeyForbidden(key)) {
       return true;
     }
     if (value && typeof value === 'object') {
@@ -184,35 +211,89 @@ export function generateErrorSignature(report = {}) {
     return report.errorSignature;
   }
 
-  if (Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || ev.event)) {
-    const classified = classifyReport(report);
-    const event = [...classified.events].reverse().find(ev => ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)) || classified.events.at(-1);
-    if (event || classified.errorCategory) return [event?.category || 'GENERAL', classified.subsystem, classified.stage || 'GENERAL', classified.errorCategory || 'UNKNOWN', event?.safeContext?.exceptionClassSafe || 'NONE', event?.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
-  }
-
-  const category = report.errorCategory || '';
   const platform = (report.platform || 'Unknown').toUpperCase().replace(/\s+/g, '_');
   const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion || '');
+  const platformTag = `${platform}${sdk ? `_${sdk}` : ''}`;
 
-  // Look for error codes in safeRecentEvents
-  let lastErrorCode = '';
-  if (Array.isArray(report.safeRecentEvents)) {
-    for (let i = report.safeRecentEvents.length - 1; i >= 0; i--) {
-      const ev = report.safeRecentEvents[i];
-      if (ev && (ev.level === 'ERROR' || ev.level === 'WARNING') && ev.code) {
-        lastErrorCode = ev.code;
-        break;
-      }
+  if (Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || ev.event)) {
+    const classified = classifyReport(report);
+    const events = classified.events || [];
+    // Priority: CURRENT_SESSION ERROR > CURRENT_SESSION WARNING > RECENT ERROR > RECENT WARNING
+    const currentError = [...events].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+    const currentWarn = [...events].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+    const recentError = [...events].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+    const recentWarn = [...events].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+    const event = currentError || currentWarn || recentError || recentWarn;
+
+    if (event) {
+      return [
+        event.category || 'GENERAL',
+        classified.subsystem || event.subsystem || 'SYSTEM',
+        event.stage || classified.stage || 'GENERAL',
+        event.errorCategory || classified.errorCategory || event.event || 'UNKNOWN',
+        event.safeContext?.exceptionClassSafe || 'NONE',
+        event.safeContext?.sourceType || report.sourceType || 'UNKNOWN'
+      ].join('|');
     }
-  }
 
-  if (!category && !lastErrorCode) {
+    if (report.errorCategory || classified.errorCategory) {
+      const cat = report.errorCategory || classified.errorCategory || 'GENERAL';
+      return [cat, classified.subsystem || 'SYSTEM', classified.stage || 'GENERAL', cat, 'NONE', report.sourceType || 'UNKNOWN'].join('|');
+    }
+
+    if (report.reportPurpose === 'USER' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport) {
+      return `GENERAL|USER_REPORT|${platformTag}`;
+    }
+
     return '';
   }
 
-  const catPart = category || 'GENERAL';
-  const codePart = lastErrorCode || 'UNKNOWN_CODE';
-  return `${catPart}|${codePart}|${platform}${sdk ? `_${sdk}` : ''}`;
+  const now = Number(report.timestamp) || Date.now();
+  const currentSessionId = report.playbackSessionId || report.livePlayback?.playbackSessionId || report.playbackStats?.playbackSessionId;
+  const rawEvents = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
+
+  function getLifecycle(ev) {
+    const evSessionId = ev.safeContext?.playbackSessionId || ev.context?.playbackSessionId || ev.safeContext?.sessionId || ev.context?.sessionId;
+    if (currentSessionId && evSessionId && evSessionId === currentSessionId) {
+      return 'CURRENT_SESSION';
+    }
+    const evTs = Number(ev.timestamp || ev.ts) || 0;
+    if (evTs > 0 && Math.abs(now - evTs) <= 180000) {
+      return 'RECENT';
+    }
+    if (!evTs) return 'RECENT';
+    return 'HISTORICAL';
+  }
+
+  // Priority: CURRENT_SESSION ERROR > CURRENT_SESSION WARNING > RECENT ERROR > RECENT WARNING
+  let chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'CURRENT_SESSION' && ev.level === 'ERROR' && ev.code);
+  if (!chosen) {
+    chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'CURRENT_SESSION' && ev.level === 'WARNING' && ev.code);
+  }
+  if (!chosen) {
+    chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'RECENT' && ev.level === 'ERROR' && ev.code);
+  }
+  if (!chosen) {
+    chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'RECENT' && ev.level === 'WARNING' && ev.code);
+  }
+
+  const category = report.errorCategory || (chosen ? chosen.category : '') || '';
+
+  if (chosen) {
+    const catPart = category || 'GENERAL';
+    const codePart = chosen.code || 'UNKNOWN_CODE';
+    return `${catPart}|${codePart}|${platformTag}`;
+  }
+
+  if (category) {
+    return `${category}|UNKNOWN_CODE|${platformTag}`;
+  }
+
+  if (report.reportPurpose === 'USER' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport) {
+    return `GENERAL|USER_REPORT|${platformTag}`;
+  }
+
+  return '';
 }
 
 const defaultStorage = new ReportStorage();

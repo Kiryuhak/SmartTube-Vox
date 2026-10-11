@@ -38,6 +38,7 @@ data class VoxDiagnosticReport(
     val playbackStats: Map<String, Any>? = null,
     val livePlayback: Map<String, Any>? = null,
     val downloadDiagnostics: Map<String, Any>? = null,
+    val translationDiagnostics: Map<String, Any>? = null,
     val startupProfile: Map<String, Any>? = null,
     val safeRecentEvents: List<VoxLogEvent> = emptyList()
 ) {
@@ -46,6 +47,38 @@ data class VoxDiagnosticReport(
         const val SCHEMA_V2 = "vox-diagnostic-report-v2"
         const val SCHEMA_V3 = "vox-diagnostic-report-v3"
         const val MAX_REPORT_EVENTS = 50
+
+        @JvmStatic
+        fun wrapJsonValue(value: Any?): Any {
+            return when (value) {
+                null -> JSONObject.NULL
+                is Map<*, *> -> {
+                    val obj = JSONObject()
+                    for ((k, v) in value) {
+                        if (k != null) {
+                            obj.put(k.toString(), wrapJsonValue(v))
+                        }
+                    }
+                    obj
+                }
+                is Collection<*> -> {
+                    val arr = JSONArray()
+                    for (item in value) {
+                        arr.put(wrapJsonValue(item))
+                    }
+                    arr
+                }
+                is Array<*> -> {
+                    val arr = JSONArray()
+                    for (item in value) {
+                        arr.put(wrapJsonValue(item))
+                    }
+                    arr
+                }
+                is Number, is Boolean, is String, is JSONObject, is JSONArray -> value
+                else -> value.toString()
+            }
+        }
 
         @JvmStatic
         @JvmOverloads
@@ -141,6 +174,12 @@ data class VoxDiagnosticReport(
                 null
             }
 
+            val transDiag = try {
+                com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController.instance()?.getTranslationDiagnosticsSummary()
+            } catch (e: Exception) {
+                null
+            }
+
             val startupSummary = try {
                 com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.getCurrentProfileSummary()
             } catch (e: Exception) {
@@ -169,6 +208,7 @@ data class VoxDiagnosticReport(
                 playbackStats = playbackSummary,
                 livePlayback = liveMetrics,
                 downloadDiagnostics = downloadDiag,
+                translationDiagnostics = transDiag,
                 startupProfile = startupSummary,
                 safeRecentEvents = recentEvents
             )
@@ -198,40 +238,27 @@ data class VoxDiagnosticReport(
         audioCodecs.forEach { (k, v) -> aObj.put(k, v) }
         root.put("audioCodecs", aObj)
 
-        val dObj = JSONObject()
-        display.forEach { (k, v) -> dObj.put(k, v) }
-        root.put("display", dObj)
-
-        val cpObj = JSONObject()
-        currentPolicy.forEach { (k, v) -> cpObj.put(k, v) }
-        root.put("currentPolicy", cpObj)
-
-        val recObj = JSONObject()
-        recommendedSettings.forEach { (k, v) -> recObj.put(k, v) }
-        root.put("recommendedSettings", recObj)
+        root.put("display", wrapJsonValue(display))
+        root.put("currentPolicy", wrapJsonValue(currentPolicy))
+        root.put("recommendedSettings", wrapJsonValue(recommendedSettings))
 
         if (riskWarning != null) {
             root.put("riskWarning", riskWarning)
         }
         if (playbackStats != null) {
-            val psObj = JSONObject()
-            playbackStats.forEach { (k, v) -> psObj.put(k, v) }
-            root.put("playbackStats", psObj)
+            root.put("playbackStats", wrapJsonValue(playbackStats))
         }
         if (livePlayback != null) {
-            val lpObj = JSONObject()
-            livePlayback.forEach { (k, v) -> lpObj.put(k, v) }
-            root.put("livePlayback", lpObj)
+            root.put("livePlayback", wrapJsonValue(livePlayback))
         }
         if (downloadDiagnostics != null && downloadDiagnostics.isNotEmpty()) {
-            val ddObj = JSONObject()
-            downloadDiagnostics.forEach { (k, v) -> ddObj.put(k, v) }
-            root.put("downloadDiagnostics", ddObj)
+            root.put("downloadDiagnostics", wrapJsonValue(downloadDiagnostics))
+        }
+        if (translationDiagnostics != null && translationDiagnostics.isNotEmpty()) {
+            root.put("translationDiagnostics", wrapJsonValue(translationDiagnostics))
         }
         if (startupProfile != null && startupProfile.isNotEmpty()) {
-            val spObj = JSONObject()
-            startupProfile.forEach { (k, v) -> spObj.put(k, v) }
-            root.put("startupProfile", spObj)
+            root.put("startupProfile", wrapJsonValue(startupProfile))
         }
 
         if (safeRecentEvents.isNotEmpty()) {
@@ -297,6 +324,13 @@ data class VoxDiagnosticReport(
         if (downloadDiagnostics != null && downloadDiagnostics.isNotEmpty()) {
             sb.append("\n--- ДИАГНОСТИКА СКАЧИВАНИЯ ---\n")
             downloadDiagnostics.forEach { (k, v) ->
+                sb.append(k).append(": ").append(v).append("\n")
+            }
+        }
+
+        if (translationDiagnostics != null && translationDiagnostics.isNotEmpty()) {
+            sb.append("\n--- ДИАГНОСТИКА ПЕРЕВОДА ---\n")
+            translationDiagnostics.forEach { (k, v) ->
                 sb.append(k).append(": ").append(v).append("\n")
             }
         }

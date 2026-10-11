@@ -89,4 +89,15 @@ class VoxTranslationStateMachineTest {
         assertEquals("MEMORY_CACHE", ctx["reuseSource"])
         assertEquals("true", ctx["isReused"])
     }
+
+    @Test
+    fun testTranslationDiagnosticsSummary() {
+        stateMachine.markLookupReady(VoxTranslationStateMachine.ReuseSource.BACKEND_READY_LOOKUP, 1000L)
+        val summary = stateMachine.getDiagnosticsSummary()
+        assertEquals(VoxTranslationStateMachine.TranslationSource.BACKEND_READY.label, summary["translationSource"])
+        assertTrue((summary["translationLookupMs"] as Long) >= 0L)
+        assertTrue(summary.containsKey("translationWaitMs"))
+        assertTrue(summary.containsKey("translationAttachMs"))
+        assertTrue(summary.containsKey("translationTotalMs"))
+    }
 }

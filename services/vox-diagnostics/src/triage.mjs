@@ -1,5 +1,6 @@
 export const STATUSES = [
   'NEW',
+  'TRIAGED',
   'IN_PROGRESS',
   'NEEDS_INFO',
   'FIXED_PENDING_VERIFICATION',
@@ -9,6 +10,7 @@ export const STATUSES = [
   'KNOWN_ISSUE',
   'IGNORED_TEST',
   'IGNORED',
+  'WONT_FIX',
 ];
 export const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const SUBSYSTEMS = ['DOWNLOAD', 'PLAYER', 'BACKGROUND', 'OTA', 'OFFLINE', 'CHANNEL_GROUPS', 'AUTO_SETUP', 'TRANSLATION', 'NETWORK', 'SYSTEM'];
@@ -128,7 +130,7 @@ export function technicalSummary(report = {}) {
 
 export function structuredEvents(report = {}) {
   const raw = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
-  return raw.map(event => {
+  const mapped = raw.map(event => {
     const category = enumValue(event.category || report.errorCategory, 'GENERAL');
     const code = enumValue(event.event || event.code, 'EVENT');
     const inferredSubsystem = category === 'CHANNEL_GROUP' ? 'CHANNEL_GROUPS' :
@@ -153,6 +155,38 @@ export function structuredEvents(report = {}) {
       ...(Number.isFinite(event.durationMs) && event.durationMs >= 0 ? { durationMs: event.durationMs } : {}),
     };
   });
+
+  const aggregated = [];
+  for (const ev of mapped) {
+    const last = aggregated[aggregated.length - 1];
+    if (last && last.event === ev.event) {
+      if (ev.event === 'DOWNLOAD_STATE_INCONSISTENT') {
+        const lastJob = last.safeContext?.downloadId || last.safeContext?.jobId;
+        const curJob = ev.safeContext?.downloadId || ev.safeContext?.jobId;
+        const lastReason = last.safeContext?.reason;
+        const curReason = ev.safeContext?.reason;
+        if (lastJob === curJob && lastReason === curReason) {
+          last.repeatCount = (last.repeatCount || 1) + (ev.repeatCount || 1);
+          last.timestamp = Math.max(last.timestamp, ev.timestamp);
+          continue;
+        }
+      } else if (ev.event === 'OTA_FAILED') {
+        const lastOta = last.safeContext?.sessionId || last.safeContext?.otaSessionId;
+        const curOta = ev.safeContext?.sessionId || ev.safeContext?.otaSessionId;
+        if (!curOta || lastOta === curOta) {
+          last.repeatCount = (last.repeatCount || 1) + (ev.repeatCount || 1);
+          last.timestamp = Math.max(last.timestamp, ev.timestamp);
+          continue;
+        }
+      } else if (ev.event === 'IMAGE_REQUEST_FAILED') {
+        last.repeatCount = (last.repeatCount || 1) + (ev.repeatCount || 1);
+        last.timestamp = Math.max(last.timestamp, ev.timestamp);
+        continue;
+      }
+    }
+    aggregated.push(ev);
+  }
+  return aggregated;
 }
 
 export function classifyReport(report = {}) {

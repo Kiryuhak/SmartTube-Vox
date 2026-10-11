@@ -156,6 +156,10 @@ public class VoiceTranslateController extends BasePlayerController {
         return sInstance;
     }
 
+    public Map<String, Object> getTranslationDiagnosticsSummary() {
+        return mStateMachine.getDiagnosticsSummary();
+    }
+
     private YandexVotOrchestrator mYandexOrchestrator;
     private YandexVotPlaybackAdapter mYandexPlaybackAdapter;
     private boolean mIsNewBackendActive = false;
@@ -256,6 +260,30 @@ public class VoiceTranslateController extends BasePlayerController {
             if (mProgressOverlay != null) {
                 mProgressOverlay.dismissImmediately();
             }
+        }
+    };
+
+    private static final long TRANSLATION_WATCHDOG_TIMEOUT_MS = 45000L;
+
+    private final Runnable mTranslationWatchdogRunnable = () -> {
+        if (mState == STATE_PENDING) {
+            Log.w(TAG, "VOT Watchdog: Translation state stuck in PREPARING for video=%s", mCurrentVideoId);
+            Map<String, String> stuckCtx = new HashMap<>();
+            stuckCtx.put("videoId", mCurrentVideoId != null ? mCurrentVideoId : "unknown");
+            stuckCtx.put("timeoutMs", String.valueOf(TRANSLATION_WATCHDOG_TIMEOUT_MS));
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_STUCK_DETECTED,
+                    "Translation state stuck detected by watchdog",
+                    stuckCtx
+            );
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_WATCHDOG_TIMEOUT,
+                    "Translation watchdog timeout reached",
+                    stuckCtx
+            );
+            onTranslationTimeout();
         }
     };
 
@@ -410,6 +438,18 @@ public class VoiceTranslateController extends BasePlayerController {
         mUserExplicitlySelectedOriginal = false;
         mTranslationRequestedByUser = false;
         resetTrackSwitch();
+        if (mState == STATE_PENDING) {
+            Map<String, String> cancelCtx = new HashMap<>();
+            cancelCtx.put("previousVideoId", mCurrentVideoId != null ? mCurrentVideoId : "unknown");
+            cancelCtx.put("newVideoId", item != null ? item.videoId : "null");
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_SESSION_CANCELLED,
+                    "Translation session cancelled due to video change",
+                    cancelCtx
+            );
+        }
+        Utils.removeCallbacks(mTranslationWatchdogRunnable);
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
         Utils.removeCallbacks(mRetryCountdownRunnable);
@@ -1075,6 +1115,19 @@ public class VoiceTranslateController extends BasePlayerController {
                     "Existing translation result ready for immediate reuse",
                     diagCtx
             );
+            com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.TranslationResult cachedRes =
+                    YandexVotApiClient.getCachedResult(videoUrl, sourceLang, targetLang, useLively);
+            if (cachedRes != null && cachedRes.getStatus() == YandexVotApiClient.STATUS_FINISHED && cachedRes.getAudioUrl() != null) {
+                mStateMachine.markLookupReady(
+                        com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.BACKEND_READY_LOOKUP,
+                        System.currentTimeMillis()
+                );
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showLookupReady(getActivity());
+                }
+                prepareAndStartTranslationAudio(cachedRes.getAudioUrl());
+                return;
+            }
         } else {
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
@@ -1352,6 +1405,25 @@ public class VoiceTranslateController extends BasePlayerController {
                     progressOverlay().showPreparing(getActivity());
                 }
                 break;
+            case PREPARING_AUDIO:
+                setState(STATE_PENDING);
+                mLastBackendPendingTimestamp = SystemClock.elapsedRealtime();
+                Utils.removeCallbacks(mTranslationWatchdogRunnable);
+                Utils.postDelayed(mTranslationWatchdogRunnable, TRANSLATION_WATCHDOG_TIMEOUT_MS);
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showPreparing(getActivity());
+                }
+                break;
+            case UPLOADING:
+                setState(STATE_PENDING);
+                mLastBackendPendingTimestamp = SystemClock.elapsedRealtime();
+                Utils.removeCallbacks(mTranslationWatchdogRunnable);
+                Utils.postDelayed(mTranslationWatchdogRunnable, TRANSLATION_WATCHDOG_TIMEOUT_MS);
+                if (state.getTotalParts() > 0 && state.getCurrentPart() >= 0 && progressOverlay() != null) {
+                    int percent = Math.min(100, Math.max(1, ((state.getCurrentPart() + 1) * 100) / state.getTotalParts()));
+                    progressOverlay().updateRealProgress(percent);
+                }
+                break;
             case READY:
                 YandexVotLog.i(TAG, "VOT NEW backend READY (audio_url_present=" + (state.getAudioUrl() != null) + ")");
                 Utils.removeCallbacks(mProgressTickRunnable);
@@ -1475,7 +1547,19 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private boolean isCurrentNewBackendSession(long generationId) {
-        return mIsNewBackendActive && mNewBackendGenerationId != 0 && generationId == mNewBackendGenerationId;
+        boolean valid = mIsNewBackendActive && mNewBackendGenerationId != 0 && generationId == mNewBackendGenerationId;
+        if (!valid && generationId != 0) {
+            Map<String, String> staleCtx = new HashMap<>();
+            staleCtx.put("staleGenerationId", String.valueOf(generationId));
+            staleCtx.put("currentGenerationId", String.valueOf(mNewBackendGenerationId));
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_STALE_SESSION_DROPPED,
+                    "Dropped stale translation session callback",
+                    staleCtx
+            );
+        }
+        return valid;
     }
 
     public void setYandexOrchestrator(@Nullable YandexVotOrchestrator orchestrator) {
@@ -1915,6 +1999,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void cancelTranslationJob() {
+        Utils.removeCallbacks(mTranslationWatchdogRunnable);
         Utils.removeCallbacks(mProgressTickRunnable);
         Utils.removeCallbacks(mRetryCountdownRunnable);
         mRetrySecondsRemaining = 0;
@@ -2100,6 +2185,12 @@ public class VoiceTranslateController extends BasePlayerController {
             Log.d(TAG, "State transition: " + stateToString(mState) + " -> " + stateToString(state));
         }
         mState = state;
+        if (state == STATE_PENDING) {
+            Utils.removeCallbacks(mTranslationWatchdogRunnable);
+            Utils.postDelayed(mTranslationWatchdogRunnable, TRANSLATION_WATCHDOG_TIMEOUT_MS);
+        } else {
+            Utils.removeCallbacks(mTranslationWatchdogRunnable);
+        }
         int btnIndex;
         switch (state) {
             case STATE_PENDING:
