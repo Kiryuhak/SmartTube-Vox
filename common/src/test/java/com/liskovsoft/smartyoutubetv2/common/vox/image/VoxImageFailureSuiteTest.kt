@@ -24,7 +24,7 @@ class ImageFinalFailureTest {
     }
 }
 
-class ImageViewRecycleNotFailureTest {
+class ImageRecycleNotFailureTest {
     @Test
     fun testRecycledOrCancelledViewIsNotTreatedAsNetworkFailure() {
         val cancelledException = IOException("Target was cleared / request was cancelled")

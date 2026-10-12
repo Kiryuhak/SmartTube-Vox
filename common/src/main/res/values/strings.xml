@@ -1105,7 +1105,9 @@
     <string name="vox_diagnostics_auto_toggle">Automatic diagnostics submission</string>
     <string name="vox_diagnostics_auto_toggle_desc">Anonymous collection of technical errors without personal data</string>
     <string name="vox_beta_privacy_notice_title">Beta Version Diagnostics</string>
-    <string name="vox_beta_privacy_notice_message">You are using the SmartTube VOX Beta version. To quickly identify and fix issues, automatic anonymous technical error reporting is enabled by default.\n\nOnly safe technical telemetry without accounts, history, or tokens is sent. You can disable this anytime in Settings -> Diagnostics &amp; Logs.</string>
+    <string name="vox_beta_privacy_notice_message">SmartTube VOX Beta may automatically submit anonymized technical error reports to help diagnose and resolve issues faster.\n\nStrictly NOT collected:\n• Video titles and watch history\n• Accounts, OAuth/access/refresh tokens\n• Cookies, IP/MAC, and Wi-Fi SSIDs\n• Signed URLs and request query parameters\n• Subtitle text, translation text, and user input\n\nYou can disable or customize this anytime in Diagnostics &amp; Logs settings.</string>
+    <string name="vox_beta_privacy_notice_btn_ok">Understood</string>
+    <string name="vox_beta_privacy_notice_btn_settings">Diagnostics Settings</string>
 
     <string name="vox_ota_error_no_update">You have the latest version installed</string>
     <string name="vox_ota_error_dns">DNS error while reaching update server</string>

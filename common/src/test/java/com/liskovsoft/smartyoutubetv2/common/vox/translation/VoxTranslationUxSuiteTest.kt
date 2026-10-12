@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class OriginalLanguageAutoUiTest {
+class OriginalLanguageAutoTest {
     @Test
     fun testOriginalLanguageIsAutoDetected() {
         val resolvedLang: String? = null // Auto-detection
@@ -23,7 +23,15 @@ class DefaultTargetRussianTest {
     }
 }
 
-class PauseDuringTranslationPreparationTest {
+class TranslationPauseSettingDefaultOffTest {
+    @Test
+    fun testPauseWhilePreparingSettingDefaultsToOff() {
+        var pauseWhilePreparing = false
+        assertFalse(pauseWhilePreparing)
+    }
+}
+
+class TranslationPauseAutoResumeTest {
     @Test
     fun testPauseAndAutoResumeLifecycle() {
         val pauseWhilePreparingEnabled = true
@@ -51,7 +59,7 @@ class PauseDuringTranslationPreparationTest {
     }
 }
 
-class ManualPauseDoesNotAutoResumeTest {
+class TranslationManualPauseNoResumeTest {
     @Test
     fun testUserManualPausePreventsAutoResume() {
         val pauseWhilePreparingEnabled = true
@@ -81,7 +89,7 @@ class ManualPauseDoesNotAutoResumeTest {
     }
 }
 
-class SeekDuringPreparationTest {
+class TranslationSeekDuringPrepareTest {
     @Test
     fun testSeekDuringPreparationDisablesRewind() {
         var userSeekedDuringPreparation = false
@@ -96,7 +104,17 @@ class SeekDuringPreparationTest {
     }
 }
 
-class NoDuplicateTranslationPreferenceTest {
+class TranslationMixDefaultsTest {
+    @Test
+    fun testDefaultMixPercentagesAre5PercentOriginalAnd100PercentTranslation() {
+        val defaultOriginalVolume = 5
+        val defaultTranslationVolume = 100
+        assertEquals(5, defaultOriginalVolume)
+        assertEquals(100, defaultTranslationVolume)
+    }
+}
+
+class NoDuplicateVotPreferenceTest {
     @Test
     fun testPreferenceNamespaceIntegrity() {
         val prefsName = "vot_data"

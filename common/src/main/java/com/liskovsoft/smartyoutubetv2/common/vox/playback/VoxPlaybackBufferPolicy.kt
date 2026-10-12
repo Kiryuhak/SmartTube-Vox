@@ -261,6 +261,12 @@ object VoxPlaybackBufferPolicy {
                 VoxBufferRootCause.BUFFER_POLICY_TOO_SMALL
             bitrateMbps >= 40.0 ->
                 VoxBufferRootCause.BITRATE_TOO_HIGH
+            // Если измеренная скорость значительно превышает битрейт, сбой не связан с пропускной способностью
+            measuredBandwidthBps > 0 && measuredMbps >= (bitrateMbps * 1.2) ->
+                VoxBufferRootCause.UNKNOWN
+            // Для умеренного битрейта (< 25 Mbps) при отсутствии измерений сети не ставим ложноположительный NETWORK_LIMITED
+            measuredBandwidthBps <= 0L && bitrateMbps < 25.0 ->
+                VoxBufferRootCause.UNKNOWN
             else -> VoxBufferRootCause.NETWORK_LIMITED
         }
     }

@@ -69,14 +69,16 @@ function inferStage(code) {
     ['AUDIO', 'AUDIO'], ['VIDEO', 'VIDEO'], ['INSTALL', 'INSTALL'],
     ['BUFFER', 'BUFFERING'], ['STARTUP', 'PREPARE'], ['DECODER', 'PREPARE'],
     ['CHECK', 'CHECK'], ['RESUME', 'RESOLVING'], ['QUEUE', 'RESOLVING'],
-    ['DOWNLOAD', 'DOWNLOAD'],
+    ['DOWNLOAD', 'DOWNLOAD'], ['HUD', 'UI'],
   ];
   return rules.find(([needle]) => code.includes(needle))?.[1] || '';
 }
 
 function severityForEvent(code, rawLevel, repeats = 1) {
   if (rawLevel === 'CRITICAL' || /CRASH_LOOP|CORRUPT|DATA_LOSS/.test(code)) return 'CRITICAL';
-  if (/MUX_FAILED|PACKAGING_FAILED|FINALIZE_FAILED|BACKGROUND.*FAILED|OTA_SIGNATURE_MISMATCH/.test(code)) return 'HIGH';
+  if (/MUX_FAILED|PACKAGING_FAILED|FINALIZE_FAILED|BACKGROUND.*FAILED|OTA_SIGNATURE_MISMATCH|HUD_SELF_HEAL_FAILED|PLAYER_HUD_MISSING/.test(code)) return 'HIGH';
+  if (/HUD_STATE_INCONSISTENT/.test(code)) return 'MEDIUM';
+  if (/HUD_SELF_HEAL_SUCCESS/.test(code)) return 'INFO';
   if (/REBUFFER|STARTUP_SLOW|NETWORK_TIMEOUT|HTTP_5XX|OTA_FAILED/.test(code)) return 'MEDIUM';
   if (rawLevel === 'ERROR') return repeats > 2 ? 'HIGH' : 'MEDIUM';
   if (rawLevel === 'WARNING') return 'LOW';
@@ -425,6 +427,15 @@ export function generateDeterministicIssueTitle(signature = '', report = {}) {
   }
   if (subsystem === 'AUTO_SETUP' || sig.includes('AUTO_SETUP')) {
     return 'Сбой модуля автонастройки кодеков';
+  }
+  if (sig.includes('PLAYER_HUD_MISSING') || errorCategory.includes('PLAYER_HUD_MISSING') || sig.includes('HUD_MISSING')) {
+    return 'Исчезновение панели управления (HUD) после смены видео';
+  }
+  if (sig.includes('HUD_SELF_HEAL_FAILED') || errorCategory.includes('HUD_SELF_HEAL_FAILED')) {
+    return 'Сбой автоматического восстановления HUD';
+  }
+  if (sig.includes('HUD_STATE_INCONSISTENT') || errorCategory.includes('HUD_STATE_INCONSISTENT')) {
+    return 'Рассинхронизация элементов управления HUD';
   }
   if (subsystem) {
     return `Сбой подсистемы ${subsystem}${stage ? ` на этапе ${stage}` : ''}`;

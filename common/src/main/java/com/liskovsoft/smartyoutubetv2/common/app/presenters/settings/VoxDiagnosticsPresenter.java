@@ -414,4 +414,29 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
             Log.e(TAG, "Failed to copy to clipboard", e);
         }
     }
+
+    public static void showBetaPrivacyNoticeIfNeeded(Context context) {
+        if (context == null) return;
+        VoxUpdateChannelManager manager = VoxUpdateChannelManager.instance(context);
+        if (manager.isAutoDiagnosticsAllowedByDefault() && !manager.hasSeenBetaPrivacyNotice()) {
+            manager.setSeenBetaPrivacyNotice(true);
+            if (context instanceof Activity && Utils.checkActivity((Activity) context)) {
+                Activity activity = (Activity) context;
+                AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+                builder.setTitle(R.string.vox_beta_privacy_notice_title)
+                        .setMessage(R.string.vox_beta_privacy_notice_message)
+                        .setCancelable(true)
+                        .setPositiveButton(R.string.vox_beta_privacy_notice_btn_ok, (dialog, which) -> dialog.dismiss())
+                        .setNegativeButton(R.string.vox_beta_privacy_notice_btn_settings, (dialog, which) -> {
+                            dialog.dismiss();
+                            instance(activity).show();
+                        });
+                try {
+                    builder.create().show();
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to show beta privacy notice dialog", e);
+                }
+            }
+        }
+    }
 }

@@ -147,8 +147,7 @@ public class PlayerUIController extends BasePlayerController {
         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SESSION_STARTED,
-                "Начата новая сессия HUD id=" + mHudSessionId + ", playbackSessionId=" + mPlaybackSessionId +
-                (item != null ? (" для видео: " + item.getTitle()) : "")
+                "Начата новая сессия HUD id=" + mHudSessionId + ", playbackSessionId=" + mPlaybackSessionId
         );
 
         enableUiAutoHideTimeout();

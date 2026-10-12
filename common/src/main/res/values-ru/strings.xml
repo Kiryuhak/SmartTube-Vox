@@ -1020,7 +1020,9 @@
     <string name="vox_diagnostics_auto_toggle">Автоматическая отправка диагностики</string>
     <string name="vox_diagnostics_auto_toggle_desc">Анонимный сбор технических ошибок без личных данных</string>
     <string name="vox_beta_privacy_notice_title">Диагностика бета-версии</string>
-    <string name="vox_beta_privacy_notice_message">Вы используете бета-версию SmartTube VOX. Для быстрого устранения сбоев включена автоматическая анонимная отправка технических ошибок разработчикам.\n\nОтправляются только безопасные технические данные без аккаунтов, истории и токенов. Вы можете отключить отправку в любой момент в разделе «Диагностика и логи».</string>
+    <string name="vox_beta_privacy_notice_message">Бета-версия SmartTube VOX может автоматически отправлять обезличенные технические отчёты об ошибках, чтобы быстрее находить и исправлять проблемы.\n\nКатегорически НЕ отправляются:\n• Названия видео и история просмотров\n• Аккаунты, OAuth/access/refresh токены\n• Cookies, IP/MAC и Wi-Fi SSID\n• Подписанные ссылки и параметры URL запросов\n• Текст субтитров, перевода и ввода пользователя\n\nВы можете в любой момент изменить эту настройку в разделе «Диагностика и логи».</string>
+    <string name="vox_beta_privacy_notice_btn_ok">Понятно</string>
+    <string name="vox_beta_privacy_notice_btn_settings">Настройки диагностики</string>
 
     <string name="vox_ota_error_no_update">У вас установлена последняя версия</string>
     <string name="vox_ota_error_dns">Ошибка DNS при подключении к серверу обновлений</string>

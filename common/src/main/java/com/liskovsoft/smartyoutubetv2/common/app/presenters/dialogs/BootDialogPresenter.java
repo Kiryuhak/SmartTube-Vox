@@ -31,6 +31,13 @@ public class BootDialogPresenter extends BasePresenter<Void> {
 
     public void start() {
         startUpdatePresenter();
+        showBetaPrivacyNotice();
+    }
+
+    private void showBetaPrivacyNotice() {
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxDiagnosticsPresenter.showBetaPrivacyNoticeIfNeeded(getContext());
+        }
     }
 
     private void startUpdatePresenter() {

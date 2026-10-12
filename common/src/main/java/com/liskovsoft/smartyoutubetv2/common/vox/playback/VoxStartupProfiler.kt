@@ -71,7 +71,10 @@ object VoxStartupProfiler {
         )
     }
 
+    const val STAGE_REQUEST_START = "REQUEST_START"
     const val STAGE_REQUEST = "REQUEST"
+    const val STAGE_MANIFEST_FETCH = "MANIFEST_FETCH"
+    const val STAGE_MANIFEST_PARSE = "MANIFEST_PARSE"
     const val STAGE_MANIFEST = "MANIFEST"
     const val STAGE_TRACK_SELECT = "TRACK_SELECT"
     const val STAGE_DECODER_INIT = "DECODER_INIT"
@@ -80,6 +83,7 @@ object VoxStartupProfiler {
 
     const val ROOT_CAUSE_NETWORK = "NETWORK"
     const val ROOT_CAUSE_MANIFEST = "MANIFEST"
+    const val ROOT_CAUSE_TRACK_SELECTION = "TRACK_SELECTION"
     const val ROOT_CAUSE_DECODER = "DECODER"
     const val ROOT_CAUSE_BUFFER_FILL = "BUFFER_FILL"
     const val ROOT_CAUSE_UNKNOWN = "UNKNOWN"
@@ -95,8 +99,9 @@ object VoxStartupProfiler {
         val maxRecord = stageRecords.maxByOrNull { it.elapsedMs } ?: return ROOT_CAUSE_UNKNOWN
         if (maxRecord.elapsedMs < 300L) return ROOT_CAUSE_UNKNOWN
         return when (maxRecord.stage) {
-            STAGE_REQUEST -> ROOT_CAUSE_NETWORK
-            STAGE_MANIFEST, STAGE_TRACK_SELECT -> ROOT_CAUSE_MANIFEST
+            STAGE_REQUEST, STAGE_REQUEST_START -> ROOT_CAUSE_NETWORK
+            STAGE_MANIFEST, STAGE_MANIFEST_FETCH, STAGE_MANIFEST_PARSE -> ROOT_CAUSE_MANIFEST
+            STAGE_TRACK_SELECT -> ROOT_CAUSE_TRACK_SELECTION
             STAGE_DECODER_INIT -> ROOT_CAUSE_DECODER
             STAGE_BUFFER_FILL, "BUFFER_LOAD" -> ROOT_CAUSE_BUFFER_FILL
             else -> ROOT_CAUSE_UNKNOWN
@@ -109,10 +114,12 @@ object VoxStartupProfiler {
     @JvmStatic
     fun getProfileSummary(): Map<String, Any> {
         val totalStartupMs = stageRecords.lastOrNull()?.relativeOffsetMs ?: 0L
+        val slowestStage = stageRecords.maxByOrNull { it.elapsedMs }?.stage ?: "NONE"
         return mapOf(
             "playbackSessionId" to currentSessionId,
             "engine" to currentEngine,
             "totalStartupMs" to totalStartupMs,
+            "slowestStage" to slowestStage,
             "rootCause" to classifyStartupRootCause(),
             "stages" to stageRecords.map { it.toMap() }
         )

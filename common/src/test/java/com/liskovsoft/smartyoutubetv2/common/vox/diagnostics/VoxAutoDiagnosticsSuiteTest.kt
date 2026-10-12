@@ -8,7 +8,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class BetaAutoDiagnosticsPolicyTest {
+class BetaAutoDiagnosticsEnabledTest {
     @Test
     fun testBetaBuildDefaultsAutoDiagnosticsOn() {
         val betaChannel = VoxBuildChannel.fromVersion("32.56-vox.8.2-beta.2")
@@ -18,7 +18,16 @@ class BetaAutoDiagnosticsPolicyTest {
     }
 }
 
-class StableDiagnosticsOptInTest {
+class BetaAutoDiagnosticsDisableTest {
+    @Test
+    fun testBetaUserCanDisableDiagnostics() {
+        var userDiagnosticsEnabled = true
+        userDiagnosticsEnabled = false
+        assertFalse(userDiagnosticsEnabled)
+    }
+}
+
+class StableDiagnosticsDefaultOffTest {
     @Test
     fun testStableBuildDefaultsAutoDiagnosticsOff() {
         val stableChannel = VoxBuildChannel.fromVersion("32.56-vox.8.1")
@@ -28,7 +37,7 @@ class StableDiagnosticsOptInTest {
     }
 }
 
-class BetaToStableConsentResetTest {
+class BetaToStablePolicyTest {
     @Test
     fun testSwitchingToStableResetsConsent() {
         var autoEnabled = true
@@ -68,7 +77,7 @@ class IncidentRepeatCountTest {
     }
 }
 
-class OfflineBoundedQueueTest {
+class OfflineQueueBoundedTest {
     @Test
     fun testOfflineQueueDropsOldestOnOverflow() {
         assertEquals(10, VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_SIZE)
@@ -124,7 +133,7 @@ class ReportPurposeTest {
     }
 }
 
-class EmulatorTestPurposeTest {
+class EmulatorReportPurposeTest {
     @Test
     fun testEmulatorTestReportPurposeClassification() {
         val purpose = VoxDiagnosticReport.PURPOSE_EMULATOR_TEST

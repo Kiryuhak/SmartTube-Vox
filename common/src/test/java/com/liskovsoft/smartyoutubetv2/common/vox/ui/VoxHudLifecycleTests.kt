@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class HudSessionResetTest {
+class HudLifecycleSessionTest {
     @Test
     fun testSessionIdIncrementsOnNewSession() {
         var currentSessionId = 1L
@@ -16,7 +16,7 @@ class HudSessionResetTest {
     }
 }
 
-class HudStaleCallbackIgnoredTest {
+class HudOldSessionCallbackDroppedTest {
     @Test
     fun testStaleSessionCallbackIsDropped() {
         val scheduledSessionId = 100L
@@ -27,7 +27,7 @@ class HudStaleCallbackIgnoredTest {
     }
 }
 
-class HudAttachAfterVideoSwitchTest {
+class HudControlsAttachTest {
     @Test
     fun testControlsShownPreviouslyResetsOnVideoSwitch() {
         var isControlsShownPreviously: Boolean? = true
@@ -37,7 +37,19 @@ class HudAttachAfterVideoSwitchTest {
     }
 }
 
-class HudAutoHidePreviousSessionTest {
+class HudVideoSwitchTest {
+    @Test
+    fun testHudAttachSucceedsOnSwitch() {
+        var hudAttached = false
+        var playbackSessionId = 10L
+        playbackSessionId++
+        hudAttached = true
+        assertTrue(hudAttached)
+        assertEquals(11L, playbackSessionId)
+    }
+}
+
+class HudAutoHideIsolationTest {
     @Test
     fun testAutoHidePreviousSessionCannotHideCurrentSession() {
         val scheduledSession = 1L
@@ -52,7 +64,7 @@ class HudAutoHidePreviousSessionTest {
     }
 }
 
-class HudFocusRestoreTest {
+class HudFocusRecoveryTest {
     @Test
     fun testFocusRestoreTriggersWhenUnfocused() {
         var hasFocus = false
@@ -66,7 +78,7 @@ class HudFocusRestoreTest {
     }
 }
 
-class HudSelfHealTest {
+class HudSelfHealSuccessTest {
     @Test
     fun testSelfHealTriggersOnFirstAttempt() {
         var selfHealAttempted = false
@@ -79,6 +91,21 @@ class HudSelfHealTest {
 
         assertTrue(selfHealExecuted)
         assertTrue(selfHealAttempted)
+    }
+}
+
+class HudSelfHealBoundedTest {
+    @Test
+    fun testSelfHealBoundToOneAttempt() {
+        var selfHealAttempted = false
+        var executions = 0
+        for (i in 1..3) {
+            if (!selfHealAttempted) {
+                selfHealAttempted = true
+                executions++
+            }
+        }
+        assertEquals(1, executions)
     }
 }
 

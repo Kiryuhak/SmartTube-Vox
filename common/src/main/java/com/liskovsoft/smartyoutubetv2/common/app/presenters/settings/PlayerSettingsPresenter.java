@@ -221,6 +221,7 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
     private void showVotSettingsDialog() {
         AppDialogPresenter settingsPresenter = AppDialogPresenter.instance(getContext());
 
+        // 1. ПЕРЕВОД
         settingsPresenter.appendSingleSwitch(UiOptionItem.from(
                 getContext().getString(R.string.vot_auto_translate),
                 getContext().getString(R.string.vot_auto_translate_desc),
@@ -234,115 +235,10 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 mVotData.isAutoActivateReadyTranslation()));
 
         settingsPresenter.appendSingleSwitch(UiOptionItem.from(
-                getContext().getString(R.string.vot_pause_while_preparing),
-                getContext().getString(R.string.vot_pause_while_preparing_desc),
-                option -> mVotData.setPauseWhilePreparingTranslation(option.isSelected()),
-                mVotData.isPauseWhilePreparingTranslation()));
-
-        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
                 getContext().getString(R.string.vot_prefer_youtube_dub),
                 getContext().getString(R.string.vot_prefer_youtube_dub_desc),
                 option -> mVotData.setPreferYoutubeAutoDub(option.isSelected()),
                 mVotData.isPreferYoutubeAutoDub()));
-
-        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
-                getContext().getString(R.string.vot_lively_voice),
-                getContext().getString(R.string.vot_lively_voice_desc),
-                optionItem -> {
-                    if (optionItem.isSelected()) {
-                        if (!mVotData.hasOAuthToken()) {
-                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
-                            startYandexOAuth();
-                            return;
-                        }
-                        if (mVotData.getAuthState() == VotData.AuthState.REJECTED) {
-                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_rejected);
-                            startYandexOAuth();
-                            return;
-                        }
-                    }
-                    mVotData.setLivelyVoiceEnabled(optionItem.isSelected());
-                },
-                mVotData.isLivelyVoiceEnabled()));
-
-        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
-                getContext().getString(R.string.vot_player_button_switch),
-                getContext().getString(R.string.vot_player_button_switch_desc),
-                option -> {
-                    if (option.isSelected()) {
-                        mPlayerTweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
-                    } else {
-                        mPlayerTweaksData.setPlayerButtonDisabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
-                    }
-                },
-                mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)));
-
-        VotData.AuthState state = mVotData.getAuthState();
-        String statusText = authStateToStatusString(state);
-
-        if (state == VotData.AuthState.ABSENT) {
-            settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_login),
-                    statusText,
-                    optionItem -> startYandexOAuth()
-            ));
-        } else if (state == VotData.AuthState.REJECTED) {
-            settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_relogin),
-                    statusText,
-                    optionItem -> startYandexOAuth()
-            ));
-            settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_logout),
-                    optionItem -> performYandexLogout()
-            ));
-        } else {
-            settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_device_auth_title),
-                    statusText,
-                    null
-            ));
-            settingsPresenter.appendSingleButton(UiOptionItem.from(
-                    getContext().getString(R.string.vot_yandex_logout),
-                    optionItem -> performYandexLogout()
-            ));
-        }
-
-        settingsPresenter.appendSingleButton(UiOptionItem.from(
-                getContext().getString(R.string.vot_manual_token_entry),
-                optionItem -> showVotTokenDialog()
-        ));
-
-        settingsPresenter.appendSingleButton(UiOptionItem.from(
-                getContext().getString(R.string.vox_proxy_title),
-                mVotData.getVoxProxyConfig().toDisplayString(),
-                optionItem -> com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyDialog.show(getContext(), config -> {
-                    AppDialogPresenter.instance(getContext()).closeDialog();
-                })
-        ));
-
-        settingsPresenter.appendRadioCategory(
-                getContext().getString(R.string.vot_original_volume),
-                AppDialogUtil.createVotOriginalVolumeCategory(getContext()).options);
-        settingsPresenter.appendRadioCategory(
-                getContext().getString(R.string.vot_translation_volume),
-                AppDialogUtil.createVotTranslationVolumeCategory(getContext()).options);
-
-        List<OptionItem> postWatchOptions = new ArrayList<>();
-        postWatchOptions.add(UiOptionItem.from(
-                getContext().getString(R.string.vox_download_post_watch_setting_none),
-                optionItem -> mVotData.setPostWatchAction(VotData.POST_WATCH_DO_NOTHING),
-                mVotData.getPostWatchAction() == VotData.POST_WATCH_DO_NOTHING
-        ));
-        postWatchOptions.add(UiOptionItem.from(
-                getContext().getString(R.string.vox_download_post_watch_setting_prompt),
-                optionItem -> mVotData.setPostWatchAction(VotData.POST_WATCH_OFFER_DELETE),
-                mVotData.getPostWatchAction() == VotData.POST_WATCH_OFFER_DELETE
-        ));
-        settingsPresenter.appendRadioCategory(
-                getContext().getString(R.string.vox_download_post_watch_setting),
-                postWatchOptions
-        );
 
         settingsPresenter.appendSingleButton(UiOptionItem.from(
                 getContext().getString(R.string.vot_original_language_title),
@@ -375,6 +271,115 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         settingsPresenter.appendRadioCategory(
                 getContext().getString(R.string.vot_target_language),
                 targetLangOptions
+        );
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_pause_while_preparing),
+                getContext().getString(R.string.vot_pause_while_preparing_desc),
+                option -> mVotData.setPauseWhilePreparingTranslation(option.isSelected()),
+                mVotData.isPauseWhilePreparingTranslation()));
+
+        // 2. ЗВУК
+        settingsPresenter.appendRadioCategory(
+                getContext().getString(R.string.vot_translation_volume),
+                AppDialogUtil.createVotTranslationVolumeCategory(getContext()).options);
+
+        settingsPresenter.appendRadioCategory(
+                getContext().getString(R.string.vot_original_volume),
+                AppDialogUtil.createVotOriginalVolumeCategory(getContext()).options);
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_lively_voice),
+                getContext().getString(R.string.vot_lively_voice_desc),
+                optionItem -> {
+                    if (optionItem.isSelected()) {
+                        if (!mVotData.hasOAuthToken()) {
+                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_required);
+                            startYandexOAuth();
+                            return;
+                        }
+                        if (mVotData.getAuthState() == VotData.AuthState.REJECTED) {
+                            MessageHelpers.showMessage(getContext(), R.string.vot_error_auth_rejected);
+                            startYandexOAuth();
+                            return;
+                        }
+                    }
+                    mVotData.setLivelyVoiceEnabled(optionItem.isSelected());
+                },
+                mVotData.isLivelyVoiceEnabled()));
+
+        // 3. YANDEX
+        VotData.AuthState state = mVotData.getAuthState();
+        String statusText = authStateToStatusString(state);
+
+        if (state == VotData.AuthState.ABSENT) {
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_login),
+                    statusText,
+                    optionItem -> startYandexOAuth()
+            ));
+        } else if (state == VotData.AuthState.REJECTED) {
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_relogin),
+                    statusText,
+                    optionItem -> startYandexOAuth()
+            ));
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_logout),
+                    optionItem -> performYandexLogout()
+            ));
+        } else {
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_device_auth_title),
+                    statusText,
+                    null
+            ));
+            settingsPresenter.appendSingleButton(UiOptionItem.from(
+                    getContext().getString(R.string.vot_yandex_logout),
+                    optionItem -> performYandexLogout()
+            ));
+        }
+
+        // 4. РАСШИРЕННЫЕ И ДИАГНОСТИКА
+        settingsPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.vox_proxy_title),
+                mVotData.getVoxProxyConfig().toDisplayString(),
+                optionItem -> com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxProxyDialog.show(getContext(), config -> {
+                    AppDialogPresenter.instance(getContext()).closeDialog();
+                })
+        ));
+
+        settingsPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.vot_manual_token_entry),
+                optionItem -> showVotTokenDialog()
+        ));
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_player_button_switch),
+                getContext().getString(R.string.vot_player_button_switch_desc),
+                option -> {
+                    if (option.isSelected()) {
+                        mPlayerTweaksData.setPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
+                    } else {
+                        mPlayerTweaksData.setPlayerButtonDisabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE);
+                    }
+                },
+                mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)));
+
+        List<OptionItem> postWatchOptions = new ArrayList<>();
+        postWatchOptions.add(UiOptionItem.from(
+                getContext().getString(R.string.vox_download_post_watch_setting_none),
+                optionItem -> mVotData.setPostWatchAction(VotData.POST_WATCH_DO_NOTHING),
+                mVotData.getPostWatchAction() == VotData.POST_WATCH_DO_NOTHING
+        ));
+        postWatchOptions.add(UiOptionItem.from(
+                getContext().getString(R.string.vox_download_post_watch_setting_prompt),
+                optionItem -> mVotData.setPostWatchAction(VotData.POST_WATCH_OFFER_DELETE),
+                mVotData.getPostWatchAction() == VotData.POST_WATCH_OFFER_DELETE
+        ));
+        settingsPresenter.appendRadioCategory(
+                getContext().getString(R.string.vox_download_post_watch_setting),
+                postWatchOptions
         );
 
         settingsPresenter.showDialog(getContext().getString(R.string.vot_settings_category));

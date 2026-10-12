@@ -43,6 +43,13 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
     }
 
     /**
+     * Проверяет, разрешена ли автодиагностика по умолчанию для текущей сборки приложения.
+     */
+    fun isAutoDiagnosticsAllowedByDefault(): Boolean {
+        return getBuildChannel().isPreRelease
+    }
+
+    /**
      * Возвращает версию приложения из PackageManager или константу.
      */
     fun getAppVersionName(): String {
