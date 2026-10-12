@@ -263,14 +263,27 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     };
 
+    private long mRequestStartTimestamp;
+    private long mLastBackendPendingTimestamp;
+
     private static final long TRANSLATION_WATCHDOG_TIMEOUT_MS = 45000L;
 
-    private final Runnable mTranslationWatchdogRunnable = () -> {
+    private void onWatchdogTick() {
         if (mState == STATE_PENDING) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            long timeSinceLastProgress = mLastBackendPendingTimestamp > 0 ? (now - mLastBackendPendingTimestamp) : TRANSLATION_WATCHDOG_TIMEOUT_MS;
+            if (timeSinceLastProgress < TRANSLATION_WATCHDOG_TIMEOUT_MS) {
+                // Провайдер активен и присылает прогресс/heartbeat. Продлеваем таймер на оставшееся время.
+                long remainingMs = Math.max(1000L, TRANSLATION_WATCHDOG_TIMEOUT_MS - timeSinceLastProgress);
+                Utils.postDelayed(mTranslationWatchdogRunnable, remainingMs);
+                return;
+            }
+
             Log.w(TAG, "VOT Watchdog: Translation state stuck in PREPARING for video=%s", mCurrentVideoId);
             Map<String, String> stuckCtx = new HashMap<>();
             stuckCtx.put("videoId", mCurrentVideoId != null ? mCurrentVideoId : "unknown");
             stuckCtx.put("timeoutMs", String.valueOf(TRANSLATION_WATCHDOG_TIMEOUT_MS));
+            stuckCtx.put("inactivityMs", String.valueOf(timeSinceLastProgress));
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_STUCK_DETECTED,
@@ -285,10 +298,9 @@ public class VoiceTranslateController extends BasePlayerController {
             );
             onTranslationTimeout();
         }
-    };
+    }
 
-    private long mRequestStartTimestamp;
-    private long mLastBackendPendingTimestamp;
+    private final Runnable mTranslationWatchdogRunnable = this::onWatchdogTick;
 
     private final Runnable mSyncRunnable = new Runnable() {
         @Override

@@ -13,7 +13,8 @@ object VoxOtaReleaseParser {
      * Защищён от HTML 404 страниц и некорректного JSON.
      */
     @JvmStatic
-    fun parseRelease(jsonString: String?): VoxReleaseInfo {
+    @JvmOverloads
+    fun parseRelease(jsonString: String?, isBetaChannel: Boolean = false): VoxReleaseInfo {
         if (jsonString.isNullOrBlank()) {
             throw VoxOtaException(VoxOtaErrorCode.RELEASE_PARSE_FAILED, "Empty release response")
         }
@@ -27,10 +28,44 @@ object VoxOtaReleaseParser {
         }
 
         try {
+            // Вариант 0: Массив релизов GitHub API
+            if (trimmed.startsWith("[")) {
+                val array = JSONArray(trimmed)
+                if (array.length() == 0) {
+                    throw VoxOtaException(VoxOtaErrorCode.RELEASE_NOT_FOUND, "Release list is empty")
+                }
+
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val isPre = item.optBoolean("prerelease", false)
+                    val isDraft = item.optBoolean("draft", false)
+                    if (isDraft) continue
+
+                    // На стабильном канале пропускаем pre-release
+                    if (!isBetaChannel && isPre) continue
+
+                    if (item.has("tag_name") && item.has("assets")) {
+                        return parseGitHubRelease(item)
+                    }
+                }
+
+                throw VoxOtaException(
+                    VoxOtaErrorCode.RELEASE_NOT_FOUND,
+                    "No compatible release found in release list for channel: ${if (isBetaChannel) "beta" else "stable"}"
+                )
+            }
+
             val root = JSONObject(trimmed)
 
             // Вариант 1: GitHub Releases API объект
             if (root.has("tag_name") && root.has("assets")) {
+                val isPre = root.optBoolean("prerelease", false)
+                if (!isBetaChannel && isPre) {
+                    throw VoxOtaException(
+                        VoxOtaErrorCode.CHANNEL_MISMATCH,
+                        "Release is pre-release but requested stable channel"
+                    )
+                }
                 return parseGitHubRelease(root)
             }
 
@@ -47,6 +82,9 @@ object VoxOtaReleaseParser {
             throw VoxOtaException(
                 VoxOtaErrorCode.RELEASE_PARSE_FAILED,
                 "Failed to parse release JSON: ${e.message}",
+                VoxOtaStage.PARSE,
+                null,
+                false,
                 e
             )
         }
@@ -57,6 +95,7 @@ object VoxOtaReleaseParser {
         val versionName = tagName.removePrefix("v").removePrefix("V")
         val body = obj.optString("body", "")
         val changelog = parseChangelogText(body)
+        val isPrerelease = obj.optBoolean("prerelease", false)
 
         val assetsArray = obj.getJSONArray("assets")
         val assets = mutableListOf<VoxReleaseAsset>()
@@ -79,7 +118,8 @@ object VoxOtaReleaseParser {
             versionName = versionName,
             changelog = changelog,
             assets = assets,
-            sha256SumsUrl = sha256SumsUrl
+            sha256SumsUrl = sha256SumsUrl,
+            isPrerelease = isPrerelease
         )
     }
 

@@ -13,28 +13,34 @@ import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
+import java.net.UnknownHostException
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SSLException
 
 /**
- * Менеджер обновлений OTA для SmartTube VOX.
+ * Менеджер обновлений OTA для SmartTube VOX (Patch #35 Hardened).
  *
  * Особенности:
- * - Защита от HTML 404 страниц и сбоев разбора;
- * - Резервный опрос GitHub Releases API при отсутствии smarttube_vox.json;
- * - Точный выбор APK по архитектуре процессора (ABI);
- * - Сверка контрольной суммы SHA-256;
- * - Проверка цифровой подписи официального сертификата VOX;
- * - Полное покрытие диагностическими событиями OTA_*;
- * - Понятные пользователю локализованные сообщения об ошибках (без java.lang...).
+ * - Строгая классификация ошибок (DNS, Timeout, TLS, Rate Limit, HTTP, Release Not Found);
+ * - Гарантия Single-Flight и защита от параллельного спама запросов;
+ * - Безопасный переход NO_UPDATE / VERSION_NOT_NEWER без сетевых ложных тревог;
+ * - Обработка 404 манифеста с прозрачным переходом к актуальному релизу;
+ * - Разделение Stable и Beta каналов с корректной иерархией версий;
+ * - Полное покрытие телеметрией этапов проверки обновления.
  */
 class VoxOtaUpdateManager(private val context: Context) {
 
     companion object {
         private const val TAG = "VoxOtaUpdateManager"
-        private const val GITHUB_LATEST_RELEASE_API =
+        const val GITHUB_LATEST_RELEASE_API =
             "https://api.github.com/repos/Kiryuhak/SmartTube-Vox/releases/latest"
+        const val GITHUB_RELEASES_LIST_API =
+            "https://api.github.com/repos/Kiryuhak/SmartTube-Vox/releases?per_page=5"
         private const val USER_AGENT = "SmartTube-VOX-OTA/1.0"
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
@@ -50,10 +56,58 @@ class VoxOtaUpdateManager(private val context: Context) {
                 sInstance ?: VoxOtaUpdateManager(context.applicationContext).also { sInstance = it }
             }
         }
+
+        @JvmStatic
+        fun classifyException(
+            throwable: Throwable,
+            customMessage: String? = null,
+            stage: VoxOtaStage = VoxOtaStage.HTTP
+        ): VoxOtaException {
+            if (throwable is VoxOtaException) return throwable
+            val msg = customMessage ?: throwable.message ?: throwable.javaClass.simpleName
+            val (code, resolvedStage, isRetryable) = when (throwable) {
+                is UnknownHostException -> Triple(VoxOtaErrorCode.DNS_ERROR, VoxOtaStage.DNS, true)
+                is SocketTimeoutException -> Triple(VoxOtaErrorCode.TIMEOUT, VoxOtaStage.CONNECT, true)
+                is ConnectException -> Triple(VoxOtaErrorCode.NETWORK_ERROR, VoxOtaStage.CONNECT, true)
+                is SSLException -> Triple(VoxOtaErrorCode.TLS_ERROR, VoxOtaStage.TLS, false)
+                is org.json.JSONException -> Triple(VoxOtaErrorCode.PARSE_ERROR, VoxOtaStage.PARSE, false)
+                else -> {
+                    val m = throwable.message?.lowercase() ?: ""
+                    when {
+                        m.contains("rate limit") || m.contains("429") -> Triple(VoxOtaErrorCode.RATE_LIMIT, VoxOtaStage.HTTP, true)
+                        m.contains("404") || m.contains("not found") -> Triple(VoxOtaErrorCode.RELEASE_NOT_FOUND, VoxOtaStage.HTTP, false)
+                        m.contains("dns") || m.contains("unknown host") -> Triple(VoxOtaErrorCode.DNS_ERROR, VoxOtaStage.DNS, true)
+                        m.contains("timeout") || m.contains("timed out") -> Triple(VoxOtaErrorCode.TIMEOUT, VoxOtaStage.CONNECT, true)
+                        m.contains("ssl") || m.contains("tls") || m.contains("handshake") || m.contains("certificate") -> Triple(VoxOtaErrorCode.TLS_ERROR, VoxOtaStage.TLS, false)
+                        m.contains("refused") || m.contains("reset") || m.contains("no route") || m.contains("unreachable") -> Triple(VoxOtaErrorCode.NETWORK_ERROR, VoxOtaStage.CONNECT, true)
+                        m.contains("500") || m.contains("502") || m.contains("503") || m.contains("504") -> Triple(VoxOtaErrorCode.HTTP_ERROR, VoxOtaStage.HTTP, true)
+                        else -> Triple(VoxOtaErrorCode.NETWORK_ERROR, stage, false)
+                    }
+                }
+            }
+            return VoxOtaException(
+                code = code,
+                message = msg,
+                stage = resolvedStage,
+                httpStatus = null,
+                isRetryable = isRetryable,
+                cause = throwable
+            )
+        }
+
+        private fun sanitizeUrl(urlStr: String): String {
+            return try {
+                val url = URL(urlStr)
+                "${url.protocol}://${url.host}${url.path}"
+            } catch (e: Exception) {
+                urlStr.split("?")[0]
+            }
+        }
     }
 
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val isInFlight = AtomicBoolean(false)
 
     interface Callback {
         fun onUpdateAvailable(release: VoxReleaseInfo, asset: VoxReleaseAsset)
@@ -63,8 +117,10 @@ class VoxOtaUpdateManager(private val context: Context) {
         fun onError(error: VoxOtaException)
     }
 
+    fun isCheckingForUpdates(): Boolean = isInFlight.get()
+
     /**
-     * Запускает проверку наличия обновлений.
+     * Запускает проверку наличия обновлений с защитой от параллельных запросов (Single-Flight).
      */
     fun checkForUpdates(
         currentVersion: String,
@@ -72,25 +128,74 @@ class VoxOtaUpdateManager(private val context: Context) {
         isBetaChannel: Boolean = false,
         callback: Callback
     ) {
+        if (!isInFlight.compareAndSet(false, true)) {
+            Log.d(TAG, "Update check already in flight, ignoring duplicate request")
+            return
+        }
+
         executor.execute {
+            val startTimeMs = System.currentTimeMillis()
+            val channelName = if (isBetaChannel) "beta" else "stable"
+
             try {
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
                     VoxLogCode.OTA_CHECK_STARTED,
                     "Начата проверка обновлений",
-                    mapOf("currentVersion" to currentVersion, "channel" to if (isBetaChannel) "beta" else "stable")
+                    mapOf("currentVersion" to currentVersion, "channel" to channelName)
                 )
-
-                val release = fetchReleaseInfo(manifestUrls)
 
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
-                    VoxLogCode.OTA_RELEASE_FOUND,
-                    "Получена информация о релизе",
-                    mapOf("targetVersion" to release.versionName, "tag" to release.tagName)
+                    VoxLogCode.OTA_CHANNEL_SELECTED,
+                    "Выбран канал обновления",
+                    mapOf("channel" to channelName, "currentVersion" to currentVersion)
                 )
 
-                val updateAvailable = VoxVersionComparator.isUpdateAvailable(currentVersion, release.versionName, isBetaChannel)
+                val release = try {
+                    fetchReleaseInfo(manifestUrls, isBetaChannel)
+                } catch (e: VoxOtaException) {
+                    if (e.code == VoxOtaErrorCode.RELEASE_NOT_FOUND) {
+                        // 404 или отсутствие релиза при плановой проверке = NO_UPDATE
+                        val elapsed = System.currentTimeMillis() - startTimeMs
+                        VoxSafeLogger.info(
+                            VoxLogCategory.OTA,
+                            VoxLogCode.OTA_RELEASE_NOT_FOUND,
+                            "Релиз не найден на сервере (трактуется как отсутствие обновлений)",
+                            mapOf("currentVersion" to currentVersion, "channel" to channelName, "elapsedMs" to elapsed.toString())
+                        )
+                        VoxSafeLogger.info(
+                            VoxLogCategory.OTA,
+                            VoxLogCode.OTA_NO_UPDATE,
+                            "Новых обновлений нет",
+                            mapOf("currentVersion" to currentVersion, "reason" to "RELEASE_NOT_FOUND")
+                        )
+                        VoxSafeLogger.info(
+                            VoxLogCategory.OTA,
+                            VoxLogCode.OTA_CHECK_COMPLETED,
+                            "Проверка обновлений завершена",
+                            mapOf("resultCode" to VoxOtaErrorCode.NO_UPDATE.name, "elapsedMs" to elapsed.toString(), "retryable" to "false")
+                        )
+                        mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
+                        return@execute
+                    }
+                    throw e
+                }
+
+                val targetVersion = release.versionName
+                VoxSafeLogger.info(
+                    VoxLogCategory.OTA,
+                    VoxLogCode.OTA_RELEASE_PARSED,
+                    "Информация о релизе успешно разобрана",
+                    mapOf(
+                        "targetVersion" to targetVersion,
+                        "tag" to release.tagName,
+                        "assetsCount" to release.assets.size.toString(),
+                        "isPrerelease" to release.isPrerelease.toString()
+                    )
+                )
+
+                val updateAvailable = VoxVersionComparator.isUpdateAvailable(currentVersion, targetVersion, isBetaChannel)
 
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
@@ -98,12 +203,36 @@ class VoxOtaUpdateManager(private val context: Context) {
                     "Сравнение версий завершено",
                     mapOf(
                         "currentVersion" to currentVersion,
-                        "targetVersion" to release.versionName,
-                        "updateAvailable" to updateAvailable.toString()
+                        "targetVersion" to targetVersion,
+                        "updateAvailable" to updateAvailable.toString(),
+                        "channel" to channelName
                     )
                 )
 
+                val elapsed = System.currentTimeMillis() - startTimeMs
+
                 if (!updateAvailable) {
+                    VoxSafeLogger.info(
+                        VoxLogCategory.OTA,
+                        VoxLogCode.OTA_NO_UPDATE,
+                        "У вас установлена последняя версия",
+                        mapOf(
+                            "currentVersion" to currentVersion,
+                            "targetVersion" to targetVersion,
+                            "resultCode" to VoxOtaErrorCode.VERSION_NOT_NEWER.name,
+                            "channel" to channelName
+                        )
+                    )
+                    VoxSafeLogger.info(
+                        VoxLogCategory.OTA,
+                        VoxLogCode.OTA_CHECK_COMPLETED,
+                        "Проверка обновлений завершена",
+                        mapOf(
+                            "resultCode" to VoxOtaErrorCode.NO_UPDATE.name,
+                            "elapsedMs" to elapsed.toString(),
+                            "retryable" to "false"
+                        )
+                    )
                     mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
                     return@execute
                 }
@@ -112,8 +241,22 @@ class VoxOtaUpdateManager(private val context: Context) {
                 val selectedAsset = VoxReleaseAssetSelector.selectAsset(release.assets, primaryAbi)
                     ?: throw VoxOtaException(
                         VoxOtaErrorCode.NO_COMPATIBLE_ASSET,
-                        "No compatible APK asset found for ABI: $primaryAbi"
+                        "No compatible APK asset found for ABI: $primaryAbi",
+                        VoxOtaStage.COMPARE,
+                        null,
+                        false
                     )
+
+                VoxSafeLogger.info(
+                    VoxLogCategory.OTA,
+                    VoxLogCode.OTA_UPDATE_AVAILABLE,
+                    "Найдено доступное обновление",
+                    mapOf(
+                        "currentVersion" to currentVersion,
+                        "targetVersion" to targetVersion,
+                        "assetName" to selectedAsset.name
+                    )
+                )
 
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
@@ -126,10 +269,24 @@ class VoxOtaUpdateManager(private val context: Context) {
                     )
                 )
 
+                VoxSafeLogger.info(
+                    VoxLogCategory.OTA,
+                    VoxLogCode.OTA_CHECK_COMPLETED,
+                    "Проверка обновлений завершена",
+                    mapOf(
+                        "resultCode" to VoxOtaErrorCode.UPDATE_AVAILABLE.name,
+                        "elapsedMs" to elapsed.toString(),
+                        "retryable" to "false"
+                    )
+                )
+
                 mainHandler.post { callback.onUpdateAvailable(release, selectedAsset) }
 
             } catch (e: Throwable) {
-                handleError(e, callback)
+                val elapsed = System.currentTimeMillis() - startTimeMs
+                handleError(e, currentVersion, channelName, elapsed, callback)
+            } finally {
+                isInFlight.set(false)
             }
         }
     }
@@ -200,7 +357,6 @@ class VoxOtaUpdateManager(private val context: Context) {
                 // 2. Проверка цифровой подписи официального сертификата VOX
                 val isSignatureValid = VoxOtaSecurityVerifier.verifyApkSignature(context, destinationFile)
                 if (!isSignatureValid) {
-                    // Проверяем, запущено ли приложение в тестовой среде без PackageArchiveInfo
                     val isTestEnv = try { context.packageManager.getPackageArchiveInfo(destinationFile.absolutePath, 0) == null } catch (e: Exception) { true }
                     if (!isTestEnv) {
                         throw VoxOtaException(
@@ -221,7 +377,7 @@ class VoxOtaUpdateManager(private val context: Context) {
 
             } catch (e: Throwable) {
                 destinationFile?.delete()
-                handleError(e, callback)
+                handleError(e, "", "", 0L, callback)
             }
         }
     }
@@ -251,13 +407,21 @@ class VoxOtaUpdateManager(private val context: Context) {
         }
     }
 
-    private fun fetchReleaseInfo(manifestUrls: Array<String>?): VoxReleaseInfo {
+    private fun fetchReleaseInfo(manifestUrls: Array<String>?, isBetaChannel: Boolean): VoxReleaseInfo {
         // Сначала пробуем конфигурационные URL манифестов
         if (!manifestUrls.isNullOrEmpty()) {
             for (url in manifestUrls) {
+                val safeUrl = sanitizeUrl(url)
+                VoxSafeLogger.info(
+                    VoxLogCategory.OTA,
+                    VoxLogCode.OTA_ENDPOINT_REQUEST,
+                    "Запрос манифеста обновления",
+                    mapOf("endpoint" to safeUrl, "stage" to VoxOtaStage.HTTP.name)
+                )
                 try {
                     val content = downloadString(url)
-                    return VoxOtaReleaseParser.parseRelease(content)
+                    val parsed = VoxOtaReleaseParser.parseRelease(content, isBetaChannel)
+                    return parsed
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to fetch/parse manifest from $url: ${e.message}")
                 }
@@ -265,32 +429,72 @@ class VoxOtaUpdateManager(private val context: Context) {
         }
 
         // Резервный канал: официальный GitHub Releases API
+        val fallbackApi = if (isBetaChannel) GITHUB_RELEASES_LIST_API else GITHUB_LATEST_RELEASE_API
+        val safeApiUrl = sanitizeUrl(fallbackApi)
+        VoxSafeLogger.info(
+            VoxLogCategory.OTA,
+            VoxLogCode.OTA_ENDPOINT_REQUEST,
+            "Резервный запрос GitHub Releases API",
+            mapOf("endpoint" to safeApiUrl, "stage" to VoxOtaStage.HTTP.name)
+        )
         try {
-            val content = downloadString(GITHUB_LATEST_RELEASE_API)
-            return VoxOtaReleaseParser.parseRelease(content)
+            val content = downloadString(fallbackApi)
+            return VoxOtaReleaseParser.parseRelease(content, isBetaChannel)
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
-            throw mapThrowableToOtaException(e, "Failed to reach update servers: ${e.message}")
+            throw classifyException(e, "Failed to reach update servers: ${e.message}", VoxOtaStage.CONNECT)
         }
     }
 
     private fun downloadString(urlStr: String): String {
+        val reqStartTime = System.currentTimeMillis()
         val conn = openConnectionWithRedirects(urlStr)
         try {
             val code = conn.responseCode
+            val reqElapsed = System.currentTimeMillis() - reqStartTime
+
+            VoxSafeLogger.info(
+                VoxLogCategory.OTA,
+                VoxLogCode.OTA_HTTP_RESULT,
+                "HTTP ответ от сервера обновлений",
+                mapOf("httpStatus" to code.toString(), "elapsedMs" to reqElapsed.toString())
+            )
+
             if (code !in 200..299) {
-                val errorCode = when (code) {
-                    429 -> VoxOtaErrorCode.RATE_LIMIT
-                    404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
-                    in 500..599 -> VoxOtaErrorCode.HTTP_ERROR
+                val remainingHeader = conn.getHeaderField("X-RateLimit-Remaining")
+                val isRateLimited = code == 429 || (code == 403 && (remainingHeader == "0" || conn.getHeaderField("Retry-After") != null))
+
+                val errorCode = when {
+                    isRateLimited -> VoxOtaErrorCode.RATE_LIMIT
+                    code == 404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
+                    code in 500..599 -> VoxOtaErrorCode.HTTP_ERROR
+                    code == 403 -> {
+                        val errBody = try { conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (e: Exception) { "" }
+                        if (errBody.contains("rate limit", ignoreCase = true)) {
+                            VoxOtaErrorCode.RATE_LIMIT
+                        } else {
+                            VoxOtaErrorCode.HTTP_ERROR
+                        }
+                    }
                     else -> VoxOtaErrorCode.HTTP_ERROR
                 }
-                throw VoxOtaException(errorCode, "HTTP error $code while fetching $urlStr")
+
+                val isRetryable = errorCode == VoxOtaErrorCode.RATE_LIMIT ||
+                        errorCode == VoxOtaErrorCode.TIMEOUT ||
+                        errorCode == VoxOtaErrorCode.HTTP_ERROR
+
+                throw VoxOtaException(
+                    code = errorCode,
+                    message = "HTTP error $code while fetching ${sanitizeUrl(urlStr)}",
+                    stage = VoxOtaStage.HTTP,
+                    httpStatus = code,
+                    isRetryable = isRetryable
+                )
             }
             return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
-            throw mapThrowableToOtaException(e, "Network error fetching $urlStr")
+            throw classifyException(e, "Network error fetching ${sanitizeUrl(urlStr)}", VoxOtaStage.CONNECT)
         } finally {
             conn.disconnect()
         }
@@ -311,8 +515,11 @@ class VoxOtaUpdateManager(private val context: Context) {
                     else -> VoxOtaErrorCode.ASSET_DOWNLOAD_FAILED
                 }
                 throw VoxOtaException(
-                    errorCode,
-                    "HTTP error $code while downloading APK"
+                    code = errorCode,
+                    message = "HTTP error $code while downloading APK",
+                    stage = VoxOtaStage.HTTP,
+                    httpStatus = code,
+                    isRetryable = errorCode == VoxOtaErrorCode.RATE_LIMIT
                 )
             }
 
@@ -336,7 +543,7 @@ class VoxOtaUpdateManager(private val context: Context) {
             }
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
-            throw mapThrowableToOtaException(e, "Failed to download update APK: ${e.message}")
+            throw classifyException(e, "Failed to download update APK: ${e.message}", VoxOtaStage.CONNECT)
         } finally {
             conn.disconnect()
         }
@@ -360,7 +567,13 @@ class VoxOtaUpdateManager(private val context: Context) {
                 val location = conn.getHeaderField("Location")
                 conn.disconnect()
                 if (location.isNullOrBlank()) {
-                    throw VoxOtaException(VoxOtaErrorCode.NETWORK_ERROR, "Empty redirect location header")
+                    throw VoxOtaException(
+                        code = VoxOtaErrorCode.NETWORK_ERROR,
+                        message = "Empty redirect location header",
+                        stage = VoxOtaStage.CONNECT,
+                        httpStatus = status,
+                        isRetryable = false
+                    )
                 }
                 currentUrl = location
                 redirectCount++
@@ -368,46 +581,73 @@ class VoxOtaUpdateManager(private val context: Context) {
                 return conn
             }
         }
-        throw VoxOtaException(VoxOtaErrorCode.NETWORK_ERROR, "Too many redirects while accessing $initialUrl")
+        throw VoxOtaException(
+            code = VoxOtaErrorCode.NETWORK_ERROR,
+            message = "Too many redirects while accessing $initialUrl",
+            stage = VoxOtaStage.CONNECT,
+            httpStatus = null,
+            isRetryable = false
+        )
     }
 
-    private fun handleError(throwable: Throwable, callback: Callback) {
+    private fun handleError(
+        throwable: Throwable,
+        currentVersion: String,
+        channel: String,
+        elapsedMs: Long,
+        callback: Callback
+    ) {
         val otaError = if (throwable is VoxOtaException) {
             throwable
         } else {
-            mapThrowableToOtaException(throwable)
+            classifyException(throwable)
+        }
+
+        val eventCode = when (otaError.code) {
+            VoxOtaErrorCode.RATE_LIMIT -> VoxLogCode.OTA_RATE_LIMIT
+            VoxOtaErrorCode.DNS_ERROR -> VoxLogCode.OTA_DNS_ERROR
+            VoxOtaErrorCode.TIMEOUT -> VoxLogCode.OTA_TIMEOUT
+            VoxOtaErrorCode.TLS_ERROR -> VoxLogCode.OTA_TLS_ERROR
+            VoxOtaErrorCode.HTTP_ERROR -> VoxLogCode.OTA_HTTP_ERROR
+            VoxOtaErrorCode.RELEASE_NOT_FOUND -> VoxLogCode.OTA_RELEASE_NOT_FOUND
+            VoxOtaErrorCode.INVALID_RELEASE -> VoxLogCode.OTA_INVALID_RELEASE
+            VoxOtaErrorCode.CHANNEL_MISMATCH -> VoxLogCode.OTA_CHANNEL_MISMATCH
+            else -> VoxLogCode.OTA_FAILED
         }
 
         VoxSafeLogger.error(
             VoxLogCategory.OTA,
-            VoxLogCode.OTA_FAILED,
+            eventCode,
             "Ошибка процесса обновления: ${otaError.userMessageRu}",
-            mapOf("errorCode" to otaError.code.name, "reason" to (throwable.javaClass.simpleName))
+            mapOf(
+                "errorCode" to otaError.code.name,
+                "stage" to otaError.stage.name,
+                "httpStatus" to (otaError.httpStatus?.toString() ?: "none"),
+                "isRetryable" to otaError.isRetryable.toString(),
+                "reason" to (throwable.javaClass.simpleName),
+                "channel" to channel,
+                "currentVersion" to currentVersion
+            )
         )
 
-        mainHandler.post { callback.onError(otaError) }
-    }
+        VoxSafeLogger.info(
+            VoxLogCategory.OTA,
+            VoxLogCode.OTA_CHECK_COMPLETED,
+            "Проверка обновлений завершена с ошибкой",
+            mapOf(
+                "resultCode" to otaError.code.name,
+                "elapsedMs" to elapsedMs.toString(),
+                "retryable" to otaError.isRetryable.toString()
+            )
+        )
 
-    private fun mapThrowableToOtaException(throwable: Throwable, customMessage: String? = null): VoxOtaException {
-        val msg = customMessage ?: throwable.message ?: throwable.javaClass.simpleName
-        val code = when (throwable) {
-            is java.net.UnknownHostException -> VoxOtaErrorCode.DNS_ERROR
-            is java.net.SocketTimeoutException -> VoxOtaErrorCode.TIMEOUT
-            is java.net.ConnectException -> VoxOtaErrorCode.NETWORK_ERROR
-            is javax.net.ssl.SSLException -> VoxOtaErrorCode.TLS_ERROR
-            is org.json.JSONException -> VoxOtaErrorCode.INVALID_RELEASE
-            else -> {
-                val m = throwable.message?.lowercase() ?: ""
-                when {
-                    m.contains("429") -> VoxOtaErrorCode.RATE_LIMIT
-                    m.contains("404") -> VoxOtaErrorCode.RELEASE_NOT_FOUND
-                    m.contains("dns") || m.contains("unknown host") -> VoxOtaErrorCode.DNS_ERROR
-                    m.contains("timeout") -> VoxOtaErrorCode.TIMEOUT
-                    m.contains("ssl") || m.contains("tls") -> VoxOtaErrorCode.TLS_ERROR
-                    else -> VoxOtaErrorCode.NETWORK_ERROR
-                }
-            }
+        // RELEASE_NOT_FOUND трактуется как отсутствие обновлений без пугания пользователя
+        if (otaError.code == VoxOtaErrorCode.RELEASE_NOT_FOUND ||
+            otaError.code == VoxOtaErrorCode.NO_UPDATE ||
+            otaError.code == VoxOtaErrorCode.VERSION_NOT_NEWER) {
+            mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
+        } else {
+            mainHandler.post { callback.onError(otaError) }
         }
-        return VoxOtaException(code, msg, throwable)
     }
 }

@@ -61,6 +61,13 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
     public void start(boolean forceCheck) {
         mIsForceCheck = forceCheck;
 
+        if (VoxOtaUpdateManager.instance(getContext()).isCheckingForUpdates()) {
+            if (forceCheck) {
+                MessageHelpers.showMessage(getContext(), "Проверяем обновления…");
+            }
+            return;
+        }
+
         if (forceCheck) {
             LoadingManager.showLoading(getContext(), true);
         }
@@ -109,7 +116,13 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
                     public void onError(VoxOtaException error) {
                         if (mIsForceCheck) {
                             LoadingManager.showLoading(getContext(), false);
-                            MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
+                            if (error.getCode() == VoxOtaErrorCode.NO_UPDATE ||
+                                    error.getCode() == VoxOtaErrorCode.VERSION_NOT_NEWER ||
+                                    error.getCode() == VoxOtaErrorCode.RELEASE_NOT_FOUND) {
+                                MessageHelpers.showMessage(getContext(), R.string.update_not_found);
+                            } else {
+                                MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
+                            }
                         }
                         onFinish();
                     }

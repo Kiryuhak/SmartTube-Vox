@@ -431,3 +431,142 @@ export function generateDeterministicIssueTitle(signature = '', report = {}) {
   }
   return `Инцидент ${errorCategory || signature || 'системного сбоя'}`;
 }
+
+export function extractReportIssues(report = {}) {
+  const payload = typeof report.payload_json === 'string'
+    ? JSON.parse(report.payload_json || '{}')
+    : (report.payload_json || report);
+
+  const classified = classifyReport(payload);
+  const events = classified.events || [];
+
+  const issueMap = new Map();
+  for (const ev of events) {
+    if (ev.level === 'ERROR' || ev.level === 'WARNING' || ['HIGH', 'CRITICAL', 'MEDIUM'].includes(ev.severity)) {
+      const code = ev.event;
+      if (!issueMap.has(code)) {
+        issueMap.set(code, {
+          code,
+          subsystem: ev.subsystem,
+          category: ev.category,
+          severity: ev.severity,
+          lifecycle: ev.lifecycle,
+          repeatCount: ev.repeatCount || 1,
+          timestamp: ev.timestamp
+        });
+      } else {
+        const item = issueMap.get(code);
+        item.repeatCount += (ev.repeatCount || 1);
+        item.timestamp = Math.max(item.timestamp, ev.timestamp);
+      }
+    }
+  }
+
+  const rank = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
+  const sorted = [...issueMap.values()].sort((a, b) => {
+    if (a.lifecycle !== b.lifecycle) {
+      if (a.lifecycle === 'CURRENT_SESSION') return -1;
+      if (b.lifecycle === 'CURRENT_SESSION') return 1;
+      if (a.lifecycle === 'RECENT') return -1;
+      if (b.lifecycle === 'RECENT') return 1;
+    }
+    return (rank[b.severity] || 0) - (rank[a.severity] || 0);
+  });
+
+  const formatConcise = (issue) => {
+    if (!issue) return 'USER REPORT';
+    const sub = issue.subsystem || 'SYSTEM';
+    const code = issue.code.replace(/^(PLAYER_|OTA_|DOWNLOAD_|IMAGE_)/, '');
+    return `${sub} · ${code}`;
+  };
+
+  const primaryIssue = sorted.length > 0
+    ? formatConcise(sorted[0])
+    : (report.errorCategory ? `${report.subsystem || 'APP'} · ${report.errorCategory}` : 'USER REPORT');
+
+  const secondaryIssues = sorted.slice(1).map(i => formatConcise(i));
+
+  return {
+    primaryIssue,
+    secondaryIssues,
+    allIssues: sorted
+  };
+}
+
+export function groupOtaReports(reports = []) {
+  const groups = new Map();
+  for (const r of reports) {
+    const payload = typeof r.payload_json === 'string' ? JSON.parse(r.payload_json || '{}') : (r.payload_json || r);
+    const channel = payload.channel || r.channel || 'stable';
+    const version = payload.appVersion || r.app_version || 'unknown';
+    const devFamily = payload.deviceFamily || r.device_family || 'unknown';
+    const reason = r.error_signature || 'OTA_FAILED';
+    const key = `${channel}:${version}:${devFamily}:${reason}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        channel,
+        version,
+        deviceFamily: devFamily,
+        reason,
+        count: 1,
+        firstSeen: r.created_at || r.timestamp || Date.now(),
+        lastSeen: r.created_at || r.timestamp || Date.now(),
+        reportIds: [r.report_id || r.id]
+      });
+    } else {
+      const g = groups.get(key);
+      g.count++;
+      g.firstSeen = Math.min(g.firstSeen, r.created_at || r.timestamp || Date.now());
+      g.lastSeen = Math.max(g.lastSeen, r.created_at || r.timestamp || Date.now());
+      g.reportIds.push(r.report_id || r.id);
+    }
+  }
+  return [...groups.values()];
+}
+
+export function groupRebufferReports(reports = []) {
+  const groups = new Map();
+  for (const r of reports) {
+    const payload = typeof r.payload_json === 'string' ? JSON.parse(r.payload_json || '{}') : (r.payload_json || r);
+    const events = payload.safeRecentEvents || payload.events || [];
+    for (const ev of events) {
+      if ((ev.code || ev.event) === 'PLAYER_REBUFFER') {
+        const ctx = ev.context || ev.safeContext || {};
+        const sessionId = ctx.playbackSessionId || 'default';
+        const resolution = ctx.selectedHeight || 'unknown';
+        const codec = ctx.selectedCodec || 'unknown';
+        const key = `${sessionId}:${resolution}:${codec}`;
+
+        if (!groups.has(key)) {
+          groups.set(key, {
+            sessionId,
+            resolution,
+            codec,
+            count: Number(ctx.rebufferCount) || 1,
+            reportId: r.report_id || r.id
+          });
+        } else {
+          const g = groups.get(key);
+          g.count += (Number(ctx.rebufferCount) || 1);
+        }
+      }
+    }
+  }
+  return [...groups.values()];
+}
+
+export function getNeedsAttentionSummary(reports = []) {
+  const attentionStatuses = new Set(['IN_PROGRESS', 'KNOWN_ISSUE', 'FIXED_PENDING_VERIFICATION']);
+  const filtered = reports.filter(r => attentionStatuses.has(r.status));
+
+  const issueCounts = new Map();
+  for (const r of filtered) {
+    const { primaryIssue } = extractReportIssues(r);
+    issueCounts.set(primaryIssue, (issueCounts.get(primaryIssue) || 0) + 1);
+  }
+
+  return [...issueCounts.entries()]
+    .map(([issue, count]) => ({ issue, count }))
+    .sort((a, b) => b.count - a.count);
+}

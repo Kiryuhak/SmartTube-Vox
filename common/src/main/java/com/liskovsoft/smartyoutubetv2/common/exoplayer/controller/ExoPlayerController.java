@@ -660,16 +660,20 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                     Map<String, String> ctx = new HashMap<>();
                     ctx.put("playbackSessionId", String.valueOf(mPlaybackSessionId));
                     ctx.put("rebufferCount", String.valueOf(mRebufferCount));
+                    long bitrate = 0;
+                    int height = 0;
                     FormatItem vf = getVideoFormat();
                     if (vf != null) {
-                        ctx.put("selectedHeight", String.valueOf(vf.getHeight()));
+                        height = vf.getHeight();
+                        ctx.put("selectedHeight", String.valueOf(height));
                         MediaTrack tr = vf.getTrack();
                         if (tr != null && tr.format != null) {
                             if (tr.format.codecs != null) {
                                 ctx.put("selectedCodec", tr.format.codecs);
                             }
                             if (tr.format.bitrate > 0) {
-                                ctx.put("bitrate", String.valueOf(tr.format.bitrate));
+                                bitrate = tr.format.bitrate;
+                                ctx.put("bitrate", String.valueOf(bitrate));
                             }
                         }
                     }
@@ -682,6 +686,12 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                         ctx.put("networkEngine", String.valueOf(currentEngine));
                     } catch (Throwable ignored) {}
                     ctx.put("isLive", String.valueOf(isLive));
+
+                    com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxBufferRootCause rootCause =
+                            com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.classifyRebuffer(
+                                    bitrate, buffered, 0L, 0, height >= 2160, 0);
+                    ctx.put("rootCause", rootCause.name());
+
                     VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_REBUFFER, "Буферизация потока", ctx);
                 }
             }

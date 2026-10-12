@@ -1137,19 +1137,7 @@ class VoxDownloadCoordinator(
                 packagingElapsedMs = job.packagingElapsedMs,
                 finalizeElapsedMs = job.finalizeElapsedMs
             )
-            VoxSafeLogger.i(
-                VoxLogCategory.DOWNLOAD,
-                VoxLogCode.DOWNLOAD_ROUTE_SUMMARY,
-                "Анализ сетевого маршрута загрузки",
-                mapOf(
-                    "videoHost" to (job.videoHost ?: "unknown"),
-                    "audioHost" to (job.audioHost ?: "unknown"),
-                    "hostFamily" to (job.hostFamily ?: "UNKNOWN"),
-                    "bottleneck" to (job.bottleneckAnalysis?.bottleneck?.label ?: "UNKNOWN"),
-                    "confidence" to (job.bottleneckAnalysis?.confidence?.label ?: "LOW"),
-                    "summary" to (job.bottleneckAnalysis?.developerSummary ?: "")
-                )
-            )
+            emitRouteSummary(job, effectiveSize, moveUsed = false)
             // Сначала фиксируем метаданные; UI не увидит COMPLETED до успешной записи.
             VoxDownloadCompletionValidator.check(job, effectiveSize)
             repository.persistJob(job, VoxDownloadState.COMPLETED)
@@ -1166,31 +1154,63 @@ class VoxDownloadCoordinator(
             job.finalizeElapsedMs = Math.max(1L, System.currentTimeMillis() - finalizeStart)
             job.publishedUri = android.net.Uri.fromFile(outputFile).toString()
             job.publishedFilePath = outputFile.absolutePath
+            val localSize = storage.getPublishedFileSize(job.publishedUri)
+            val effectiveSize = if (localSize > 0L) localSize else outputFile.length()
             job.bottleneckAnalysis = VoxDownloadBottleneckClassifier.classify(
                 forensics = job.videoForensics ?: job.audioForensics,
                 packagingElapsedMs = job.packagingElapsedMs,
                 finalizeElapsedMs = job.finalizeElapsedMs
             )
-            VoxSafeLogger.i(
-                VoxLogCategory.DOWNLOAD,
-                VoxLogCode.DOWNLOAD_ROUTE_SUMMARY,
-                "Анализ сетевого маршрута загрузки",
-                mapOf(
-                    "videoHost" to (job.videoHost ?: "unknown"),
-                    "audioHost" to (job.audioHost ?: "unknown"),
-                    "hostFamily" to (job.hostFamily ?: "UNKNOWN"),
-                    "bottleneck" to (job.bottleneckAnalysis?.bottleneck?.label ?: "UNKNOWN"),
-                    "confidence" to (job.bottleneckAnalysis?.confidence?.label ?: "LOW"),
-                    "summary" to (job.bottleneckAnalysis?.developerSummary ?: "")
-                )
-            )
-            VoxDownloadCompletionValidator.check(job, storage.getPublishedFileSize(job.publishedUri))
+            emitRouteSummary(job, effectiveSize, moveUsed = true)
+            VoxDownloadCompletionValidator.check(job, effectiveSize)
             repository.persistJob(job, VoxDownloadState.COMPLETED)
             job.updateState(VoxDownloadState.COMPLETED)
             VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка видео успешно завершена", mapOf("downloadId" to downloadId))
             repository.pruneOldHistory()
             notifyStateChange(job)
         }
+    }
+
+    private fun emitRouteSummary(job: VoxDownloadJob, effectiveSize: Long, moveUsed: Boolean) {
+        val f = job.videoForensics ?: job.audioForensics
+        val muxMbps = if (job.packagingElapsedMs > 0 && job.finalFileBytes > 0) {
+            String.format(java.util.Locale.US, "%.2f", (job.finalFileBytes * 8.0) / (job.packagingElapsedMs / 1000.0) / 1_000_000.0)
+        } else "0.00"
+
+        val writeMbps = if (job.finalizeElapsedMs > 0 && effectiveSize > 0) {
+            String.format(java.util.Locale.US, "%.2f", (effectiveSize * 8.0) / (job.finalizeElapsedMs / 1000.0) / 1_000_000.0)
+        } else "0.00"
+
+        val summaryMap = mutableMapOf<String, String>(
+            "videoHost" to (job.videoHost ?: f?.safeHost ?: "unknown"),
+            "audioHost" to (job.audioHost ?: "unknown"),
+            "hostFamily" to (job.hostFamily ?: f?.hostFamily?.label ?: "UNKNOWN"),
+            "safeHost" to (f?.safeHost ?: "unknown"),
+            "engine" to (f?.networkEngine ?: "OKHTTP"),
+            "dnsMs" to (f?.dnsMs?.toString() ?: "0"),
+            "connectMs" to (f?.connectMs?.toString() ?: "0"),
+            "tlsMs" to (f?.tlsMs?.toString() ?: "0"),
+            "ttfbMs" to (f?.ttfbMs?.toString() ?: "0"),
+            "avgMbps" to (if (f != null) String.format(java.util.Locale.US, "%.2f", f.avgMbps) else "0.00"),
+            "peakMbps" to (if (f != null) String.format(java.util.Locale.US, "%.2f", f.peakMbps) else "0.00"),
+            "rangeSupported" to (f?.rangeSupported?.toString() ?: "true"),
+            "parallelConnections" to (f?.parallelConnections?.toString() ?: "1"),
+            "bottleneck" to (job.bottleneckAnalysis?.bottleneck?.name ?: "UNKNOWN"),
+            "confidence" to (job.bottleneckAnalysis?.confidence?.name ?: "LOW"),
+            "muxMbpsEquivalent" to muxMbps,
+            "diskWriteMbps" to writeMbps,
+            "copyBytes" to effectiveSize.toString(),
+            "moveUsed" to moveUsed.toString(),
+            "fullCopyCount" to (if (moveUsed) "0" else "1"),
+            "summary" to (job.bottleneckAnalysis?.developerSummary ?: "")
+        )
+
+        VoxSafeLogger.i(
+            VoxLogCategory.DOWNLOAD,
+            VoxLogCode.DOWNLOAD_ROUTE_SUMMARY,
+            "Анализ сетевого маршрута загрузки",
+            summaryMap
+        )
     }
 
     private fun validateOutputFile(outputFile: File, translated: Boolean) {

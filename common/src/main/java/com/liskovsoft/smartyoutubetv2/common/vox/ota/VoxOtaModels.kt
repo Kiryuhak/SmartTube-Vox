@@ -16,7 +16,21 @@ enum class VoxUpdateChannel(val id: String, val titleRu: String, val description
 }
 
 /**
- * Типизированные коды ошибок системы обновления OTA.
+ * Стадии процесса проверки и установки обновления OTA.
+ */
+enum class VoxOtaStage(val id: String) {
+    START("START"),
+    DNS("DNS"),
+    CONNECT("CONNECT"),
+    TLS("TLS"),
+    HTTP("HTTP"),
+    PARSE("PARSE"),
+    COMPARE("COMPARE"),
+    RESULT("RESULT");
+}
+
+/**
+ * Типизированные коды ошибок и результатов системы обновления OTA.
  */
 enum class VoxOtaErrorCode(val userMessageRu: String) {
     NO_UPDATE("У вас установлена последняя версия"),
@@ -26,10 +40,12 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     TIMEOUT("Превышено время ожидания ответа сервера обновлений"),
     TLS_ERROR("Ошибка защищенного соединения (TLS/SSL)"),
     HTTP_ERROR("Ошибка HTTP-сервера обновлений"),
-    RATE_LIMIT("Превышен лимит запросов к серверу обновлений"),
+    RATE_LIMIT("Сервер временно ограничил частоту проверок. Попробуйте позже."),
     RELEASE_NOT_FOUND("Данные обновления не найдены на сервере"),
     INVALID_RELEASE("Некорректный формат данных обновления"),
-    VERSION_NOT_NEWER("Найдена версия не новее текущей"),
+    VERSION_NOT_NEWER("У вас установлена последняя версия"),
+    CHANNEL_MISMATCH("Обновление не соответствует выбранному каналу"),
+    PARSE_ERROR("Ошибка обработки данных обновления"),
     NO_COMPATIBLE_ASSET("Не найден подходящий файл обновления для вашего устройства"),
     ASSET_DOWNLOAD_FAILED("Не удалось скачать обновление"),
     HASH_MISMATCH("Ошибка проверки целостности обновления (не совпадает SHA-256)"),
@@ -43,13 +59,40 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
 }
 
 /**
+ * Структурированный результат проверки обновлений OTA.
+ */
+data class VoxOtaResult(
+    val code: VoxOtaErrorCode,
+    val stage: VoxOtaStage = VoxOtaStage.RESULT,
+    val httpStatus: Int? = null,
+    val isRetryable: Boolean = false,
+    val userMessage: String = code.userMessageRu,
+    val diagnosticReason: String = "",
+    val releaseInfo: VoxReleaseInfo? = null,
+    val selectedAsset: VoxReleaseAsset? = null
+) {
+    val isSuccessful: Boolean
+        get() = code == VoxOtaErrorCode.UPDATE_AVAILABLE || code == VoxOtaErrorCode.NO_UPDATE || code == VoxOtaErrorCode.VERSION_NOT_NEWER
+
+    val isUpdateAvailable: Boolean
+        get() = code == VoxOtaErrorCode.UPDATE_AVAILABLE
+}
+
+/**
  * Исключение обновления OTA с типизированным кодом и понятным описанием для пользователя.
  */
 class VoxOtaException(
     val code: VoxOtaErrorCode,
     override val message: String,
+    val stage: VoxOtaStage = VoxOtaStage.HTTP,
+    val httpStatus: Int? = null,
+    val isRetryable: Boolean = false,
     cause: Throwable? = null
 ) : Exception(message, cause) {
+
+    constructor(code: VoxOtaErrorCode, message: String, cause: Throwable?) :
+            this(code, message, VoxOtaStage.HTTP, null, false, cause)
+
     val userMessageRu: String
         get() = code.userMessageRu
 }
@@ -71,5 +114,6 @@ data class VoxReleaseInfo(
     val versionName: String,
     val changelog: List<String>,
     val assets: List<VoxReleaseAsset>,
-    val sha256SumsUrl: String? = null
+    val sha256SumsUrl: String? = null,
+    val isPrerelease: Boolean = false
 )

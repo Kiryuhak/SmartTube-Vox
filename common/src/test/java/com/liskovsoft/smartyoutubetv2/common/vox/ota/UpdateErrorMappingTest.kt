@@ -30,7 +30,7 @@ class UpdateErrorMappingTest {
         assertEquals("Ошибка DNS при подключении к серверу обновлений", VoxOtaErrorCode.DNS_ERROR.userMessageRu)
         assertEquals("Превышено время ожидания ответа сервера обновлений", VoxOtaErrorCode.TIMEOUT.userMessageRu)
         assertEquals("Ошибка защищенного соединения (TLS/SSL)", VoxOtaErrorCode.TLS_ERROR.userMessageRu)
-        assertEquals("Превышен лимит запросов к серверу обновлений", VoxOtaErrorCode.RATE_LIMIT.userMessageRu)
+        assertEquals("Сервер временно ограничил частоту проверок. Попробуйте позже.", VoxOtaErrorCode.RATE_LIMIT.userMessageRu)
         assertEquals("Данные обновления не найдены на сервере", VoxOtaErrorCode.RELEASE_NOT_FOUND.userMessageRu)
         assertEquals("У вас установлена последняя версия", VoxOtaErrorCode.NO_UPDATE.userMessageRu)
     }
