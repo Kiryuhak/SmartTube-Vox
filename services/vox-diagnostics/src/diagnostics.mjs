@@ -153,6 +153,8 @@ const BANNED_EXACT_KEYS = new Set([
 
 const ALLOWED_SAFE_KEYS = new Set([
   'playbacksessionid',
+  'appsessionid',
+  'hudsessionid',
   'sessionstate',
   'mediasessionstate',
   'gatewaysessionstate',

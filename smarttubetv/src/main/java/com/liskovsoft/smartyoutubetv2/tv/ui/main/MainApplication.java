@@ -85,6 +85,7 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
         setupGlobalExceptionHandler();
         setupViewManager();
         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.init(this);
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(this).schedulePeriodicCheck();
         YouTubePlayerCacheManager.onAppUpgradeIfNeeded(this);
     }
 

@@ -28,6 +28,7 @@ object VoxStartupProfiler {
     @Volatile private var currentSessionId: Long = 0L
     @Volatile private var sessionOpenTimeMs: Long = 0L
     @Volatile private var currentEngine: String = "AUTO"
+    @Volatile private var transportProtocol: String = "UNKNOWN"
     private val stageRecords = CopyOnWriteArrayList<StageRecord>()
     private val stageStartTimes = ConcurrentHashMap<String, Long>()
 
@@ -37,10 +38,25 @@ object VoxStartupProfiler {
         currentSessionId = sessionId
         sessionOpenTimeMs = nowMs
         currentEngine = engine
+        transportProtocol = "UNKNOWN"
         stageRecords.clear()
         stageStartTimes.clear()
         recordStage("USER_OPEN", 0L, "OK", nowMs)
     }
+
+    @JvmStatic
+    fun updateTransportProtocol(protocol: String?) {
+        transportProtocol = when (protocol?.lowercase()?.trim()) {
+            "quic", "h3", "http/3" -> "H3"
+            "h2", "http/2" -> "H2"
+            "http/1.1", "http_1_1" -> "HTTP_1_1"
+            null, "" -> "UNKNOWN"
+            else -> protocol.uppercase()
+        }
+    }
+
+    @JvmStatic
+    fun getTransportProtocol(): String = transportProtocol
 
     @JvmStatic
     @JvmOverloads
@@ -118,6 +134,7 @@ object VoxStartupProfiler {
         return mapOf(
             "playbackSessionId" to currentSessionId,
             "engine" to currentEngine,
+            "transportProtocol" to transportProtocol,
             "totalStartupMs" to totalStartupMs,
             "slowestStage" to slowestStage,
             "rootCause" to classifyStartupRootCause(),

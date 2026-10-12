@@ -45,7 +45,8 @@ data class VoxDiagnosticReport(
     val autoSubmitted: Boolean = false,
     val triggerEvent: String? = null,
     val channel: String? = null,
-    val aggregationWindowMs: Long = 0L
+    val aggregationWindowMs: Long = 0L,
+    val incidentSummary: Map<String, Any>? = null
 ) {
     companion object {
         const val SCHEMA_V1 = "vox-diagnostic-report-v1"
@@ -98,7 +99,8 @@ data class VoxDiagnosticReport(
             reportPurpose: String = PURPOSE_USER_MANUAL,
             autoSubmitted: Boolean = false,
             triggerEvent: String? = null,
-            aggregationWindowMs: Long = 0L
+            aggregationWindowMs: Long = 0L,
+            incidentSummary: Map<String, Any>? = null
         ): VoxDiagnosticReport {
             val manager = VoxCompatibilityManager.instance(context)
             val profile = manager.getDeviceProfile(false)
@@ -232,7 +234,8 @@ data class VoxDiagnosticReport(
                 autoSubmitted = autoSubmitted,
                 triggerEvent = triggerEvent,
                 channel = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getBuildChannel().id,
-                aggregationWindowMs = aggregationWindowMs
+                aggregationWindowMs = aggregationWindowMs,
+                incidentSummary = incidentSummary
             )
         }
     }
@@ -247,6 +250,9 @@ data class VoxDiagnosticReport(
         if (triggerEvent != null) root.put("triggerEvent", triggerEvent)
         if (channel != null) root.put("channel", channel)
         if (aggregationWindowMs > 0) root.put("aggregationWindowMs", aggregationWindowMs)
+        if (incidentSummary != null && incidentSummary.isNotEmpty()) {
+            root.put("incidentSummary", wrapJsonValue(incidentSummary))
+        }
         root.put("appVersion", appVersion)
         root.put("appVersionCode", appVersionCode)
         root.put("platform", platform)
@@ -349,6 +355,13 @@ data class VoxDiagnosticReport(
             sb.append("\n⚠️ ВНИМАНИЕ: ").append(riskWarning).append("\n")
         } else {
             sb.append("\n✓ Параметры полностью согласованы с возможностями устройства.\n")
+        }
+
+        if (incidentSummary != null && incidentSummary.isNotEmpty()) {
+            sb.append("\n--- СВОДКА ИНЦИДЕНТА ---\n")
+            incidentSummary.forEach { (k, v) ->
+                sb.append(k).append(": ").append(v).append("\n")
+            }
         }
 
         if (downloadDiagnostics != null && downloadDiagnostics.isNotEmpty()) {

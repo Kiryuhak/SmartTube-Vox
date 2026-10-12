@@ -66,7 +66,7 @@ export class AutoTriageService {
         summary.checkedReports++;
         const currentStatus = normalizeStatus(report.status);
         const reportPurpose = String(report.report_purpose || report.payload?.reportPurpose || '').toUpperCase();
-        const isTestReport = reportPurpose === 'TEST' || reportId.includes('TEST');
+        const isTestReport = reportPurpose === 'TEST' || reportPurpose === 'EMULATOR_TEST' || reportId.includes('TEST');
 
         // Сценарий 1: Тестовый или отладочный отчёт
         if (isTestReport) {

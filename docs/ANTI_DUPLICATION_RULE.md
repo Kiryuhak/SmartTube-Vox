@@ -56,3 +56,20 @@ When assessing feature ideas or code patterns from third-party applications (e.g
   - If existing VOX implementation is better: keep ours.
   - If external feature has proven benefit: integrate it cleanly into existing VOX architecture.
   - If mobile-centric (e.g., per-network cellular quality): **explicitly reject**.
+
+---
+
+## 5. Patch #38 Feature Audit Ledger
+
+| Subsystem | Existing Canonical Path | Classification | Decision / Action | Duplicate Created |
+| :--- | :--- | :--- | :--- | :--- |
+| **Diagnostics Incident Scheduler** | `VoxDiagnosticsScheduler`, `VoxDiagnosticsPolicy` | `EXTENDED` | Incident aggregation, cooldown, and bounded offline queue | **NO** |
+| **Shorts Playback & Translation** | `PlaybackPresenter`, `VoiceTranslateController` | `ALREADY_IMPLEMENTED` | Verified session isolation and volume restoration; suite tests added | **NO** |
+| **Network Transport & Protocol** | `CronetEngine`, `VoxStartupProfiler` | `EXTENDED` | Transport protocol telemetry added; auto h3->h2 preserved | **NO** |
+| **Playback Startup Timeline** | `VoxStartupProfiler` | `ALREADY_IMPLEMENTED` | Validated on emulator for 1080p and 4K VP9 streams | **NO** |
+| **Rebuffer Root Cause** | `AdaptiveBufferingManager` | `ALREADY_IMPLEMENTED` | Re-verified false-positive suppression for low bitrate streams | **NO** |
+| **Image Retry & Recovery** | `Glide`, `VoxSafeLogger` | `ALREADY_IMPLEMENTED` | Noise filtering and final failure escalation verified | **NO** |
+| **HUD Lifecycle & Self-Healing** | `PlaybackFragment`, `PlayerUIController` | `EXTENDED` | Linked `HUD_STATE_INCONSISTENT` to `VoxDiagnosticsScheduler` | **NO** |
+| **OTA Updater & Checks** | `VoxOtaUpdateManager`, `AppUpdatePresenter` | `ALREADY_IMPLEMENTED` | Verified `NO_UPDATE` / downgrade protection («У вас установлена последняя версия») | **NO** |
+| **HDR Stream Handling** | `TrackSelectorUtil`, `AndroidVoxCapabilityProvider` | `ALREADY_IMPLEMENTED` | Canonical track scoring maintained; no fake setting | **NO** |
+| **DRC Audio** | ExoPlayer DASH manifest format parser | `ALREADY_IMPLEMENTED` | No platform DSP available; fake setting rejected | **NO** |

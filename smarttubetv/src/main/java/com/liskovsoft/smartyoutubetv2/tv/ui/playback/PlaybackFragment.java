@@ -1333,6 +1333,15 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_STATE_INCONSISTENT,
                     "Рассинхронизация состояния HUD: mIsControlsShownPreviously=true, но Leanback скрыт. Сброс состояния."
             );
+            if (getContext() != null) {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(getContext())
+                        .triggerIncident(
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_STATE_INCONSISTENT,
+                                mPlaybackPresenter != null && mPlaybackPresenter.getVideo() != null ? mPlaybackPresenter.getVideo().videoId : null,
+                                "hud_" + System.identityHashCode(this),
+                                false
+                        );
+            }
         }
 
         updatePlayerBackground();

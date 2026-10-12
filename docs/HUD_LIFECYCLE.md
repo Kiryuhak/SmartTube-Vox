@@ -43,3 +43,13 @@ PLAYER_READY / PLAYING + PlaybackFragment RESUMED + DPAD_OK / UP / DOWN = HUD MU
 Events logged under category `UI`:
 `HUD_SESSION_STARTED`, `HUD_SESSION_ENDED`, `HUD_CONTROLS_ATTACH_STARTED`, `HUD_CONTROLS_ATTACHED`, `HUD_CONTROLS_DETACHED`, `HUD_SHOW_REQUESTED`, `HUD_SHOWN`, `HUD_HIDE_REQUESTED`, `HUD_HIDDEN`, `HUD_FOCUS_RESTORED`, `HUD_STALE_CALLBACK_DROPPED`, `HUD_STATE_INCONSISTENT`, `HUD_SELF_HEAL_STARTED`, `HUD_SELF_HEAL_SUCCESS`, `HUD_SELF_HEAL_FAILED`.
 Zero PII is logged (no titles, URLs, or account tokens).
+
+---
+
+## 4. Telemetry Integration & Incident Aggregation (Patch #38)
+
+In Patch #38, `HUD_STATE_INCONSISTENT` is wired directly into `VoxDiagnosticsScheduler.triggerIncident()`:
+- Provides normalized signatures: `HUD_STATE_INCONSISTENT|videoId|hudSessionId`.
+- Repeated desync events within the aggregation window (45s) increment `repeatCount` rather than generating separate reports.
+- Enforces rate-limiting cooldown and bounded offline queues.
+- Verified on Android TV 14 / API 34 emulator with 0 HUD failures across consecutive video switch cycles.

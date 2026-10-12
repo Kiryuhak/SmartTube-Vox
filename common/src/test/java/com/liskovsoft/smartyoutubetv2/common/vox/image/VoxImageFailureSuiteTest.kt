@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
-class ImageRetryRecoveredTest {
+class ImageRetryThenRecoveredTest {
     @Test
     fun testAttempt1CanRetryAndRecovers() {
         assertTrue(VoxImageRetryPolicy.canRetry(1))
@@ -16,7 +16,7 @@ class ImageRetryRecoveredTest {
     }
 }
 
-class ImageFinalFailureTest {
+class ImageFinalFailureOnlyTest {
     @Test
     fun testAttempt2IsFinalFailure() {
         assertFalse(VoxImageRetryPolicy.canRetry(2))
@@ -24,7 +24,7 @@ class ImageFinalFailureTest {
     }
 }
 
-class ImageRecycleNotFailureTest {
+class ImageCancelledRequestIgnoredTest {
     @Test
     fun testRecycledOrCancelledViewIsNotTreatedAsNetworkFailure() {
         val cancelledException = IOException("Target was cleared / request was cancelled")
@@ -35,7 +35,7 @@ class ImageRecycleNotFailureTest {
     }
 }
 
-class ImageFailureAggregationTest {
+class ImageAggregationWindowTest {
     @Test
     fun testBackoffCalculatedPerAttempt() {
         assertEquals(0L, VoxImageRetryPolicy.getBackoffDelayMs(0))

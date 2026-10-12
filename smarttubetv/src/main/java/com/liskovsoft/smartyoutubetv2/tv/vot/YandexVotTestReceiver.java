@@ -691,6 +691,31 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         } else if ("testClearLogs".equalsIgnoreCase(action)) {
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore.instance(context).clearLogs();
             Log.i(TAG, "LOGS_CLEARED: count=" + com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore.instance(context).getJournalEventCount());
+        } else if ("testTriggerIncident".equalsIgnoreCase(action)) {
+            String rawTriggerCode = intent.getStringExtra("triggerCode");
+            final String triggerCode = (rawTriggerCode == null || rawTriggerCode.isEmpty())
+                    ? com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_STATE_INCONSISTENT
+                    : rawTriggerCode;
+            String playbackSessionId = intent.getStringExtra("playbackSessionId");
+            String hudSessionId = intent.getStringExtra("hudSessionId");
+            boolean isImmediate = intent.getBooleanExtra("isImmediate", false);
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(context)
+                    .triggerIncident(triggerCode, playbackSessionId, hudSessionId, isImmediate, success -> {
+                        Log.i(TAG, "TRIGGER_INCIDENT_COMPLETE: success=" + success + " trigger=" + triggerCode);
+                    });
+            Log.i(TAG, "TRIGGER_INCIDENT_INVOKED: trigger=" + triggerCode + " immediate=" + isImmediate);
+        } else if ("testFlushOfflineQueue".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(context)
+                    .flushOfflineQueue(success -> {
+                        Log.i(TAG, "FLUSH_OFFLINE_QUEUE_COMPLETE: success=" + success);
+                    });
+        } else if ("testOfflineQueueStatus".equalsIgnoreCase(action)) {
+            java.util.Map<String, Object> summary = com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(context).getOfflineQueueSummary();
+            Log.i(TAG, "OFFLINE_QUEUE_SUMMARY: " + summary.toString());
+        } else if ("testResetDiagnosticsCooldown".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context)
+                    .setLastDiagnosticsSubmissionTimestamp(0L);
+            Log.i(TAG, "DIAGNOSTICS_COOLDOWN_RESET");
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }
