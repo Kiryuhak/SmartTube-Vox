@@ -9,6 +9,7 @@ import {
   CANONICAL_SCHEMA,
 } from '../src/diagnostics.mjs';
 import { ReportStorage } from '../src/storage.mjs';
+import { classifyReport } from '../src/triage.mjs';
 
 const validReportV1 = {
   schema: 'vox-diagnostic-report-v1',
@@ -417,4 +418,150 @@ test('Admin UI and Admin API list, auth check, stats, issues, PATCH status and D
   // Verify report is deleted
   const getDeletedRes = await handleRequest(getReq, env, customStorage);
   assert.equal(getDeletedRes.status, 404);
+});
+
+test('AutoBetaKnownTriggerGetsSignatureTest: triggerEvent gives explicit signature and category', async () => {
+  const autoBetaReport = {
+    schema: 'vox-diagnostic-report-v3',
+    timestamp: Date.now(),
+    appVersion: '32.56-vox.8.2-beta.2',
+    platform: 'Android TV',
+    manufacturer: 'Google',
+    model: 'Chromecast',
+    sdkInt: 34,
+    reportPurpose: 'AUTO_BETA',
+    autoSubmitted: true,
+    triggerEvent: 'OTA_RATE_LIMIT',
+    safeRecentEvents: [
+      {
+        timestamp: Date.now() - 50000,
+        level: 'WARNING',
+        category: 'OTA',
+        code: 'OTA_RATE_LIMIT',
+        message: 'Rate limit encountered'
+      }
+    ]
+  };
+
+  const sig = generateErrorSignature(autoBetaReport);
+  assert.equal(sig, 'OTA|OTA_RATE_LIMIT|ANDROID_TV_API34');
+
+  const customStorage = new ReportStorage();
+  const req = createRequest(autoBetaReport);
+  const res = await handleRequest(req, {}, customStorage);
+  assert.equal(res.status, 201);
+  const json = await res.json();
+  const saved = await customStorage.getReportById(json.reportId);
+  assert.equal(saved.error_category, 'OTA');
+  assert.equal(saved.error_signature, 'OTA|OTA_RATE_LIMIT|ANDROID_TV_API34');
+});
+
+test('AutoBetaEmptySignatureFallbackTest: empty/healthy AUTO_BETA gets fallback signature, never empty string', async () => {
+  const healthyAutoBeta = {
+    schema: 'vox-diagnostic-report-v3',
+    timestamp: Date.now(),
+    appVersion: '32.56-vox.8.2-beta.2',
+    platform: 'Android TV',
+    manufacturer: 'Google',
+    model: 'Chromecast',
+    sdkInt: 34,
+    reportPurpose: 'AUTO_BETA',
+    autoSubmitted: true,
+    safeRecentEvents: [
+      {
+        timestamp: Date.now(),
+        level: 'INFO',
+        category: 'SYSTEM',
+        code: 'APP_RESUMED',
+        message: 'App is healthy'
+      }
+    ]
+  };
+
+  const sig = generateErrorSignature(healthyAutoBeta);
+  assert.equal(sig, 'SYSTEM|AUTO_BETA_ROUTINE|ANDROID_TV_API34');
+  assert.notEqual(sig, '');
+
+  const customStorage = new ReportStorage();
+  const req = createRequest(healthyAutoBeta);
+  const res = await handleRequest(req, {}, customStorage);
+  assert.equal(res.status, 201);
+  const json = await res.json();
+  const saved = await customStorage.getReportById(json.reportId);
+  assert.equal(saved.error_signature, 'SYSTEM|AUTO_BETA_ROUTINE|ANDROID_TV_API34');
+});
+
+test('RecoveredRateLimitNotPrimaryTest: recovered error is not chosen as primary when followed by success', async () => {
+  const recoveredReport = {
+    schema: 'vox-diagnostic-report-v3',
+    timestamp: Date.now(),
+    appVersion: '32.56-vox.8.2-beta.2',
+    platform: 'Android TV',
+    manufacturer: 'Google',
+    model: 'Chromecast',
+    sdkInt: 34,
+    reportPurpose: 'AUTO_BETA',
+    autoSubmitted: true,
+    safeRecentEvents: [
+      {
+        timestamp: Date.now() - 40000,
+        level: 'WARNING',
+        category: 'OTA',
+        code: 'OTA_RATE_LIMIT',
+        message: 'Rate limited 40s ago'
+      },
+      {
+        timestamp: Date.now() - 5000,
+        level: 'INFO',
+        category: 'OTA',
+        code: 'OTA_NO_UPDATE',
+        message: 'Current version is latest'
+      }
+    ]
+  };
+
+  const classified = classifyReport(recoveredReport);
+  const rateLimitEv = classified.events.find(e => e.event === 'OTA_RATE_LIMIT');
+  assert.equal(rateLimitEv.recovered, true);
+  assert.equal(rateLimitEv.recoveryEvent, 'OTA_NO_UPDATE');
+
+  const sig = generateErrorSignature(recoveredReport);
+  assert.equal(sig, 'SYSTEM|AUTO_BETA_ROUTINE|ANDROID_TV_API34');
+});
+
+test('CurrentSuccessBeatsHistoricalFailureTest: historical unrecovered failure vs current session success', async () => {
+  const now = Date.now();
+  const reportWithHistoricalError = {
+    schema: 'vox-diagnostic-report-v3',
+    timestamp: now,
+    appVersion: '32.56-vox.8.2-beta.2',
+    platform: 'Android TV',
+    manufacturer: 'Google',
+    model: 'Chromecast',
+    sdkInt: 34,
+    reportPurpose: 'AUTO_BETA',
+    playbackSessionId: 42,
+    safeRecentEvents: [
+      {
+        timestamp: now - 3600000, // 1 hour ago
+        level: 'ERROR',
+        category: 'OTA',
+        code: 'OTA_FAILED',
+        message: 'Historical failure'
+      },
+      {
+        timestamp: now,
+        level: 'INFO',
+        category: 'OTA',
+        code: 'OTA_NO_UPDATE',
+        message: 'Update succeeded recently'
+      }
+    ]
+  };
+
+  const classified = classifyReport(reportWithHistoricalError);
+  const otaFail = classified.events.find(e => e.event === 'OTA_FAILED');
+  assert.equal(otaFail.recovered, true);
+  assert.equal(classified.primaryEvent, null);
+  assert.ok(['INFO', 'LOW'].includes(classified.severity));
 });

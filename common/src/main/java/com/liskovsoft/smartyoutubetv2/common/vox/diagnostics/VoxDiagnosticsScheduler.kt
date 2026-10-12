@@ -421,7 +421,11 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 val filteredEvents = rawReport.safeRecentEvents
                     .filter { VoxDiagnosticsPolicy.isEventAllowedByPrivacy(it) }
                 val deduplicatedEvents = VoxDiagnosticsPolicy.deduplicateEvents(filteredEvents)
-                val finalReport = rawReport.copy(safeRecentEvents = deduplicatedEvents)
+                val prominentEvent = VoxDiagnosticsPolicy.findProminentUnrecoveredEvent(filteredEvents)
+                val finalReport = rawReport.copy(
+                    safeRecentEvents = deduplicatedEvents,
+                    triggerEvent = rawReport.triggerEvent ?: prominentEvent?.code
+                )
 
                 VoxDiagnosticsClient.instance().submitReportAsync(finalReport, object : VoxDiagnosticsClient.Callback {
                     override fun onSuccess(reportId: String) {

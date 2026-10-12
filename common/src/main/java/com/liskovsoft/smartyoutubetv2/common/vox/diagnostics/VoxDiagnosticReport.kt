@@ -177,7 +177,9 @@ data class VoxDiagnosticReport(
             }
 
             val liveMetrics = try {
-                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.getMetricsSummary().toMap()
+                if (com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.hasActiveOrRecentLiveSession()) {
+                    com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.getMetricsSummary().toMap()
+                } else null
             } catch (e: Exception) {
                 null
             }
@@ -189,7 +191,10 @@ data class VoxDiagnosticReport(
             }
 
             val playbackSummary = try {
-                VoxCompatibilityManager.instance(context).getPlaybackHealthTracker().getHealthSummary().toMap()
+                val tracker = VoxCompatibilityManager.instance(context).getPlaybackHealthTracker()
+                if (tracker.getObservationCount() > 0) {
+                    tracker.getHealthSummary().toMap()
+                } else null
             } catch (e: Exception) {
                 null
             }

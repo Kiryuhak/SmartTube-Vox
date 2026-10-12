@@ -46,6 +46,8 @@ class VoxOtaUpdateManager(private val context: Context) {
         private const val READ_TIMEOUT_MS = 30_000
         private const val MAX_REDIRECTS = 5
         private const val BUFFER_SIZE = 128 * 1024
+        const val AUTO_CHECK_COOLDOWN_MS = 4L * 60 * 60 * 1000 // 4 hours
+        const val RATE_LIMIT_COOLDOWN_MS = 1L * 60 * 60 * 1000 // 1 hour
 
         @Volatile
         private var sInstance: VoxOtaUpdateManager? = null
@@ -109,6 +111,45 @@ class VoxOtaUpdateManager(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val isInFlight = AtomicBoolean(false)
 
+    @Volatile
+    private var lastSuccessfulCheckTimeMs: Long = 0L
+
+    @Volatile
+    private var lastRateLimitTimeMs: Long = 0L
+
+    @Volatile
+    private var wasRateLimited: Boolean = false
+
+    fun getLastSuccessfulCheckTimeMs(): Long = lastSuccessfulCheckTimeMs
+    fun getLastRateLimitTimeMs(): Long = lastRateLimitTimeMs
+    fun wasRateLimited(): Boolean = wasRateLimited
+
+    fun resetCooldownForTesting() {
+        lastSuccessfulCheckTimeMs = 0L
+        lastRateLimitTimeMs = 0L
+        wasRateLimited = false
+    }
+
+    fun setCooldownStateForTesting(successTimeMs: Long, rateLimitTimeMs: Long, rateLimited: Boolean) {
+        lastSuccessfulCheckTimeMs = successTimeMs
+        lastRateLimitTimeMs = rateLimitTimeMs
+        wasRateLimited = rateLimited
+    }
+
+    private fun markCheckSucceeded(currentVersion: String, channelName: String) {
+        lastSuccessfulCheckTimeMs = System.currentTimeMillis()
+        if (wasRateLimited) {
+            wasRateLimited = false
+            lastRateLimitTimeMs = 0L
+            VoxSafeLogger.info(
+                VoxLogCategory.OTA,
+                VoxLogCode.OTA_RATE_LIMIT_RECOVERED,
+                "Связь с сервером обновлений успешно восстановлена после ограничения частоты",
+                mapOf("currentVersion" to currentVersion, "channel" to channelName)
+            )
+        }
+    }
+
     interface Callback {
         fun onUpdateAvailable(release: VoxReleaseInfo, asset: VoxReleaseAsset)
         fun onNoUpdateAvailable(currentVersion: String)
@@ -120,14 +161,58 @@ class VoxOtaUpdateManager(private val context: Context) {
     fun isCheckingForUpdates(): Boolean = isInFlight.get()
 
     /**
-     * Запускает проверку наличия обновлений с защитой от параллельных запросов (Single-Flight).
+     * Запускает проверку наличия обновлений с защитой от параллельных запросов (Single-Flight)
+     * и периодами охлаждения (Cooldown) для автоматических проверок.
      */
+    @JvmOverloads
     fun checkForUpdates(
         currentVersion: String,
         manifestUrls: Array<String>?,
         isBetaChannel: Boolean = false,
+        isManual: Boolean = false,
         callback: Callback
     ) {
+        if (!isManual) {
+            val now = System.currentTimeMillis()
+            if (lastRateLimitTimeMs > 0L) {
+                val rateLimitElapsed = now - lastRateLimitTimeMs
+                if (rateLimitElapsed in 0 until RATE_LIMIT_COOLDOWN_MS) {
+                    val remaining = RATE_LIMIT_COOLDOWN_MS - rateLimitElapsed
+                    VoxSafeLogger.info(
+                        VoxLogCategory.OTA,
+                        VoxLogCode.OTA_CHECK_SKIPPED_COOLDOWN,
+                        "Автоматическая проверка обновлений пропущена (активен период ожидания ограничения частоты)",
+                        mapOf(
+                            "currentVersion" to currentVersion,
+                            "cooldownRemainingMs" to remaining.toString(),
+                            "reason" to "RATE_LIMIT_COOLDOWN"
+                        )
+                    )
+                    mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
+                    return
+                }
+            }
+
+            if (lastSuccessfulCheckTimeMs > 0L) {
+                val successElapsed = now - lastSuccessfulCheckTimeMs
+                if (successElapsed in 0 until AUTO_CHECK_COOLDOWN_MS) {
+                    val remaining = AUTO_CHECK_COOLDOWN_MS - successElapsed
+                    VoxSafeLogger.info(
+                        VoxLogCategory.OTA,
+                        VoxLogCode.OTA_CHECK_SKIPPED_COOLDOWN,
+                        "Автоматическая проверка обновлений пропущена (активен период охлаждения)",
+                        mapOf(
+                            "currentVersion" to currentVersion,
+                            "cooldownRemainingMs" to remaining.toString(),
+                            "reason" to "AUTO_CHECK_COOLDOWN"
+                        )
+                    )
+                    mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
+                    return
+                }
+            }
+        }
+
         if (!isInFlight.compareAndSet(false, true)) {
             Log.d(TAG, "Update check already in flight, ignoring duplicate request")
             return
@@ -176,6 +261,7 @@ class VoxOtaUpdateManager(private val context: Context) {
                             "Проверка обновлений завершена",
                             mapOf("resultCode" to VoxOtaErrorCode.NO_UPDATE.name, "elapsedMs" to elapsed.toString(), "retryable" to "false")
                         )
+                        markCheckSucceeded(currentVersion, channelName)
                         mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
                         return@execute
                     }
@@ -233,6 +319,7 @@ class VoxOtaUpdateManager(private val context: Context) {
                             "retryable" to "false"
                         )
                     )
+                    markCheckSucceeded(currentVersion, channelName)
                     mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
                     return@execute
                 }
@@ -280,6 +367,7 @@ class VoxOtaUpdateManager(private val context: Context) {
                     )
                 )
 
+                markCheckSucceeded(currentVersion, channelName)
                 mainHandler.post { callback.onUpdateAvailable(release, selectedAsset) }
 
             } catch (e: Throwable) {
@@ -640,6 +728,11 @@ class VoxOtaUpdateManager(private val context: Context) {
                 "retryable" to otaError.isRetryable.toString()
             )
         )
+
+        if (otaError.code == VoxOtaErrorCode.RATE_LIMIT) {
+            lastRateLimitTimeMs = System.currentTimeMillis()
+            wasRateLimited = true
+        }
 
         // RELEASE_NOT_FOUND трактуется как отсутствие обновлений без пугания пользователя
         if (otaError.code == VoxOtaErrorCode.RELEASE_NOT_FOUND ||

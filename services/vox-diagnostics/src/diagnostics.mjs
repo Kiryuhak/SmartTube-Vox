@@ -3,7 +3,7 @@ import { ReportStorage, normalizeStatus } from './storage.mjs';
 import { checkAdminAuth, resolveAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
-import { classifyReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES } from './triage.mjs';
+import { classifyReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES, inferCategoryFromCode, inferSubsystemFromCode } from './triage.mjs';
 
 /**
  * Формирует безопасный и полный JSON объект для скачивания отчёта администратором.
@@ -217,15 +217,33 @@ export function generateErrorSignature(report = {}) {
   const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion || '');
   const platformTag = `${platform}${sdk ? `_${sdk}` : ''}`;
 
-  if (Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || ev.event)) {
+  const trigger = report.triggerEvent || report.trigger_event || report.trigger;
+
+  // Case 1: Structured events with stage / subsystem / event
+  if (Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || (ev.event && !ev.code))) {
     const classified = classifyReport(report);
     const events = classified.events || [];
-    // Priority: CURRENT_SESSION ERROR > CURRENT_SESSION WARNING > RECENT ERROR > RECENT WARNING
-    const currentError = [...events].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-    const currentWarn = [...events].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-    const recentError = [...events].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-    const recentWarn = [...events].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-    const event = currentError || currentWarn || recentError || recentWarn;
+
+    // Trigger precedence
+    if (trigger) {
+      const triggerCode = String(trigger).toUpperCase();
+      const trigEv = [...events].reverse().find(e => (e.event || e.code) === triggerCode);
+      const cat = trigEv?.category || inferCategoryFromCode(triggerCode) || report.errorCategory || 'SYSTEM';
+      const sub = trigEv?.subsystem || classified.subsystem || inferSubsystemFromCode(triggerCode) || 'SYSTEM';
+      const stg = trigEv?.stage || classified.stage || 'GENERAL';
+      return [cat, sub, stg, triggerCode, trigEv?.safeContext?.exceptionClassSafe || 'NONE', trigEv?.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
+    }
+
+    // Filter unrecovered events first
+    const unrecovered = events.filter(ev => !ev.recovered);
+    const currentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+    const currentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+    const recentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+    const recentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+    const histError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+    const histWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+
+    const event = currentError || currentWarn || recentError || recentWarn || histError || histWarn;
 
     if (event) {
       return [
@@ -247,43 +265,40 @@ export function generateErrorSignature(report = {}) {
       return `GENERAL|USER_REPORT|${platformTag}`;
     }
 
+    if (report.reportPurpose === 'AUTO_BETA') {
+      return `SYSTEM|AUTO_BETA_ROUTINE|${platformTag}`;
+    }
+
     return '';
   }
 
-  const now = Number(report.timestamp) || Date.now();
-  const currentSessionId = report.playbackSessionId || report.livePlayback?.playbackSessionId || report.playbackStats?.playbackSessionId;
-  const rawEvents = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
+  // Case 2: Client events or raw events with code
+  const classified = classifyReport(report);
+  const events = classified.events || [];
 
-  function getLifecycle(ev) {
-    const evSessionId = ev.safeContext?.playbackSessionId || ev.context?.playbackSessionId || ev.safeContext?.sessionId || ev.context?.sessionId;
-    if (currentSessionId && evSessionId && evSessionId === currentSessionId) {
-      return 'CURRENT_SESSION';
-    }
-    const evTs = Number(ev.timestamp || ev.ts) || 0;
-    if (evTs > 0 && Math.abs(now - evTs) <= 180000) {
-      return 'RECENT';
-    }
-    if (!evTs) return 'RECENT';
-    return 'HISTORICAL';
+  // Trigger precedence
+  if (trigger) {
+    const triggerCode = String(trigger).toUpperCase();
+    const trigEv = [...events].reverse().find(e => (e.event || e.code) === triggerCode);
+    const cat = trigEv?.category || inferCategoryFromCode(triggerCode) || report.errorCategory || 'GENERAL';
+    return `${cat}|${triggerCode}|${platformTag}`;
   }
 
-  // Priority: CURRENT_SESSION ERROR > CURRENT_SESSION WARNING > RECENT ERROR > RECENT WARNING
-  let chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'CURRENT_SESSION' && ev.level === 'ERROR' && ev.code);
-  if (!chosen) {
-    chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'CURRENT_SESSION' && ev.level === 'WARNING' && ev.code);
-  }
-  if (!chosen) {
-    chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'RECENT' && ev.level === 'ERROR' && ev.code);
-  }
-  if (!chosen) {
-    chosen = [...rawEvents].reverse().find(ev => getLifecycle(ev) === 'RECENT' && ev.level === 'WARNING' && ev.code);
-  }
+  // Precedence: CURRENT ERROR > CURRENT WARNING > RECENT ERROR > RECENT WARNING > HISTORICAL ERROR > HISTORICAL WARNING
+  const unrecovered = events.filter(ev => !ev.recovered);
+  const currentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+  const currentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+  const recentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+  const recentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
+  const histError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
+  const histWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
 
+  const chosen = currentError || currentWarn || recentError || recentWarn || histError || histWarn;
   const category = report.errorCategory || (chosen ? chosen.category : '') || '';
 
   if (chosen) {
     const catPart = category || 'GENERAL';
-    const codePart = chosen.code || 'UNKNOWN_CODE';
+    const codePart = chosen.event || chosen.code || 'UNKNOWN_CODE';
     return `${catPart}|${codePart}|${platformTag}`;
   }
 
@@ -293,6 +308,10 @@ export function generateErrorSignature(report = {}) {
 
   if (report.reportPurpose === 'USER' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport) {
     return `GENERAL|USER_REPORT|${platformTag}`;
+  }
+
+  if (report.reportPurpose === 'AUTO_BETA') {
+    return `SYSTEM|AUTO_BETA_ROUTINE|${platformTag}`;
   }
 
   return '';

@@ -236,10 +236,29 @@ object VoxStartupProfiler {
     }
 
     @JvmStatic
-    fun getCurrentProfileSummary(): Map<String, Any> = getProfileSummary()
+    fun hasActiveOrRecordedSession(): Boolean {
+        return currentSessionId > 0L || stageRecords.isNotEmpty()
+    }
 
     @JvmStatic
-    fun getProfileSummary(): Map<String, Any> {
+    fun resetForTesting() {
+        currentSessionId = 0L
+        sessionOpenTimeMs = 0L
+        currentEngine = "AUTO"
+        transportProtocol = "UNKNOWN"
+        stageRecords.clear()
+        stageStartTimes.clear()
+        recentSamples.clear()
+    }
+
+    @JvmStatic
+    fun getCurrentProfileSummary(): Map<String, Any>? = getProfileSummary()
+
+    @JvmStatic
+    fun getProfileSummary(): Map<String, Any>? {
+        if (currentSessionId == 0L && stageRecords.isEmpty()) {
+            return null
+        }
         val totalStartupMs = stageRecords.lastOrNull()?.relativeOffsetMs ?: 0L
         val slowestStage = stageRecords.maxByOrNull { it.elapsedMs }?.stage ?: "NONE"
         return mapOf(

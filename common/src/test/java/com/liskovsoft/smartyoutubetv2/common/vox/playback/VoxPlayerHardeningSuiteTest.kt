@@ -19,7 +19,7 @@ class StartupStageTimingTest {
         VoxStartupProfiler.recordStage(VoxStartupProfiler.STAGE_BUFFER_FILL, 400L)
         VoxStartupProfiler.recordStage(VoxStartupProfiler.STAGE_FIRST_FRAME, 120L)
 
-        val summary = VoxStartupProfiler.getProfileSummary()
+        val summary = VoxStartupProfiler.getProfileSummary()!!
         assertEquals("H2", summary["transportProtocol"])
         assertEquals("CRONET", summary["engine"])
         assertEquals(VoxStartupProfiler.STAGE_BUFFER_FILL, summary["slowestStage"])
@@ -34,7 +34,7 @@ class StartupRootCauseTest {
         VoxStartupProfiler.recordStage(VoxStartupProfiler.STAGE_MANIFEST_FETCH, 1800L) // Slowest stage
         VoxStartupProfiler.recordStage(VoxStartupProfiler.STAGE_DECODER_INIT, 200L)
 
-        val summary = VoxStartupProfiler.getProfileSummary()
+        val summary = VoxStartupProfiler.getProfileSummary()!!
         assertEquals(VoxStartupProfiler.ROOT_CAUSE_MANIFEST, summary["rootCause"])
     }
 }

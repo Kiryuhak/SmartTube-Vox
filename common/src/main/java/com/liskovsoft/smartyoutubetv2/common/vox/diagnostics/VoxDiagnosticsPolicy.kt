@@ -72,16 +72,73 @@ object VoxDiagnosticsPolicy {
     }
 
     /**
+     * Проверяет, было ли событие ошибки устранено последующим успешным событием.
+     */
+    @JvmStatic
+    fun isEventRecovered(event: VoxLogEvent, allEvents: List<VoxLogEvent>): Boolean {
+        val eventIndex = allEvents.indexOf(event)
+        if (eventIndex < 0) return false
+        val laterEvents = allEvents.subList(eventIndex + 1, allEvents.size)
+
+        // OTA recovery
+        if (event.category == VoxLogCategory.OTA || event.code.startsWith("OTA_")) {
+            val otaErrors = listOf(
+                VoxLogCode.OTA_RATE_LIMIT, VoxLogCode.OTA_FAILED,
+                VoxLogCode.OTA_HTTP_ERROR, VoxLogCode.OTA_TIMEOUT, VoxLogCode.OTA_DNS_ERROR
+            )
+            if (event.code in otaErrors) {
+                val otaSuccesses = listOf(
+                    VoxLogCode.OTA_NO_UPDATE, VoxLogCode.OTA_RELEASE_PARSED,
+                    VoxLogCode.OTA_UPDATE_AVAILABLE, VoxLogCode.OTA_RATE_LIMIT_RECOVERED,
+                    VoxLogCode.OTA_VERSION_COMPARED
+                )
+                if (laterEvents.any { it.code in otaSuccesses }) return true
+            }
+        }
+
+        // HUD recovery
+        if (event.category == VoxLogCategory.UI || event.code.startsWith("HUD_")) {
+            if (event.code == VoxLogCode.HUD_STATE_INCONSISTENT || event.code == VoxLogCode.HUD_CONTROLS_DETACHED) {
+                if (laterEvents.any { it.code == VoxLogCode.HUD_SELF_HEAL_SUCCESS || it.code == VoxLogCode.HUD_CONTROLS_ATTACHED }) return true
+            }
+        }
+
+        // Image recovery
+        if (event.code == VoxLogCode.IMAGE_REQUEST_FAILED) {
+            if (laterEvents.any { it.code == VoxLogCode.IMAGE_REQUEST_RECOVERED }) return true
+        }
+
+        return false
+    }
+
+    /**
+     * Находит наиболее значимое неустранённое событие среди журнала.
+     */
+    @JvmStatic
+    fun findProminentUnrecoveredEvent(events: List<VoxLogEvent>): VoxLogEvent? {
+        val candidates = events.filter {
+            (it.level == VoxLogLevel.ERROR || it.level == VoxLogLevel.WARNING) && !isEventRecovered(it, events)
+        }
+        return candidates.lastOrNull { it.level == VoxLogLevel.ERROR }
+            ?: candidates.lastOrNull { it.level == VoxLogLevel.WARNING }
+    }
+
+    /**
      * Проверяет наличие полезных диагностических данных для формирования отчёта.
+     * Игнорирует ошибки, которые уже были устранены последующими успешными действиями.
      */
     @JvmStatic
     fun hasValuableDiagnostics(context: Context): Boolean {
         val count = VoxLogStore.instance(context).getJournalEventCount()
         if (count <= 0) return false
 
-        // Проверяем наличие хотя бы одного события уровня WARNING или ERROR
         val events = VoxLogStore.instance(context).getEvents(MAX_BATCH_EVENTS, VoxLogLevel.INFO)
-        return events.any { it.level == VoxLogLevel.WARNING || it.level == VoxLogLevel.ERROR }
+        return hasValuableDiagnostics(events)
+    }
+
+    @JvmStatic
+    fun hasValuableDiagnostics(events: List<VoxLogEvent>): Boolean {
+        return findProminentUnrecoveredEvent(events) != null
     }
 
     /**

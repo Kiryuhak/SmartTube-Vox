@@ -16,10 +16,15 @@ export const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   PLAYER_REBUFFER: 'Повторная буферизация видео',
   PLAYER_STARTUP_SLOW: 'Видео долго запускается',
+  PLAYER_HTTP_ERROR: 'Сетевая ошибка при загрузке видеопотока (HTTP сбой)',
   HUD_STATE_INCONSISTENT: 'Панель управления плеером работает некорректно',
   HUD_SELF_HEAL_FAILED: 'Сбой автовосстановления панели управления',
   HUD_CONTROLS_DETACHED: 'Панель управления отключена',
   OTA_FAILED: 'Не удалось проверить обновление',
+  OTA_RATE_LIMIT: 'Превышен лимит запросов к серверу обновлений (активен период ожидания)',
+  OTA_RATE_LIMIT_RECOVERED: 'Связь с сервером обновлений восстановлена',
+  OTA_CHECK_SKIPPED_COOLDOWN: 'Проверка обновлений пропущена (действует период охлаждения)',
+  OTA_NO_UPDATE: 'Установлена актуальная версия приложения',
   OTA_SIGNATURE_MISMATCH: 'Несовпадение цифровой подписи обновления',
   IMAGE_REQUEST_FAILED_FINAL: 'Не удалось загрузить изображение',
   IMAGE_REQUEST_FAILED: 'Ошибка загрузки обложки / миниатюры',
@@ -30,11 +35,32 @@ export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   LOCAL_PLAYBACK_FAIL: 'Не удалось воспроизвести скачанное видео',
 };
 
+export function inferCategoryFromCode(code = '') {
+  const c = String(code).toUpperCase();
+  if (c.startsWith('OTA_')) return 'OTA';
+  if (c.startsWith('PLAYER_') || c.startsWith('MEDIA3_') || c.startsWith('DECODER_') || c.startsWith('BUFFER_') || c.startsWith('LIVE_')) return 'PLAYER';
+  if (c.startsWith('HUD_') || c.startsWith('SIDEBAR_') || c.startsWith('CARD_')) return 'UI';
+  if (c.startsWith('DOWNLOAD_') || c.startsWith('MUX_')) return 'DOWNLOAD';
+  if (c.startsWith('TRANSLATION_') || c.startsWith('LIVE_TRANSLATION_')) return 'TRANSLATION';
+  if (c.startsWith('NETWORK_') || c.includes('HTTP_') || c.includes('DNS_')) return 'NETWORK';
+  if (c.startsWith('BACKGROUND_')) return 'BACKGROUND';
+  if (c.startsWith('OFFLINE_')) return 'OFFLINE';
+  if (c.startsWith('CHANNEL_GROUP_')) return 'CHANNEL_GROUPS';
+  if (c.startsWith('AUTO_TUNING_') || c.startsWith('AUTO_SETUP_')) return 'AUTO_SETUP';
+  return 'GENERAL';
+}
+
+export function inferSubsystemFromCode(code = '') {
+  const cat = inferCategoryFromCode(code);
+  if (cat === 'UI') return 'UI';
+  return cat;
+}
+
 export function getFriendlyIssueLabel(code) {
   if (!code) return null;
   return USER_FRIENDLY_ISSUE_LABELS_RU[code] || null;
 }
-const SUBSYSTEMS = ['DOWNLOAD', 'PLAYER', 'BACKGROUND', 'OTA', 'OFFLINE', 'CHANNEL_GROUPS', 'AUTO_SETUP', 'TRANSLATION', 'NETWORK', 'SYSTEM'];
+const SUBSYSTEMS = ['DOWNLOAD', 'PLAYER', 'BACKGROUND', 'OTA', 'OFFLINE', 'CHANNEL_GROUPS', 'AUTO_SETUP', 'TRANSLATION', 'NETWORK', 'UI', 'SYSTEM'];
 const SAFE_CONTEXT_KEYS = new Set([
   'queueState', 'stage', 'bytes', 'speed', 'stallCount', 'retryCount', 'resumeCount',
   'packagingState', 'finalizeState', 'freeStorage', 'sourceType', 'isLive',
@@ -229,13 +255,83 @@ export function classifyReport(report = {}) {
     }
   }
 
+  // Recovery detection: Check if earlier errors were followed by success events
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    const isError = ev.level === 'ERROR' || ev.level === 'WARNING' || ['HIGH', 'CRITICAL', 'MEDIUM'].includes(ev.severity);
+    if (!isError) continue;
+
+    for (let j = i + 1; j < events.length; j++) {
+      const later = events[j];
+      // OTA recovery
+      if ((ev.category === 'OTA' || ev.event.startsWith('OTA_')) &&
+          ['OTA_RATE_LIMIT', 'OTA_FAILED', 'OTA_CHECK_FAILED', 'OTA_HTTP_ERROR', 'OTA_TIMEOUT', 'OTA_DNS_ERROR'].includes(ev.event)) {
+        if (['OTA_NO_UPDATE', 'OTA_RELEASE_PARSED', 'OTA_UPDATE_AVAILABLE', 'OTA_RATE_LIMIT_RECOVERED', 'OTA_VERSION_COMPARED'].includes(later.event)) {
+          ev.recovered = true;
+          ev.recoveryEvent = later.event;
+          break;
+        }
+      }
+      // HUD recovery
+      if ((ev.category === 'UI' || ev.event.startsWith('HUD_') || ev.event.startsWith('PLAYER_HUD_')) &&
+          ['HUD_STATE_INCONSISTENT', 'HUD_CONTROLS_DETACHED', 'PLAYER_HUD_MISSING'].includes(ev.event)) {
+        if (['HUD_SELF_HEAL_SUCCESS', 'HUD_CONTROLS_REATTACHED', 'HUD_VISIBILITY_RESTORED'].includes(later.event)) {
+          ev.recovered = true;
+          ev.recoveryEvent = later.event;
+          break;
+        }
+      }
+      // Image request recovery
+      if (ev.event === 'IMAGE_REQUEST_FAILED' && (later.event === 'IMAGE_REQUEST_RECOVERED' || later.event === 'IMAGE_REQUEST_RETRY')) {
+        ev.recovered = true;
+        ev.recoveryEvent = later.event;
+        break;
+      }
+      // Network recovery
+      if ((ev.event === 'NETWORK_ENGINE_FALLBACK' || ev.event === 'NETWORK_TIMEOUT') &&
+          ['NETWORK_RECOVERED', 'PLAYER_PLAYBACK_PROGRESS', 'DOWNLOAD_COMPLETED'].includes(later.event)) {
+        ev.recovered = true;
+        ev.recoveryEvent = later.event;
+        break;
+      }
+    }
+  }
+
   const rank = { INFO: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 
-  // Priority 1: Error in CURRENT_SESSION
-  const currentError = [...events].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
-  // Priority 2: Error in RECENT
-  const recentError = [...events].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
-  const primary = currentError || recentError;
+  // Explicit Trigger has absolute highest precedence (TRIGGER > CURRENT ERROR > ...)
+  const trigger = report.triggerEvent || report.trigger_event || report.trigger;
+  let primary = null;
+
+  if (trigger) {
+    const triggerCode = String(trigger).toUpperCase();
+    primary = [...events].reverse().find(e => (e.event || e.code) === triggerCode);
+    if (!primary) {
+      primary = {
+        event: triggerCode,
+        category: inferCategoryFromCode(triggerCode),
+        subsystem: inferSubsystemFromCode(triggerCode),
+        stage: inferStage(triggerCode),
+        severity: severityForEvent(triggerCode, 'ERROR'),
+        level: 'ERROR',
+        lifecycle: 'TRIGGER',
+        errorCategory: inferCategoryFromCode(triggerCode),
+      };
+    }
+  }
+
+  if (!primary) {
+    const unrecovered = events.filter(e => !e.recovered);
+    // Priority: CURRENT ERROR > CURRENT WARNING > RECENT ERROR > RECENT WARNING > HISTORICAL ERROR > HISTORICAL WARNING
+    const currentError = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+    const currentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
+    const recentError = [...unrecovered].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+    const recentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
+    const histError = [...unrecovered].reverse().find(e => e.lifecycle === 'HISTORICAL' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+    const histWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'HISTORICAL' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
+
+    primary = currentError || currentWarn || recentError || recentWarn || histError || histWarn;
+  }
 
   let last = primary;
   if (!last) {
@@ -246,13 +342,62 @@ export function classifyReport(report = {}) {
     }
   }
 
-  const errorCategory = enumValue(primary?.errorCategory || report.errorCategory || (last?.level === 'ERROR' ? last?.errorCategory : ''));
+  const errorCategory = enumValue(primary?.errorCategory || primary?.category || report.errorCategory || (last?.level === 'ERROR' ? (last?.errorCategory || last?.category) : ''));
   const subsystem = enumValue(report.subsystem || primary?.subsystem || last?.subsystem, 'SYSTEM');
   const stage = enumValue(report.stage || primary?.stage || last?.stage);
   const explicit = enumValue(report.severity);
-  const severity = SEVERITIES.includes(explicit) ? explicit :
-    events.reduce((best, event) => rank[event.severity] > rank[best] ? event.severity : best, errorCategory ? 'MEDIUM' : 'INFO');
-  return { events, errorCategory, subsystem, stage, severity, primaryEvent: primary };
+
+  let computedSeverity = 'INFO';
+  const unrecoveredEvents = events.filter(e => !e.recovered);
+  if (unrecoveredEvents.length > 0) {
+    computedSeverity = unrecoveredEvents.reduce((best, event) => rank[event.severity] > rank[best] ? event.severity : best, errorCategory ? 'MEDIUM' : 'INFO');
+  } else if (events.some(e => e.recovered)) {
+    computedSeverity = 'LOW';
+  } else if (errorCategory) {
+    computedSeverity = 'MEDIUM';
+  }
+  const severity = SEVERITIES.includes(explicit) ? explicit : computedSeverity;
+  const signature = buildClassificationSignature(report, { events, errorCategory, subsystem, stage, severity, primaryEvent: primary });
+  return { events, errorCategory, subsystem, stage, severity, primaryEvent: primary || null, signature };
+}
+
+export function buildClassificationSignature(report = {}, classified = null) {
+  if (report.errorSignature && typeof report.errorSignature === 'string' && /^[A-Za-z0-9_|:.-]{1,160}$/.test(report.errorSignature)) {
+    return report.errorSignature;
+  }
+
+  const platform = (report.platform || 'Unknown').toUpperCase().replace(/\s+/g, '_');
+  const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion || '');
+  const platformTag = `${platform}${sdk ? `_${sdk}` : ''}`;
+
+  const c = classified || classifyReport(report);
+  const primary = c.primaryEvent;
+
+  if (primary) {
+    const cat = primary.category || c.errorCategory || 'GENERAL';
+    const sub = c.subsystem || primary.subsystem || 'SYSTEM';
+    const stg = primary.stage || c.stage || 'GENERAL';
+    const code = primary.event || primary.code || 'UNKNOWN';
+    if (primary.stage || primary.subsystem || (primary.event && !primary.code)) {
+      return [cat, sub, stg, code, primary.safeContext?.exceptionClassSafe || 'NONE', primary.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
+    }
+    return `${cat}|${code}|${platformTag}`;
+  }
+
+  if (report.errorCategory || c.errorCategory) {
+    const cat = report.errorCategory || c.errorCategory;
+    return `${cat}|UNKNOWN_CODE|${platformTag}`;
+  }
+
+  if (report.reportPurpose === 'USER' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport) {
+    return `GENERAL|USER_REPORT|${platformTag}`;
+  }
+
+  if (report.reportPurpose === 'AUTO_BETA') {
+    return `SYSTEM|AUTO_BETA_ROUTINE|${platformTag}`;
+  }
+
+  return '';
 }
 
 export function generateDeterministicSummary(report = {}) {
@@ -483,6 +628,7 @@ export function extractReportIssues(report = {}) {
           category: ev.category,
           severity: ev.severity,
           lifecycle: ev.lifecycle,
+          recovered: Boolean(ev.recovered),
           repeatCount: ev.repeatCount || 1,
           timestamp: ev.timestamp
         });
@@ -490,13 +636,19 @@ export function extractReportIssues(report = {}) {
         const item = issueMap.get(code);
         item.repeatCount += (ev.repeatCount || 1);
         item.timestamp = Math.max(item.timestamp, ev.timestamp);
+        if (ev.recovered) item.recovered = true;
       }
     }
   }
 
   const rank = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
   const sorted = [...issueMap.values()].sort((a, b) => {
+    if (a.recovered !== b.recovered) {
+      return a.recovered ? 1 : -1;
+    }
     if (a.lifecycle !== b.lifecycle) {
+      if (a.lifecycle === 'TRIGGER') return -1;
+      if (b.lifecycle === 'TRIGGER') return 1;
       if (a.lifecycle === 'CURRENT_SESSION') return -1;
       if (b.lifecycle === 'CURRENT_SESSION') return 1;
       if (a.lifecycle === 'RECENT') return -1;
@@ -509,7 +661,8 @@ export function extractReportIssues(report = {}) {
     if (!issue) return 'USER REPORT';
     const sub = issue.subsystem || 'SYSTEM';
     const code = issue.code.replace(/^(PLAYER_|OTA_|DOWNLOAD_|IMAGE_)/, '');
-    return `${sub} · ${code}`;
+    const recStr = issue.recovered ? ' (Восстановлено)' : '';
+    return `${sub} · ${code}${recStr}`;
   };
 
   const primaryIssue = sorted.length > 0

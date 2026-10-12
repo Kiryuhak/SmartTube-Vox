@@ -24,7 +24,7 @@ class VoxStartupProfilerTest {
         // Stage 3: First frame rendered
         VoxStartupProfiler.recordStage("FIRST_FRAME", 0L, "OK", t0 + 460L)
 
-        val summary = VoxStartupProfiler.getProfileSummary()
+        val summary = VoxStartupProfiler.getProfileSummary()!!
         assertEquals(123456789L, summary["playbackSessionId"])
         assertEquals("CRONET", summary["engine"])
 
@@ -51,7 +51,7 @@ class VoxStartupProfilerTest {
 
     @Test
     fun testZeroPiiGuarantee() {
-        val summary = VoxStartupProfiler.getProfileSummary()
+        val summary = VoxStartupProfiler.getProfileSummary() ?: emptyMap<String, Any>()
         val text = summary.toString()
         assertFalse(text.contains("http://"))
         assertFalse(text.contains("https://"))
@@ -71,7 +71,7 @@ class VoxStartupProfilerTest {
         val rootCause = VoxStartupProfiler.classifyStartupRootCause()
         assertEquals(VoxStartupProfiler.ROOT_CAUSE_NETWORK, rootCause)
 
-        val summary = VoxStartupProfiler.getProfileSummary()
+        val summary = VoxStartupProfiler.getProfileSummary()!!
         assertEquals(VoxStartupProfiler.ROOT_CAUSE_NETWORK, summary["rootCause"])
     }
 }

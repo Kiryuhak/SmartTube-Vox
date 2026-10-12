@@ -88,14 +88,14 @@ export class ReportStorage {
     const appVersion = report.appVersion || 'unknown';
     const platform = report.platform || 'unknown';
     const deviceFamily = `${report.manufacturer || ''} ${report.model || ''}`.trim() || 'unknown';
-    const errorCategory = report.errorCategory || null;
+    const classification = classifyReport(report);
+    const errorCategory = report.errorCategory || classification.errorCategory || (classification.primaryEvent ? (classification.primaryEvent.category || classification.primaryEvent.errorCategory) : null) || null;
     const reportPurpose = report.reportPurpose || report.purpose || (reportId && reportId.includes('TEST') ? 'TEST' : 'USER');
     const rawStatus = report.status || (reportPurpose === 'TEST' ? 'IGNORED_TEST' : 'NEW');
     const status = normalizeStatus(rawStatus);
     const developerNotes = report.developerNotes || report.developer_notes || '';
-    const errorSignature = report.errorSignature || report.error_signature || '';
-    const classification = classifyReport(report);
-    const payloadJson = JSON.stringify({ ...report, structuredEvents: report.structuredEvents || classification.events, technicalSummary: report.technicalSummary || technicalSummary(report) });
+    const errorSignature = report.errorSignature || report.error_signature || classification.signature || (errorCategory ? `${errorCategory}|UNKNOWN|${platform}` : (reportPurpose === 'AUTO_BETA' ? `SYSTEM|AUTO_BETA_ROUTINE|${platform}` : `GENERAL|USER_REPORT|${platform}`));
+    const payloadJson = JSON.stringify({ ...report, errorCategory, errorSignature, structuredEvents: report.structuredEvents || classification.events, technicalSummary: report.technicalSummary || technicalSummary(report) });
 
     if (this.db) {
       const stmt = this.db.prepare(

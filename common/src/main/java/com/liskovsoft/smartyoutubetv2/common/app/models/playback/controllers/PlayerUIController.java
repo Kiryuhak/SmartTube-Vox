@@ -57,6 +57,8 @@ public class PlayerUIController extends BasePlayerController {
     private List<PlaylistInfo> mPlaylistInfos;
     private FormatItem mAudioFormat = FormatItem.AUDIO_HQ_MP4A;
     private boolean mEngineReady;
+    private static final java.util.concurrent.atomic.AtomicLong sPlaybackSessionSeq = new java.util.concurrent.atomic.AtomicLong(0);
+    private static final java.util.concurrent.atomic.AtomicLong sHudSessionSeq = new java.util.concurrent.atomic.AtomicLong(0);
     private boolean mDebugViewEnabled;
     private boolean mIsMetadataLoaded;
     private long mOverlayHideTimeMs;
@@ -65,6 +67,11 @@ public class PlayerUIController extends BasePlayerController {
     private long mScheduledPlaybackSessionId = 0;
     private long mScheduledHudSessionId = 0;
     private boolean mSelfHealAttempted = false;
+
+    public static void resetSessionSeqForTesting() {
+        sPlaybackSessionSeq.set(0);
+        sHudSessionSeq.set(0);
+    }
 
     public long getHudSessionId() {
         return mHudSessionId;
@@ -140,8 +147,8 @@ public class PlayerUIController extends BasePlayerController {
 
     @Override
     public void onNewVideo(Video item) {
-        mPlaybackSessionId++;
-        mHudSessionId++;
+        mPlaybackSessionId = sPlaybackSessionSeq.incrementAndGet();
+        mHudSessionId = sHudSessionSeq.incrementAndGet();
         mSelfHealAttempted = false;
         disposeTimeouts();
         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(

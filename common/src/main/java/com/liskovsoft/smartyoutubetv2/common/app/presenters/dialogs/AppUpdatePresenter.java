@@ -80,6 +80,7 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
                 currentVersion,
                 mUpdateManifestUrls,
                 isBeta,
+                mIsForceCheck,
                 new VoxOtaUpdateManager.Callback() {
                     @Override
                     public void onUpdateAvailable(VoxReleaseInfo release, VoxReleaseAsset asset) {

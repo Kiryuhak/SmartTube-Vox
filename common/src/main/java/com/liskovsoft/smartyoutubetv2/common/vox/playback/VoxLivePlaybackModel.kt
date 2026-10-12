@@ -506,6 +506,11 @@ object VoxLivePlaybackMonitor {
     }
 
     @Synchronized
+    fun hasActiveOrRecentLiveSession(): Boolean {
+        return isLiveSession || rebufferHistory.isNotEmpty() || bufferSamples.isNotEmpty() || bandwidthSamples.isNotEmpty()
+    }
+
+    @Synchronized
     fun getMetricsSummary(): VoxLivePlaybackMetrics {
         val count = rebufferHistory.size
         val totalMs = rebufferHistory.sumOf { it.durationMs }

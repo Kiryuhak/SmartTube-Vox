@@ -174,3 +174,90 @@ class OtaVersionPrecedenceTest {
         assertTrue(VoxVersionComparator.compare("32.56-vox.8.2-rc1", "32.56-vox.8.2") < 0)
     }
 }
+
+@RunWith(RobolectricTestRunner::class)
+class OtaCooldownAndRecoveryTests {
+    @Test
+    fun testAutoCheckCooldownEnforcement() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val manager = VoxOtaUpdateManager.instance(context)
+        val now = System.currentTimeMillis()
+        manager.setCooldownStateForTesting(successTimeMs = now - 1000L, rateLimitTimeMs = 0L, rateLimited = false)
+
+        var noUpdateCalled = false
+        manager.checkForUpdates(
+            currentVersion = "32.56-vox.8.2-beta.2",
+            manifestUrls = arrayOf("https://test.manifest/manifest.json"),
+            isBetaChannel = true,
+            isManual = false,
+            callback = object : VoxOtaUpdateManager.Callback {
+                override fun onUpdateAvailable(release: VoxReleaseInfo, asset: VoxReleaseAsset) {}
+                override fun onNoUpdateAvailable(currentVersion: String) {
+                    noUpdateCalled = true
+                }
+                override fun onDownloadProgress(bytesRead: Long, totalBytes: Long, percent: Int) {}
+                override fun onDownloadCompleted(apkFile: java.io.File) {}
+                override fun onError(error: VoxOtaException) {}
+            }
+        )
+        org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+        assertTrue("Automatic check within cooldown should return onNoUpdateAvailable", noUpdateCalled)
+        assertFalse(manager.isCheckingForUpdates())
+        manager.resetCooldownForTesting()
+    }
+
+    @Test
+    fun testRateLimitBackoffEnforcedForAutoCheck() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val manager = VoxOtaUpdateManager.instance(context)
+        val now = System.currentTimeMillis()
+        manager.setCooldownStateForTesting(successTimeMs = 0L, rateLimitTimeMs = now - 5000L, rateLimited = true)
+
+        var noUpdateCalled = false
+        manager.checkForUpdates(
+            currentVersion = "32.56-vox.8.2-beta.2",
+            manifestUrls = arrayOf("https://test.manifest/manifest.json"),
+            isBetaChannel = true,
+            isManual = false,
+            callback = object : VoxOtaUpdateManager.Callback {
+                override fun onUpdateAvailable(release: VoxReleaseInfo, asset: VoxReleaseAsset) {}
+                override fun onNoUpdateAvailable(currentVersion: String) {
+                    noUpdateCalled = true
+                }
+                override fun onDownloadProgress(bytesRead: Long, totalBytes: Long, percent: Int) {}
+                override fun onDownloadCompleted(apkFile: java.io.File) {}
+                override fun onError(error: VoxOtaException) {}
+            }
+        )
+        org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+        assertTrue("Automatic check within rate-limit cooldown should return onNoUpdateAvailable", noUpdateCalled)
+        assertFalse(manager.isCheckingForUpdates())
+        manager.resetCooldownForTesting()
+    }
+
+    @Test
+    fun testManualCheckBypassesCooldown() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val manager = VoxOtaUpdateManager.instance(context)
+        val now = System.currentTimeMillis()
+        // Both cooldowns active
+        manager.setCooldownStateForTesting(successTimeMs = now, rateLimitTimeMs = now, rateLimited = true)
+
+        manager.checkForUpdates(
+            currentVersion = "32.56-vox.8.2-beta.2",
+            manifestUrls = null,
+            isBetaChannel = true,
+            isManual = true,
+            callback = object : VoxOtaUpdateManager.Callback {
+                override fun onUpdateAvailable(release: VoxReleaseInfo, asset: VoxReleaseAsset) {}
+                override fun onNoUpdateAvailable(currentVersion: String) {}
+                override fun onDownloadProgress(bytesRead: Long, totalBytes: Long, percent: Int) {}
+                override fun onDownloadCompleted(apkFile: java.io.File) {}
+                override fun onError(error: VoxOtaException) {}
+            }
+        )
+        // Since isManual is true, cooldown is bypassed and check enters flight
+        assertTrue("Manual check should bypass cooldown and start check in-flight", manager.isCheckingForUpdates())
+        manager.resetCooldownForTesting()
+    }
+}

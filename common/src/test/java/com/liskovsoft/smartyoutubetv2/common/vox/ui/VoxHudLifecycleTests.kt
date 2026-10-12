@@ -173,3 +173,27 @@ class HudHundredSwitchInvariantTest {
         assertEquals(0, crashes)
     }
 }
+
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+class ProcessWideMonotonicSessionSequenceTest {
+    @Test
+    fun testProcessWideMonotonicityAcrossLifecycleRecreation() {
+        com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.PlayerUIController.resetSessionSeqForTesting()
+        val c1 = com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.PlayerUIController()
+        c1.onNewVideo(null)
+        val p1 = c1.playbackSessionId
+        val h1 = c1.hudSessionId
+        assertEquals(1L, p1)
+        assertEquals(1L, h1)
+
+        // Simulate activity recreation: new PlayerUIController instance in the same process
+        val c2 = com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.PlayerUIController()
+        c2.onNewVideo(null)
+        val p2 = c2.playbackSessionId
+        val h2 = c2.hudSessionId
+        assertEquals(2L, p2)
+        assertEquals(2L, h2)
+        assertTrue(p2 > p1)
+        assertTrue(h2 > h1)
+    }
+}
