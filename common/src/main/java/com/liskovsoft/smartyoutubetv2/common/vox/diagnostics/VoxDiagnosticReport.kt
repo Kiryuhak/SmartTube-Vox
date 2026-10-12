@@ -10,6 +10,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Неизменяемая модель диагностического отчёта SmartTube VOX (схема: vox-diagnostic-report-v2).
@@ -205,9 +206,11 @@ data class VoxDiagnosticReport(
                 null
             }
 
+            val stableReportId = reportId ?: ("VOX-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).uppercase(Locale.ROOT))
+
             return VoxDiagnosticReport(
                 schema = SCHEMA_V3,
-                reportId = reportId,
+                reportId = stableReportId,
                 timestamp = System.currentTimeMillis(),
                 appVersion = appVer,
                 appVersionCode = if (appCode > 0) appCode else 2446009,
@@ -237,6 +240,151 @@ data class VoxDiagnosticReport(
                 aggregationWindowMs = aggregationWindowMs,
                 incidentSummary = incidentSummary
             )
+        }
+
+        @JvmStatic
+        fun jsonToMap(obj: JSONObject?): Map<String, Any>? {
+            if (obj == null) return null
+            val map = mutableMapOf<String, Any>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = obj.opt(key)
+                if (value != null && value != JSONObject.NULL) {
+                    map[key] = when (value) {
+                        is JSONObject -> jsonToMap(value) ?: emptyMap<String, Any>()
+                        is JSONArray -> jsonToList(value)
+                        else -> value
+                    }
+                }
+            }
+            return map
+        }
+
+        @JvmStatic
+        fun jsonToList(arr: JSONArray?): List<Any> {
+            if (arr == null) return emptyList()
+            val list = mutableListOf<Any>()
+            for (i in 0 until arr.length()) {
+                val item = arr.opt(i)
+                if (item != null && item != JSONObject.NULL) {
+                    list.add(when (item) {
+                        is JSONObject -> jsonToMap(item) ?: emptyMap<String, Any>()
+                        is JSONArray -> jsonToList(item)
+                        else -> item
+                    })
+                }
+            }
+            return list
+        }
+
+        @JvmStatic
+        fun fromJson(jsonStr: String): VoxDiagnosticReport? {
+            return try {
+                fromJson(JSONObject(jsonStr))
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        @JvmStatic
+        fun fromJson(root: JSONObject): VoxDiagnosticReport? {
+            return try {
+                val schema = root.optString("schema", SCHEMA_V3)
+                val reportId = if (root.has("reportId") && !root.isNull("reportId")) root.optString("reportId") else null
+                val timestamp = root.optLong("timestamp", System.currentTimeMillis())
+                val appVersion = root.optString("appVersion", "32.56-vox.8")
+                val appVersionCode = root.optInt("appVersionCode", 2446009)
+                val platform = root.optString("platform", "Android TV")
+                val manufacturer = root.optString("manufacturer", "unknown")
+                val model = root.optString("model", "unknown")
+                val osName = root.optString("osName", "Android")
+                val osVersion = root.optString("osVersion", "")
+                val sdkInt = root.optInt("sdkInt", 0)
+                val deviceTier = root.optString("deviceTier", "UNKNOWN")
+
+                val vCodecs = mutableMapOf<String, String>()
+                root.optJSONObject("videoCodecs")?.let { vo ->
+                    val it = vo.keys()
+                    while (it.hasNext()) {
+                        val k = it.next()
+                        vCodecs[k] = vo.optString(k, "")
+                    }
+                }
+
+                val aCodecs = mutableMapOf<String, String>()
+                root.optJSONObject("audioCodecs")?.let { ao ->
+                    val it = ao.keys()
+                    while (it.hasNext()) {
+                        val k = it.next()
+                        aCodecs[k] = ao.optString(k, "")
+                    }
+                }
+
+                val display = jsonToMap(root.optJSONObject("display")) ?: emptyMap()
+                val currentPolicy = jsonToMap(root.optJSONObject("currentPolicy")) ?: emptyMap()
+                val recommendedSettings = jsonToMap(root.optJSONObject("recommendedSettings")) ?: emptyMap()
+                val riskWarning = if (root.has("riskWarning") && !root.isNull("riskWarning")) root.optString("riskWarning") else null
+
+                val playbackStats = jsonToMap(root.optJSONObject("playbackStats"))
+                val livePlayback = jsonToMap(root.optJSONObject("livePlayback"))
+                val downloadDiagnostics = jsonToMap(root.optJSONObject("downloadDiagnostics"))
+                val translationDiagnostics = jsonToMap(root.optJSONObject("translationDiagnostics"))
+                val startupProfile = jsonToMap(root.optJSONObject("startupProfile"))
+
+                val events = mutableListOf<VoxLogEvent>()
+                root.optJSONArray("safeRecentEvents")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val evObj = arr.optJSONObject(i)
+                        if (evObj != null) {
+                            val ev = VoxLogEvent.fromJson(evObj)
+                            if (ev != null) events.add(ev)
+                        }
+                    }
+                }
+
+                val reportPurpose = root.optString("reportPurpose", PURPOSE_USER_MANUAL)
+                val autoSubmitted = root.optBoolean("autoSubmitted", false)
+                val triggerEvent = if (root.has("triggerEvent") && !root.isNull("triggerEvent")) root.optString("triggerEvent") else null
+                val channel = if (root.has("channel") && !root.isNull("channel")) root.optString("channel") else null
+                val aggregationWindowMs = root.optLong("aggregationWindowMs", 0L)
+                val incidentSummary = jsonToMap(root.optJSONObject("incidentSummary"))
+
+                VoxDiagnosticReport(
+                    schema = schema,
+                    reportId = reportId,
+                    timestamp = timestamp,
+                    appVersion = appVersion,
+                    appVersionCode = appVersionCode,
+                    platform = platform,
+                    manufacturer = manufacturer,
+                    model = model,
+                    osName = osName,
+                    osVersion = osVersion,
+                    sdkInt = sdkInt,
+                    deviceTier = deviceTier,
+                    videoCodecs = vCodecs,
+                    audioCodecs = aCodecs,
+                    display = display,
+                    currentPolicy = currentPolicy,
+                    recommendedSettings = recommendedSettings,
+                    riskWarning = riskWarning,
+                    playbackStats = playbackStats,
+                    livePlayback = livePlayback,
+                    downloadDiagnostics = downloadDiagnostics,
+                    translationDiagnostics = translationDiagnostics,
+                    startupProfile = startupProfile,
+                    safeRecentEvents = events,
+                    reportPurpose = reportPurpose,
+                    autoSubmitted = autoSubmitted,
+                    triggerEvent = triggerEvent,
+                    channel = channel,
+                    aggregationWindowMs = aggregationWindowMs,
+                    incidentSummary = incidentSummary
+                )
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 

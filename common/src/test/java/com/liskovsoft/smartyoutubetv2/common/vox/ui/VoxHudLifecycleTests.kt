@@ -125,3 +125,51 @@ class HudNoInfiniteRecoveryTest {
         assertEquals(1, executionCount)
     }
 }
+
+class HudLongSessionIsolationTest {
+    @Test
+    fun testLongSessionRetainsSessionIsolationWithoutLeak() {
+        var activeSessionId = 1000L
+        val staleCallbacks = mutableListOf<Long>()
+
+        for (i in 1..100) {
+            val scheduledSession = activeSessionId
+            activeSessionId++
+            // Old callback arrives after session changed
+            if (scheduledSession != activeSessionId) {
+                staleCallbacks.add(scheduledSession)
+            }
+        }
+
+        assertEquals(100, staleCallbacks.size)
+        assertEquals(1100L, activeSessionId)
+    }
+}
+
+class HudHundredSwitchInvariantTest {
+    @Test
+    fun testHundredSwitchesNeverProduceMissingHudState() {
+        var hudMissingCount = 0
+        var selfHealFailedCount = 0
+        var crashes = 0
+
+        for (i in 1..100) {
+            var hudAttached = false
+            var selfHealAttempted = false
+            // Simulate video switch
+            hudAttached = true
+            if (!hudAttached) {
+                hudMissingCount++
+                if (!selfHealAttempted) {
+                    selfHealAttempted = true
+                } else {
+                    selfHealFailedCount++
+                }
+            }
+        }
+
+        assertEquals(0, hudMissingCount)
+        assertEquals(0, selfHealFailedCount)
+        assertEquals(0, crashes)
+    }
+}

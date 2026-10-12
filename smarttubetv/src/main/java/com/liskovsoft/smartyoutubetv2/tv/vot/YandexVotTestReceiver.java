@@ -712,6 +712,9 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         } else if ("testOfflineQueueStatus".equalsIgnoreCase(action)) {
             java.util.Map<String, Object> summary = com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(context).getOfflineQueueSummary();
             Log.i(TAG, "OFFLINE_QUEUE_SUMMARY: " + summary.toString());
+        } else if ("testStartupStats".equalsIgnoreCase(action)) {
+            java.util.Map<String, Object> stats = com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.getAggregatedStatistics();
+            Log.i(TAG, "STARTUP_AGGREGATED_STATS: " + stats.toString());
         } else if ("testResetDiagnosticsCooldown".equalsIgnoreCase(action)) {
             com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context)
                     .setLastDiagnosticsSubmissionTimestamp(0L);

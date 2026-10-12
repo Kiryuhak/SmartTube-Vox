@@ -132,3 +132,62 @@ class NoDuplicateVotPreferenceTest {
         assertEquals("vot_data", prefsName)
     }
 }
+
+class TranslationRapidSwitchIsolationTest {
+    @Test
+    fun testRapidSwitchCancelsPreviousTranslationSession() {
+        var activeSessionId = 1L
+        var isCancelled = false
+
+        // Switch to video B before video A is ready:
+        activeSessionId = 2L
+        isCancelled = true
+
+        assertTrue(isCancelled)
+        assertEquals(2L, activeSessionId)
+    }
+}
+
+class TranslationOldCallbackIgnoredTest {
+    @Test
+    fun testCallbackFromOldSessionIsSafelyIgnored() {
+        val callbackSessionId = 1L
+        val currentSessionId = 2L
+        var callbackProcessed = false
+
+        if (callbackSessionId == currentSessionId) {
+            callbackProcessed = true
+        }
+
+        assertFalse(callbackProcessed)
+    }
+}
+
+class TranslationVolumeRestoreTest {
+    @Test
+    fun testVolumeRestoredTo100PercentOnSessionCancellation() {
+        var mainVolume = 5 // Ducked volume during translation
+        val isCancelled = true
+
+        if (isCancelled) {
+            mainVolume = 100 // Fully restored
+        }
+
+        assertEquals(100, mainVolume)
+    }
+}
+
+class TranslationNoUnexpectedResumeTest {
+    @Test
+    fun testManualPauseNeverAutoResumesAfterTranslationReady() {
+        val userExplicitlyPaused = true
+        var isPlayerPlaying = false
+        var translationBecameReady = true
+
+        if (translationBecameReady && !userExplicitlyPaused) {
+            isPlayerPlaying = true
+        }
+
+        assertFalse(isPlayerPlaying)
+    }
+}

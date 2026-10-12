@@ -21,6 +21,10 @@ object VoxDiagnosticsPolicy {
     const val INCIDENT_AGGREGATION_WINDOW_MS = 45 * 1000L              // Окно агрегации инцидентов (30-60с)
     const val INCIDENT_MIN_INTERVAL_MS = 5 * 60 * 1000L                // Минимальный интервал между авто-отчетами об инцидентах
     const val MAX_OFFLINE_QUEUE_SIZE = 10                              // Ограниченная очередь оффлайн отчетов
+    const val MAX_OFFLINE_QUEUE_AGE_MS = 48 * 60 * 60 * 1000L          // 48 часов максимальное время жизни в очереди
+    const val MAX_OFFLINE_RETRY_COUNT = 5                              // Максимум 5 попыток перед удалением
+    const val OFFLINE_INITIAL_BACKOFF_MS = 15 * 1000L                  // 15 секунд начальная задержка
+    const val OFFLINE_MAX_BACKOFF_MS = 15 * 60 * 1000L                 // 15 минут максимальная задержка
     const val MAX_BATCH_EVENTS = 50
 
     /**

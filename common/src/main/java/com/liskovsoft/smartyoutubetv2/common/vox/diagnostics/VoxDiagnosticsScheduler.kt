@@ -3,8 +3,11 @@ package com.liskovsoft.smartyoutubetv2.common.vox.diagnostics
 import android.content.Context
 import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.UUID
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -52,11 +55,38 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
     data class QueuedOfflineReport(
         val report: VoxDiagnosticReport,
         val queuedTimestampMs: Long = System.currentTimeMillis(),
-        var retryCount: Int = 0
-    )
+        var retryCount: Int = 0,
+        var nextRetryTimestampMs: Long = 0L
+    ) {
+        fun toJson(): JSONObject {
+            val obj = JSONObject()
+            obj.put("report", JSONObject(report.toJson()))
+            obj.put("queuedTimestampMs", queuedTimestampMs)
+            obj.put("retryCount", retryCount)
+            obj.put("nextRetryTimestampMs", nextRetryTimestampMs)
+            return obj
+        }
+
+        companion object {
+            fun fromJson(obj: JSONObject): QueuedOfflineReport? {
+                return try {
+                    val rObj = obj.optJSONObject("report") ?: return null
+                    val report = VoxDiagnosticReport.fromJson(rObj) ?: return null
+                    val ts = obj.optLong("queuedTimestampMs", System.currentTimeMillis())
+                    val retries = obj.optInt("retryCount", 0)
+                    val nextRetry = obj.optLong("nextRetryTimestampMs", 0L)
+                    QueuedOfflineReport(report, ts, retries, nextRetry)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "VoxDiagnosticsScheduler"
+        private const val QUEUE_FILE_NAME = "vox_offline_diagnostics.json"
+        private const val QUEUE_TMP_FILE_NAME = "vox_offline_diagnostics.json.tmp"
         private val EXECUTOR = Executors.newSingleThreadExecutor()
         val APP_SESSION_ID: String = UUID.randomUUID().toString().substring(0, 8)
 
@@ -72,66 +102,209 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
     }
 
     private val isRunning = AtomicBoolean(false)
-    private val offlineQueue = ConcurrentLinkedQueue<QueuedOfflineReport>()
+    private val queueLock = Any()
+    private val offlineQueue = ArrayList<QueuedOfflineReport>()
     private var pendingIncident: AutoBetaIncident? = null
     private var pendingIncidentTimer: ScheduledFuture<*>? = null
     private val scheduledExecutor = Executors.newSingleThreadScheduledExecutor()
 
-    fun getOfflineQueueSize(): Int = offlineQueue.size
+    init {
+        synchronized(queueLock) {
+            loadFromDiskLocked()
+        }
+    }
 
-    fun getOfflineQueueSummary(): Map<String, Any> {
+    fun getOfflineQueueSize(): Int = synchronized(queueLock) { offlineQueue.size }
+
+    fun getOfflineQueueSummary(): Map<String, Any> = synchronized(queueLock) {
         val count = offlineQueue.size
-        val oldest = offlineQueue.peek()
+        val oldest = offlineQueue.firstOrNull()
         val oldestAgeMs = if (oldest != null) System.currentTimeMillis() - oldest.queuedTimestampMs else 0L
         val maxRetries = offlineQueue.maxOfOrNull { it.retryCount } ?: 0
-        return mapOf(
+        mapOf(
             "queuedCount" to count,
             "oldestAgeMs" to oldestAgeMs,
             "maxRetries" to maxRetries
         )
     }
 
+    fun clearOfflineQueue() {
+        synchronized(queueLock) {
+            offlineQueue.clear()
+            saveToDiskLocked()
+        }
+    }
+
+    private fun loadFromDiskLocked() {
+        offlineQueue.clear()
+        val file = File(context.filesDir, QUEUE_FILE_NAME)
+        if (!file.exists()) return
+
+        try {
+            val content = file.readText(StandardCharsets.UTF_8)
+            if (content.isBlank()) return
+            val jsonArray = JSONArray(content)
+            val now = System.currentTimeMillis()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.optJSONObject(i) ?: continue
+                val entry = QueuedOfflineReport.fromJson(obj)
+                if (entry != null) {
+                    val age = now - entry.queuedTimestampMs
+                    if (age <= VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_AGE_MS &&
+                        entry.retryCount < VoxDiagnosticsPolicy.MAX_OFFLINE_RETRY_COUNT) {
+                        offlineQueue.add(entry)
+                    }
+                }
+            }
+            while (offlineQueue.size > VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_SIZE) {
+                offlineQueue.removeAt(0)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Corrupted offline diagnostics queue file recovered, resetting: ${e.message}")
+            offlineQueue.clear()
+            try { file.delete() } catch (ignored: Exception) {}
+        }
+    }
+
+    private fun saveToDiskLocked() {
+        try {
+            val file = File(context.filesDir, QUEUE_FILE_NAME)
+            if (offlineQueue.isEmpty()) {
+                if (file.exists()) file.delete()
+                return
+            }
+            val jsonArray = JSONArray()
+            for (item in offlineQueue) {
+                jsonArray.put(item.toJson())
+            }
+            val tmp = File(context.filesDir, QUEUE_TMP_FILE_NAME)
+            tmp.writeText(jsonArray.toString(2), StandardCharsets.UTF_8)
+            if (!tmp.renameTo(file)) {
+                file.delete()
+                tmp.renameTo(file)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist offline diagnostics queue to disk", e)
+        }
+    }
+
     fun enqueueOfflineReport(report: VoxDiagnosticReport) {
         val now = System.currentTimeMillis()
-        while (offlineQueue.size >= VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_SIZE) {
-            val dropped = offlineQueue.poll()
-            val oldestAge = if (dropped != null) now - dropped.queuedTimestampMs else 0L
-            val dropCtx = mapOf(
-                "dropReason" to "QUEUE_FULL",
-                "oldestAgeMs" to oldestAge.toString(),
-                "queuedCount" to offlineQueue.size.toString()
+        synchronized(queueLock) {
+            // Deduplication: check if already exists by reportId or incident signature
+            val reportSig = report.incidentSummary?.get("normalizedSignature")?.toString()
+            val existingIndex = offlineQueue.indexOfFirst {
+                it.report.reportId == report.reportId ||
+                (reportSig != null && it.report.incidentSummary?.get("normalizedSignature")?.toString() == reportSig)
+            }
+
+            if (existingIndex >= 0) {
+                val existing = offlineQueue[existingIndex]
+                val mergedReport = if (report.incidentSummary != null && existing.report.incidentSummary != null) {
+                    val exRepeats = (existing.report.incidentSummary["repeatCount"] as? Number)?.toInt() ?: 1
+                    val newRepeats = (report.incidentSummary["repeatCount"] as? Number)?.toInt() ?: 1
+                    val updatedSummary = report.incidentSummary.toMutableMap()
+                    updatedSummary["repeatCount"] = Math.max(exRepeats, newRepeats)
+                    report.copy(incidentSummary = updatedSummary)
+                } else {
+                    report
+                }
+                offlineQueue[existingIndex] = existing.copy(report = mergedReport, nextRetryTimestampMs = now)
+                saveToDiskLocked()
+                VoxSafeLogger.d(
+                    VoxLogCategory.DIAGNOSTICS,
+                    VoxLogCode.AUTO_DIAG_UPLOAD_QUEUED,
+                    "Offline diagnostic report deduplicated & updated in queue",
+                    mapOf("reportId" to (report.reportId ?: "UNKNOWN"), "queuedCount" to offlineQueue.size.toString())
+                )
+                return
+            }
+
+            offlineQueue.removeAll {
+                val age = now - it.queuedTimestampMs
+                age > VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_AGE_MS || it.retryCount >= VoxDiagnosticsPolicy.MAX_OFFLINE_RETRY_COUNT
+            }
+
+            while (offlineQueue.size >= VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_SIZE) {
+                val dropped = offlineQueue.removeAt(0)
+                val oldestAge = now - dropped.queuedTimestampMs
+                val dropCtx = mapOf(
+                    "dropReason" to "QUEUE_FULL",
+                    "oldestAgeMs" to oldestAge.toString(),
+                    "queuedCount" to offlineQueue.size.toString()
+                )
+                VoxSafeLogger.w(
+                    VoxLogCategory.DIAGNOSTICS,
+                    VoxLogCode.AUTO_DIAG_UPLOAD_DROPPED,
+                    "Offline diagnostic queue full, dropped oldest report",
+                    dropCtx
+                )
+            }
+
+            val entry = QueuedOfflineReport(report, now, 0, now)
+            offlineQueue.add(entry)
+            saveToDiskLocked()
+
+            val queueCtx = mapOf(
+                "queuedCount" to offlineQueue.size.toString(),
+                "trigger" to (report.triggerEvent ?: "UNKNOWN"),
+                "reportId" to (report.reportId ?: "UNKNOWN")
             )
-            VoxSafeLogger.w(
+            VoxSafeLogger.d(
                 VoxLogCategory.DIAGNOSTICS,
-                VoxLogCode.AUTO_DIAG_UPLOAD_DROPPED,
-                "Offline diagnostic queue full, dropped oldest report",
-                dropCtx
+                VoxLogCode.AUTO_DIAG_UPLOAD_QUEUED,
+                "Diagnostic report enqueued to persistent offline queue",
+                queueCtx
             )
         }
-        val entry = QueuedOfflineReport(report, now, 0)
-        offlineQueue.offer(entry)
-        val queueCtx = mapOf(
-            "queuedCount" to offlineQueue.size.toString(),
-            "trigger" to (report.triggerEvent ?: "UNKNOWN"),
-            "oldestAgeMs" to (now - (offlineQueue.peek()?.queuedTimestampMs ?: now)).toString()
-        )
-        VoxSafeLogger.d(
-            VoxLogCategory.DIAGNOSTICS,
-            VoxLogCode.AUTO_DIAG_UPLOAD_QUEUED,
-            "Diagnostic report enqueued to offline queue",
-            queueCtx
-        )
     }
 
     fun interface CompletionCallback {
         fun onComplete(success: Boolean)
     }
 
-    fun pollOfflineReport(): VoxDiagnosticReport? = offlineQueue.poll()?.report
+    fun pollOfflineReport(): VoxDiagnosticReport? = synchronized(queueLock) {
+        if (offlineQueue.isNotEmpty()) {
+            val rep = offlineQueue.removeAt(0).report
+            saveToDiskLocked()
+            rep
+        } else null
+    }
+
+    private fun calculateBackoffMs(retryCount: Int): Long {
+        val multiplier = 1L shl (retryCount - 1).coerceIn(0, 6)
+        val delay = VoxDiagnosticsPolicy.OFFLINE_INITIAL_BACKOFF_MS * multiplier
+        return delay.coerceAtMost(VoxDiagnosticsPolicy.OFFLINE_MAX_BACKOFF_MS)
+    }
 
     @JvmOverloads
     fun flushOfflineQueue(onComplete: CompletionCallback? = null) {
-        val entry = offlineQueue.poll()
+        flushOfflineQueueInternal(forceBypassBackoff = false, onComplete = onComplete)
+    }
+
+    fun flushOfflineQueueForce(onComplete: CompletionCallback? = null) {
+        flushOfflineQueueInternal(forceBypassBackoff = true, onComplete = onComplete)
+    }
+
+    private fun flushOfflineQueueInternal(forceBypassBackoff: Boolean, onComplete: CompletionCallback?) {
+        val entry = synchronized(queueLock) {
+            val now = System.currentTimeMillis()
+            offlineQueue.removeAll {
+                val age = now - it.queuedTimestampMs
+                age > VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_AGE_MS || it.retryCount >= VoxDiagnosticsPolicy.MAX_OFFLINE_RETRY_COUNT
+            }
+            if (offlineQueue.isEmpty()) {
+                saveToDiskLocked()
+                return@synchronized null
+            }
+            val eligibleIndex = offlineQueue.indexOfFirst { forceBypassBackoff || now >= it.nextRetryTimestampMs }
+            if (eligibleIndex >= 0) {
+                offlineQueue.removeAt(eligibleIndex)
+            } else {
+                null
+            }
+        }
+
         if (entry == null) {
             onComplete?.onComplete(true)
             return
@@ -140,8 +313,9 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
         entry.retryCount++
         val retryCtx = mapOf(
             "retryCount" to entry.retryCount.toString(),
-            "queuedCount" to offlineQueue.size.toString(),
-            "trigger" to (entry.report.triggerEvent ?: "UNKNOWN")
+            "queuedCount" to getOfflineQueueSize().toString(),
+            "trigger" to (entry.report.triggerEvent ?: "UNKNOWN"),
+            "reportId" to (entry.report.reportId ?: "UNKNOWN")
         )
         VoxSafeLogger.d(
             VoxLogCategory.DIAGNOSTICS,
@@ -163,11 +337,44 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                     sentCtx
                 )
                 VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(System.currentTimeMillis())
-                flushOfflineQueue(onComplete)
+                synchronized(queueLock) {
+                    saveToDiskLocked()
+                }
+                flushOfflineQueueInternal(forceBypassBackoff, onComplete)
             }
 
             override fun onError(errorMessage: String) {
-                enqueueOfflineReport(entry.report)
+                synchronized(queueLock) {
+                    if (entry.retryCount >= VoxDiagnosticsPolicy.MAX_OFFLINE_RETRY_COUNT) {
+                        val dropCtx = mapOf(
+                            "dropReason" to "MAX_RETRIES_EXCEEDED",
+                            "retryCount" to entry.retryCount.toString(),
+                            "reportId" to (entry.report.reportId ?: "UNKNOWN")
+                        )
+                        VoxSafeLogger.w(
+                            VoxLogCategory.DIAGNOSTICS,
+                            VoxLogCode.AUTO_DIAG_UPLOAD_DROPPED,
+                            "Offline report dropped: exceeded max retry limit",
+                            dropCtx
+                        )
+                    } else {
+                        val delayMs = calculateBackoffMs(entry.retryCount)
+                        entry.nextRetryTimestampMs = System.currentTimeMillis() + delayMs
+                        offlineQueue.add(entry)
+                        val backoffCtx = mapOf(
+                            "retryCount" to entry.retryCount.toString(),
+                            "nextRetryDelayMs" to delayMs.toString(),
+                            "reportId" to (entry.report.reportId ?: "UNKNOWN")
+                        )
+                        VoxSafeLogger.w(
+                            VoxLogCategory.DIAGNOSTICS,
+                            VoxLogCode.AUTO_DIAG_UPLOAD_RETRY,
+                            "Offline diagnostic report upload failed, will retry with backoff",
+                            backoffCtx
+                        )
+                    }
+                    saveToDiskLocked()
+                }
                 onComplete?.onComplete(false)
             }
         })

@@ -13,6 +13,27 @@ export const STATUSES = [
   'WONT_FIX',
 ];
 export const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+export const USER_FRIENDLY_ISSUE_LABELS_RU = {
+  PLAYER_REBUFFER: 'Повторная буферизация видео',
+  PLAYER_STARTUP_SLOW: 'Видео долго запускается',
+  HUD_STATE_INCONSISTENT: 'Панель управления плеером работает некорректно',
+  HUD_SELF_HEAL_FAILED: 'Сбой автовосстановления панели управления',
+  HUD_CONTROLS_DETACHED: 'Панель управления отключена',
+  OTA_FAILED: 'Не удалось проверить обновление',
+  OTA_SIGNATURE_MISMATCH: 'Несовпадение цифровой подписи обновления',
+  IMAGE_REQUEST_FAILED_FINAL: 'Не удалось загрузить изображение',
+  IMAGE_REQUEST_FAILED: 'Ошибка загрузки обложки / миниатюры',
+  DOWNLOAD_FAILED: 'Сбой скачивания видео',
+  DOWNLOAD_STATE_INCONSISTENT: 'Несоответствие состояния загрузки',
+  TRANSLATION_DESYNC_WARNING: 'Рассинхронизация звуковой дорожки перевода',
+  TRANSLATION_AUDIO_DOWNLOAD_FAILED: 'Сбой загрузки аудиодорожки перевода',
+  LOCAL_PLAYBACK_FAIL: 'Не удалось воспроизвести скачанное видео',
+};
+
+export function getFriendlyIssueLabel(code) {
+  if (!code) return null;
+  return USER_FRIENDLY_ISSUE_LABELS_RU[code] || null;
+}
 const SUBSYSTEMS = ['DOWNLOAD', 'PLAYER', 'BACKGROUND', 'OTA', 'OFFLINE', 'CHANNEL_GROUPS', 'AUTO_SETUP', 'TRANSLATION', 'NETWORK', 'SYSTEM'];
 const SAFE_CONTEXT_KEYS = new Set([
   'queueState', 'stage', 'bytes', 'speed', 'stallCount', 'retryCount', 'resumeCount',
@@ -496,11 +517,18 @@ export function extractReportIssues(report = {}) {
     : (report.errorCategory ? `${report.subsystem || 'APP'} · ${report.errorCategory}` : 'USER REPORT');
 
   const secondaryIssues = sorted.slice(1).map(i => formatConcise(i));
+  const primaryCode = sorted.length > 0 ? sorted[0].code : (report.errorCategory || null);
+
+  const enrichedIssues = sorted.map(i => ({
+    ...i,
+    labelRu: getFriendlyIssueLabel(i.code),
+  }));
 
   return {
     primaryIssue,
+    primaryIssueLabelRu: getFriendlyIssueLabel(primaryCode),
     secondaryIssues,
-    allIssues: sorted
+    allIssues: enrichedIssues
   };
 }
 

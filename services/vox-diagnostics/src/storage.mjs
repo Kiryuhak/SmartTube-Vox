@@ -104,7 +104,10 @@ export class ReportStorage {
           device_family, error_category, payload_json, expires_at,
           status, developer_notes, report_purpose, error_signature,
           severity, subsystem, stage, event_error_category, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(report_id) DO UPDATE SET
+          payload_json = excluded.payload_json,
+          updated_at = excluded.updated_at`
       );
       await stmt.bind(
         reportId,

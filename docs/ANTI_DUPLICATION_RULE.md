@@ -73,3 +73,17 @@ When assessing feature ideas or code patterns from third-party applications (e.g
 | **OTA Updater & Checks** | `VoxOtaUpdateManager`, `AppUpdatePresenter` | `ALREADY_IMPLEMENTED` | Verified `NO_UPDATE` / downgrade protection («У вас установлена последняя версия») | **NO** |
 | **HDR Stream Handling** | `TrackSelectorUtil`, `AndroidVoxCapabilityProvider` | `ALREADY_IMPLEMENTED` | Canonical track scoring maintained; no fake setting | **NO** |
 | **DRC Audio** | ExoPlayer DASH manifest format parser | `ALREADY_IMPLEMENTED` | No platform DSP available; fake setting rejected | **NO** |
+
+---
+
+## 6. Patch #39 Feature Audit Ledger
+
+| Subsystem / Feature | Existing Canonical Path | Classification | Decision / Action | Duplicate Created |
+| :--- | :--- | :--- | :--- | :--- |
+| **Offline Diagnostics Persistence** | `VoxDiagnosticsScheduler`, `vox_offline_diagnostics.json` | `EXTENDED` | Added atomic disk persistence, corruption self-healing, and session reload without duplicate queue | **NO** |
+| **Idempotency & Re-upload Protection** | `VoxDiagnosticReport`, `storage.mjs` | `EXTENDED` | Stable client-generated `reportId` + D1 `ON CONFLICT DO UPDATE` prevents duplicates | **NO** |
+| **Bounded Retry Backoff** | `VoxDiagnosticsScheduler`, `VoxDiagnosticsPolicy` | `EXTENDED` | Exponential backoff (15s to 15min) bounded at 5 attempts, preventing network tight loops | **NO** |
+| **Startup Statistical Profiler** | `VoxStartupProfiler` | `EXTENDED` | Ring buffer for 50 samples, calculating median, p90, min/max, slowest stage and stage medians | **NO** |
+| **Friendly Russian Issue Names** | `triage.mjs`, `admin_app.js` | `EXTENDED` | Added `USER_FRIENDLY_ISSUE_LABELS_RU` dictionary while preserving machine codes for triage | **NO** |
+| **Image Pipeline Noise Filtering** | `VoxImageRetryPolicy` | `ALREADY_IMPLEMENTED` | Verified retry/recovered transitions and cancellation ignoring on fast scrolls | **NO** |
+| **User Documentation** | `README.md` | `EXTENDED` | Complete Russian rewrite: user-friendly explanations, zero technical noise, links to `docs/` | **NO** |
