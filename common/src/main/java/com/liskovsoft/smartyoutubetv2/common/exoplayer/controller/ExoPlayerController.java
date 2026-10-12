@@ -194,6 +194,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         mTrackSelectorManager.invalidate();
         mOnSourceChanged = true;
         mPrepareStartTimeMs = System.currentTimeMillis();
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.onUserOpen(mPlaybackSessionId, "EXOPLAYER", mPrepareStartTimeMs);
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.startStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_REQUEST, mPrepareStartTimeMs);
         mHasStartedPlayback = false;
         mOfflineReadyLogged = false;
         mRebufferCount = 0;
@@ -388,6 +390,9 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             Log.i(TAG, "onTracksChanged: Hmm. Strange. Received empty groups, no selections. Why is this happens only on next/prev videos?");
             return;
         }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.finishStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_TRACK_SELECT, "OK");
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.startStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_DECODER_INIT);
 
         if (getVideo() != null && getVideo().isLocal) {
             List<FormatItem> vFormats = getVideoFormats();
@@ -592,6 +597,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             }
             if (!mHasStartedPlayback) {
                 mHasStartedPlayback = true;
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.finishStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_BUFFER_FILL, "OK");
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.recordStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_FIRST_FRAME, 0L, "OK");
                 if (mPrepareStartTimeMs > 0) {
                     long startupLatency = System.currentTimeMillis() - mPrepareStartTimeMs;
                     long thresholdMs = isLive ? 6000L : 3500L;
@@ -619,6 +626,11 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                         ctx.put("isLive", String.valueOf(isLive));
                         String networkConfidence = isLocalSrc ? "0.0" : (buffered < 1000 ? "0.85" : "0.4");
                         ctx.put("networkLimitedConfidence", networkConfidence);
+                        String rootCause = com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.classifyStartupRootCause();
+                        if ("UNKNOWN".equals(rootCause) && buffered < 1000 && !isLocalSrc) {
+                            rootCause = "NETWORK";
+                        }
+                        ctx.put("rootCause", rootCause);
                         VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_STARTUP_SLOW, "Замедленный старт воспроизведения", ctx);
                     }
                 }
@@ -644,6 +656,10 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mEventListener.onPlayEnd();
             mIsEnded = true;
         } else if (isBuffering) {
+            if (!mHasStartedPlayback) {
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.finishStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_DECODER_INIT, "OK");
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.startStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_BUFFER_FILL);
+            }
             if (isLive) {
                 long pos = getPositionMs();
                 long dur = getDurationMs();
@@ -846,11 +862,15 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     public void onTimelineChanged(Timeline timeline, @Nullable Object manifest, int reason) {
         long duration = getDurationMs();
         mOfflineProbe.onTimelineChanged(duration, duration > 0, false);
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.finishStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_REQUEST, "OK");
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.recordStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_MANIFEST, 0L, "OK");
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.startStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_TRACK_SELECT);
     }
 
     @Override
     public void onRenderedFirstFrame() {
         mOfflineProbe.onFirstFrameRendered();
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.recordStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_FIRST_FRAME, 0L, "OK");
     }
 
     @Override

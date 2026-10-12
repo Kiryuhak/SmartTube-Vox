@@ -314,7 +314,15 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
     }
 
     private void performReportSubmission(Activity activity) {
-        VoxDiagnosticReport report = VoxDiagnosticReport.create(activity, null, true);
+        VoxDiagnosticReport report = VoxDiagnosticReport.create(
+                activity,
+                null,
+                true,
+                VoxDiagnosticReport.PURPOSE_USER_MANUAL,
+                false,
+                null,
+                0L
+        );
 
         VoxDiagnosticsClient.instance().submitReportAsync(report, new VoxDiagnosticsClient.Callback() {
             @Override
@@ -329,6 +337,27 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
                 showSendFailureDialog(activity, errorMessage);
             }
         });
+    }
+
+    public void maybeShowBetaPrivacyNotice(Activity activity) {
+        if (activity == null || !Utils.checkActivity(activity)) return;
+        VoxUpdateChannelManager manager = VoxUpdateChannelManager.instance(activity);
+        if (manager.isBetaChannel() && !manager.hasSeenBetaPrivacyNotice()) {
+            manager.setSeenBetaPrivacyNotice(true);
+            AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
+            builder.setTitle(R.string.vox_beta_privacy_notice_title)
+                    .setMessage(R.string.vox_beta_privacy_notice_message)
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> dialog.dismiss())
+                    .setNeutralButton(R.string.settings_diagnostics_and_logs, (dialog, which) -> {
+                        dialog.dismiss();
+                        show();
+                    });
+            try {
+                builder.create().show();
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to show beta privacy notice dialog", e);
+            }
+        }
     }
 
     private void showSendSuccessDialog(Activity activity, String reportId) {

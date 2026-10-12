@@ -33,9 +33,23 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
     }
 
     private val isRunning = AtomicBoolean(false)
+    private val offlineQueue = java.util.concurrent.ConcurrentLinkedQueue<VoxDiagnosticReport>()
+    private var pendingIncidentTimer: java.util.concurrent.ScheduledFuture<*>? = null
+    private val scheduledExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+
+    fun getOfflineQueueSize(): Int = offlineQueue.size
+
+    fun enqueueOfflineReport(report: VoxDiagnosticReport) {
+        while (offlineQueue.size >= VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_SIZE) {
+            offlineQueue.poll() // Drop oldest to enforce bounded buffer
+        }
+        offlineQueue.offer(report)
+    }
+
+    fun pollOfflineReport(): VoxDiagnosticReport? = offlineQueue.poll()
 
     /**
-     * Запускает фоновую проверку и отправку отчёта, если условия политики выполнены.
+     * Запускает фоновую периодическую проверку и отправку отчёта.
      */
     fun schedulePeriodicCheck(onComplete: ((Boolean) -> Unit)? = null) {
         if (isRunning.getAndSet(true)) {
@@ -62,7 +76,15 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 }
 
                 // Формируем анонимный отчет с дедуплицированными событиями
-                val rawReport = VoxDiagnosticReport.create(context, null, true)
+                val purpose = if (VoxUpdateChannelManager.instance(context).isBetaChannel())
+                    VoxDiagnosticReport.PURPOSE_AUTO_BETA else VoxDiagnosticReport.PURPOSE_USER_MANUAL
+                val rawReport = VoxDiagnosticReport.create(
+                    context = context,
+                    reportId = null,
+                    includeEvents = true,
+                    reportPurpose = purpose,
+                    autoSubmitted = true
+                )
                 val filteredEvents = rawReport.safeRecentEvents
                     .filter { VoxDiagnosticsPolicy.isEventAllowedByPrivacy(it) }
                 val deduplicatedEvents = VoxDiagnosticsPolicy.deduplicateEvents(filteredEvents)
@@ -77,7 +99,8 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                     }
 
                     override fun onError(errorMessage: String) {
-                        Log.w(TAG, "Periodic diagnostics submission failed: $errorMessage")
+                        Log.w(TAG, "Periodic diagnostics submission failed: $errorMessage, enqueuing offline")
+                        enqueueOfflineReport(finalReport)
                         isRunning.set(false)
                         onComplete?.invoke(false)
                     }
@@ -88,6 +111,67 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 isRunning.set(false)
                 onComplete?.invoke(false)
             }
+        }
+    }
+
+    /**
+     * Запускает обработку инцидента с окном агрегации (30-60с) или немедленно при критической ошибке.
+     */
+    fun triggerIncident(
+        triggerCode: String,
+        isImmediate: Boolean = VoxDiagnosticsPolicy.isFatalOrCriticalError(triggerCode),
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        val delayMs = if (isImmediate) 0L else VoxDiagnosticsPolicy.INCIDENT_AGGREGATION_WINDOW_MS
+
+        synchronized(this) {
+            pendingIncidentTimer?.cancel(false)
+            pendingIncidentTimer = scheduledExecutor.schedule({
+                EXECUTOR.execute {
+                    try {
+                        val canSend = VoxDiagnosticsPolicy.canSendIncidentDiagnostics(context)
+                        if (!canSend) {
+                            Log.d(TAG, "Incident report suppressed by policy/rate-limit for $triggerCode")
+                            onComplete?.invoke(false)
+                            return@execute
+                        }
+
+                        val purpose = if (VoxUpdateChannelManager.instance(context).isBetaChannel())
+                            VoxDiagnosticReport.PURPOSE_AUTO_BETA else VoxDiagnosticReport.PURPOSE_USER_MANUAL
+
+                        val rawReport = VoxDiagnosticReport.create(
+                            context = context,
+                            reportId = null,
+                            includeEvents = true,
+                            reportPurpose = purpose,
+                            autoSubmitted = true,
+                            triggerEvent = triggerCode,
+                            aggregationWindowMs = delayMs
+                        )
+                        val filteredEvents = rawReport.safeRecentEvents
+                            .filter { VoxDiagnosticsPolicy.isEventAllowedByPrivacy(it) }
+                        val deduplicatedEvents = VoxDiagnosticsPolicy.deduplicateEvents(filteredEvents)
+                        val finalReport = rawReport.copy(safeRecentEvents = deduplicatedEvents)
+
+                        VoxDiagnosticsClient.instance().submitReportAsync(finalReport, object : VoxDiagnosticsClient.Callback {
+                            override fun onSuccess(reportId: String) {
+                                Log.i(TAG, "Incident diagnostics submitted: $reportId (trigger=$triggerCode)")
+                                VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(System.currentTimeMillis())
+                                onComplete?.invoke(true)
+                            }
+
+                            override fun onError(errorMessage: String) {
+                                Log.w(TAG, "Incident diagnostics submission failed: $errorMessage, enqueuing offline")
+                                enqueueOfflineReport(finalReport)
+                                onComplete?.invoke(false)
+                            }
+                        })
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Error submitting incident report", e)
+                        onComplete?.invoke(false)
+                    }
+                }
+            }, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
     }
 }

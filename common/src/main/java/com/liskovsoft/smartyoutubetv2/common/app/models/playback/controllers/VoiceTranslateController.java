@@ -128,6 +128,8 @@ public class VoiceTranslateController extends BasePlayerController {
     private long mRequestStartPositionMs;
     private boolean mRequestWasAutoTranslate;
     private boolean mUserSeekedDuringPreparation;
+    private boolean mPausedByTranslationPreparation;
+    private boolean mUserManuallyPaused;
     private final com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine mStateMachine =
             new com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine();
 
@@ -158,6 +160,22 @@ public class VoiceTranslateController extends BasePlayerController {
 
     public Map<String, Object> getTranslationDiagnosticsSummary() {
         return mStateMachine.getDiagnosticsSummary();
+    }
+
+    public boolean isPausedByTranslationPreparation() {
+        return mPausedByTranslationPreparation;
+    }
+
+    public void setPausedByTranslationPreparation(boolean paused) {
+        mPausedByTranslationPreparation = paused;
+    }
+
+    public boolean isUserManuallyPaused() {
+        return mUserManuallyPaused;
+    }
+
+    public void setUserManuallyPaused(boolean paused) {
+        mUserManuallyPaused = paused;
     }
 
     private YandexVotOrchestrator mYandexOrchestrator;
@@ -201,6 +219,12 @@ public class VoiceTranslateController extends BasePlayerController {
                 YandexVotLog.i(TAG, "VOT NEW backend: audible playback active, ducking original audio");
                 duckMainAudio();
                 setState(STATE_ACTIVE);
+                if (mPausedByTranslationPreparation) {
+                    mPausedByTranslationPreparation = false;
+                    if (!mUserManuallyPaused && getPlayer() != null && !getPlayer().getPlayWhenReady()) {
+                        getPlayer().setPlayWhenReady(true);
+                    }
+                }
                 Map<String, String> activeCtx = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.createSafeDiagnosticsContext(
                         Math.max(0L, SystemClock.elapsedRealtime() - mRequestStartTimestamp),
                         "existing",
@@ -558,6 +582,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onPlay() {
+        mUserManuallyPaused = false;
         long mainPos = getPlayer() != null ? getPlayer().getPositionMs() : 0;
         if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
             if (mainPos < 1500) {
@@ -580,6 +605,9 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onPause() {
+        if (!mPausedByTranslationPreparation) {
+            mUserManuallyPaused = true;
+        }
         if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
             mYandexPlaybackAdapter.onPause();
         } else if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
@@ -1044,6 +1072,13 @@ public class VoiceTranslateController extends BasePlayerController {
         mRequestStartPositionMs = getPlayer() != null ? Math.max(0L, getPlayer().getPositionMs()) : 0L;
         mRequestWasAutoTranslate = !mUserArmed;
         mUserSeekedDuringPreparation = false;
+        mUserManuallyPaused = false;
+        if (votData().isPauseWhilePreparingTranslation() && getPlayer() != null && getPlayer().containsMedia() && getPlayer().getPlayWhenReady()) {
+            mPausedByTranslationPreparation = true;
+            getPlayer().setPlayWhenReady(false);
+        } else {
+            mPausedByTranslationPreparation = false;
+        }
 
         setState(STATE_PENDING);
 
@@ -1262,6 +1297,13 @@ public class VoiceTranslateController extends BasePlayerController {
             mRequestStartPositionMs = getPlayer() != null ? Math.max(0L, getPlayer().getPositionMs()) : 0L;
             mRequestWasAutoTranslate = !mUserArmed;
             mUserSeekedDuringPreparation = false;
+            mUserManuallyPaused = false;
+            if (votData().isPauseWhilePreparingTranslation() && getPlayer() != null && getPlayer().containsMedia() && getPlayer().getPlayWhenReady()) {
+                mPausedByTranslationPreparation = true;
+                getPlayer().setPlayWhenReady(false);
+            } else {
+                mPausedByTranslationPreparation = false;
+            }
         } else {
             if (mRequestStartTimestamp == 0) {
                 mRequestStartTimestamp = now;
@@ -1931,6 +1973,12 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         setState(STATE_ACTIVE);
+        if (mPausedByTranslationPreparation) {
+            mPausedByTranslationPreparation = false;
+            if (!mUserManuallyPaused && getPlayer() != null && !getPlayer().getPlayWhenReady()) {
+                getPlayer().setPlayWhenReady(true);
+            }
+        }
         if (mTrackSwitchState == TrackSwitchState.STARTING_VOT) {
             mTrackSwitchState = TrackSwitchState.VOT_ACTIVE;
         }
@@ -2094,6 +2142,12 @@ public class VoiceTranslateController extends BasePlayerController {
         mRequestStartPositionMs = 0;
         mRequestWasAutoTranslate = false;
         mUserSeekedDuringPreparation = false;
+        if (mPausedByTranslationPreparation) {
+            mPausedByTranslationPreparation = false;
+            if (!mUserManuallyPaused && getPlayer() != null && !getPlayer().getPlayWhenReady()) {
+                getPlayer().setPlayWhenReady(true);
+            }
+        }
     }
 
     private void disarmWithMessage(int msgResId) {

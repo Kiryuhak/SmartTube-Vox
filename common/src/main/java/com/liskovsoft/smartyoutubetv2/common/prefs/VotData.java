@@ -18,6 +18,7 @@ public class VotData extends SharedPreferencesBase {
     private static final String TRANSLATION_VOLUME_PERCENT = "translation_volume_percent";
     private static final String AUTO_TRANSLATE = "auto_translate_enabled";
     private static final String AUTO_ACTIVATE_READY_TRANSLATION = "auto_activate_ready_translation";
+    private static final String PAUSE_WHILE_PREPARING_TRANSLATION = "pause_while_preparing_translation";
     private static final String TARGET_LANGUAGE = "target_language";
     private static final String PREFER_YOUTUBE_AUTO_DUB = "prefer_youtube_auto_dub";
     private static final String AUTH_STATE = "yandex_auth_state";
@@ -245,6 +246,14 @@ public class VotData extends SharedPreferencesBase {
 
     public void setAutoActivateReadyTranslation(boolean enabled) {
         putBoolean(AUTO_ACTIVATE_READY_TRANSLATION, enabled);
+    }
+
+    public boolean isPauseWhilePreparingTranslation() {
+        return getBoolean(PAUSE_WHILE_PREPARING_TRANSLATION, false);
+    }
+
+    public void setPauseWhilePreparingTranslation(boolean enabled) {
+        putBoolean(PAUSE_WHILE_PREPARING_TRANSLATION, enabled);
     }
 
     /**

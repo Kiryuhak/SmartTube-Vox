@@ -32,6 +32,7 @@ object VoxStartupProfiler {
     private val stageStartTimes = ConcurrentHashMap<String, Long>()
 
     @JvmStatic
+    @JvmOverloads
     fun onUserOpen(sessionId: Long, engine: String = "AUTO", nowMs: Long = System.currentTimeMillis()) {
         currentSessionId = sessionId
         sessionOpenTimeMs = nowMs
@@ -42,11 +43,13 @@ object VoxStartupProfiler {
     }
 
     @JvmStatic
+    @JvmOverloads
     fun startStage(stage: String, nowMs: Long = System.currentTimeMillis()) {
         stageStartTimes[stage] = nowMs
     }
 
     @JvmStatic
+    @JvmOverloads
     fun finishStage(stage: String, result: String = "OK", nowMs: Long = System.currentTimeMillis()) {
         val start = stageStartTimes.remove(stage) ?: sessionOpenTimeMs
         val elapsed = if (start > 0L) Math.max(0L, nowMs - start) else 0L
@@ -54,6 +57,7 @@ object VoxStartupProfiler {
     }
 
     @JvmStatic
+    @JvmOverloads
     fun recordStage(stage: String, elapsedMs: Long, result: String = "OK", nowMs: Long = System.currentTimeMillis()) {
         val relativeOffset = if (sessionOpenTimeMs > 0L) Math.max(0L, nowMs - sessionOpenTimeMs) else 0L
         stageRecords.add(
@@ -67,9 +71,36 @@ object VoxStartupProfiler {
         )
     }
 
+    const val STAGE_REQUEST = "REQUEST"
+    const val STAGE_MANIFEST = "MANIFEST"
+    const val STAGE_TRACK_SELECT = "TRACK_SELECT"
+    const val STAGE_DECODER_INIT = "DECODER_INIT"
+    const val STAGE_BUFFER_FILL = "BUFFER_FILL"
+    const val STAGE_FIRST_FRAME = "FIRST_FRAME"
+
+    const val ROOT_CAUSE_NETWORK = "NETWORK"
+    const val ROOT_CAUSE_MANIFEST = "MANIFEST"
+    const val ROOT_CAUSE_DECODER = "DECODER"
+    const val ROOT_CAUSE_BUFFER_FILL = "BUFFER_FILL"
+    const val ROOT_CAUSE_UNKNOWN = "UNKNOWN"
+
     @JvmStatic
     fun updateEngine(engine: String) {
         currentEngine = engine
+    }
+
+    @JvmStatic
+    fun classifyStartupRootCause(): String {
+        if (stageRecords.isEmpty()) return ROOT_CAUSE_UNKNOWN
+        val maxRecord = stageRecords.maxByOrNull { it.elapsedMs } ?: return ROOT_CAUSE_UNKNOWN
+        if (maxRecord.elapsedMs < 300L) return ROOT_CAUSE_UNKNOWN
+        return when (maxRecord.stage) {
+            STAGE_REQUEST -> ROOT_CAUSE_NETWORK
+            STAGE_MANIFEST, STAGE_TRACK_SELECT -> ROOT_CAUSE_MANIFEST
+            STAGE_DECODER_INIT -> ROOT_CAUSE_DECODER
+            STAGE_BUFFER_FILL, "BUFFER_LOAD" -> ROOT_CAUSE_BUFFER_FILL
+            else -> ROOT_CAUSE_UNKNOWN
+        }
     }
 
     @JvmStatic
@@ -82,6 +113,7 @@ object VoxStartupProfiler {
             "playbackSessionId" to currentSessionId,
             "engine" to currentEngine,
             "totalStartupMs" to totalStartupMs,
+            "rootCause" to classifyStartupRootCause(),
             "stages" to stageRecords.map { it.toMap() }
         )
     }

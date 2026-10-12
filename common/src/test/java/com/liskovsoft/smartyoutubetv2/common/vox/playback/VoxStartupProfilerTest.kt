@@ -58,4 +58,20 @@ class VoxStartupProfilerTest {
         assertFalse(text.contains("Bearer"))
         assertFalse(text.contains(".googlevideo.com"))
     }
+
+    @Test
+    fun testRootCauseClassification() {
+        val t0 = 20_000L
+        VoxStartupProfiler.onUserOpen(sessionId = 999L, engine = "EXOPLAYER", nowMs = t0)
+        VoxStartupProfiler.startStage(VoxStartupProfiler.STAGE_REQUEST, t0)
+        VoxStartupProfiler.finishStage(VoxStartupProfiler.STAGE_REQUEST, "OK", t0 + 1500L) // 1500ms
+        VoxStartupProfiler.startStage(VoxStartupProfiler.STAGE_BUFFER_FILL, t0 + 1500L)
+        VoxStartupProfiler.finishStage(VoxStartupProfiler.STAGE_BUFFER_FILL, "OK", t0 + 1900L) // 400ms
+
+        val rootCause = VoxStartupProfiler.classifyStartupRootCause()
+        assertEquals(VoxStartupProfiler.ROOT_CAUSE_NETWORK, rootCause)
+
+        val summary = VoxStartupProfiler.getProfileSummary()
+        assertEquals(VoxStartupProfiler.ROOT_CAUSE_NETWORK, summary["rootCause"])
+    }
 }

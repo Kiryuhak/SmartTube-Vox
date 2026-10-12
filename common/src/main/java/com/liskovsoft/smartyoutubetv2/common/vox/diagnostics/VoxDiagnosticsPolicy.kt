@@ -18,10 +18,13 @@ object VoxDiagnosticsPolicy {
 
     const val BETA_DIAGNOSTICS_INTERVAL_MS = 6 * 60 * 60 * 1000L      // 6 часов
     const val STABLE_DIAGNOSTICS_INTERVAL_MS = 72 * 60 * 60 * 1000L   // 72 часа
+    const val INCIDENT_AGGREGATION_WINDOW_MS = 45 * 1000L              // Окно агрегации инцидентов (30-60с)
+    const val INCIDENT_MIN_INTERVAL_MS = 5 * 60 * 1000L                // Минимальный интервал между авто-отчетами об инцидентах
+    const val MAX_OFFLINE_QUEUE_SIZE = 10                              // Ограниченная очередь оффлайн отчетов
     const val MAX_BATCH_EVENTS = 50
 
     /**
-     * Проверяет, разрешена ли отправка автоматической диагностики в текущий момент времени.
+     * Проверяет, разрешена ли отправка автоматической периодической диагностики.
      */
     @JvmStatic
     @JvmOverloads
@@ -30,16 +33,38 @@ object VoxDiagnosticsPolicy {
         val channel = manager.getUpdateChannel()
         val lastSubmission = manager.getLastDiagnosticsSubmissionTimestamp()
 
-        return when (channel) {
-            VoxUpdateChannel.TEST -> {
-                if (!manager.isBetaDiagnosticsEnabled()) return false
-                lastSubmission == 0L || (now - lastSubmission) >= BETA_DIAGNOSTICS_INTERVAL_MS
-            }
-            VoxUpdateChannel.STABLE -> {
-                if (!manager.isStableDiagnosticsEnabled()) return false
-                lastSubmission == 0L || (now - lastSubmission) >= STABLE_DIAGNOSTICS_INTERVAL_MS
-            }
+        return if (manager.isBetaChannel()) {
+            if (!manager.isBetaDiagnosticsEnabled()) return false
+            lastSubmission == 0L || (now - lastSubmission) >= BETA_DIAGNOSTICS_INTERVAL_MS
+        } else {
+            if (!manager.isStableDiagnosticsEnabled()) return false
+            lastSubmission == 0L || (now - lastSubmission) >= STABLE_DIAGNOSTICS_INTERVAL_MS
         }
+    }
+
+    /**
+     * Проверяет, разрешена ли отправка отчёта об инциденте в текущий момент времени.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun canSendIncidentDiagnostics(context: Context, now: Long = System.currentTimeMillis()): Boolean {
+        val manager = VoxUpdateChannelManager.instance(context)
+        val enabled = if (manager.isBetaChannel()) manager.isBetaDiagnosticsEnabled() else manager.isStableDiagnosticsEnabled()
+        if (!enabled) return false
+
+        val lastSubmission = manager.getLastDiagnosticsSubmissionTimestamp()
+        return lastSubmission == 0L || (now - lastSubmission) >= INCIDENT_MIN_INTERVAL_MS
+    }
+
+    /**
+     * Проверяет, является ли код ошибки критическим / фатальным.
+     */
+    @JvmStatic
+    fun isFatalOrCriticalError(code: String): Boolean {
+        return code == VoxLogCode.PLAYER_INIT_FAILED ||
+               code == VoxLogCode.PLAYER_RENDERER_ERROR ||
+               code == VoxLogCode.LOCAL_FILE_OPEN_FAILED ||
+               code == VoxLogCode.DOWNLOAD_FAILED
     }
 
     /**

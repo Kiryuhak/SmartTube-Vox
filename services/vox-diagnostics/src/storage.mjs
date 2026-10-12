@@ -372,7 +372,7 @@ export class ReportStorage {
       if (signature) { query += ' AND error_signature = ?'; params.push(signature); }
       if (hasNotes === true) query += " AND developer_notes != ''";
       if (hasDuplicates === true) query += " AND error_signature != '' AND (SELECT COUNT(*) FROM reports r2 WHERE r2.error_signature = reports.error_signature) > 1";
-      if (attention === true) query += " AND (status IN ('NEW', 'IN_PROGRESS') OR severity IN ('HIGH', 'CRITICAL') OR EXISTS (SELECT 1 FROM issues WHERE issues.signature = reports.error_signature AND issues.reopened_at > 0 AND issues.status = 'IN_PROGRESS'))";
+      if (attention === true) query += " AND status NOT IN ('IGNORED_TEST', 'TEST', 'ignored_test', 'test', 'RESOLVED', 'resolved') AND (status IN ('NEW', 'IN_PROGRESS') OR severity IN ('HIGH', 'CRITICAL') OR EXISTS (SELECT 1 FROM issues WHERE issues.signature = reports.error_signature AND issues.reopened_at > 0 AND issues.status = 'IN_PROGRESS'))";
       if (since) { query += ' AND created_at >= ?'; params.push(Number(since)); }
       if (cursor && sort === 'newest') {
         const [created, id] = String(cursor).split(':');
@@ -415,7 +415,7 @@ export class ReportStorage {
       if (signature) list = list.filter(r => r.error_signature === signature);
       if (hasNotes === true) list = list.filter(r => Boolean(r.developer_notes));
       if (hasDuplicates === true) list = list.filter(r => r.error_signature && [...this.inMemoryReports.values()].some(other => other.report_id !== r.report_id && other.error_signature === r.error_signature));
-      if (attention === true) list = list.filter(r => ['NEW', 'IN_PROGRESS'].includes(normalizeStatus(r.status)) || ['HIGH', 'CRITICAL'].includes(r.severity) || (this.issues.get(r.error_signature)?.reopened_at > 0 && this.issues.get(r.error_signature)?.issue_status === 'IN_PROGRESS'));
+      if (attention === true) list = list.filter(r => !['IGNORED_TEST', 'RESOLVED'].includes(normalizeStatus(r.status)) && (['NEW', 'IN_PROGRESS'].includes(normalizeStatus(r.status)) || ['HIGH', 'CRITICAL'].includes(r.severity) || (this.issues.get(r.error_signature)?.reopened_at > 0 && this.issues.get(r.error_signature)?.issue_status === 'IN_PROGRESS')));
       if (since) list = list.filter(r => r.created_at >= Number(since));
       if (cursor && sort === 'newest') {
         const [created, id] = String(cursor).split(':');

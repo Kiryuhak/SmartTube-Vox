@@ -234,6 +234,12 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 mVotData.isAutoActivateReadyTranslation()));
 
         settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vot_pause_while_preparing),
+                getContext().getString(R.string.vot_pause_while_preparing_desc),
+                option -> mVotData.setPauseWhilePreparingTranslation(option.isSelected()),
+                mVotData.isPauseWhilePreparingTranslation()));
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
                 getContext().getString(R.string.vot_prefer_youtube_dub),
                 getContext().getString(R.string.vot_prefer_youtube_dub_desc),
                 option -> mVotData.setPreferYoutubeAutoDub(option.isSelected()),
@@ -337,6 +343,12 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 getContext().getString(R.string.vox_download_post_watch_setting),
                 postWatchOptions
         );
+
+        settingsPresenter.appendSingleButton(UiOptionItem.from(
+                getContext().getString(R.string.vot_original_language_title),
+                getContext().getString(R.string.vot_original_language_auto),
+                null
+        ));
 
         List<OptionItem> targetLangOptions = new ArrayList<>();
         String currentTarget = mVotData.getTargetLanguage();

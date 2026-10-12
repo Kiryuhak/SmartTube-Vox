@@ -102,6 +102,9 @@ object VoxDiagnosticSanitizer {
     }
 
     @JvmStatic
+    fun sanitizeMessage(message: String?): String = sanitize(message)
+
+    @JvmStatic
     fun sanitizeUrl(url: String?): String {
         if (url.isNullOrBlank()) return ""
         val sanitized = sanitize(url)

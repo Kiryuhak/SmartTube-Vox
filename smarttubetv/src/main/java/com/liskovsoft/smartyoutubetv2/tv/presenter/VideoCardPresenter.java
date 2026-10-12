@@ -361,6 +361,7 @@ public class VideoCardPresenter extends LongClickPresenter {
 
         @Override
         public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+            com.liskovsoft.smartyoutubetv2.common.vox.image.VoxImageRetryPolicy.logSuccess("card_thumbnail");
             return false;
         }
     };
@@ -375,6 +376,7 @@ public class VideoCardPresenter extends LongClickPresenter {
 
         @Override
         public boolean onResourceReady(Bitmap resource, Object model, Target<Bitmap> target, DataSource dataSource, boolean isFirstResource) {
+            com.liskovsoft.smartyoutubetv2.common.vox.image.VoxImageRetryPolicy.logSuccess("card_bitmap");
             return false;
         }
     };

@@ -437,6 +437,10 @@
     <string name="vot_mix_menu_hint">Видео не ставится на паузу. Подберите комфортную громкость.</string>
     <string name="vot_auto_translate">Автоперевод (если язык не русский)</string>
     <string name="vot_auto_translate_desc">Автоматически включать перевод для видео с нерусской аудиодорожкой (английский и др.).</string>
+    <string name="vot_pause_while_preparing">Приостанавливать видео во время подготовки перевода</string>
+    <string name="vot_pause_while_preparing_desc">Ставит воспроизведение на паузу, пока готовится дорожка перевода, и возобновляет его после готовности</string>
+    <string name="vot_original_language_title">Язык оригинала</string>
+    <string name="vot_original_language_auto">Автоопределение</string>
     <string name="vot_auto_activate_ready">Автоматически включать готовый перевод</string>
     <string name="vot_auto_activate_ready_desc">Включать перевод сразу после завершения подготовки</string>
     <string name="vot_translation_activated">Перевод включён</string>
@@ -1015,6 +1019,8 @@
     <string name="vox_diagnostics_mode_stable">Стабильный канал (активна, раз в 72 ч)</string>
     <string name="vox_diagnostics_auto_toggle">Автоматическая отправка диагностики</string>
     <string name="vox_diagnostics_auto_toggle_desc">Анонимный сбор технических ошибок без личных данных</string>
+    <string name="vox_beta_privacy_notice_title">Диагностика бета-версии</string>
+    <string name="vox_beta_privacy_notice_message">Вы используете бета-версию SmartTube VOX. Для быстрого устранения сбоев включена автоматическая анонимная отправка технических ошибок разработчикам.\n\nОтправляются только безопасные технические данные без аккаунтов, истории и токенов. Вы можете отключить отправку в любой момент в разделе «Диагностика и логи».</string>
 
     <string name="vox_ota_error_no_update">У вас установлена последняя версия</string>
     <string name="vox_ota_error_dns">Ошибка DNS при подключении к серверу обновлений</string>

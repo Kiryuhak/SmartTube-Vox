@@ -23,6 +23,8 @@ object VoxImageRetryPolicy {
         REQUEST_FAILED(VoxLogCode.IMAGE_REQUEST_FAILED)
     }
 
+    private val retryAttempts = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+
     @JvmStatic
     fun canRetry(currentAttempt: Int): Boolean {
         return currentAttempt < MAX_RETRIES
@@ -33,6 +35,24 @@ object VoxImageRetryPolicy {
         if (attempt <= 0) return 0L
         val multiplier = 1L shl (attempt - 1).coerceAtMost(4)
         return BASE_BACKOFF_MS * multiplier
+    }
+
+    @JvmStatic
+    fun isCancellationOrRecycled(throwable: Throwable?): Boolean {
+        if (throwable == null) return false
+        var current: Throwable? = throwable
+        while (current != null) {
+            val className = current.javaClass.simpleName.lowercase()
+            val msg = current.message?.lowercase() ?: ""
+            if (className.contains("cancel") || className.contains("recycle") || className.contains("interrupted")) {
+                return true
+            }
+            if (msg.contains("request was cancelled") || msg.contains("target was cleared") || msg.contains("recycled")) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     @JvmStatic
@@ -61,6 +81,11 @@ object VoxImageRetryPolicy {
 
     @JvmStatic
     fun logFailure(throwable: Throwable?, attempt: Int, imageType: String = "thumbnail") {
+        if (isCancellationOrRecycled(throwable)) {
+            // Отмена запроса или переиспользование View в карусели не является сетевой ошибкой
+            return
+        }
+
         val errorType = classifyError(throwable)
         val details = mapOf(
             "attempt" to attempt.toString(),
@@ -68,11 +93,34 @@ object VoxImageRetryPolicy {
             "errorType" to errorType.name
         )
 
-        VoxSafeLogger.w(
-            VoxLogCategory.NETWORK,
-            errorType.code,
-            "Сбой загрузки $imageType (попытка $attempt/$MAX_RETRIES): ${errorType.name}",
-            details
-        )
+        if (attempt < MAX_RETRIES) {
+            retryAttempts.computeIfAbsent(imageType) { java.util.concurrent.atomic.AtomicInteger(0) }.incrementAndGet()
+            VoxSafeLogger.info(
+                VoxLogCategory.UI,
+                VoxLogCode.IMAGE_REQUEST_RETRY,
+                "Повтор загрузки $imageType (попытка $attempt/$MAX_RETRIES): ${errorType.name}",
+                details
+            )
+        } else {
+            VoxSafeLogger.warn(
+                VoxLogCategory.UI,
+                VoxLogCode.IMAGE_REQUEST_FAILED_FINAL,
+                "Окончательный сбой загрузки $imageType (попытка $attempt/$MAX_RETRIES): ${errorType.name}",
+                details
+            )
+        }
+    }
+
+    @JvmStatic
+    fun logSuccess(imageType: String = "thumbnail") {
+        val attempts = retryAttempts.remove(imageType)
+        if (attempts != null && attempts.get() > 0) {
+            VoxSafeLogger.info(
+                VoxLogCategory.UI,
+                VoxLogCode.IMAGE_REQUEST_RECOVERED,
+                "Загрузка $imageType успешно восстановлена после повторной попытки",
+                mapOf("imageType" to imageType)
+            )
+        }
     }
 }

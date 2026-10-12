@@ -17,7 +17,7 @@ import java.util.Locale
  * паролей, cookies или конфиденциальных идентификаторов.
  */
 data class VoxDiagnosticReport(
-    val schema: String = SCHEMA_V2,
+    val schema: String = SCHEMA_V3,
     val reportId: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
     val appVersion: String,
@@ -40,13 +40,22 @@ data class VoxDiagnosticReport(
     val downloadDiagnostics: Map<String, Any>? = null,
     val translationDiagnostics: Map<String, Any>? = null,
     val startupProfile: Map<String, Any>? = null,
-    val safeRecentEvents: List<VoxLogEvent> = emptyList()
+    val safeRecentEvents: List<VoxLogEvent> = emptyList(),
+    val reportPurpose: String = PURPOSE_USER_MANUAL,
+    val autoSubmitted: Boolean = false,
+    val triggerEvent: String? = null,
+    val channel: String? = null,
+    val aggregationWindowMs: Long = 0L
 ) {
     companion object {
         const val SCHEMA_V1 = "vox-diagnostic-report-v1"
         const val SCHEMA_V2 = "vox-diagnostic-report-v2"
         const val SCHEMA_V3 = "vox-diagnostic-report-v3"
         const val MAX_REPORT_EVENTS = 50
+
+        const val PURPOSE_AUTO_BETA = "AUTO_BETA"
+        const val PURPOSE_USER_MANUAL = "USER_MANUAL"
+        const val PURPOSE_EMULATOR_TEST = "EMULATOR_TEST"
 
         @JvmStatic
         fun wrapJsonValue(value: Any?): Any {
@@ -82,7 +91,15 @@ data class VoxDiagnosticReport(
 
         @JvmStatic
         @JvmOverloads
-        fun create(context: Context, reportId: String? = null, includeEvents: Boolean = true): VoxDiagnosticReport {
+        fun create(
+            context: Context,
+            reportId: String? = null,
+            includeEvents: Boolean = true,
+            reportPurpose: String = PURPOSE_USER_MANUAL,
+            autoSubmitted: Boolean = false,
+            triggerEvent: String? = null,
+            aggregationWindowMs: Long = 0L
+        ): VoxDiagnosticReport {
             val manager = VoxCompatibilityManager.instance(context)
             val profile = manager.getDeviceProfile(false)
             val policy = manager.getCodecPolicy()
@@ -210,7 +227,12 @@ data class VoxDiagnosticReport(
                 downloadDiagnostics = downloadDiag,
                 translationDiagnostics = transDiag,
                 startupProfile = startupSummary,
-                safeRecentEvents = recentEvents
+                safeRecentEvents = recentEvents,
+                reportPurpose = reportPurpose,
+                autoSubmitted = autoSubmitted,
+                triggerEvent = triggerEvent,
+                channel = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getBuildChannel().id,
+                aggregationWindowMs = aggregationWindowMs
             )
         }
     }
@@ -220,6 +242,11 @@ data class VoxDiagnosticReport(
         root.put("schema", schema)
         if (reportId != null) root.put("reportId", reportId)
         root.put("timestamp", timestamp)
+        root.put("reportPurpose", reportPurpose)
+        root.put("autoSubmitted", autoSubmitted)
+        if (triggerEvent != null) root.put("triggerEvent", triggerEvent)
+        if (channel != null) root.put("channel", channel)
+        if (aggregationWindowMs > 0) root.put("aggregationWindowMs", aggregationWindowMs)
         root.put("appVersion", appVersion)
         root.put("appVersionCode", appVersionCode)
         root.put("platform", platform)
@@ -279,6 +306,9 @@ data class VoxDiagnosticReport(
             sb.append("ID отчёта: ").append(reportId).append("\n")
         }
         sb.append("Схема отчёта: ").append(schema).append("\n")
+        sb.append("Назначение: ").append(reportPurpose).append("\n")
+        if (channel != null) sb.append("Канал сборки: ").append(channel).append("\n")
+        if (triggerEvent != null) sb.append("Событие-триггер: ").append(triggerEvent).append("\n")
         sb.append("Приложение: ").append(appVersion).append(" (").append(appVersionCode).append(")\n")
         sb.append("Платформа: ").append(platform).append("\n")
         sb.append("Производитель: ").append(manufacturer).append("\n")

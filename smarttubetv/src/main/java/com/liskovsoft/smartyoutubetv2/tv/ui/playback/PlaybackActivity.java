@@ -76,7 +76,13 @@ public class PlaybackActivity extends LeanbackActivity {
             mPlaybackFragment.onDispatchKeyEvent(event);
         }
 
-        return super.dispatchKeyEvent(event);
+        boolean handled = super.dispatchKeyEvent(event);
+
+        if (!handled && mPlaybackFragment != null) {
+            handled = mPlaybackFragment.handleFallbackKeyEvent(event);
+        }
+
+        return handled;
     }
 
     @Override

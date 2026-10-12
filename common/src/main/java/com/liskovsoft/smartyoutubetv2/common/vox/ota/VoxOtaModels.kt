@@ -16,6 +16,32 @@ enum class VoxUpdateChannel(val id: String, val titleRu: String, val description
 }
 
 /**
+ * Канонические каналы сборки SmartTube VOX (Canonical Build Channels).
+ */
+enum class VoxBuildChannel(val id: String, val titleRu: String, val isPreRelease: Boolean) {
+    DEV("dev", "Разработка (Dev)", true),
+    ALPHA("alpha", "Альфа (Alpha)", true),
+    BETA("beta", "Бета (Beta)", true),
+    RC("rc", "Кандидат в релиз (RC)", true),
+    STABLE("stable", "Стабильный (Stable)", false);
+
+    companion object {
+        @JvmStatic
+        fun fromVersion(versionName: String?): VoxBuildChannel {
+            if (versionName == null) return STABLE
+            val lower = versionName.lowercase()
+            return when {
+                lower.contains("-dev") -> DEV
+                lower.contains("-alpha") -> ALPHA
+                lower.contains("-beta") || lower.contains("beta") -> BETA
+                lower.contains("-rc") -> RC
+                else -> STABLE
+            }
+        }
+    }
+}
+
+/**
  * Стадии процесса проверки и установки обновления OTA.
  */
 enum class VoxOtaStage(val id: String) {

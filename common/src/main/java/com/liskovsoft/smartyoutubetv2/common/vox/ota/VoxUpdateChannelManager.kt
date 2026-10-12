@@ -24,6 +24,7 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
         private const val KEY_STABLE_DIAGNOSTICS_ENABLED = "stable_diagnostics_enabled"
         private const val KEY_LAST_DIAGNOSTICS_TIMESTAMP = "last_diagnostics_timestamp"
         private const val KEY_SEEN_TEST_WARNING = "seen_test_warning"
+        private const val KEY_SEEN_BETA_PRIVACY_NOTICE = "seen_beta_privacy_notice"
 
         @Volatile
         private var sInstance: VoxUpdateChannelManager? = null
@@ -34,6 +35,29 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
                 sInstance ?: VoxUpdateChannelManager(context.applicationContext).also { sInstance = it }
             }
         }
+
+        @JvmStatic
+        fun isAutoDiagnosticsAllowedByDefault(versionName: String): Boolean {
+            return VoxBuildChannel.fromVersion(versionName).isPreRelease
+        }
+    }
+
+    /**
+     * Возвращает версию приложения из PackageManager или константу.
+     */
+    fun getAppVersionName(): String {
+        return try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            "32.56-vox.8.2-beta.2"
+        }
+    }
+
+    /**
+     * Возвращает канонический канал сборки (DEV, ALPHA, BETA, RC, STABLE).
+     */
+    fun getBuildChannel(): VoxBuildChannel {
+        return VoxBuildChannel.fromVersion(getAppVersionName())
     }
 
     /**
@@ -60,17 +84,25 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
     }
 
     /**
-     * Проверяет, активен ли тестовый/бета канал.
+     * Явный сброс согласия на бета-диагностику при переходе на стабильный канал.
      */
-    fun isBetaChannel(): Boolean {
-        return getUpdateChannel() == VoxUpdateChannel.TEST
+    fun resetBetaConsentOnSwitchToStable() {
+        prefs.edit().putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false).apply()
     }
 
     /**
-     * Согласие на автоматическую диагностику тестовых версий (раз в 6 часов).
+     * Проверяет, активен ли тестовый/бета канал.
+     */
+    fun isBetaChannel(): Boolean {
+        return getUpdateChannel() == VoxUpdateChannel.TEST || getBuildChannel().isPreRelease
+    }
+
+    /**
+     * Согласие на автоматическую диагностику тестовых версий (Beta/Dev/Alpha/RC по умолчанию включено).
      */
     fun isBetaDiagnosticsEnabled(): Boolean {
-        return prefs.getBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+        val defaultEnabled = getBuildChannel().isPreRelease
+        return prefs.getBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, defaultEnabled)
     }
 
     fun setBetaDiagnosticsEnabled(enabled: Boolean) {
@@ -78,7 +110,7 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
     }
 
     /**
-     * Согласие на редкую диагностику стабильных версий (раз в 72 часа).
+     * Согласие на редкую диагностику стабильных версий (по умолчанию строго выключено - добровольный opt-in).
      */
     fun isStableDiagnosticsEnabled(): Boolean {
         return prefs.getBoolean(KEY_STABLE_DIAGNOSTICS_ENABLED, false)
@@ -108,6 +140,17 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
 
     fun setSeenTestChannelWarning(seen: Boolean) {
         prefs.edit().putBoolean(KEY_SEEN_TEST_WARNING, seen).apply()
+    }
+
+    /**
+     * Флаг первого показа уведомления о политике конфиденциальности бета-версии.
+     */
+    fun hasSeenBetaPrivacyNotice(): Boolean {
+        return prefs.getBoolean(KEY_SEEN_BETA_PRIVACY_NOTICE, false)
+    }
+
+    fun setSeenBetaPrivacyNotice(seen: Boolean) {
+        prefs.edit().putBoolean(KEY_SEEN_BETA_PRIVACY_NOTICE, seen).apply()
     }
 
     /**

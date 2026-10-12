@@ -25,7 +25,8 @@ enum class VoxLogCategory(val displayNameRu: String) {
     DIAGNOSTICS("Диагностика"),
     BACKGROUND("Фоновый режим"),
     OTA("Обновление ПО"),
-    CHANNEL_GROUP("Группы каналов")
+    CHANNEL_GROUP("Группы каналов"),
+    UI("Интерфейс")
 }
 
 object VoxLogCode {
@@ -200,8 +201,28 @@ object VoxLogCode {
     const val CARD_QUALITY_MISMATCH = "CARD_QUALITY_MISMATCH"
     const val AGE_BADGE_BOUND = "AGE_BADGE_BOUND"
     const val IMAGE_REQUEST_FAILED = "IMAGE_REQUEST_FAILED"
+    const val IMAGE_REQUEST_RETRY = "IMAGE_REQUEST_RETRY"
+    const val IMAGE_REQUEST_RECOVERED = "IMAGE_REQUEST_RECOVERED"
+    const val IMAGE_REQUEST_FAILED_FINAL = "IMAGE_REQUEST_FAILED_FINAL"
     const val IMAGE_DNS_ERROR = "IMAGE_DNS_ERROR"
     const val IMAGE_TIMEOUT = "IMAGE_TIMEOUT"
+
+    // Player HUD & Controls Lifecycle
+    const val HUD_SESSION_STARTED = "HUD_SESSION_STARTED"
+    const val HUD_SESSION_ENDED = "HUD_SESSION_ENDED"
+    const val HUD_CONTROLS_ATTACH_STARTED = "HUD_CONTROLS_ATTACH_STARTED"
+    const val HUD_CONTROLS_ATTACHED = "HUD_CONTROLS_ATTACHED"
+    const val HUD_CONTROLS_DETACHED = "HUD_CONTROLS_DETACHED"
+    const val HUD_SHOW_REQUESTED = "HUD_SHOW_REQUESTED"
+    const val HUD_SHOWN = "HUD_SHOWN"
+    const val HUD_HIDE_REQUESTED = "HUD_HIDE_REQUESTED"
+    const val HUD_HIDDEN = "HUD_HIDDEN"
+    const val HUD_FOCUS_RESTORED = "HUD_FOCUS_RESTORED"
+    const val HUD_STALE_CALLBACK_DROPPED = "HUD_STALE_CALLBACK_DROPPED"
+    const val HUD_STATE_INCONSISTENT = "HUD_STATE_INCONSISTENT"
+    const val HUD_SELF_HEAL_STARTED = "HUD_SELF_HEAL_STARTED"
+    const val HUD_SELF_HEAL_SUCCESS = "HUD_SELF_HEAL_SUCCESS"
+    const val HUD_SELF_HEAL_FAILED = "HUD_SELF_HEAL_FAILED"
 
     // Offline / Downloaded Playback Probe & Observability
     const val OFFLINE_PLAYBACK_OPENED = "OFFLINE_PLAYBACK_OPENED"

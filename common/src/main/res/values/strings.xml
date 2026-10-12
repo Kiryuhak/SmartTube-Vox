@@ -441,6 +441,10 @@
     <string name="vot_mix_menu_hint">Video keeps playing. Adjust balance between original and translation.</string>
     <string name="vot_auto_translate">Auto-translate (non-Russian audio)</string>
     <string name="vot_auto_translate_desc">Automatically start translation for non-Russian audio (English, etc.).</string>
+    <string name="vot_pause_while_preparing">Pause video while preparing translation</string>
+    <string name="vot_pause_while_preparing_desc">Pauses playback until translation is ready, then automatically resumes.</string>
+    <string name="vot_original_language_title">Original language</string>
+    <string name="vot_original_language_auto">Auto detection</string>
     <string name="vot_pending_eta">Translation in about %d min</string>
     <string name="vot_pending_eta_short">~%d min</string>
     <string name="vot_pending_long">Waiting…</string>
@@ -1100,6 +1104,8 @@
     <string name="vox_diagnostics_mode_stable">Stable Channel (Active, every 72h)</string>
     <string name="vox_diagnostics_auto_toggle">Automatic diagnostics submission</string>
     <string name="vox_diagnostics_auto_toggle_desc">Anonymous collection of technical errors without personal data</string>
+    <string name="vox_beta_privacy_notice_title">Beta Version Diagnostics</string>
+    <string name="vox_beta_privacy_notice_message">You are using the SmartTube VOX Beta version. To quickly identify and fix issues, automatic anonymous technical error reporting is enabled by default.\n\nOnly safe technical telemetry without accounts, history, or tokens is sent. You can disable this anytime in Settings -> Diagnostics &amp; Logs.</string>
 
     <string name="vox_ota_error_no_update">You have the latest version installed</string>
     <string name="vox_ota_error_dns">DNS error while reaching update server</string>

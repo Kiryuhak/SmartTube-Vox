@@ -259,8 +259,34 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         //ExoPlayerInitializer.enableAudioFocus(mPlayer, false); // Disable focus in PIP
     }
 
+    public void ensureFocus() {
+        View root = getView();
+        if (root != null && getActivity() != null) {
+            View currentFocus = getActivity().getCurrentFocus();
+            if (currentFocus == null || !root.hasFocus()) {
+                root.requestFocus();
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_FOCUS_RESTORED,
+                        "Фокус ввода восстановлен на PlaybackFragment"
+                );
+            }
+        }
+    }
+
+    public boolean handleFallbackKeyEvent(KeyEvent event) {
+        if (event == null || event.getAction() != KeyEvent.ACTION_DOWN) {
+            return false;
+        }
+        int keyCode = event.getKeyCode();
+        if (mPlaybackPresenter != null) {
+            return mPlaybackPresenter.onKeyDown(keyCode);
+        }
+        return false;
+    }
+
     public void onDispatchKeyEvent(KeyEvent event) {
-        // NOP
+        ensureFocus();
     }
 
     public void onDispatchTouchEvent(MotionEvent event) {
@@ -449,7 +475,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             mPlayerGlue.getPlayerAdapter().onDetachedFromHost();
             mPlayerGlue.setHost(null);
             mPlayerGlue = null;
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_CONTROLS_DETACHED,
+                    "VideoPlayerGlue отвязан от хоста и освобождён"
+            );
         }
+        mIsControlsShownPreviously = null;
         if (mDebugInfoManager != null) {
             mDebugInfoManager.show(false);
             mDebugInfoManager = null;
@@ -504,6 +536,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     }
 
     private void createPlayerGlue() {
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_CONTROLS_ATTACH_STARTED,
+                "Инициализация и привязка VideoPlayerGlue"
+        );
         PlayerAdapter playerAdapter = new LeanbackPlayerAdapter(getContext(), mPlayer, UPDATE_DELAY_MS); // NOTE: possible context memory leak
 
         OnActionClickedListener playerActionListener = new PlayerActionListener();
@@ -515,6 +552,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             }
         }; // NOTE: possible context memory leak
         mPlayerGlue.setHost(new SurfacePlaybackFragmentGlueHost(this));
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_CONTROLS_ATTACHED,
+                "VideoPlayerGlue успешно привязан к хосту"
+        );
         mPlayerGlue.setSeekEnabled(true);
         mPlayerGlue.setControlsOverlayAutoHideEnabled(false); // don't show controls on some player events like play/pause/end
         StoryboardSeekDataProvider.setSeekProvider(mPlayerGlue);
@@ -870,6 +912,7 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
 
     @Override
     public void setVideo(Video video) {
+        mIsControlsShownPreviously = null;
         mExoPlayerController.setVideo(video);
 
         if (mPlayerGlue != null && video != null) {
@@ -1278,9 +1321,18 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     public void showControlsOverlay(boolean runAnimation) {
         super.showControlsOverlay(mIsUIAnimationsEnabled);
 
-        // Do throttle. Called so many times. Rely on boxing because initial state is unknown.
-        if (mIsControlsShownPreviously != null && mIsControlsShownPreviously) {
+        boolean leanbackVisible = isControlsOverlayVisible();
+        // Do throttle only if both our state and Leanback indicate it's already visible
+        if (mIsControlsShownPreviously != null && mIsControlsShownPreviously && leanbackVisible) {
             return;
+        }
+
+        if (mIsControlsShownPreviously != null && mIsControlsShownPreviously && !leanbackVisible) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.warn(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_STATE_INCONSISTENT,
+                    "Рассинхронизация состояния HUD: mIsControlsShownPreviously=true, но Leanback скрыт. Сброс состояния."
+            );
         }
 
         updatePlayerBackground();
@@ -1300,8 +1352,9 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     public void hideControlsOverlay(boolean runAnimation) {
         super.hideControlsOverlay(mIsUIAnimationsEnabled);
 
-        // Do throttle. Called so many times. Rely on boxing because initial state is unknown.
-        if (mIsControlsShownPreviously != null && !mIsControlsShownPreviously) {
+        boolean leanbackVisible = isControlsOverlayVisible();
+        // Do throttle only if both our state and Leanback indicate it's already hidden
+        if (mIsControlsShownPreviously != null && !mIsControlsShownPreviously && !leanbackVisible) {
             return;
         }
 

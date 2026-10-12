@@ -60,6 +60,24 @@ public class PlayerUIController extends BasePlayerController {
     private boolean mDebugViewEnabled;
     private boolean mIsMetadataLoaded;
     private long mOverlayHideTimeMs;
+    private long mPlaybackSessionId = 0;
+    private long mHudSessionId = 0;
+    private long mScheduledPlaybackSessionId = 0;
+    private long mScheduledHudSessionId = 0;
+    private boolean mSelfHealAttempted = false;
+
+    public long getHudSessionId() {
+        return mHudSessionId;
+    }
+
+    public long getPlaybackSessionId() {
+        return mPlaybackSessionId;
+    }
+
+    public boolean isSelfHealAttempted() {
+        return mSelfHealAttempted;
+    }
+
     private final Runnable mSuggestionsResetHandler = () -> {
         if (getPlayer() == null) {
             return;
@@ -71,9 +89,24 @@ public class PlayerUIController extends BasePlayerController {
             return;
         }
 
+        if (mScheduledHudSessionId != mHudSessionId || mScheduledPlaybackSessionId != mPlaybackSessionId) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.warn(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_STALE_CALLBACK_DROPPED,
+                    "Отброшен устаревший таймер скрытия HUD (запланирован hudSession=" + mScheduledHudSessionId +
+                    "/playbackSession=" + mScheduledPlaybackSessionId + ", текущие: hudSession=" + mHudSessionId + "/playbackSession=" + mPlaybackSessionId + ")"
+            );
+            return;
+        }
+
         // Playing the video and dialog overlay isn't shown
         if (getPlayer().isPlaying() && !getAppDialogPresenter().isDialogShown()) {
             if (getPlayer().isControlsShown()) { // don't hide when suggestions is shown
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_HIDE_REQUESTED,
+                        "Таймаут автоскрытия HUD (sessionId=" + mHudSessionId + ")"
+                );
                 getPlayer().showOverlay(false);
                 mOverlayHideTimeMs = System.currentTimeMillis();
             }
@@ -107,6 +140,17 @@ public class PlayerUIController extends BasePlayerController {
 
     @Override
     public void onNewVideo(Video item) {
+        mPlaybackSessionId++;
+        mHudSessionId++;
+        mSelfHealAttempted = false;
+        disposeTimeouts();
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SESSION_STARTED,
+                "Начата новая сессия HUD id=" + mHudSessionId + ", playbackSessionId=" + mPlaybackSessionId +
+                (item != null ? (" для видео: " + item.getTitle()) : "")
+        );
+
         enableUiAutoHideTimeout();
 
         if (item != null && !item.equals(getVideo())) {
@@ -117,6 +161,11 @@ public class PlayerUIController extends BasePlayerController {
 
     @Override
     public void onControlsShown(boolean shown) {
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                shown ? com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SHOWN : com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_HIDDEN,
+                shown ? "Элементы управления отображены" : "Элементы управления скрыты"
+        );
         disableUiAutoHideTimeout();
 
         if (shown) {
@@ -360,6 +409,11 @@ public class PlayerUIController extends BasePlayerController {
         mEngineReady = false;
 
         disposeTimeouts();
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SESSION_ENDED,
+                "Сессия HUD завершена id=" + mHudSessionId
+        );
     }
 
     @Override
@@ -664,6 +718,8 @@ public class PlayerUIController extends BasePlayerController {
         Log.d(TAG, "Starting auto hide ui timer...");
         disableUiAutoHideTimeout();
         if (mEngineReady && getPlayerData().getUiHideTimeoutSec() > 0) {
+            mScheduledPlaybackSessionId = mPlaybackSessionId;
+            mScheduledHudSessionId = mHudSessionId;
             mHandler.postDelayed(mUiAutoHideHandler, getPlayerData().getUiHideTimeoutSec() * 1_000L);
         }
     }
@@ -723,12 +779,53 @@ public class PlayerUIController extends BasePlayerController {
         return false;
     }
 
+    private void showOverlayWithSelfHeal(boolean show) {
+        if (getPlayer() == null) {
+            return;
+        }
+
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                show ? com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SHOW_REQUESTED : com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_HIDE_REQUESTED,
+                (show ? "Запрос показа HUD (sessionId=" : "Запрос скрытия HUD (sessionId=") + mHudSessionId + ")"
+        );
+
+        getPlayer().showOverlay(show);
+
+        if (show && !getPlayer().isOverlayShown() && !mSelfHealAttempted) {
+            mSelfHealAttempted = true;
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.warn(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SELF_HEAL_STARTED,
+                    "HUD не отобразился по запросу пользователя. Выполняется ограниченный self-heal (попытка 1/1, sessionId=" + mHudSessionId + ")"
+            );
+            getPlayer().showControls(true);
+            if (getPlayer().isOverlayShown()) {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SELF_HEAL_SUCCESS,
+                        "Self-heal HUD успешно восстановил интерфейс"
+                );
+            } else {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.error(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SELF_HEAL_FAILED,
+                        "Self-heal HUD не смог восстановить элементы управления"
+                );
+            }
+        }
+    }
+
     private boolean handleMenuKey(int keyCode) {
+        if (getPlayer() == null) {
+            return false;
+        }
+
         boolean controlsShown = getPlayer().isOverlayShown();
         boolean suggestionsShown = getPlayer().isSuggestionsShown();
 
         if (KeyHelpers.isMenuKey(keyCode) && !suggestionsShown) {
-            getPlayer().showOverlay(!controlsShown);
+            showOverlayWithSelfHeal(!controlsShown);
 
             if (controlsShown) {
                 enableSuggestionsResetTimeout();
@@ -748,7 +845,7 @@ public class PlayerUIController extends BasePlayerController {
         if (KeyHelpers.isConfirmKey(keyCode) && !controlsShown) {
             switch (getPlayerData().getOKButtonBehavior()) {
                 case PlayerData.OK_ONLY_UI:
-                    getPlayer().showOverlay(true);
+                    showOverlayWithSelfHeal(true);
                     return true; // don't show ui
                 case PlayerData.OK_UI_AND_PAUSE:
                     // NOP
