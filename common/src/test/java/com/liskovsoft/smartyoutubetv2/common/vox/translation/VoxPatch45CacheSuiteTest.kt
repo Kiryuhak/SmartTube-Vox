@@ -83,7 +83,7 @@ class VoxPatch45CacheSuiteTest {
         val res = VoxTranslationSessionCache.lookup("testVideo2", null, "en", "ru", false)
         assertTrue(res is VoxTranslationSessionCache.LookupResult.Hit)
         val hit = res as VoxTranslationSessionCache.LookupResult.Hit
-        assertEquals("PERSISTED_SESSION", hit.source)
+        assertEquals("PERSISTED_CACHE", hit.source)
         assertEquals(1L, VoxTranslationSessionCache.getStats()["persistedHitCount"])
     }
 

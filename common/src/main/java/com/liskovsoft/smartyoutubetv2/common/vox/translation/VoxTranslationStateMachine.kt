@@ -28,6 +28,7 @@ class VoxTranslationStateMachine {
         NONE,
         MEMORY_CACHE,
         PERSISTED_SESSION,
+        PERSISTED_CACHE,
         EXISTING_PROVIDER_SESSION,
         BACKEND_READY_LOOKUP
     }
@@ -301,7 +302,8 @@ class VoxTranslationStateMachine {
         }
         val src = when (reuseSource) {
             ReuseSource.MEMORY_CACHE -> TranslationSource.LOCAL_CACHE.label
-            ReuseSource.PERSISTED_SESSION -> TranslationSource.PERSISTED_SESSION.label
+            ReuseSource.PERSISTED_SESSION,
+            ReuseSource.PERSISTED_CACHE -> TranslationSource.PERSISTED_SESSION.label
             ReuseSource.BACKEND_READY_LOOKUP -> TranslationSource.BACKEND_READY.label
             ReuseSource.EXISTING_PROVIDER_SESSION -> TranslationSource.BACKEND_PENDING.label
             else -> TranslationSource.NEW_REQUEST.label

@@ -47,6 +47,7 @@ object VoxTranslationSessionCache {
         val durationSec: Double,
         val useLivelyVoice: Boolean,
         val createdAtMs: Long,
+        var lastAccessedMs: Long = createdAtMs,
         val schemaVersion: Int = CURRENT_SCHEMA_VERSION
     )
 
@@ -77,7 +78,6 @@ object VoxTranslationSessionCache {
     @JvmStatic
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        loadPersistedRecords()
     }
 
     @JvmStatic
@@ -160,6 +160,7 @@ object VoxTranslationSessionCache {
         }
 
         if (memRecord != null && isValid(memRecord, effectiveTarget)) {
+            memRecord.lastAccessedMs = System.currentTimeMillis()
             val elapsedMs = System.currentTimeMillis() - startMs
             val ctx = mapOf(
                 "elapsedMs" to elapsedMs.toString(),
@@ -181,16 +182,17 @@ object VoxTranslationSessionCache {
         }
 
         if (persistedRecord != null && isValid(persistedRecord, effectiveTarget)) {
-            memoryCache[key] = persistedRecord
+            persistedRecord.lastAccessedMs = System.currentTimeMillis()
+            memoryCache[key] = persistedRecord // Cache warming for subsequent lookups in this process!
             val elapsedMs = System.currentTimeMillis() - startMs
             val ctx = mapOf(
                 "elapsedMs" to elapsedMs.toString(),
-                "source" to "PERSISTED_SESSION",
+                "source" to "PERSISTED_CACHE",
                 "finalPath" to "CACHE"
             )
-            VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATION_PERSISTED_SESSION_HIT, "Translation persisted session hit", ctx)
+            VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATION_PERSISTED_SESSION_HIT, "Translation persisted cache hit", ctx)
             incrementPersistedHit()
-            return LookupResult.Hit(persistedRecord, "PERSISTED_SESSION")
+            return LookupResult.Hit(persistedRecord, "PERSISTED_CACHE")
         }
 
         // 3. Existing active job
@@ -275,7 +277,7 @@ object VoxTranslationSessionCache {
         )
 
         if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
-            val oldestKey = memoryCache.minByOrNull { it.value.createdAtMs }?.key
+            val oldestKey = memoryCache.minByOrNull { it.value.lastAccessedMs }?.key
             if (oldestKey != null) {
                 memoryCache.remove(oldestKey)
             }
@@ -308,7 +310,35 @@ object VoxTranslationSessionCache {
         }
         val ttl = customTtlMs ?: DEFAULT_TTL_MS
         val ageMs = System.currentTimeMillis() - record.createdAtMs
-        return ageMs in 0..ttl
+        if (ageMs !in 0..ttl) return false
+
+        val urlExpiryMs = extractUrlExpiryTimestampMs(record.audioUrl)
+        if (urlExpiryMs != null && System.currentTimeMillis() >= urlExpiryMs) {
+            return false
+        }
+        return true
+    }
+
+    private fun extractUrlExpiryTimestampMs(url: String): Long? {
+        return try {
+            if (!url.contains("?")) return null
+            val query = url.substringAfter("?")
+            for (param in query.split("&")) {
+                val parts = param.split("=")
+                if (parts.size == 2) {
+                    val key = parts[0].lowercase()
+                    if (key == "expires" || key == "expire") {
+                        val epochSec = parts[1].toLongOrNull()
+                        if (epochSec != null && epochSec in 1_000_000_000L..5_000_000_000L) {
+                            return epochSec * 1000L
+                        }
+                    }
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun getPersistedRecord(key: String): TranslationRecord? {
@@ -323,6 +353,7 @@ object VoxTranslationSessionCache {
                 p.edit().remove("rec_$key").commit()
                 return null
             }
+            val lastAccessed = json.optLong("lastAccessedMs", createdAt)
             TranslationRecord(
                 videoId = videoId,
                 canonicalUrl = json.optString("canonicalUrl", ""),
@@ -332,6 +363,7 @@ object VoxTranslationSessionCache {
                 durationSec = json.optDouble("durationSec", 0.0),
                 useLivelyVoice = json.optBoolean("useLivelyVoice", false),
                 createdAtMs = createdAt,
+                lastAccessedMs = if (lastAccessed > 0) lastAccessed else createdAt,
                 schemaVersion = json.optInt("schemaVersion", CURRENT_SCHEMA_VERSION)
             )
         } catch (e: Exception) {
@@ -352,25 +384,28 @@ object VoxTranslationSessionCache {
                 put("durationSec", record.durationSec)
                 put("useLivelyVoice", record.useLivelyVoice)
                 put("createdAtMs", record.createdAtMs)
+                put("lastAccessedMs", record.lastAccessedMs)
                 put("schemaVersion", CURRENT_SCHEMA_VERSION)
             }
-            val editor = p.edit().putString("rec_$key", json.toString())
-            trimPersistedRecordsIfNeeded(p, editor)
-            editor.apply()
+            val recKey = "rec_$key"
+            val editor = p.edit().putString(recKey, json.toString())
+            trimPersistedRecordsIfNeeded(p, editor, recKey, record.lastAccessedMs)
+            editor.commit()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist translation record: %s", e.message)
         }
     }
 
-    private fun trimPersistedRecordsIfNeeded(p: SharedPreferences, editor: SharedPreferences.Editor) {
+    private fun trimPersistedRecordsIfNeeded(p: SharedPreferences, editor: SharedPreferences.Editor, newKey: String, newLastAccess: Long) {
         try {
             val records = mutableListOf<Pair<String, Long>>()
+            records.add(Pair(newKey, newLastAccess))
             for ((k, v) in p.all) {
-                if (k.startsWith("rec_") && v is String) {
+                if (k.startsWith("rec_") && k != newKey && v is String) {
                     try {
                         val jobj = JSONObject(v)
-                        val created = jobj.optLong("createdAtMs", 0L)
-                        records.add(Pair(k, created))
+                        val lastAccess = jobj.optLong("lastAccessedMs", jobj.optLong("createdAtMs", 0L))
+                        records.add(Pair(k, lastAccess))
                     } catch (_: Exception) {
                         editor.remove(k)
                     }
