@@ -277,7 +277,11 @@ object VoxTranslationSessionCache {
         )
 
         if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
-            val oldestKey = memoryCache.minByOrNull { it.value.lastAccessedMs }?.key
+            val oldestKey = memoryCache.entries.minWithOrNull(
+                compareBy<Map.Entry<String, TranslationRecord>> { it.value.lastAccessedMs }
+                    .thenBy { it.value.createdAtMs }
+                    .thenBy { it.key }
+            )?.key
             if (oldestKey != null) {
                 memoryCache.remove(oldestKey)
             }
@@ -309,8 +313,14 @@ object VoxTranslationSessionCache {
             return false
         }
         val ttl = customTtlMs ?: DEFAULT_TTL_MS
-        val ageMs = System.currentTimeMillis() - record.createdAtMs
-        if (ageMs !in 0..ttl) return false
+        val nowMs = System.currentTimeMillis()
+        val ageMs = nowMs - record.createdAtMs
+        if (ageMs < 0) {
+            // Guard against backward clock skew up to 10 minutes, but reject far-future timestamps
+            if (-ageMs > 10 * 60_000L) return false
+        } else if (ageMs > ttl) {
+            return false
+        }
 
         val urlExpiryMs = extractUrlExpiryTimestampMs(record.audioUrl)
         if (urlExpiryMs != null && System.currentTimeMillis() >= urlExpiryMs) {
@@ -372,27 +382,54 @@ object VoxTranslationSessionCache {
         }
     }
 
+    private val diskExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "vox-cache-disk").apply { isDaemon = true }
+    }
+
+    @JvmStatic
+    fun flushDiskPersistenceForTesting() {
+        try {
+            val future = diskExecutor.submit { }
+            future.get(2, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: Exception) {}
+    }
+
     private fun persistRecord(key: String, record: TranslationRecord) {
         val p = prefs ?: return
-        try {
-            val json = JSONObject().apply {
-                put("videoId", record.videoId)
-                put("canonicalUrl", record.canonicalUrl)
-                put("sourceLang", record.sourceLang)
-                put("targetLang", record.targetLang)
-                put("audioUrl", record.audioUrl)
-                put("durationSec", record.durationSec)
-                put("useLivelyVoice", record.useLivelyVoice)
-                put("createdAtMs", record.createdAtMs)
-                put("lastAccessedMs", record.lastAccessedMs)
-                put("schemaVersion", CURRENT_SCHEMA_VERSION)
+        val task = Runnable {
+            try {
+                val json = JSONObject().apply {
+                    put("videoId", record.videoId)
+                    put("canonicalUrl", record.canonicalUrl)
+                    put("sourceLang", record.sourceLang)
+                    put("targetLang", record.targetLang)
+                    put("audioUrl", record.audioUrl)
+                    put("durationSec", record.durationSec)
+                    put("useLivelyVoice", record.useLivelyVoice)
+                    put("createdAtMs", record.createdAtMs)
+                    put("lastAccessedMs", record.lastAccessedMs)
+                    put("schemaVersion", CURRENT_SCHEMA_VERSION)
+                }
+                val recKey = "rec_$key"
+                val editor = p.edit().putString(recKey, json.toString())
+                trimPersistedRecordsIfNeeded(p, editor, recKey, record.lastAccessedMs)
+                editor.apply()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to persist translation record: %s", e.message)
             }
-            val recKey = "rec_$key"
-            val editor = p.edit().putString(recKey, json.toString())
-            trimPersistedRecordsIfNeeded(p, editor, recKey, record.lastAccessedMs)
-            editor.commit()
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to persist translation record: %s", e.message)
+        }
+
+        val isMainThread = try {
+            val looper = android.os.Looper.myLooper()
+            looper != null && looper == android.os.Looper.getMainLooper()
+        } catch (_: Throwable) {
+            false
+        }
+
+        if (isMainThread) {
+            diskExecutor.execute(task)
+        } else {
+            task.run()
         }
     }
 
@@ -412,7 +449,7 @@ object VoxTranslationSessionCache {
                 }
             }
             if (records.size > MAX_PERSISTED_ENTRIES) {
-                records.sortBy { it.second }
+                records.sortWith(compareBy<Pair<String, Long>> { it.second }.thenBy { it.first })
                 val toRemove = records.size - MAX_PERSISTED_ENTRIES
                 for (i in 0 until toRemove) {
                     editor.remove(records[i].first)
@@ -535,6 +572,7 @@ object VoxTranslationSessionCache {
 
     @JvmStatic
     fun clearPersisted() {
+        flushDiskPersistenceForTesting()
         val p = prefs ?: return
         try {
             val editor = p.edit()

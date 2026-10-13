@@ -16,7 +16,9 @@ class VoxTranslationStateMachine {
         READY,
         TIMEOUT,
         FAILED,
-        CANCELLED
+        CANCELLED;
+
+        fun isTerminal(): Boolean = this == READY || this == TIMEOUT || this == FAILED || this == CANCELLED
     }
 
     enum class ProgressUpdateType {
@@ -102,6 +104,7 @@ class VoxTranslationStateMachine {
     fun transitionTo(newState: State, nowMs: Long = System.currentTimeMillis()) {
         val prev = currentState
         if (prev == newState) return
+        if (prev.isTerminal() && newState != State.IDLE) return
 
         val stageElapsed = if (stageStartedAtMs > 0L) Math.max(0L, nowMs - stageStartedAtMs) else 0L
 

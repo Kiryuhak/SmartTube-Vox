@@ -29,6 +29,9 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (!com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG) {
+            return;
+        }
         if (intent == null || !ACTION_TEST_YANDEX_VOT.equals(intent.getAction())) {
             return;
         }
