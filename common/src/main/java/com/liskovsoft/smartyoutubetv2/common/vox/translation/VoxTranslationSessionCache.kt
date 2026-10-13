@@ -352,6 +352,7 @@ object VoxTranslationSessionCache {
     }
 
     private fun getPersistedRecord(key: String): TranslationRecord? {
+        flushDiskPersistenceForTesting()
         val p = prefs ?: return null
         val rawJson = p.getString("rec_$key", null) ?: return null
         return try {
@@ -566,6 +567,7 @@ object VoxTranslationSessionCache {
 
     @JvmStatic
     fun clearMemory() {
+        flushDiskPersistenceForTesting()
         memoryCache.clear()
         activeJobs.clear()
     }

@@ -44,6 +44,10 @@ public class SidebarService implements ProfileChangeListener {
         return sInstance;
     }
 
+    public static void resetInstance() {
+        sInstance = null;
+    }
+
     public Collection<Video> getPinnedItems() {
         return Collections.unmodifiableList(mPinnedItems);
     }
@@ -269,6 +273,15 @@ public class SidebarService implements ProfileChangeListener {
                     MediaGroup.TYPE_BLOCKED_CHANNELS
             }));
         }
+        if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
+            mPrefs.setDownloadedSectionMigrated(true);
+        }
+    }
+
+    public void resetSidebar() {
+        mPinnedItems.clear();
+        initPinnedItems();
+        persistState();
     }
 
     private void cleanupPinnedItems() {
@@ -308,8 +321,15 @@ public class SidebarService implements ProfileChangeListener {
         // Backward compatibility
         enableSection(MediaGroup.TYPE_SETTINGS, true);
 
-        if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext) && !isSectionPinned(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED)) {
-            enableSection(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED, true);
+        // One-time migration for existing users upgrading to VOX:
+        // ensure Downloads section is added on first upgrade, but respect user choice if they hide it subsequently.
+        if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
+            if (!mPrefs.isDownloadedSectionMigrated()) {
+                if (!isSectionPinned(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED)) {
+                    enableSection(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED, true);
+                }
+                mPrefs.setDownloadedSectionMigrated(true);
+            }
         }
 
         cleanupPinnedItems();

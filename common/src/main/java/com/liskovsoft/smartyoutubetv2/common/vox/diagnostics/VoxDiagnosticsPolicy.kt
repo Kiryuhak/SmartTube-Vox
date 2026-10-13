@@ -150,11 +150,13 @@ object VoxDiagnosticsPolicy {
         }
     }
 
-    private fun isSyntheticFixtureEvent(event: VoxLogEvent): Boolean {
+    @JvmStatic
+    fun isSyntheticFixtureEvent(event: VoxLogEvent): Boolean {
         if (event.code != VoxLogCode.DOWNLOAD_STATE_INCONSISTENT) return false
         val msg = event.message.lowercase(java.util.Locale.ROOT)
         val dlId = event.context?.get("downloadId")?.lowercase(java.util.Locale.ROOT) ?: ""
-        return msg.contains("p37-") || msg.contains("test-fixture-") || dlId.startsWith("p37-") || dlId.startsWith("test-fixture-")
+        return msg.contains("p37-") || msg.contains("test-fixture-") || msg.contains("test-dl-") ||
+            dlId.startsWith("p37-") || dlId.startsWith("test-fixture-") || dlId.startsWith("test-dl-")
     }
 
     /**
@@ -199,6 +201,22 @@ object VoxDiagnosticsPolicy {
         // Image recovery
         if (event.code == VoxLogCode.IMAGE_REQUEST_FAILED) {
             if (laterEvents.any { it.code == VoxLogCode.IMAGE_REQUEST_RECOVERED }) return true
+        }
+
+        // Player recovery
+        if (event.category == VoxLogCategory.PLAYER || event.code.startsWith("PLAYER_")) {
+            val playerErrors = listOf(
+                VoxLogCode.PLAYER_HTTP_ERROR, VoxLogCode.PLAYER_REBUFFER, VoxLogCode.PLAYER_SOURCE_ERROR,
+                VoxLogCode.PLAYER_RENDERER_ERROR, VoxLogCode.PLAYER_DECODER_ERROR
+            )
+            if (event.code in playerErrors) {
+                val playerSuccesses = listOf(
+                    "PLAYER_PLAYBACK_PROGRESS", "PLAYER_STATE_READY",
+                    "PLAYER_RECOVERED", "PLAYER_SOURCE_RECOVERED",
+                    VoxLogCode.OFFLINE_PLAYBACK_OPENED
+                )
+                if (laterEvents.any { it.code in playerSuccesses }) return true
+            }
         }
 
         return false
@@ -248,10 +266,13 @@ object VoxDiagnosticsPolicy {
         val deduplicated = mutableListOf<VoxLogEvent>()
         for (event in events) {
             val last = deduplicated.lastOrNull()
+            val isSameInconsistentDownload = last != null &&
+                last.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT &&
+                event.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT
             if (last != null &&
                 last.category == event.category &&
                 last.code == event.code &&
-                last.message == event.message
+                (last.message == event.message || isSameInconsistentDownload)
             ) {
                 // Объединяем счетчики повторов
                 deduplicated[deduplicated.size - 1] = last.copy(
@@ -271,6 +292,11 @@ object VoxDiagnosticsPolicy {
      */
     @JvmStatic
     fun isEventAllowedByPrivacy(event: VoxLogEvent): Boolean {
+        // Exclude synthetic test fixture events from production reports
+        if (isSyntheticFixtureEvent(event)) {
+            return false
+        }
+
         // Проверка сообщения на наличие сырых несанитизированных секретов
         if (VoxDiagnosticSanitizer.sanitize(event.message) != event.message) {
             return false

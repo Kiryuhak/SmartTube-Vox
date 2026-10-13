@@ -67,4 +67,36 @@ class DiagnosticsPrivacyAllowlistTest {
         )
         assertFalse(VoxDiagnosticsPolicy.isEventAllowedByPrivacy(event))
     }
+
+    @Test
+    fun testSyntheticFixtureEventsAreRejectedByPrivacyPolicy() {
+        val fixtureEvent1 = VoxLogEvent(
+            timestamp = System.currentTimeMillis(),
+            level = VoxLogLevel.WARNING,
+            category = VoxLogCategory.DOWNLOAD,
+            code = "DOWNLOAD_STATE_INCONSISTENT",
+            message = "Inconsistent download state for p37-trans-rick-1234"
+        )
+        assertFalse(VoxDiagnosticsPolicy.isEventAllowedByPrivacy(fixtureEvent1))
+
+        val fixtureEvent2 = VoxLogEvent(
+            timestamp = System.currentTimeMillis(),
+            level = VoxLogLevel.WARNING,
+            category = VoxLogCategory.DOWNLOAD,
+            code = "DOWNLOAD_STATE_INCONSISTENT",
+            message = "State inconsistent",
+            context = mapOf("downloadId" to "test-fixture-download-99")
+        )
+        assertFalse(VoxDiagnosticsPolicy.isEventAllowedByPrivacy(fixtureEvent2))
+
+        val fixtureEvent3 = VoxLogEvent(
+            timestamp = System.currentTimeMillis(),
+            level = VoxLogLevel.WARNING,
+            category = VoxLogCategory.DOWNLOAD,
+            code = "DOWNLOAD_STATE_INCONSISTENT",
+            message = "State inconsistent",
+            context = mapOf("downloadId" to "test-dl-item-01")
+        )
+        assertFalse(VoxDiagnosticsPolicy.isEventAllowedByPrivacy(fixtureEvent3))
+    }
 }

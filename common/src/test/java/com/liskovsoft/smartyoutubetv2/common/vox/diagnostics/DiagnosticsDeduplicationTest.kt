@@ -68,4 +68,28 @@ class DiagnosticsDeduplicationTest {
         val deduplicated = VoxDiagnosticsPolicy.deduplicateEvents(listOf(event1, event2, event3))
         assertEquals(3, deduplicated.size)
     }
+
+    @Test
+    fun testDownloadStateInconsistentCoalesced() {
+        val event1 = VoxLogEvent(
+            timestamp = 1000L,
+            level = VoxLogLevel.WARNING,
+            category = VoxLogCategory.DOWNLOAD,
+            code = "DOWNLOAD_STATE_INCONSISTENT",
+            message = "Inconsistent download state: missing content file",
+            context = mapOf("reason" to "missing_file")
+        )
+        val event2 = VoxLogEvent(
+            timestamp = 2000L,
+            level = VoxLogLevel.WARNING,
+            category = VoxLogCategory.DOWNLOAD,
+            code = "DOWNLOAD_STATE_INCONSISTENT",
+            message = "Inconsistent download state: missing content file",
+            context = mapOf("reason" to "missing_file")
+        )
+        val deduplicated = VoxDiagnosticsPolicy.deduplicateEvents(listOf(event1, event2))
+        assertEquals(1, deduplicated.size)
+        assertEquals(2, deduplicated[0].repeatCount)
+        assertEquals(2000L, deduplicated[0].timestamp)
+    }
 }

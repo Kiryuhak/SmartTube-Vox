@@ -358,7 +358,7 @@ class VoxDownloadStorage(val context: Context) {
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
                             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
                             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
-                            "Download completed state invariant violated for $downloadId: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
+                            "Download completed state invariant violated: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
                         )
                     }
                 } else if (!packagingValid) {
@@ -367,7 +367,7 @@ class VoxDownloadStorage(val context: Context) {
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_REPAIRED,
-                        "Download completed state metadata repaired for $downloadId: valid file found, restored packaging flags"
+                        "Download completed state metadata repaired: valid file found, restored packaging flags"
                     )
                     try {
                         json.put("packagingCompleted", true)

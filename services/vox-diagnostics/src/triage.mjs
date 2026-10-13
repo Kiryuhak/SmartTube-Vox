@@ -207,8 +207,8 @@ export function isSyntheticTestReport(report = {}) {
 export function structuredEvents(report = {}) {
   const raw = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
   const mapped = raw.map(event => {
-    const category = enumValue(event.category || report.errorCategory, 'GENERAL');
     const code = enumValue(event.event || event.code, 'EVENT');
+    const category = enumValue(event.category || inferCategoryFromCode(code), 'GENERAL');
     const inferredSubsystem = category === 'CHANNEL_GROUP' ? 'CHANNEL_GROUPS' :
       ['MEDIA3', 'CODEC', 'PLAYBACK'].includes(category) ? 'PLAYER' :
       category === 'COMPATIBILITY' ? 'AUTO_SETUP' :
@@ -220,6 +220,14 @@ export function structuredEvents(report = {}) {
       /p37-|test-fixture-|test-dl-/i.test(String(event.message || '')) ||
       /p37-|test-fixture-|test-dl-/i.test(String(event.context?.downloadId || event.safeContext?.downloadId || ''))
     );
+    let eventErrorCategory = null;
+    if (event.errorCategory) {
+      eventErrorCategory = enumValue(event.errorCategory);
+    } else if (level === 'ERROR') {
+      eventErrorCategory = enumValue(code);
+    } else if (level === 'WARN' || level === 'WARNING') {
+      eventErrorCategory = enumValue(inferCategoryFromCode(code) || code);
+    }
     return {
       timestamp: Number(event.timestamp || event.ts || report.timestamp) || 0,
       category,
@@ -229,7 +237,7 @@ export function structuredEvents(report = {}) {
       severity: SEVERITIES.includes(severity) ? severity : severityForEvent(code, level, event.repeatCount || 1),
       level,
       result: enumValue(event.result),
-      errorCategory: enumValue(event.errorCategory || (level === 'ERROR' ? code : report.errorCategory)),
+      errorCategory: eventErrorCategory,
       safeContext: safeContext(event.safeContext || event.context),
       repeatCount: Number.isInteger(event.repeatCount) ? Math.min(Math.max(event.repeatCount, 1), 100000) : 1,
       ...(Number.isFinite(event.durationMs) && event.durationMs >= 0 ? { durationMs: event.durationMs } : {}),
@@ -242,11 +250,9 @@ export function structuredEvents(report = {}) {
     const last = aggregated[aggregated.length - 1];
     if (last && last.event === ev.event) {
       if (ev.event === 'DOWNLOAD_STATE_INCONSISTENT') {
-        const lastJob = last.safeContext?.downloadId || last.safeContext?.jobId;
-        const curJob = ev.safeContext?.downloadId || ev.safeContext?.jobId;
-        const lastReason = last.safeContext?.reason;
-        const curReason = ev.safeContext?.reason;
-        if (lastJob === curJob && lastReason === curReason) {
+        const lastReason = last.safeContext?.reason || last.safeContext?.state;
+        const curReason = ev.safeContext?.reason || ev.safeContext?.state;
+        if (!lastReason || lastReason === curReason || !curReason) {
           last.repeatCount = (last.repeatCount || 1) + (ev.repeatCount || 1);
           last.timestamp = Math.max(last.timestamp, ev.timestamp);
           continue;
@@ -329,6 +335,15 @@ export function classifyReport(report = {}) {
         ev.recovered = true;
         ev.recoveryEvent = later.event;
         break;
+      }
+      // Player error recovery
+      if ((ev.category === 'PLAYER' || ev.event.startsWith('PLAYER_')) &&
+          ['PLAYER_HTTP_ERROR', 'PLAYER_REBUFFER', 'PLAYER_ERROR', 'PLAYER_SOURCE_FAILED'].includes(ev.event)) {
+        if (['PLAYER_PLAYBACK_PROGRESS', 'PLAYER_SOURCE_RECOVERED', 'PLAYER_RECOVERED', 'PLAYER_STATE_READY'].includes(later.event)) {
+          ev.recovered = true;
+          ev.recoveryEvent = later.event;
+          break;
+        }
       }
     }
   }

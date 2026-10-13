@@ -21,6 +21,7 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     private static final String STATE_UPDATER_DATA = "state_updater_data";
     private static final String CHANNEL_GROUP_DATA = "channel_group_data";
     private static final String SIDEBAR_DATA = "sidebar_data";
+    private static final String DOWNLOADED_SECTION_MIGRATED = "downloaded_section_migrated";
     private static final String VIEW_MANAGER_DATA = "view_manager_data";
     private static final String WEB_PROXY_URI = "web_proxy_uri";
     private static final String WEB_PROXY_ENABLED = "web_proxy_enabled";
@@ -107,6 +108,14 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     public void setSidebarData(String data) {
         // Always use multiple profiles
         setData(getProfileKey(SIDEBAR_DATA,  true), data);
+    }
+
+    public boolean isDownloadedSectionMigrated() {
+        return getBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), false);
+    }
+
+    public void setDownloadedSectionMigrated(boolean migrated) {
+        putBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), migrated);
     }
 
     public String getProfileData(String key) {
