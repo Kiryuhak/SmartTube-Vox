@@ -128,10 +128,14 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
         )
     }
 
+    val diskWriteCountForTest = java.util.concurrent.atomic.AtomicInteger(0)
+
     fun clearOfflineQueue() {
         synchronized(queueLock) {
-            offlineQueue.clear()
-            saveToDiskLocked()
+            if (offlineQueue.isNotEmpty() || File(context.filesDir, QUEUE_FILE_NAME).exists()) {
+                offlineQueue.clear()
+                saveToDiskLocked()
+            }
         }
     }
 
@@ -168,6 +172,7 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
 
     private fun saveToDiskLocked() {
         try {
+            diskWriteCountForTest.incrementAndGet()
             val file = File(context.filesDir, QUEUE_FILE_NAME)
             if (offlineQueue.isEmpty()) {
                 if (file.exists()) file.delete()
@@ -289,18 +294,23 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
     private fun flushOfflineQueueInternal(forceBypassBackoff: Boolean, onComplete: CompletionCallback?) {
         val entry = synchronized(queueLock) {
             val now = System.currentTimeMillis()
-            offlineQueue.removeAll {
+            val removedExpired = offlineQueue.removeAll {
                 val age = now - it.queuedTimestampMs
                 age > VoxDiagnosticsPolicy.MAX_OFFLINE_QUEUE_AGE_MS || it.retryCount >= VoxDiagnosticsPolicy.MAX_OFFLINE_RETRY_COUNT
             }
             if (offlineQueue.isEmpty()) {
-                saveToDiskLocked()
+                if (removedExpired) {
+                    saveToDiskLocked()
+                }
                 return@synchronized null
             }
             val eligibleIndex = offlineQueue.indexOfFirst { forceBypassBackoff || now >= it.nextRetryTimestampMs }
             if (eligibleIndex >= 0) {
                 offlineQueue.removeAt(eligibleIndex)
             } else {
+                if (removedExpired) {
+                    saveToDiskLocked()
+                }
                 null
             }
         }
@@ -385,12 +395,11 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
      */
     @JvmOverloads
     fun schedulePeriodicCheck(onComplete: CompletionCallback? = null) {
-        if (isRunning.getAndSet(true)) {
-            onComplete?.onComplete(false)
-            return
-        }
-
         EXECUTOR.execute {
+            if (isRunning.getAndSet(true)) {
+                onComplete?.onComplete(false)
+                return@execute
+            }
             try {
                 val canSend = VoxDiagnosticsPolicy.canSendPeriodicDiagnostics(context)
                 if (!canSend) {

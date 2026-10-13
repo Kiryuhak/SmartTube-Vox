@@ -126,6 +126,14 @@ object VoxSafeLogger {
         rawContext: Map<String, String>?,
         throwable: Throwable?
     ) {
+        if (level == VoxLogLevel.DEBUG) {
+            try {
+                Log.d(TAG, "[$category][$code] $rawMessage")
+            } catch (ignored: Throwable) {
+            }
+            return
+        }
+
         val sanitizedCode = VoxDiagnosticSanitizer.sanitize(code).take(64)
         var sanitizedMsg = VoxDiagnosticSanitizer.sanitize(rawMessage).take(MAX_MESSAGE_LENGTH)
 

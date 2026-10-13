@@ -565,6 +565,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         mIsUIAnimationsEnabled = getPlayerTweaksData().isUIAnimationsEnabled();
 
         mExoPlayerController.setPlayerView(mPlayerGlue);
+
+        Video currentVideo = mExoPlayerController.getVideo();
+        if (currentVideo != null) {
+            mPlayerGlue.setTitle(currentVideo.getTitleFull() != null ? currentVideo.getTitleFull() : "...");
+            mPlayerGlue.setSubtitle(currentVideo.getSecondTitleFull() != null ? createSubtitle(currentVideo) : "...");
+            mPlayerGlue.setVideo(currentVideo);
+        }
     }
 
     private void createSubtitleManager() {

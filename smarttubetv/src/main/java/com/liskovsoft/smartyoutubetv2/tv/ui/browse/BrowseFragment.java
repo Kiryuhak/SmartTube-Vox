@@ -470,6 +470,10 @@ public class BrowseFragment extends BrowseSupportFragment implements BrowseView 
         }
 
         mIsFragmentCreated = false;
+
+        if (getTitleView() instanceof com.liskovsoft.smartyoutubetv2.tv.ui.widgets.browse.NavigateTitleView) {
+            ((com.liskovsoft.smartyoutubetv2.tv.ui.widgets.browse.NavigateTitleView) getTitleView()).applyPipParameters();
+        }
     }
 
     /**

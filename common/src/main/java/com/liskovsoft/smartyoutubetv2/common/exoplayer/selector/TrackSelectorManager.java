@@ -469,14 +469,49 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         invalidate();
     }
 
+    private boolean mPreferTranslatedLocalAudio;
+
     public void setMergedSource(boolean mergedSource) {
         mIsMergedSource = mergedSource;
+    }
+
+    public void setPreferTranslatedLocalAudio(boolean prefer) {
+        mPreferTranslatedLocalAudio = prefer;
+    }
+
+    public static MediaTrack findTranslatedLocalAudioTrack(MediaTrack[][] mediaTracks) {
+        if (mediaTracks == null) {
+            return null;
+        }
+        MediaTrack mpegFallback = null;
+        for (MediaTrack[] group : mediaTracks) {
+            if (group == null) continue;
+            for (MediaTrack track : group) {
+                if (track == null || track.format == null) continue;
+                String lang = track.format.language != null ? track.format.language.toLowerCase() : "";
+                if (lang.startsWith("ru") || lang.startsWith("rus")) {
+                    return track;
+                }
+                if ("audio/mpeg".equalsIgnoreCase(track.format.sampleMimeType) && mpegFallback == null) {
+                    mpegFallback = track;
+                }
+            }
+        }
+        return mpegFallback;
     }
 
     private MediaTrack findBestMatch(MediaTrack originTrack) {
         Log.d(TAG, "findBestMatch: Starting: " + originTrack.format);
 
         Renderer renderer = mRenderers[originTrack.rendererIndex];
+
+        if (mPreferTranslatedLocalAudio && originTrack instanceof AudioTrack && renderer != null) {
+            MediaTrack translatedTrack = findTranslatedLocalAudioTrack(renderer.mediaTracks);
+            if (translatedTrack != null) {
+                Log.i(TAG, "findBestMatch: Preferring local translated audio track: " + translatedTrack.format);
+                return translatedTrack;
+            }
+        }
 
         MediaTrack result = createAutoSelection(originTrack.rendererIndex);
 

@@ -52,10 +52,19 @@ class VoxLogStore private constructor(private val appContext: Context) {
         File(appContext.filesDir, LOG_FILE_NAME)
     }
 
+    private val diskExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "VoxLogStore-IO").apply { isDaemon = true }
+    }
+    private var pendingSaveFuture: java.util.concurrent.ScheduledFuture<*>? = null
+
+    val mainThreadDiskIoCount = java.util.concurrent.atomic.AtomicInteger(0)
+    val backgroundDiskWriteCount = java.util.concurrent.atomic.AtomicInteger(0)
+
     private val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val dateFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
     fun addEvent(event: VoxLogEvent) {
+        val immediateFlush = event.level == VoxLogLevel.ERROR
         synchronized(lock) {
             val now = System.currentTimeMillis()
             pruneExpiredEventsLocked(now)
@@ -70,7 +79,7 @@ class VoxLogStore private constructor(private val appContext: Context) {
                         repeatCount = (last.repeatCount + 1).coerceAtMost(100000),
                         context = event.context
                     )
-                    saveToDiskLocked()
+                    scheduleSaveToDiskLocked(false)
                     return
                 }
                 val sidebarCount = memoryEvents.count { it.code == VoxLogCode.SIDEBAR_FOCUS_CHANGED }
@@ -99,7 +108,7 @@ class VoxLogStore private constructor(private val appContext: Context) {
                             repeatCount = (last.repeatCount + 1).coerceAtMost(100000),
                             context = updatedContext
                         )
-                        saveToDiskLocked()
+                        scheduleSaveToDiskLocked(false)
                         return
                     }
                 }
@@ -122,7 +131,7 @@ class VoxLogStore private constructor(private val appContext: Context) {
             }
             memoryEvents.add(event)
 
-            saveToDiskLocked()
+            scheduleSaveToDiskLocked(immediateFlush)
         }
     }
 
@@ -170,6 +179,8 @@ class VoxLogStore private constructor(private val appContext: Context) {
     fun clearLogs() {
         synchronized(lock) {
             memoryEvents.clear()
+            pendingSaveFuture?.cancel(false)
+            pendingSaveFuture = null
             try {
                 if (logFile.exists()) {
                     logFile.delete()
@@ -253,25 +264,58 @@ class VoxLogStore private constructor(private val appContext: Context) {
         }
     }
 
-    private fun saveToDiskLocked() {
-        try {
-            val array = JSONArray()
-            for (ev in memoryEvents) {
-                array.put(ev.toJson())
-            }
-            val jsonString = array.toString()
+    private fun scheduleSaveToDiskLocked(immediate: Boolean) {
+        if (immediate) {
+            pendingSaveFuture?.cancel(false)
+            pendingSaveFuture = diskExecutor.schedule({ flushSnapshotToDisk() }, 0L, TimeUnit.MILLISECONDS)
+        } else if (pendingSaveFuture == null || pendingSaveFuture?.isDone == true) {
+            pendingSaveFuture = diskExecutor.schedule({ flushSnapshotToDisk() }, 1500L, TimeUnit.MILLISECONDS)
+        }
+    }
 
-            // Check max byte limit
-            val bytes = jsonString.toByteArray(StandardCharsets.UTF_8)
-            if (bytes.size > MAX_FILE_BYTES) {
-                // Remove oldest quarter if exceeded
-                val dropCount = memoryEvents.size / 4
-                if (dropCount > 0 && dropCount < memoryEvents.size) {
-                    for (i in 0 until dropCount) {
+    fun flushToDiskSyncForTest() {
+        try {
+            diskExecutor.submit { flushSnapshotToDisk() }.get(5, TimeUnit.SECONDS)
+        } catch (ignored: Exception) {
+        }
+    }
+
+    fun hasPersistedLogFile(): Boolean = logFile.exists() && logFile.length() > 0L
+
+    private fun flushSnapshotToDisk() {
+        val isMainThread = try {
+            android.os.Looper.getMainLooper() != null && android.os.Looper.myLooper() == android.os.Looper.getMainLooper()
+        } catch (ignored: Throwable) {
+            false
+        }
+        if (isMainThread) {
+            mainThreadDiskIoCount.incrementAndGet()
+        } else {
+            backgroundDiskWriteCount.incrementAndGet()
+        }
+
+        val snapshot: List<VoxLogEvent> = synchronized(lock) {
+            ArrayList(memoryEvents)
+        }
+
+        try {
+            var workingList = snapshot
+            var bytes: ByteArray
+            while (true) {
+                val array = JSONArray()
+                for (ev in workingList) {
+                    array.put(ev.toJson())
+                }
+                bytes = array.toString().toByteArray(StandardCharsets.UTF_8)
+                if (bytes.size <= MAX_FILE_BYTES || workingList.size <= 4) {
+                    break
+                }
+                val dropCount = workingList.size / 4
+                workingList = workingList.drop(dropCount)
+                synchronized(lock) {
+                    while (memoryEvents.size > workingList.size && memoryEvents.isNotEmpty()) {
                         memoryEvents.removeAt(0)
                     }
-                    saveToDiskLocked()
-                    return
                 }
             }
 

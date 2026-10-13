@@ -151,12 +151,24 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
             return false;
         }
 
+        if (!isInPipMode() && getContext() != null
+                && com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.instance(getContext()).getBackgroundMode()
+                == com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.BACKGROUND_MODE_DEFAULT) {
+            return false;
+        }
+
         Context ctx = getContext();
         if (ctx instanceof Activity) {
             return Utils.checkActivity((Activity) ctx);
         }
 
         return true;
+    }
+
+    public void clearEndedSessionIfNotBackground() {
+        if (!isRunningInBackground()) {
+            mVideo = null;
+        }
     }
 
     public boolean isInPipMode() {
@@ -255,6 +267,7 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
     @Override
     public void onFinish() {
         process(PlayerEventListener::onFinish);
+        clearEndedSessionIfNotBackground();
     }
 
     @Override
@@ -291,6 +304,7 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
     @Override
     public void onViewDestroyed() {
         process(ViewEventListener::onViewDestroyed);
+        clearEndedSessionIfNotBackground();
     }
 
     @Override
@@ -328,6 +342,7 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
         getTickleManager().removeListener(this);
 
         process(PlayerEventListener::onEngineReleased);
+        clearEndedSessionIfNotBackground();
     }
 
     @Override

@@ -135,7 +135,6 @@ public class ComplexImageView extends RelativeLayout {
         if (text != null && !text.isEmpty()) {
             mAgeBadge.setText(text);
             mAgeBadge.setVisibility(View.VISIBLE);
-            mAgeBadge.bringToFront();
         } else {
             mAgeBadge.setVisibility(View.GONE);
         }

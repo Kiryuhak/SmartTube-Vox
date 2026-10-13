@@ -160,10 +160,7 @@ public class NavigateTitleView extends TitleView implements OnDataChange, Accoun
             mLanguageView.setVisibility(mSearchVisibility);
         }
 
-        if (mExitPip != null && (PlaybackPresenter.instance(getContext()).isRunningInBackground() || mSearchVisibility != View.VISIBLE)) {
-            mExitPip.setVisibility(mSearchVisibility);
-            mPipTitle.setVisibility(mSearchVisibility);
-        }
+        applyPipParameters();
 
         if (mIsGlobalClockEnabled) {
             mGlobalClock.setVisibility(mBrandingVisibility);
@@ -265,15 +262,22 @@ public class NavigateTitleView extends TitleView implements OnDataChange, Accoun
         updateAccountIcon();
     }
 
-    private void applyPipParameters() {
-        if (mExitPip != null) {
-            int newVisibility = PlaybackPresenter.instance(getContext()).isRunningInBackground() ? mSearchVisibility : View.INVISIBLE;
-            mExitPip.setVisibility(newVisibility);
-            mPipTitle.setVisibility(newVisibility);
+    public void applyPipParameters() {
+        if (mExitPip != null && mPipTitle != null) {
+            PlaybackPresenter playbackPresenter = PlaybackPresenter.instance(getContext());
+            Video video = playbackPresenter.getVideo();
+            boolean showPip = playbackPresenter.isRunningInBackground() && video != null && mSearchVisibility == View.VISIBLE;
 
-            if (newVisibility == View.VISIBLE) {
-                Video video = PlaybackPresenter.instance(getContext()).getVideo();
-                mPipTitle.setText(video != null ? String.format("%s - %s", video.getTitle(), video.getAuthor()) : "");
+            if (showPip) {
+                String title = video.getTitle() != null ? video.getTitle() : "";
+                String author = video.getAuthor();
+                mPipTitle.setText(author != null && !author.isEmpty() ? String.format("%s - %s", title, author) : title);
+                mExitPip.setVisibility(View.VISIBLE);
+                mPipTitle.setVisibility(View.VISIBLE);
+            } else {
+                mPipTitle.setText("");
+                mExitPip.setVisibility(View.GONE);
+                mPipTitle.setVisibility(View.GONE);
             }
         }
     }

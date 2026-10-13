@@ -39,7 +39,28 @@ object VoxImageRetryPolicy {
 
     @JvmStatic
     fun isCancellationOrRecycled(throwable: Throwable?): Boolean {
-        if (throwable == null) return false
+        if (throwable == null) return true
+        try {
+            if (throwable.javaClass.name.contains("GlideException")) {
+                val rootCausesMethod = throwable.javaClass.getMethod("getRootCauses")
+                val rootCauses = rootCausesMethod.invoke(throwable) as? List<*>
+                if (rootCauses != null && rootCauses.isEmpty()) {
+                    return true
+                }
+                if (rootCauses != null) {
+                    for (cause in rootCauses) {
+                        val t = cause as? Throwable ?: continue
+                        val cName = t.javaClass.simpleName.lowercase()
+                        val cMsg = t.message?.lowercase() ?: ""
+                        if (cName.contains("cancel") || cName.contains("recycle") || cName.contains("interrupted") ||
+                            cMsg.contains("request was cancelled") || cMsg.contains("target was cleared") || cMsg.contains("recycled")) {
+                            return true
+                        }
+                    }
+                }
+            }
+        } catch (ignored: Throwable) {
+        }
         var current: Throwable? = throwable
         while (current != null) {
             val className = current.javaClass.simpleName.lowercase()

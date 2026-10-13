@@ -209,6 +209,7 @@ public class PlaybackActivity extends LeanbackActivity {
                 exitBackgroundAudioOnly();
             }
             if (mPlaybackFragment != null) {
+                mPlaybackFragment.blockEngine(false);
                 mPlaybackFragment.setMediaSessionReleaseReason("USER_EXIT");
             }
             if (getPlayerTweaksData().isKeepFinishedActivityEnabled()) {
@@ -218,6 +219,9 @@ public class PlaybackActivity extends LeanbackActivity {
                 // Player with TextureView keeps running in background because onStop() fired with huge delay (~5sec).
                 mPlaybackFragment.maybeReleasePlayer();
             } else {
+                if (mPlaybackFragment != null) {
+                    mPlaybackFragment.maybeReleasePlayer();
+                }
                 super.finish();
             }
         }
@@ -229,6 +233,7 @@ public class PlaybackActivity extends LeanbackActivity {
             exitBackgroundAudioOnly();
         }
         if (mPlaybackFragment != null) {
+            mPlaybackFragment.blockEngine(false);
             mPlaybackFragment.setMediaSessionReleaseReason("ACTIVITY_FINISH");
         }
         BackgroundPlaybackService.stop(this);

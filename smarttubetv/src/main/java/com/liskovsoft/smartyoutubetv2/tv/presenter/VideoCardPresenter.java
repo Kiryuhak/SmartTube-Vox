@@ -148,13 +148,7 @@ public class VideoCardPresenter extends LongClickPresenter {
             qualityBadge = resolver.cached(video.videoId);
         }
         cardView.setQualityBadge(qualityBadge);
-        if (qualityBadge != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.QUALITY_BADGE_BOUND,
-                    "Quality badge bound: " + qualityBadge
-            );
-        } else if (canResolveQuality(video)) {
+        if (qualityBadge == null && canResolveQuality(video)) {
             QualityBinding binding = new QualityBinding(cardView, video.videoId, resolver);
             cardView.addOnAttachStateChangeListener(binding);
             mQualityBindings.put(viewHolder, binding);
@@ -163,13 +157,6 @@ public class VideoCardPresenter extends LongClickPresenter {
 
         String ageBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getAgeBadge(video);
         cardView.setAgeBadge(ageBadge);
-        if (ageBadge != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.debug(
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.AGE_BADGE_BOUND,
-                    "Age badge bound: " + ageBadge
-            );
-        }
 
         boolean isLocal = video.isLocal;
         boolean isTranslated = video.isDownloadedTranslated();

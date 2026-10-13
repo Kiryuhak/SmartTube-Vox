@@ -12,10 +12,16 @@ class VoxTranslationStateMachine {
         REQUESTING,
         WAITING_PROVIDER,
         PROCESSING,
+        ATTACHING,
         READY,
         TIMEOUT,
         FAILED,
         CANCELLED
+    }
+
+    enum class ProgressUpdateType {
+        REAL_PROGRESS,
+        HEARTBEAT_ONLY
     }
 
     enum class ReuseSource {
@@ -39,12 +45,20 @@ class VoxTranslationStateMachine {
     var audioAttachElapsedMs: Long = 0L
     var totalTranslationStartupMs: Long = 0L
 
+    var lastRealProgressPercent: Int = -1
+        private set
+    var lastStageTransitionAtMs: Long = 0L
+        private set
+    var lastHeartbeatAtMs: Long = 0L
+        private set
+
     private var stageStartedAtMs: Long = 0L
     private var jobStartedAtMs: Long = 0L
 
     // ETA countdown management: monotonically non-increasing bounded countdown
     private var initialEtaSec: Int = 0
     private var lastReportedEtaSec: Int = -1
+    private var lowestBackendEtaSec: Int = Int.MAX_VALUE
     private var etaTargetMs: Long = 0L
 
     fun transitionTo(newState: State, nowMs: Long = System.currentTimeMillis()) {
@@ -58,11 +72,18 @@ class VoxTranslationStateMachine {
             State.REQUESTING -> requestElapsedMs = stageElapsed
             State.WAITING_PROVIDER -> providerWaitElapsedMs = stageElapsed
             State.PROCESSING -> processingElapsedMs = stageElapsed
+            State.ATTACHING -> audioAttachElapsedMs = stageElapsed
             else -> Unit
         }
 
         currentState = newState
         stageStartedAtMs = nowMs
+        lastStageTransitionAtMs = nowMs
+        lastHeartbeatAtMs = nowMs
+
+        if (newState == State.ATTACHING) {
+            lastRealProgressPercent = -1
+        }
 
         if (newState == State.LOOKUP || newState == State.REQUESTING) {
             if (jobStartedAtMs == 0L) jobStartedAtMs = nowMs
@@ -71,6 +92,46 @@ class VoxTranslationStateMachine {
                 totalTranslationStartupMs = Math.max(0L, nowMs - jobStartedAtMs)
             }
         }
+    }
+
+    fun onProgressPoll(
+        progressPercent: Int = -1,
+        remainingSec: Int = -1,
+        nowMs: Long = System.currentTimeMillis()
+    ): ProgressUpdateType {
+        lastHeartbeatAtMs = nowMs
+        if (lastStageTransitionAtMs == 0L) {
+            lastStageTransitionAtMs = nowMs
+        }
+
+        if (progressPercent in 1..100 && progressPercent > lastRealProgressPercent) {
+            lastRealProgressPercent = progressPercent
+            lastStageTransitionAtMs = nowMs
+            return ProgressUpdateType.REAL_PROGRESS
+        }
+
+        if (remainingSec > 0) {
+            reconcileEtaSec(remainingSec, nowMs)
+            if (remainingSec < lowestBackendEtaSec) {
+                lowestBackendEtaSec = remainingSec
+                lastStageTransitionAtMs = nowMs
+                return ProgressUpdateType.REAL_PROGRESS
+            }
+        }
+
+        return ProgressUpdateType.HEARTBEAT_ONLY
+    }
+
+    fun isStageStalled(nowMs: Long, maxStageStallMs: Long): Boolean {
+        if (currentState == State.IDLE || currentState == State.READY ||
+            currentState == State.TIMEOUT || currentState == State.FAILED || currentState == State.CANCELLED) {
+            return false
+        }
+        return lastStageTransitionAtMs > 0L && (nowMs - lastStageTransitionAtMs) >= maxStageStallMs
+    }
+
+    fun isPostProcessTimedOut(nowMs: Long, postProcessTimeoutMs: Long = 15_000L): Boolean {
+        return currentState == State.ATTACHING && stageStartedAtMs > 0L && (nowMs - stageStartedAtMs) >= postProcessTimeoutMs
     }
 
     fun markLookupReady(source: ReuseSource, nowMs: Long = System.currentTimeMillis()) {
@@ -127,10 +188,14 @@ class VoxTranslationStateMachine {
         processingElapsedMs = 0L
         audioAttachElapsedMs = 0L
         totalTranslationStartupMs = 0L
+        lastRealProgressPercent = -1
+        lastStageTransitionAtMs = 0L
+        lastHeartbeatAtMs = 0L
         stageStartedAtMs = 0L
         jobStartedAtMs = 0L
         initialEtaSec = 0
         lastReportedEtaSec = -1
+        lowestBackendEtaSec = Int.MAX_VALUE
         etaTargetMs = 0L
     }
 

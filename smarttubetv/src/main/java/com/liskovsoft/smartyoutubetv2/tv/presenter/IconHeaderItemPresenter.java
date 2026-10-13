@@ -84,13 +84,6 @@ public class IconHeaderItemPresenter extends RowHeaderPresenter {
             } else if (lbl != null) {
                 lbl.setSelected(hasFocus || isRowSelected);
             }
-            if (hasFocus && headerItem != null) {
-                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.APP,
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.SIDEBAR_FOCUS_CHANGED,
-                        "Sidebar header focused: " + headerItem.getName()
-                );
-            }
         });
 
         ImageView iconView = rootView.findViewById(R.id.header_icon);

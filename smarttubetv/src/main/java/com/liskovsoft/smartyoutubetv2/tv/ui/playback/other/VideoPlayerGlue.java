@@ -197,11 +197,6 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         }
         boolean isDownloadedTranslated = getVideo() != null && getVideo().isDownloadedTranslated();
         boolean isLocal = getVideo() != null && getVideo().isLocal;
-        if (!isDownloadedTranslated) {
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
-                adapter.add(mActions.get(R.id.action_voice_translate));
-            }
-        }
         if (!isDownloadedTranslated && !isLocal) {
             if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)) {
                 adapter.add(mActions.get(R.id.action_download));
@@ -253,6 +248,12 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         }
         if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VIDEO_STATS)) {
             adapter.add(mActions.get(R.id.action_video_stats));
+        }
+        boolean isDownloadedTranslated = getVideo() != null && getVideo().isDownloadedTranslated();
+        if (!isDownloadedTranslated) {
+            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
+                adapter.add(mActions.get(R.id.action_voice_translate));
+            }
         }
     }
 
@@ -622,6 +623,7 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
     private void updateActionVisibilityForVideo(Video video) {
         if (getControlsRow() == null) return;
         ArrayObjectAdapter primary = (ArrayObjectAdapter) getControlsRow().getPrimaryActionsAdapter();
+        ArrayObjectAdapter secondary = (ArrayObjectAdapter) getControlsRow().getSecondaryActionsAdapter();
         if (primary == null) return;
 
         boolean isDownloadedTranslated = video != null && video.isDownloadedTranslated();
@@ -629,25 +631,33 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
         Action translateAction = mActions.get(R.id.action_voice_translate);
         Action downloadAction = mActions.get(R.id.action_download);
 
+        if (translateAction != null) {
+            primary.remove(translateAction);
+        }
+
         if (isDownloadedTranslated) {
-            if (translateAction != null) primary.remove(translateAction);
+            if (translateAction != null && secondary != null) secondary.remove(translateAction);
             if (downloadAction != null) primary.remove(downloadAction);
         } else if (isLocal) {
             if (downloadAction != null) primary.remove(downloadAction);
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
-                if (translateAction != null && primary.indexOf(translateAction) == -1) {
-                    primary.add(translateAction);
+            if (secondary != null) {
+                if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
+                    if (translateAction != null && secondary.indexOf(translateAction) == -1) {
+                        secondary.add(translateAction);
+                    }
+                } else if (translateAction != null) {
+                    secondary.remove(translateAction);
                 }
-            } else if (translateAction != null) {
-                primary.remove(translateAction);
             }
         } else {
-            if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
-                if (translateAction != null && primary.indexOf(translateAction) == -1) {
-                    primary.add(translateAction);
+            if (secondary != null) {
+                if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_VOICE_TRANSLATE)) {
+                    if (translateAction != null && secondary.indexOf(translateAction) == -1) {
+                        secondary.add(translateAction);
+                    }
+                } else if (translateAction != null) {
+                    secondary.remove(translateAction);
                 }
-            } else if (translateAction != null) {
-                primary.remove(translateAction);
             }
 
             if (mPlayerTweaksData.isPlayerButtonEnabled(PlayerTweaksData.PLAYER_BUTTON_DOWNLOAD)) {

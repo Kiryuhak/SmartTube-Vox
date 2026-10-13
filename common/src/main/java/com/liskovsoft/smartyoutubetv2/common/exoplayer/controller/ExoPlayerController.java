@@ -191,6 +191,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         setQualityInfo("");
 
         mTrackSelectorManager.setMergedSource(mediaSource instanceof MergingMediaSource);
+        boolean isLocalTranslated = getVideo() != null && getVideo().isLocal && getVideo().isDownloadedTranslated();
+        mTrackSelectorManager.setPreferTranslatedLocalAudio(isLocalTranslated);
         mTrackSelectorManager.invalidate();
         mOnSourceChanged = true;
         mPrepareStartTimeMs = System.currentTimeMillis();
@@ -358,12 +360,42 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
     public void selectFormat(FormatItem formatItem) {
         if (formatItem != null && formatItem.getTrack() != null) {
+            if (formatItem.getTrack().rendererIndex == TrackSelectorManager.RENDERER_INDEX_AUDIO) {
+                mTrackSelectorManager.setPreferTranslatedLocalAudio(false);
+            }
             FormatItem selectedFormatItem = getSelectedFormat(formatItem.getTrack().rendererIndex);
             if (!formatItem.equals(selectedFormatItem)) {
                 mTrackSelectorManager.selectTrack(formatItem.getTrack());
                 mEventListener.onTrackSelected(formatItem);
             }
         }
+    }
+
+    public static FormatItem findTranslatedAudioFormat(List<FormatItem> aFormats) {
+        if (aFormats == null || aFormats.isEmpty()) {
+            return null;
+        }
+        FormatItem mpegFallback = null;
+        for (FormatItem item : aFormats) {
+            if (item == null || item.getTrack() == null) {
+                continue;
+            }
+            String lang = item.getLanguage() != null ? item.getLanguage().toLowerCase() : "";
+            if (lang.startsWith("ru") || lang.contains("rus") || lang.contains("рус")) {
+                return item;
+            }
+            if (item.getTrack() != null && item.getTrack().format != null) {
+                String fLang = item.getTrack().format.language != null ? item.getTrack().format.language.toLowerCase() : "";
+                if (fLang.startsWith("ru") || fLang.contains("rus") || fLang.contains("рус")) {
+                    return item;
+                }
+                String mime = item.getTrack().format.sampleMimeType;
+                if (mpegFallback == null && ("audio/mpeg".equals(mime) || "audio/mp3".equals(mime))) {
+                    mpegFallback = item;
+                }
+            }
+        }
+        return mpegFallback;
     }
 
     public FormatItem getVideoFormat() {
@@ -399,16 +431,47 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             List<FormatItem> aFormats = getAudioFormats();
             String vMime = (vFormats != null && !vFormats.isEmpty() && vFormats.get(0).getTrack() != null && vFormats.get(0).getTrack().format != null)
                     ? vFormats.get(0).getTrack().format.sampleMimeType : null;
-            String aMime = (aFormats != null && !aFormats.isEmpty() && aFormats.get(0).getTrack() != null && aFormats.get(0).getTrack().format != null)
-                    ? aFormats.get(0).getTrack().format.sampleMimeType : null;
-            boolean hasTrans = getVideo().isDownloadedTranslated();
+            FormatItem selectedAudio = getAudioFormat();
+            boolean expectedTrans = getVideo().isDownloadedTranslated();
+            boolean hasTrans = false;
+            boolean isTransSelected = false;
+            if (expectedTrans) {
+                FormatItem translatedFormat = findTranslatedAudioFormat(aFormats);
+                if (translatedFormat != null) {
+                    hasTrans = true;
+                    if (mOnSourceChanged && !translatedFormat.equals(selectedAudio)) {
+                        mTrackSelectorManager.selectTrack(translatedFormat.getTrack());
+                        selectedAudio = translatedFormat;
+                    }
+                    isTransSelected = translatedFormat.equals(selectedAudio) || mOnSourceChanged;
+                } else {
+                    if (mOnSourceChanged) {
+                        java.util.Map<String, String> warnPayload = new java.util.LinkedHashMap<>();
+                        warnPayload.put("videoId", getVideo().videoId != null ? getVideo().videoId : "unknown");
+                        warnPayload.put("audioTracksCount", String.valueOf(aFormats != null ? aFormats.size() : 0));
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.PLAYER,
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.LOCAL_TRANSLATED_AUDIO_MISSING,
+                                "Local video marked as translated but no Russian/translated audio track found; falling back to original audio",
+                                warnPayload
+                        );
+                        if (mContext != null) {
+                            com.liskovsoft.sharedutils.helpers.MessageHelpers.showMessage(mContext, "Файл перевода не найден, воспроизводится оригинал");
+                        }
+                    }
+                }
+            }
+            String aMime = (selectedAudio != null && selectedAudio.getTrack() != null && selectedAudio.getTrack().format != null)
+                    ? selectedAudio.getTrack().format.sampleMimeType
+                    : ((aFormats != null && !aFormats.isEmpty() && aFormats.get(0).getTrack() != null && aFormats.get(0).getTrack().format != null)
+                            ? aFormats.get(0).getTrack().format.sampleMimeType : null);
             mOfflineProbe.onTracksDiscovered(
                     vFormats != null ? vFormats.size() : 0,
                     aFormats != null ? aFormats.size() : 0,
                     vMime,
                     aMime,
                     hasTrans,
-                    hasTrans
+                    isTransSelected
             );
         }
 

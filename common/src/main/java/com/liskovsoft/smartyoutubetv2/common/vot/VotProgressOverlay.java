@@ -45,6 +45,7 @@ public class VotProgressOverlay {
     public static final int STATE_RETRY = 7;
     public static final int STATE_LOOKING_UP = 8;
     public static final int STATE_LOOKUP_READY = 9;
+    public static final int STATE_ATTACHING = 10;
 
     public static final long COLLAPSE_DELAY_MS = 4500L;
     private static final long DISMISS_DELAY_READY_MS = 2000L;
@@ -76,7 +77,8 @@ public class VotProgressOverlay {
     private final Runnable mCollapseRunnable = this::performCollapseAnimation;
     private final Runnable mSafetyWatchdogRunnable = () -> {
         if (mCurrentState == STATE_PREPARING || mCurrentState == STATE_LOOKING_UP ||
-                mCurrentState == STATE_WAITING_WITH_ETA || mCurrentState == STATE_ETA_EXPIRED_STILL_WAITING) {
+                mCurrentState == STATE_WAITING_WITH_ETA || mCurrentState == STATE_ETA_EXPIRED_STILL_WAITING ||
+                mCurrentState == STATE_ATTACHING) {
             Log.w(TAG, "VOT overlay watchdog triggered: stuck in preparing state for > %d ms", OVERLAY_WATCHDOG_TIMEOUT_MS);
             dismissImmediately();
         }
@@ -100,6 +102,13 @@ public class VotProgressOverlay {
 
     public int getRealProgressPercent() {
         return mRealProgressPercent;
+    }
+
+    public void resetRealProgress() {
+        mRealProgressPercent = -1;
+        if (mIsCollapsed) {
+            updateCompactView();
+        }
     }
 
     public boolean isCompactContainerVisible() {
@@ -167,7 +176,7 @@ public class VotProgressOverlay {
     public void showStarting(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
         cancelTimers();
-        mCurrentState = STATE_PREPARING;
+        mCurrentState = STATE_ATTACHING;
         mRealProgressPercent = -1;
         expandMode();
         showSpinnerMode();
@@ -182,8 +191,14 @@ public class VotProgressOverlay {
     public void showWaitingWithEta(@Nullable Activity activity, String timeRemainingFormatted) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
+        boolean stateChanged = mCurrentState != STATE_WAITING_WITH_ETA;
         mCurrentState = STATE_WAITING_WITH_ETA;
-        armSafetyWatchdog();
+        if (mRealProgressPercent >= 100) {
+            mRealProgressPercent = -1;
+        }
+        if (stateChanged) {
+            armSafetyWatchdog();
+        }
 
         if (mIsCollapsed) {
             // Keep compact circle with hourglass, update compact state
@@ -201,8 +216,14 @@ public class VotProgressOverlay {
     public void showWaitingWithoutEta(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
+        boolean stateChanged = mCurrentState != STATE_PREPARING;
         mCurrentState = STATE_PREPARING;
-        armSafetyWatchdog();
+        if (mRealProgressPercent >= 100) {
+            mRealProgressPercent = -1;
+        }
+        if (stateChanged) {
+            armSafetyWatchdog();
+        }
 
         if (mIsCollapsed) {
             updateCompactView();
@@ -218,8 +239,14 @@ public class VotProgressOverlay {
     public void showDelayedWaiting(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
+        boolean stateChanged = mCurrentState != STATE_ETA_EXPIRED_STILL_WAITING;
         mCurrentState = STATE_ETA_EXPIRED_STILL_WAITING;
-        armSafetyWatchdog();
+        if (mRealProgressPercent >= 100) {
+            mRealProgressPercent = -1;
+        }
+        if (stateChanged) {
+            armSafetyWatchdog();
+        }
 
         if (mIsCollapsed) {
             updateCompactView();
@@ -235,18 +262,18 @@ public class VotProgressOverlay {
     public void showAttaching(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
-        mCurrentState = STATE_PREPARING;
+        Utils.removeCallbacks(mCollapseRunnable);
+        mCurrentState = STATE_ATTACHING;
+        mRealProgressPercent = -1;
         armSafetyWatchdog();
 
-        if (mIsCollapsed) {
-            updateCompactView();
-        } else {
-            showSpinnerMode();
-            setTitle(getStringSafe(R.string.vot_progress_attaching));
-            hideSubtitle();
-            hideTimer();
-            fadeIn();
-        }
+        expandMode();
+        showSpinnerMode();
+        setTitle(getStringSafe(R.string.vot_progress_attaching));
+        hideSubtitle();
+        hideTimer();
+        fadeIn();
+        Utils.postDelayed(mCollapseRunnable, COLLAPSE_DELAY_MS);
     }
 
     public void showStillWaiting(@Nullable Activity activity, String timeElapsedFormatted) {
@@ -257,6 +284,7 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
         mCurrentState = STATE_RETRY;
+        mRealProgressPercent = -1;
         armSafetyWatchdog();
 
         expandMode();
@@ -280,8 +308,8 @@ public class VotProgressOverlay {
      * Prevents fake progress and throttles UI updates.
      */
     public void updateRealProgress(int percent) {
-        if (percent < 0 || percent > 100) return;
-        if (percent < mRealProgressPercent && percent > 0) return; // Monotonic only
+        if (percent <= 0 || percent > 100) return;
+        if (percent < mRealProgressPercent) return; // Monotonic only
 
         long now = System.currentTimeMillis();
         if (now - mLastProgressUpdateTime < 150L && percent != 100) {
@@ -293,6 +321,8 @@ public class VotProgressOverlay {
 
         if (mIsCollapsed) {
             updateCompactView();
+        } else {
+            setTimer(percent + "%");
         }
     }
 
@@ -395,7 +425,8 @@ public class VotProgressOverlay {
     public void performCollapseAnimation() {
         if (mExpandedContainer == null || mCompactContainer == null) return;
         if (mCurrentState != STATE_PREPARING && mCurrentState != STATE_LOOKING_UP &&
-                mCurrentState != STATE_WAITING_WITH_ETA && mCurrentState != STATE_ETA_EXPIRED_STILL_WAITING) {
+                mCurrentState != STATE_WAITING_WITH_ETA && mCurrentState != STATE_ETA_EXPIRED_STILL_WAITING &&
+                mCurrentState != STATE_ATTACHING) {
             return;
         }
 
