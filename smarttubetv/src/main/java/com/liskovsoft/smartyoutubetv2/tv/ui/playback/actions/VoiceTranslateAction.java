@@ -165,12 +165,21 @@ public class VoiceTranslateAction extends MultiAction {
      * without layout thrashing or fixed screen coordinates.
      */
     public static final class VoxProgressButtonDrawable extends Drawable {
+        private static final String[] PERCENT_STRINGS = new String[101];
+        static {
+            for (int i = 0; i <= 100; i++) {
+                PERCENT_STRINGS[i] = i + "%";
+            }
+        }
+
         @Nullable
         private final Bitmap mBaseBitmap;
         private final int mIntrinsicWidth;
         private final int mIntrinsicHeight;
         private final int mAccentColor;
         private final int mPreparingColor;
+        private final PorterDuffColorFilter mAccentFilter;
+        private final PorterDuffColorFilter mPreparingFilter;
         private final Paint mIconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Paint mTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mArcPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -179,7 +188,10 @@ public class VoiceTranslateAction extends MultiAction {
         private final RectF mRingBounds = new RectF();
         private final Rect mSrcRect = new Rect();
         private final RectF mDstRect = new RectF();
+        private final RectF mPillRect = new RectF();
         private final float mDensity;
+        private final float mFontAscent;
+        private final float mFontDescent;
 
         private int mPercent = -1;
         private int mStage = STAGE_PREPARING;
@@ -200,6 +212,8 @@ public class VoiceTranslateAction extends MultiAction {
             mDensity = density > 0f ? density : 1f;
             mAccentColor = accentColor;
             mPreparingColor = preparingColor;
+            mAccentFilter = new PorterDuffColorFilter(accentColor, PorterDuff.Mode.SRC_IN);
+            mPreparingFilter = new PorterDuffColorFilter(preparingColor, PorterDuff.Mode.SRC_IN);
 
             if (baseBitmap != null) {
                 mSrcRect.set(0, 0, baseBitmap.getWidth(), baseBitmap.getHeight());
@@ -222,6 +236,10 @@ public class VoiceTranslateAction extends MultiAction {
             mTextPaint.setTextAlign(Paint.Align.CENTER);
             mTextPaint.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
             mTextPaint.setTextSize(10.5f * mDensity);
+
+            Paint.FontMetrics fm = mTextPaint.getFontMetrics();
+            mFontAscent = fm.ascent;
+            mFontDescent = fm.descent;
         }
 
         public void setState(int percent, int stage) {
@@ -266,8 +284,8 @@ public class VoiceTranslateAction extends MultiAction {
                 float iconHalf = (minDim * iconScale) / 2f;
                 float iconCenterY = hasRealPercent ? (cy - minDim * 0.12f) : cy;
                 mDstRect.set(cx - iconHalf, iconCenterY - iconHalf, cx + iconHalf, iconCenterY + iconHalf);
-                int tintColor = (mStage == STAGE_ATTACHING || hasRealPercent) ? mAccentColor : mPreparingColor;
-                mIconPaint.setColorFilter(new PorterDuffColorFilter(tintColor, PorterDuff.Mode.SRC_IN));
+                PorterDuffColorFilter filter = (mStage == STAGE_ATTACHING || hasRealPercent) ? mAccentFilter : mPreparingFilter;
+                mIconPaint.setColorFilter(filter);
                 mIconPaint.setAlpha(hasRealPercent ? 185 : 235);
                 canvas.drawBitmap(mBaseBitmap, mSrcRect, mDstRect, mIconPaint);
             }
@@ -285,16 +303,15 @@ public class VoiceTranslateAction extends MultiAction {
                 float sweep = Math.max(12f, (360f * mPercent) / 100f);
                 canvas.drawArc(mRingBounds, -90f, sweep, false, mArcPaint);
 
-                // 4. Draw compact real % label inside lower half of button ring
-                String pctText = mPercent + "%";
+                // 4. Draw compact real % label inside lower half of button ring (zero allocation)
+                String pctText = (mPercent >= 0 && mPercent <= 100) ? PERCENT_STRINGS[mPercent] : (mPercent + "%");
                 float textY = cy + (minDim * 0.24f);
-                Paint.FontMetrics fm = mTextPaint.getFontMetrics();
                 float textW = mTextPaint.measureText(pctText);
                 float pillPadX = 3f * mDensity;
-                float pillTop = textY + fm.ascent - mDensity;
-                float pillBottom = textY + fm.descent + mDensity;
-                RectF pillRect = new RectF(cx - textW / 2f - pillPadX, pillTop, cx + textW / 2f + pillPadX, pillBottom);
-                canvas.drawRoundRect(pillRect, 4f * mDensity, 4f * mDensity, mBadgeBgPaint);
+                float pillTop = textY + mFontAscent - mDensity;
+                float pillBottom = textY + mFontDescent + mDensity;
+                mPillRect.set(cx - textW / 2f - pillPadX, pillTop, cx + textW / 2f + pillPadX, pillBottom);
+                canvas.drawRoundRect(mPillRect, 4f * mDensity, 4f * mDensity, mBadgeBgPaint);
                 canvas.drawText(pctText, cx, textY, mTextPaint);
             } else {
                 mArcPaint.setColor(mPreparingColor);

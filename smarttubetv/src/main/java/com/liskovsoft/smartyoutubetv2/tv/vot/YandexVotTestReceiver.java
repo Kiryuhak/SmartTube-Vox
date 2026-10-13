@@ -131,6 +131,38 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                 com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadService.Companion.cancel(context, downloadId);
                 Log.i(TAG, "DOWNLOAD_SERVICE_CANCEL_REQUESTED: id=" + downloadId);
             }
+        } else if ("testSetupOfflineFixture".equalsIgnoreCase(action)) {
+            String downloadId = intent.getStringExtra("downloadId");
+            if (downloadId == null || downloadId.isEmpty()) {
+                downloadId = "patch41_demo";
+            }
+            String srcMkv = intent.getStringExtra("srcMkv");
+            if (srcMkv == null || srcMkv.isEmpty()) {
+                srcMkv = "/data/local/tmp/output.mkv";
+            }
+            String srcJob = intent.getStringExtra("srcJob");
+            if (srcJob == null || srcJob.isEmpty()) {
+                srcJob = "/data/local/tmp/job.json";
+            }
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage storage =
+                        new com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadStorage(context);
+                java.io.File jobDir = storage.getJobDir(downloadId);
+                if (!jobDir.exists()) {
+                    jobDir.mkdirs();
+                }
+                java.io.File dstMkv = storage.getOutputFile(downloadId);
+                java.io.File dstJob = new java.io.File(jobDir, "job.json");
+
+                copyFile(new java.io.File(srcMkv), dstMkv);
+                copyFile(new java.io.File(srcJob), dstJob);
+
+                Log.i(TAG, "OFFLINE_FIXTURE_SETUP_SUCCESS: id=" + downloadId
+                        + " mkvSize=" + dstMkv.length() + " jobSize=" + dstJob.length()
+                        + " path=" + dstMkv.getAbsolutePath());
+            } catch (Exception e) {
+                Log.e(TAG, "OFFLINE_FIXTURE_SETUP_ERROR: " + e.getMessage(), e);
+            }
         } else if ("testDownloadStatus".equalsIgnoreCase(action)) {
             String downloadId = intent.getStringExtra("downloadId");
             if (downloadId == null || downloadId.isEmpty()) {
@@ -719,6 +751,32 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context)
                     .setLastDiagnosticsSubmissionTimestamp(0L);
             Log.i(TAG, "DIAGNOSTICS_COOLDOWN_RESET");
+        } else if ("testCheckOta".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager mgr =
+                    com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Companion.instance(context);
+            mgr.resetCooldownForTesting();
+            mgr.checkForUpdates("32.56-vox.8.2-beta.2", null, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+                @Override
+                public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo release, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset asset) {
+                    Log.i(TAG, "OTA_CHECK_RESULT: UPDATE_AVAILABLE " + release.getVersionName());
+                }
+
+                @Override
+                public void onNoUpdateAvailable(String currentVersion) {
+                    Log.i(TAG, "OTA_CHECK_RESULT: NO_UPDATE " + currentVersion);
+                }
+
+                @Override
+                public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {}
+
+                @Override
+                public void onDownloadCompleted(java.io.File apkFile) {}
+
+                @Override
+                public void onError(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException error) {
+                    Log.e(TAG, "OTA_CHECK_RESULT: ERROR " + error.getMessage());
+                }
+            });
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }
@@ -739,5 +797,23 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                 + " user_flow_active=" + userFlowActive
                 + " active_backend=" + (isNewActive ? "NEW" : (userFlowActive ? "OLD" : "NONE"))
                 + " fallback_triggered=" + fallbackTriggered);
+    }
+
+    private static void copyFile(java.io.File src, java.io.File dst) throws java.io.IOException {
+        java.io.FileInputStream in = new java.io.FileInputStream(src);
+        try {
+            java.io.FileOutputStream out = new java.io.FileOutputStream(dst);
+            try {
+                byte[] buf = new byte[65536];
+                int read;
+                while ((read = in.read(buf)) > 0) {
+                    out.write(buf, 0, read);
+                }
+            } finally {
+                out.close();
+            }
+        } finally {
+            in.close();
+        }
     }
 }

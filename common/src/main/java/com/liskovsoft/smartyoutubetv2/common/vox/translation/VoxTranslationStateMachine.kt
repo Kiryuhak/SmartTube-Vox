@@ -312,6 +312,7 @@ class VoxTranslationStateMachine {
             "translationLookupMs" to lookupElapsedMs,
             "translationWaitMs" to (requestElapsedMs + providerWaitElapsedMs),
             "translationAttachMs" to audioAttachElapsedMs,
+            "translationPostprocessMs" to audioAttachElapsedMs,
             "translationTotalMs" to totalTranslationStartupMs
         )
     }
@@ -325,6 +326,7 @@ class VoxTranslationStateMachine {
             "providerWaitElapsedMs" to providerWaitElapsedMs.toString(),
             "processingElapsedMs" to processingElapsedMs.toString(),
             "audioAttachElapsedMs" to audioAttachElapsedMs.toString(),
+            "translationPostprocessMs" to audioAttachElapsedMs.toString(),
             "totalTranslationStartupMs" to totalTranslationStartupMs.toString(),
             "isReused" to (reuseSource != ReuseSource.NONE).toString()
         )
