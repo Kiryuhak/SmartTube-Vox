@@ -27,10 +27,28 @@ class VoxDiagnosticsClient(
         @Volatile
         private var sInstance: VoxDiagnosticsClient? = null
 
+        val blockedUnitTestUploadsCount = java.util.concurrent.atomic.AtomicInteger(0)
+
         @JvmStatic
         fun instance(): VoxDiagnosticsClient {
             return sInstance ?: synchronized(this) {
                 sInstance ?: VoxDiagnosticsClient().also { sInstance = it }
+            }
+        }
+
+        @JvmStatic
+        fun isRunningInUnitTest(): Boolean {
+            val fingerprint = android.os.Build.FINGERPRINT?.lowercase(java.util.Locale.ROOT) ?: ""
+            val model = android.os.Build.MODEL?.lowercase(java.util.Locale.ROOT) ?: ""
+            val brand = android.os.Build.BRAND?.lowercase(java.util.Locale.ROOT) ?: ""
+            if (fingerprint.contains("robolectric") || model.contains("robolectric") || brand.contains("robolectric")) {
+                return true
+            }
+            return try {
+                Class.forName("org.robolectric.Robolectric")
+                true
+            } catch (e: ClassNotFoundException) {
+                false
             }
         }
     }
@@ -64,6 +82,16 @@ class VoxDiagnosticsClient(
 
             if (!VoxDiagnosticSanitizer.isSafePayload(sanitizedJson)) {
                 return Result.Error("Diagnostic report failed privacy security check")
+            }
+
+            if (endpointUrl == DEFAULT_ENDPOINT_URL &&
+                (isRunningInUnitTest() ||
+                    report.model.contains("robolectric", ignoreCase = true) ||
+                    report.reportPurpose == VoxDiagnosticReport.PURPOSE_UNIT_TEST)
+            ) {
+                blockedUnitTestUploadsCount.incrementAndGet()
+                Log.i(TAG, "Unit test / Robolectric environment detected: blocking live network upload to production endpoint")
+                return Result.Success(report.reportId ?: "VOX-UNIT-TEST-LOCAL")
             }
 
             val url = URL(endpointUrl)

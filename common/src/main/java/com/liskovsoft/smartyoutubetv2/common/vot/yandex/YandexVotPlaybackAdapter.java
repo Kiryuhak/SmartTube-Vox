@@ -39,6 +39,8 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         void setPlaybackSpeed(float speed);
         void seekTo(long positionMs);
         long getPositionMs();
+        default long getBufferedPositionMs() { return getPositionMs(); }
+        default boolean isBuffering() { return false; }
         void pause();
         void resume();
         void release();
@@ -140,6 +142,16 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                     @Override
                     public long getPositionMs() {
                         return player.getPositionMs();
+                    }
+
+                    @Override
+                    public long getBufferedPositionMs() {
+                        return player.getBufferedPositionMs();
+                    }
+
+                    @Override
+                    public boolean isBuffering() {
+                        return player.isBuffering();
                     }
 
                     @Override
@@ -453,6 +465,24 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     public boolean isPlaying() {
         synchronized (lock) {
             return isPlaying && activePlayer != null && activePlayer.isPlaying();
+        }
+    }
+
+    public long getPositionMs() {
+        synchronized (lock) {
+            return activePlayer != null ? activePlayer.getPositionMs() : 0L;
+        }
+    }
+
+    public long getBufferedPositionMs() {
+        synchronized (lock) {
+            return activePlayer != null ? activePlayer.getBufferedPositionMs() : 0L;
+        }
+    }
+
+    public boolean isBuffering() {
+        synchronized (lock) {
+            return activePlayer != null && activePlayer.isBuffering();
         }
     }
 

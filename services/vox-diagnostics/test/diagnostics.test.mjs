@@ -565,3 +565,125 @@ test('CurrentSuccessBeatsHistoricalFailureTest: historical unrecovered failure v
   assert.equal(classified.primaryEvent, null);
   assert.ok(['INFO', 'LOW'].includes(classified.severity));
 });
+
+test('TriggerEventPopulatesTopLevelClassificationTest: VOX-1D88100B HUD_STATE_INCONSISTENT populates top-level errorCategory and errorSignature', async () => {
+  const report1D88100B = {
+    schema: 'vox-diagnostic-report-v3',
+    reportId: 'VOX-1D88100B',
+    timestamp: 1776007200926,
+    appVersion: '32.56-vox.8.2-beta.2',
+    platform: 'Google TV',
+    manufacturer: 'TCL',
+    model: 'Smart TV Pro',
+    sdkInt: 34,
+    reportPurpose: 'AUTO_BETA',
+    autoSubmitted: true,
+    triggerEvent: 'HUD_STATE_INCONSISTENT',
+    incidentSummary: {
+      triggerCode: 'HUD_STATE_INCONSISTENT',
+      normalizedSignature: 'HUD_STATE_INCONSISTENT|none|none',
+      repeatCount: 1,
+    },
+    safeRecentEvents: [
+      {
+        timestamp: 1776007200000,
+        level: 'ERROR',
+        category: 'DOWNLOAD',
+        code: 'DOWNLOAD_STATE_INCONSISTENT',
+        message: 'Download completed state invariant violated for p37-resume-rick-1776007200926',
+      },
+    ],
+  };
+
+  const customStorage = new ReportStorage();
+  const req = createRequest(report1D88100B);
+  const res = await handleRequest(req, {}, customStorage);
+  assert.equal(res.status, 201);
+  const saved = await customStorage.getReportById('VOX-1D88100B');
+  assert.equal(saved.error_category, 'UI');
+  assert.equal(saved.error_signature, 'UI|HUD_STATE_INCONSISTENT|GOOGLE_TV_API34');
+  assert.equal(saved.payload.errorCategory, 'UI');
+  assert.equal(saved.payload.errorSignature, 'UI|HUD_STATE_INCONSISTENT|GOOGLE_TV_API34');
+});
+
+test('LatestOtaSuccessBeatsOlderOtaFailureTest: VOX-2921BEB6 newest-first OTA_NO_UPDATE recovers older OTA_FAILED', async () => {
+  const now = 1776042073587;
+  const report2921BEB6 = {
+    schema: 'vox-diagnostic-report-v3',
+    reportId: 'VOX-2921BEB6',
+    timestamp: now,
+    appVersion: '32.56-vox.8.2-beta.2',
+    platform: 'Google TV',
+    manufacturer: 'Google',
+    model: 'sdk_google_atv64_amati_x86_64',
+    sdkInt: 34,
+    reportPurpose: 'AUTO_BETA',
+    autoSubmitted: true,
+    triggerEvent: 'OTA_FAILED',
+    // Newest-first order as produced by Android VoxLogStore.getRecentEvents()
+    safeRecentEvents: [
+      {
+        timestamp: now,
+        level: 'INFO',
+        category: 'OTA',
+        code: 'OTA_NO_UPDATE',
+        message: 'Current version is up to date',
+      },
+      {
+        timestamp: now - 10,
+        level: 'INFO',
+        category: 'OTA',
+        code: 'OTA_CHECK_COMPLETED',
+        message: 'OTA check completed HTTP 200',
+      },
+      {
+        timestamp: now - 1098000,
+        level: 'ERROR',
+        category: 'OTA',
+        code: 'OTA_FAILED',
+        message: 'Older OTA check failed',
+      },
+    ],
+  };
+
+  const classified = classifyReport(report2921BEB6);
+  const otaFail = classified.events.find(e => e.event === 'OTA_FAILED');
+  assert.equal(otaFail.recovered, true);
+  assert.equal(classified.primaryEvent, null);
+  assert.equal(classified.signature, 'SYSTEM|AUTO_BETA_ROUTINE|GOOGLE_TV_API34');
+});
+
+test('MachineSignatureNeverUsesLocalizedRussianPlatformTest & SyntheticTestReportMarkedIgnoredTest: VOX-4E952DB7 Robolectric normalized to UNKNOWN_PLATFORM and IGNORED_TEST', async () => {
+  const report4E952DB7 = {
+    schema: 'vox-diagnostic-report-v3',
+    reportId: 'VOX-4E952DB7',
+    timestamp: 1776037065848,
+    appVersion: '32.56-vox.8-dev',
+    platform: 'Неизвестная платформа',
+    manufacturer: 'unknown',
+    model: 'robolectric',
+    sdkInt: 27,
+    reportPurpose: 'AUTO_BETA',
+    autoSubmitted: true,
+    triggerEvent: 'PLAYER_REBUFFER',
+    safeRecentEvents: [
+      {
+        timestamp: 1776037065000,
+        level: 'WARNING',
+        category: 'PLAYER',
+        code: 'PLAYER_REBUFFER',
+        message: 'Playback rebuffering detected',
+      },
+    ],
+  };
+
+  const customStorage = new ReportStorage();
+  const req = createRequest(report4E952DB7);
+  const res = await handleRequest(req, {}, customStorage);
+  assert.equal(res.status, 201);
+  const saved = await customStorage.getReportById('VOX-4E952DB7');
+  assert.equal(saved.error_signature, 'PLAYER|PLAYER_REBUFFER|UNKNOWN_PLATFORM_API27');
+  assert.ok(!saved.error_signature.includes('НЕИЗВЕСТНАЯ'));
+  assert.equal(saved.report_purpose, 'TEST');
+  assert.equal(saved.status, 'IGNORED_TEST');
+});

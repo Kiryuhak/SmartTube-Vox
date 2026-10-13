@@ -177,6 +177,33 @@ export function technicalSummary(report = {}) {
   };
 }
 
+export function normalizePlatformTag(report = {}) {
+  let rawPlat = String(report.platform || 'UNKNOWN_PLATFORM').trim();
+  if (!rawPlat || /неизвестн/i.test(rawPlat) || /^unknown$/i.test(rawPlat) || /[^\x00-\x7F]/.test(rawPlat)) {
+    rawPlat = 'UNKNOWN_PLATFORM';
+  }
+  const platform = rawPlat.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'UNKNOWN_PLATFORM';
+  const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion ? String(report.osVersion).replace(/[^A-Za-z0-9.]/g, '') : '');
+  return `${platform}${sdk ? `_${sdk}` : ''}`;
+}
+
+export function sanitizeMachineSignature(sig = '') {
+  if (!sig || typeof sig !== 'string') return '';
+  return sig.replace(/НЕИЗВЕСТНАЯ_ПЛАТФОРМА/gi, 'UNKNOWN_PLATFORM');
+}
+
+export function isSyntheticTestReport(report = {}) {
+  const purpose = String(report.reportPurpose || report.purpose || '').toUpperCase();
+  if (['TEST', 'UNIT_TEST', 'EMULATOR_TEST'].includes(purpose)) return true;
+  if (report.isSynthetic === true || report.incidentSummary?.isSynthetic === true) return true;
+  const model = String(report.model || '');
+  const manufacturer = String(report.manufacturer || '');
+  const family = String(report.deviceFamily || report.device_family || '');
+  if (/robolectric/i.test(model) || /robolectric/i.test(manufacturer) || /robolectric/i.test(family)) return true;
+  if (report.reportId && String(report.reportId).includes('TEST')) return true;
+  return false;
+}
+
 export function structuredEvents(report = {}) {
   const raw = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
   const mapped = raw.map(event => {
@@ -189,6 +216,10 @@ export function structuredEvents(report = {}) {
       SUBSYSTEMS.find(name => category.includes(name) || code.includes(name)) || 'SYSTEM';
     const severity = enumValue(event.severity || event.level, 'INFO');
     const level = enumValue(event.level || event.severity, 'INFO');
+    const isSyntheticFixture = code === 'DOWNLOAD_STATE_INCONSISTENT' && (
+      /p37-|test-fixture-|test-dl-/i.test(String(event.message || '')) ||
+      /p37-|test-fixture-|test-dl-/i.test(String(event.context?.downloadId || event.safeContext?.downloadId || ''))
+    );
     return {
       timestamp: Number(event.timestamp || event.ts || report.timestamp) || 0,
       category,
@@ -202,6 +233,7 @@ export function structuredEvents(report = {}) {
       safeContext: safeContext(event.safeContext || event.context),
       repeatCount: Number.isInteger(event.repeatCount) ? Math.min(Math.max(event.repeatCount, 1), 100000) : 1,
       ...(Number.isFinite(event.durationMs) && event.durationMs >= 0 ? { durationMs: event.durationMs } : {}),
+      ...(isSyntheticFixture ? { isSyntheticFixture: true } : {}),
     };
   });
 
@@ -255,18 +287,22 @@ export function classifyReport(report = {}) {
     }
   }
 
-  // Recovery detection: Check if earlier errors were followed by success events
-  for (let i = 0; i < events.length; i++) {
-    const ev = events[i];
+  // Ensure chronological order (oldest -> newest) for recovery and precedence checks
+  const isNewestFirst = events.length >= 2 && events[0].timestamp > events[events.length - 1].timestamp;
+  const chronoEvents = isNewestFirst ? [...events].reverse() : events;
+
+  // Recovery detection: Check if earlier errors were followed by newer success events
+  for (let i = 0; i < chronoEvents.length; i++) {
+    const ev = chronoEvents[i];
     const isError = ev.level === 'ERROR' || ev.level === 'WARNING' || ['HIGH', 'CRITICAL', 'MEDIUM'].includes(ev.severity);
     if (!isError) continue;
 
-    for (let j = i + 1; j < events.length; j++) {
-      const later = events[j];
+    for (let j = i + 1; j < chronoEvents.length; j++) {
+      const later = chronoEvents[j];
       // OTA recovery
       if ((ev.category === 'OTA' || ev.event.startsWith('OTA_')) &&
           ['OTA_RATE_LIMIT', 'OTA_FAILED', 'OTA_CHECK_FAILED', 'OTA_HTTP_ERROR', 'OTA_TIMEOUT', 'OTA_DNS_ERROR'].includes(ev.event)) {
-        if (['OTA_NO_UPDATE', 'OTA_RELEASE_PARSED', 'OTA_UPDATE_AVAILABLE', 'OTA_RATE_LIMIT_RECOVERED', 'OTA_VERSION_COMPARED'].includes(later.event)) {
+        if (['OTA_NO_UPDATE', 'OTA_CHECK_COMPLETED', 'OTA_RELEASE_PARSED', 'OTA_UPDATE_AVAILABLE', 'OTA_RATE_LIMIT_RECOVERED', 'OTA_VERSION_COMPARED'].includes(later.event)) {
           ev.recovered = true;
           ev.recoveryEvent = later.event;
           break;
@@ -275,7 +311,7 @@ export function classifyReport(report = {}) {
       // HUD recovery
       if ((ev.category === 'UI' || ev.event.startsWith('HUD_') || ev.event.startsWith('PLAYER_HUD_')) &&
           ['HUD_STATE_INCONSISTENT', 'HUD_CONTROLS_DETACHED', 'PLAYER_HUD_MISSING'].includes(ev.event)) {
-        if (['HUD_SELF_HEAL_SUCCESS', 'HUD_CONTROLS_REATTACHED', 'HUD_VISIBILITY_RESTORED'].includes(later.event)) {
+        if (['HUD_SELF_HEAL_SUCCESS', 'HUD_CONTROLS_REATTACHED', 'HUD_VISIBILITY_RESTORED', 'HUD_CONTROLS_ATTACHED'].includes(later.event)) {
           ev.recovered = true;
           ev.recoveryEvent = later.event;
           break;
@@ -299,14 +335,18 @@ export function classifyReport(report = {}) {
 
   const rank = { INFO: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 
-  // Explicit Trigger has absolute highest precedence (TRIGGER > CURRENT ERROR > ...)
-  const trigger = report.triggerEvent || report.trigger_event || report.trigger;
+  // Explicit Trigger has highest precedence unless the trigger event itself was recovered by a newer event
+  const trigger = report.triggerEvent || report.trigger_event || report.trigger || report.incidentSummary?.triggerCode;
   let primary = null;
 
   if (trigger) {
     const triggerCode = String(trigger).toUpperCase();
-    primary = [...events].reverse().find(e => (e.event || e.code) === triggerCode);
-    if (!primary) {
+    const trigEv = [...chronoEvents].reverse().find(e => (e.event || e.code) === triggerCode);
+    if (trigEv && trigEv.recovered) {
+      primary = null;
+    } else if (trigEv) {
+      primary = trigEv;
+    } else {
       primary = {
         event: triggerCode,
         category: inferCategoryFromCode(triggerCode),
@@ -321,7 +361,7 @@ export function classifyReport(report = {}) {
   }
 
   if (!primary) {
-    const unrecovered = events.filter(e => !e.recovered);
+    const unrecovered = chronoEvents.filter(e => !e.recovered && !e.isSyntheticFixture);
     // Priority: CURRENT ERROR > CURRENT WARNING > RECENT ERROR > RECENT WARNING > HISTORICAL ERROR > HISTORICAL WARNING
     const currentError = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
     const currentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
@@ -336,22 +376,24 @@ export function classifyReport(report = {}) {
   let last = primary;
   if (!last) {
     if (report.errorCategory || report.reportPurpose === 'TEST') {
-      last = [...events].reverse().find(e => (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity))) || events.at(-1);
+      last = [...chronoEvents].reverse().find(e => !e.recovered && !e.isSyntheticFixture && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity))) || chronoEvents.at(-1);
     } else {
-      last = events.at(-1);
+      last = chronoEvents.at(-1);
     }
   }
 
-  const errorCategory = enumValue(primary?.errorCategory || primary?.category || report.errorCategory || (last?.level === 'ERROR' ? (last?.errorCategory || last?.category) : ''));
+  const errorCategory = enumValue(primary?.category || primary?.errorCategory || report.errorCategory || (last && !last.recovered && !last.isSyntheticFixture && last.level === 'ERROR' ? (last.category || last.errorCategory) : ''));
   const subsystem = enumValue(report.subsystem || primary?.subsystem || last?.subsystem, 'SYSTEM');
   const stage = enumValue(report.stage || primary?.stage || last?.stage);
   const explicit = enumValue(report.severity);
 
   let computedSeverity = 'INFO';
-  const unrecoveredEvents = events.filter(e => !e.recovered);
-  if (unrecoveredEvents.length > 0) {
+  const unrecoveredEvents = chronoEvents.filter(e => !e.recovered && !e.isSyntheticFixture);
+  if (primary && primary.lifecycle === 'TRIGGER') {
+    computedSeverity = primary.severity || 'MEDIUM';
+  } else if (unrecoveredEvents.length > 0) {
     computedSeverity = unrecoveredEvents.reduce((best, event) => rank[event.severity] > rank[best] ? event.severity : best, errorCategory ? 'MEDIUM' : 'INFO');
-  } else if (events.some(e => e.recovered)) {
+  } else if (chronoEvents.some(e => e.recovered)) {
     computedSeverity = 'LOW';
   } else if (errorCategory) {
     computedSeverity = 'MEDIUM';
@@ -362,30 +404,35 @@ export function classifyReport(report = {}) {
 }
 
 export function buildClassificationSignature(report = {}, classified = null) {
-  if (report.errorSignature && typeof report.errorSignature === 'string' && /^[A-Za-z0-9_|:.-]{1,160}$/.test(report.errorSignature)) {
-    return report.errorSignature;
+  const sanitizedIncomingSig = sanitizeMachineSignature(report.errorSignature);
+  if (sanitizedIncomingSig && /^[A-Za-z0-9_|:.-]{1,160}$/.test(sanitizedIncomingSig)) {
+    return sanitizedIncomingSig;
   }
 
-  const platform = (report.platform || 'Unknown').toUpperCase().replace(/\s+/g, '_');
-  const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion || '');
-  const platformTag = `${platform}${sdk ? `_${sdk}` : ''}`;
+  const platformTag = normalizePlatformTag(report);
+  const isStructured = Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || (ev.event && !ev.code));
 
   const c = classified || classifyReport(report);
   const primary = c.primaryEvent;
+  const hasExplicitTrigger = Boolean(report.triggerEvent || report.trigger_event || report.trigger || report.incidentSummary?.triggerCode);
 
   if (primary) {
     const cat = primary.category || c.errorCategory || 'GENERAL';
     const sub = c.subsystem || primary.subsystem || 'SYSTEM';
     const stg = primary.stage || c.stage || 'GENERAL';
     const code = primary.event || primary.code || 'UNKNOWN';
-    if (primary.stage || primary.subsystem || (primary.event && !primary.code)) {
-      return [cat, sub, stg, code, primary.safeContext?.exceptionClassSafe || 'NONE', primary.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
+    if (isStructured) {
+      const fourth = hasExplicitTrigger ? code : (primary.errorCategory || c.errorCategory || code);
+      return [cat, sub, stg, fourth, primary.safeContext?.exceptionClassSafe || 'NONE', primary.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
     }
     return `${cat}|${code}|${platformTag}`;
   }
 
   if (report.errorCategory || c.errorCategory) {
     const cat = report.errorCategory || c.errorCategory;
+    if (isStructured) {
+      return [cat, c.subsystem || 'SYSTEM', c.stage || 'GENERAL', cat, 'NONE', report.sourceType || 'UNKNOWN'].join('|');
+    }
     return `${cat}|UNKNOWN_CODE|${platformTag}`;
   }
 

@@ -328,7 +328,11 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
     }
 
     public void setButtonState(int buttonId, int buttonState) {
-        setActionIndex(mActions.get(buttonId), buttonState);
+        Action action = mActions.get(buttonId);
+        if (action instanceof VoiceTranslateAction && buttonState != VoiceTranslateAction.INDEX_PENDING) {
+            ((VoiceTranslateAction) action).resetLabels();
+        }
+        setActionIndex(action, buttonState);
     }
 
     public void updateVoiceTranslatePendingEta(int remainingTimeSec) {
@@ -337,8 +341,29 @@ public class VideoPlayerGlue extends MaxControlsVideoPlayerGlue<PlayerAdapter> i
             return;
         }
         VoiceTranslateAction votAction = (VoiceTranslateAction) action;
+        String prevLabel = votAction.getLabel1() != null ? votAction.getLabel1().toString() : "";
         votAction.updatePendingLabel(remainingTimeSec);
-        invalidateUi(votAction);
+        String nextLabel = votAction.getLabel1() != null ? votAction.getLabel1().toString() : "";
+        if (!prevLabel.equals(nextLabel)) {
+            invalidateUi(votAction);
+        }
+    }
+
+    public void updateVoiceTranslateProgress(int progressPercent, int stage) {
+        Action action = mActions.get(R.id.action_voice_translate);
+        if (!(action instanceof VoiceTranslateAction)) {
+            return;
+        }
+        VoiceTranslateAction votAction = (VoiceTranslateAction) action;
+        boolean labelChanged = votAction.updateProgressState(progressPercent, stage);
+        if (votAction.getIndex() != VoiceTranslateAction.INDEX_PENDING &&
+                (stage == VoiceTranslateAction.STAGE_PREPARING ||
+                 stage == VoiceTranslateAction.STAGE_REAL_PROGRESS ||
+                 stage == VoiceTranslateAction.STAGE_ATTACHING)) {
+            setActionIndex(votAction, VoiceTranslateAction.INDEX_PENDING);
+        } else if (labelChanged) {
+            invalidateUi(votAction);
+        }
     }
 
     public void updateDownloadProgress(int buttonState, String progressText) {

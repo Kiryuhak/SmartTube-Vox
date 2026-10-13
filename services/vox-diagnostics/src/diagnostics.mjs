@@ -3,7 +3,7 @@ import { ReportStorage, normalizeStatus } from './storage.mjs';
 import { checkAdminAuth, resolveAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
-import { classifyReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES, inferCategoryFromCode, inferSubsystemFromCode } from './triage.mjs';
+import { classifyReport, buildClassificationSignature, isSyntheticTestReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES, inferCategoryFromCode, inferSubsystemFromCode } from './triage.mjs';
 
 /**
  * Формирует безопасный и полный JSON объект для скачивания отчёта администратором.
@@ -16,6 +16,9 @@ export function prepareReportDownloadJson(report) {
 
   const status = normalizeStatus(report.status);
   const developerNotes = report.developer_notes || report.developerNotes || '';
+  const classification = classifyReport(p);
+  const errorCategory = report.error_category || report.errorCategory || p.errorCategory || classification.errorCategory || null;
+  const errorSignature = report.error_signature || report.errorSignature || p.errorSignature || classification.signature || '';
 
   return {
     reportId: report.report_id || report.reportId,
@@ -30,8 +33,8 @@ export function prepareReportDownloadJson(report) {
       sdkInt: p.sdkInt || null,
       osVersion: p.osVersion || '',
     },
-    errorCategory: report.error_category || report.errorCategory || null,
-    errorSignature: report.error_signature || report.errorSignature || '',
+    errorCategory,
+    errorSignature,
     status,
     developerNotes,
     safeRecentEvents: p.safeRecentEvents || [],
@@ -209,112 +212,7 @@ function generateReportId(platform = '') {
 }
 
 export function generateErrorSignature(report = {}) {
-  if (report.errorSignature && typeof report.errorSignature === 'string' && /^[A-Za-z0-9_|:.-]{1,160}$/.test(report.errorSignature)) {
-    return report.errorSignature;
-  }
-
-  const platform = (report.platform || 'Unknown').toUpperCase().replace(/\s+/g, '_');
-  const sdk = report.sdkInt ? `API${report.sdkInt}` : (report.osVersion || '');
-  const platformTag = `${platform}${sdk ? `_${sdk}` : ''}`;
-
-  const trigger = report.triggerEvent || report.trigger_event || report.trigger;
-
-  // Case 1: Structured events with stage / subsystem / event
-  if (Array.isArray(report.safeRecentEvents) && report.safeRecentEvents.some(ev => ev.stage || ev.subsystem || (ev.event && !ev.code))) {
-    const classified = classifyReport(report);
-    const events = classified.events || [];
-
-    // Trigger precedence
-    if (trigger) {
-      const triggerCode = String(trigger).toUpperCase();
-      const trigEv = [...events].reverse().find(e => (e.event || e.code) === triggerCode);
-      const cat = trigEv?.category || inferCategoryFromCode(triggerCode) || report.errorCategory || 'SYSTEM';
-      const sub = trigEv?.subsystem || classified.subsystem || inferSubsystemFromCode(triggerCode) || 'SYSTEM';
-      const stg = trigEv?.stage || classified.stage || 'GENERAL';
-      return [cat, sub, stg, triggerCode, trigEv?.safeContext?.exceptionClassSafe || 'NONE', trigEv?.safeContext?.sourceType || report.sourceType || 'UNKNOWN'].join('|');
-    }
-
-    // Filter unrecovered events first
-    const unrecovered = events.filter(ev => !ev.recovered);
-    const currentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-    const currentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-    const recentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-    const recentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-    const histError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-    const histWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-
-    const event = currentError || currentWarn || recentError || recentWarn || histError || histWarn;
-
-    if (event) {
-      return [
-        event.category || 'GENERAL',
-        classified.subsystem || event.subsystem || 'SYSTEM',
-        event.stage || classified.stage || 'GENERAL',
-        event.errorCategory || classified.errorCategory || event.event || 'UNKNOWN',
-        event.safeContext?.exceptionClassSafe || 'NONE',
-        event.safeContext?.sourceType || report.sourceType || 'UNKNOWN'
-      ].join('|');
-    }
-
-    if (report.errorCategory || classified.errorCategory) {
-      const cat = report.errorCategory || classified.errorCategory || 'GENERAL';
-      return [cat, classified.subsystem || 'SYSTEM', classified.stage || 'GENERAL', cat, 'NONE', report.sourceType || 'UNKNOWN'].join('|');
-    }
-
-    if (report.reportPurpose === 'USER' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport) {
-      return `GENERAL|USER_REPORT|${platformTag}`;
-    }
-
-    if (report.reportPurpose === 'AUTO_BETA') {
-      return `SYSTEM|AUTO_BETA_ROUTINE|${platformTag}`;
-    }
-
-    return '';
-  }
-
-  // Case 2: Client events or raw events with code
-  const classified = classifyReport(report);
-  const events = classified.events || [];
-
-  // Trigger precedence
-  if (trigger) {
-    const triggerCode = String(trigger).toUpperCase();
-    const trigEv = [...events].reverse().find(e => (e.event || e.code) === triggerCode);
-    const cat = trigEv?.category || inferCategoryFromCode(triggerCode) || report.errorCategory || 'GENERAL';
-    return `${cat}|${triggerCode}|${platformTag}`;
-  }
-
-  // Precedence: CURRENT ERROR > CURRENT WARNING > RECENT ERROR > RECENT WARNING > HISTORICAL ERROR > HISTORICAL WARNING
-  const unrecovered = events.filter(ev => !ev.recovered);
-  const currentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-  const currentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'CURRENT_SESSION' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-  const recentError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-  const recentWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'RECENT' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-  const histError = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(ev.severity)));
-  const histWarn = [...unrecovered].reverse().find(ev => ev.lifecycle === 'HISTORICAL' && (ev.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(ev.severity)));
-
-  const chosen = currentError || currentWarn || recentError || recentWarn || histError || histWarn;
-  const category = report.errorCategory || (chosen ? chosen.category : '') || '';
-
-  if (chosen) {
-    const catPart = category || 'GENERAL';
-    const codePart = chosen.event || chosen.code || 'UNKNOWN_CODE';
-    return `${catPart}|${codePart}|${platformTag}`;
-  }
-
-  if (category) {
-    return `${category}|UNKNOWN_CODE|${platformTag}`;
-  }
-
-  if (report.reportPurpose === 'USER' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport) {
-    return `GENERAL|USER_REPORT|${platformTag}`;
-  }
-
-  if (report.reportPurpose === 'AUTO_BETA') {
-    return `SYSTEM|AUTO_BETA_ROUTINE|${platformTag}`;
-  }
-
-  return '';
+  return buildClassificationSignature(report);
 }
 
 const defaultStorage = new ReportStorage();
@@ -889,16 +787,21 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     if (payload.reportId && (typeof payload.reportId !== 'string' || !/^VOX-[A-Z0-9-]{1,40}$/.test(payload.reportId))) return jsonResponse({ error: 'invalid_report_id' }, 400);
     const reportId = payload.reportId || generateReportId(payload.platform);
     const receivedAt = Date.now();
-    const errorSignature = generateErrorSignature(payload);
-    const reportPurpose = payload.reportPurpose || payload.purpose || (reportId.includes('TEST') ? 'TEST' : 'USER');
+    const classification = classifyReport(payload);
+    const errorCategory = classification.errorCategory || payload.errorCategory || null;
+    const errorSignature = classification.signature || generateErrorSignature(payload);
+    const isSynth = isSyntheticTestReport({ ...payload, reportId });
+    const reportPurpose = isSynth ? 'TEST' : (payload.reportPurpose || payload.purpose || 'USER');
 
     const sanitizedReport = {
       ...sanitizePayload(payload),
       reportId,
       receivedAt,
+      errorCategory,
       errorSignature,
       reportPurpose,
-      structuredEvents: structuredEvents(payload),
+      ...(isSynth ? { status: 'IGNORED_TEST' } : {}),
+      structuredEvents: classification.events,
       technicalSummary: technicalSummary(payload),
     };
 

@@ -700,7 +700,7 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             String hudSessionId = intent.getStringExtra("hudSessionId");
             boolean isImmediate = intent.getBooleanExtra("isImmediate", false);
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler.instance(context)
-                    .triggerIncident(triggerCode, playbackSessionId, hudSessionId, isImmediate, success -> {
+                    .triggerIncident(triggerCode, playbackSessionId, hudSessionId, isImmediate, true, success -> {
                         Log.i(TAG, "TRIGGER_INCIDENT_COMPLETE: success=" + success + " trigger=" + triggerCode);
                     });
             Log.i(TAG, "TRIGGER_INCIDENT_INVOKED: trigger=" + triggerCode + " immediate=" + isImmediate);

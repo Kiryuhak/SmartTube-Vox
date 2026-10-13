@@ -47,8 +47,33 @@ data class VoxDiagnosticReport(
     val triggerEvent: String? = null,
     val channel: String? = null,
     val aggregationWindowMs: Long = 0L,
-    val incidentSummary: Map<String, Any>? = null
+    val incidentSummary: Map<String, Any>? = null,
+    val errorCategory: String? = null,
+    val errorSignature: String? = null,
+    val isSynthetic: Boolean = false
 ) {
+    fun withCanonicalClassification(): VoxDiagnosticReport {
+        val effectiveTrigger = triggerEvent ?: incidentSummary?.get("triggerCode")?.toString()
+        val prominent = if (!effectiveTrigger.isNullOrBlank()) {
+            safeRecentEvents.firstOrNull { it.code.equals(effectiveTrigger, ignoreCase = true) }
+        } else {
+            VoxDiagnosticsPolicy.findProminentUnrecoveredEvent(safeRecentEvents)
+        }
+        val primaryCode = effectiveTrigger?.takeIf { it.isNotBlank() } ?: prominent?.code
+        val cat = prominent?.category?.name ?: VoxDiagnosticsPolicy.inferCategoryFromCode(primaryCode) ?: errorCategory
+        val sig = VoxDiagnosticsPolicy.buildCanonicalErrorSignature(
+            errorCategory = cat,
+            primaryCode = primaryCode,
+            platform = platform,
+            sdkInt = sdkInt,
+            reportPurpose = reportPurpose
+        )
+        return copy(
+            errorCategory = cat,
+            errorSignature = sig
+        )
+    }
+
     companion object {
         const val SCHEMA_V1 = "vox-diagnostic-report-v1"
         const val SCHEMA_V2 = "vox-diagnostic-report-v2"
@@ -58,6 +83,8 @@ data class VoxDiagnosticReport(
         const val PURPOSE_AUTO_BETA = "AUTO_BETA"
         const val PURPOSE_USER_MANUAL = "USER_MANUAL"
         const val PURPOSE_EMULATOR_TEST = "EMULATOR_TEST"
+        const val PURPOSE_TEST = "TEST"
+        const val PURPOSE_UNIT_TEST = "UNIT_TEST"
 
         @JvmStatic
         fun wrapJsonValue(value: Any?): Any {
@@ -212,6 +239,14 @@ data class VoxDiagnosticReport(
             }
 
             val stableReportId = reportId ?: ("VOX-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).uppercase(Locale.ROOT))
+            val safePlatform = if (profile.platform == com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxPlatform.UNKNOWN) {
+                "UNKNOWN_PLATFORM"
+            } else {
+                profile.platform.displayName
+            }
+            val syntheticFlag = (incidentSummary?.get("isSynthetic") == true) ||
+                VoxDiagnosticsClient.isRunningInUnitTest() ||
+                profile.model.contains("robolectric", ignoreCase = true)
 
             return VoxDiagnosticReport(
                 schema = SCHEMA_V3,
@@ -219,7 +254,7 @@ data class VoxDiagnosticReport(
                 timestamp = System.currentTimeMillis(),
                 appVersion = appVer,
                 appVersionCode = if (appCode > 0) appCode else 2446009,
-                platform = profile.platform.displayName,
+                platform = safePlatform,
                 manufacturer = profile.manufacturer,
                 model = profile.model,
                 osName = profile.osName,
@@ -243,8 +278,9 @@ data class VoxDiagnosticReport(
                 triggerEvent = triggerEvent,
                 channel = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getBuildChannel().id,
                 aggregationWindowMs = aggregationWindowMs,
-                incidentSummary = incidentSummary
-            )
+                incidentSummary = incidentSummary,
+                isSynthetic = syntheticFlag
+            ).withCanonicalClassification()
         }
 
         @JvmStatic
@@ -354,6 +390,9 @@ data class VoxDiagnosticReport(
                 val channel = if (root.has("channel") && !root.isNull("channel")) root.optString("channel") else null
                 val aggregationWindowMs = root.optLong("aggregationWindowMs", 0L)
                 val incidentSummary = jsonToMap(root.optJSONObject("incidentSummary"))
+                val errorCategory = if (root.has("errorCategory") && !root.isNull("errorCategory")) root.optString("errorCategory") else null
+                val errorSignature = if (root.has("errorSignature") && !root.isNull("errorSignature")) root.optString("errorSignature") else null
+                val isSynthetic = root.optBoolean("isSynthetic", false)
 
                 VoxDiagnosticReport(
                     schema = schema,
@@ -385,7 +424,10 @@ data class VoxDiagnosticReport(
                     triggerEvent = triggerEvent,
                     channel = channel,
                     aggregationWindowMs = aggregationWindowMs,
-                    incidentSummary = incidentSummary
+                    incidentSummary = incidentSummary,
+                    errorCategory = errorCategory,
+                    errorSignature = errorSignature,
+                    isSynthetic = isSynthetic
                 )
             } catch (e: Exception) {
                 null
@@ -401,6 +443,9 @@ data class VoxDiagnosticReport(
         root.put("reportPurpose", reportPurpose)
         root.put("autoSubmitted", autoSubmitted)
         if (triggerEvent != null) root.put("triggerEvent", triggerEvent)
+        if (errorCategory != null) root.put("errorCategory", errorCategory)
+        if (!errorSignature.isNullOrEmpty()) root.put("errorSignature", errorSignature)
+        if (isSynthetic) root.put("isSynthetic", true)
         if (channel != null) root.put("channel", channel)
         if (aggregationWindowMs > 0) root.put("aggregationWindowMs", aggregationWindowMs)
         if (incidentSummary != null && incidentSummary.isNotEmpty()) {

@@ -483,21 +483,43 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         if (mediaTracks == null) {
             return null;
         }
-        MediaTrack mpegFallback = null;
+        int totalAudioTracks = 0;
+        boolean hasNonDefaultAudioTrack = false;
+        MediaTrack defaultFlagCandidate = null;
+        MediaTrack secondTrackMpegCandidate = null;
+
         for (MediaTrack[] group : mediaTracks) {
             if (group == null) continue;
             for (MediaTrack track : group) {
                 if (track == null || track.format == null) continue;
+                int currentAudioIndex = totalAudioTracks++;
                 String lang = track.format.language != null ? track.format.language.toLowerCase() : "";
-                if (lang.startsWith("ru") || lang.startsWith("rus")) {
+                String label = track.format.label != null ? track.format.label.toLowerCase() : "";
+                if (lang.startsWith("ru") || lang.startsWith("rus") || lang.contains("рус")
+                        || label.contains("перевод") || label.contains("translation") || label.contains("vox_translated")) {
                     return track;
                 }
-                if ("audio/mpeg".equalsIgnoreCase(track.format.sampleMimeType) && mpegFallback == null) {
-                    mpegFallback = track;
+                if ((track.format.selectionFlags & com.google.android.exoplayer2.C.SELECTION_FLAG_DEFAULT) != 0) {
+                    defaultFlagCandidate = track;
+                } else {
+                    hasNonDefaultAudioTrack = true;
+                }
+                boolean isMpeg = "audio/mpeg".equalsIgnoreCase(track.format.sampleMimeType)
+                        || "audio/mp3".equalsIgnoreCase(track.format.sampleMimeType);
+                if (isMpeg && ("3".equals(track.format.id) || currentAudioIndex >= 1) && secondTrackMpegCandidate == null) {
+                    secondTrackMpegCandidate = track;
                 }
             }
         }
-        return mpegFallback;
+        if (totalAudioTracks >= 2) {
+            if (defaultFlagCandidate != null && hasNonDefaultAudioTrack) {
+                return defaultFlagCandidate;
+            }
+            if (secondTrackMpegCandidate != null) {
+                return secondTrackMpegCandidate;
+            }
+        }
+        return null;
     }
 
     private MediaTrack findBestMatch(MediaTrack originTrack) {

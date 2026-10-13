@@ -51,6 +51,14 @@ class VoxTranslationStateMachine {
         private set
     var lastHeartbeatAtMs: Long = 0L
         private set
+    var lastAudioProgressAtMs: Long = 0L
+        private set
+    var lastAudioBufferedPositionMs: Long = -1L
+        private set
+    var primaryFailureReason: String? = null
+        private set
+    var fallbackAttempted: Boolean = false
+        private set
 
     private var stageStartedAtMs: Long = 0L
     private var jobStartedAtMs: Long = 0L
@@ -60,6 +68,35 @@ class VoxTranslationStateMachine {
     private var lastReportedEtaSec: Int = -1
     private var lowestBackendEtaSec: Int = Int.MAX_VALUE
     private var etaTargetMs: Long = 0L
+
+    companion object {
+        @JvmStatic
+        fun isValidTranslationId(translationId: String?): Boolean {
+            if (translationId.isNullOrBlank()) return false
+            val trimmed = translationId.trim()
+            if (trimmed.equals("null", ignoreCase = true) ||
+                trimmed.equals("undefined", ignoreCase = true) ||
+                trimmed.equals("none", ignoreCase = true)) {
+                return false
+            }
+            return trimmed.length in 2..256
+        }
+
+        @JvmStatic
+        fun isValidAudioUrl(audioUrl: String?): Boolean {
+            if (audioUrl.isNullOrBlank()) return false
+            val trimmed = audioUrl.trim()
+            if (!trimmed.startsWith("https://", ignoreCase = true) && !trimmed.startsWith("http://", ignoreCase = true)) {
+                return false
+            }
+            return try {
+                val uri = java.net.URI(trimmed)
+                !uri.host.isNullOrBlank()
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
 
     fun transitionTo(newState: State, nowMs: Long = System.currentTimeMillis()) {
         val prev = currentState
@@ -83,6 +120,8 @@ class VoxTranslationStateMachine {
 
         if (newState == State.ATTACHING) {
             lastRealProgressPercent = -1
+            lastAudioProgressAtMs = nowMs
+            lastAudioBufferedPositionMs = -1L
         }
 
         if (newState == State.LOOKUP || newState == State.REQUESTING) {
@@ -120,6 +159,36 @@ class VoxTranslationStateMachine {
         }
 
         return ProgressUpdateType.HEARTBEAT_ONLY
+    }
+
+    fun onAudioProgressCheck(
+        currentPosMs: Long,
+        bufferedPosMs: Long,
+        nowMs: Long = System.currentTimeMillis()
+    ): ProgressUpdateType {
+        val highest = Math.max(currentPosMs, bufferedPosMs)
+        if (highest >= 0L && highest > lastAudioBufferedPositionMs) {
+            lastAudioBufferedPositionMs = highest
+            lastAudioProgressAtMs = nowMs
+            return ProgressUpdateType.REAL_PROGRESS
+        }
+        if (lastAudioProgressAtMs == 0L) {
+            lastAudioProgressAtMs = nowMs
+        }
+        return ProgressUpdateType.HEARTBEAT_ONLY
+    }
+
+    fun isAudioNoProgressTimedOut(nowMs: Long, maxNoProgressMs: Long = 12_000L): Boolean {
+        return lastAudioProgressAtMs > 0L && (nowMs - lastAudioProgressAtMs) >= maxNoProgressMs
+    }
+
+    fun canAttemptFallback(): Boolean = !fallbackAttempted
+
+    fun recordFallbackAttempt(primaryReason: String): Boolean {
+        if (fallbackAttempted) return false
+        fallbackAttempted = true
+        primaryFailureReason = primaryReason
+        return true
     }
 
     fun isStageStalled(nowMs: Long, maxStageStallMs: Long): Boolean {
@@ -179,6 +248,17 @@ class VoxTranslationStateMachine {
 
     fun isEtaKnown(): Boolean = etaTargetMs > 0L && lastReportedEtaSec > 0
 
+    fun hasActiveOrCompletedSessionData(): Boolean {
+        return jobStartedAtMs > 0L ||
+                currentState != State.IDLE ||
+                lookupElapsedMs > 0L ||
+                requestElapsedMs > 0L ||
+                providerWaitElapsedMs > 0L ||
+                processingElapsedMs > 0L ||
+                audioAttachElapsedMs > 0L ||
+                totalTranslationStartupMs > 0L
+    }
+
     fun reset() {
         currentState = State.IDLE
         reuseSource = ReuseSource.NONE
@@ -191,6 +271,10 @@ class VoxTranslationStateMachine {
         lastRealProgressPercent = -1
         lastStageTransitionAtMs = 0L
         lastHeartbeatAtMs = 0L
+        lastAudioProgressAtMs = 0L
+        lastAudioBufferedPositionMs = -1L
+        primaryFailureReason = null
+        fallbackAttempted = false
         stageStartedAtMs = 0L
         jobStartedAtMs = 0L
         initialEtaSec = 0
@@ -204,10 +288,17 @@ class VoxTranslationStateMachine {
         PERSISTED_SESSION("PERSISTED_SESSION"),
         BACKEND_READY("BACKEND_READY"),
         BACKEND_PENDING("BACKEND_PENDING"),
-        NEW_REQUEST("NEW_REQUEST")
+        NEW_REQUEST("NEW_REQUEST"),
+        NO_ACTIVE_SESSION("NO_ACTIVE_SESSION")
     }
 
     fun getDiagnosticsSummary(): Map<String, Any> {
+        if (!hasActiveOrCompletedSessionData()) {
+            return mapOf(
+                "available" to false,
+                "translationSource" to TranslationSource.NO_ACTIVE_SESSION.label
+            )
+        }
         val src = when (reuseSource) {
             ReuseSource.MEMORY_CACHE -> TranslationSource.LOCAL_CACHE.label
             ReuseSource.PERSISTED_SESSION -> TranslationSource.PERSISTED_SESSION.label
@@ -216,6 +307,7 @@ class VoxTranslationStateMachine {
             else -> TranslationSource.NEW_REQUEST.label
         }
         return mapOf(
+            "available" to true,
             "translationSource" to src,
             "translationLookupMs" to lookupElapsedMs,
             "translationWaitMs" to (requestElapsedMs + providerWaitElapsedMs),
@@ -225,7 +317,7 @@ class VoxTranslationStateMachine {
     }
 
     fun toDiagnosticsContext(): Map<String, String> {
-        return mapOf(
+        val ctx = mutableMapOf(
             "state" to currentState.name,
             "reuseSource" to reuseSource.name,
             "lookupElapsedMs" to lookupElapsedMs.toString(),
@@ -236,5 +328,8 @@ class VoxTranslationStateMachine {
             "totalTranslationStartupMs" to totalTranslationStartupMs.toString(),
             "isReused" to (reuseSource != ReuseSource.NONE).toString()
         )
+        primaryFailureReason?.let { ctx["primaryFailureReason"] = it }
+        if (fallbackAttempted) ctx["fallbackAttempted"] = "true"
+        return ctx
     }
 }

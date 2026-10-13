@@ -1452,6 +1452,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     }
 
     @Override
+    public void updateVoiceTranslateProgress(int progressPercent, int stage) {
+        if (mPlayerGlue != null) {
+            mPlayerGlue.updateVoiceTranslateProgress(progressPercent, stage);
+        }
+    }
+
+    @Override
     public void updateDownloadProgress(int buttonState, String progressText) {
         if (mPlayerGlue != null) {
             mPlayerGlue.updateDownloadProgress(buttonState, progressText);

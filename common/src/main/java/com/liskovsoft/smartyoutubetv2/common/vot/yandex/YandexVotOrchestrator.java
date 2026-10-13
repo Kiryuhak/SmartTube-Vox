@@ -298,6 +298,25 @@ public class YandexVotOrchestrator {
             switch (status) {
                 case YandexVotApiClient.STATUS_FINISHED: {
                     postUploadAudioRequestedCount = 0;
+                    if (!com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.isValidAudioUrl(result.getAudioUrl())) {
+                        YandexVotLog.w(TAG, "VOT STATUS_FINISHED but audioUrl is invalid: gen=" + gen);
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_INVALID_AUDIO_URL,
+                                "Backend returned STATUS_FINISHED with invalid audio URL"
+                        );
+                        YandexVotState errorState = YandexVotState.error(
+                                gen,
+                                params.getVideoId(),
+                                params.getVideoUrl(),
+                                "Invalid translation audio URL",
+                                "invalid_audio_url",
+                                params.isUseLiveVoices()
+                        );
+                        currentState = errorState;
+                        notifyListenerLocked(errorState);
+                        break;
+                    }
                     boolean receivedLively = params.isUseLiveVoices() && result.getAudioUrl() != null;
                     YandexVotState readyState = YandexVotState.ready(
                             gen,
@@ -315,7 +334,7 @@ public class YandexVotOrchestrator {
 
                 case YandexVotApiClient.STATUS_PART_CONTENT: {
                     postUploadAudioRequestedCount = 0;
-                    if (result.getAudioUrl() != null) {
+                    if (com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.isValidAudioUrl(result.getAudioUrl())) {
                         boolean receivedLively = params.isUseLiveVoices();
                         YandexVotState readyState = YandexVotState.ready(
                                 gen,
@@ -343,6 +362,25 @@ public class YandexVotOrchestrator {
 
                 case YandexVotApiClient.STATUS_AUDIO_REQUESTED: {
                     final String translationId = result.getTranslationId();
+                    if (!com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.isValidTranslationId(translationId)) {
+                        YandexVotLog.w(TAG, "VOT STATUS_AUDIO_REQUESTED with invalid translationId: gen=" + gen);
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_INVALID_ID,
+                                "Backend requested audio upload with invalid translationId"
+                        );
+                        YandexVotState errorState = YandexVotState.error(
+                                gen,
+                                params.getVideoId(),
+                                params.getVideoUrl(),
+                                "Invalid translation ID",
+                                "invalid_translation_id",
+                                params.isUseLiveVoices()
+                        );
+                        currentState = errorState;
+                        notifyListenerLocked(errorState);
+                        break;
+                    }
                     final String uploadKey = makeUploadKey(params.getVideoUrl(), translationId);
 
                     if (completedUploadKeys.contains(uploadKey)) {

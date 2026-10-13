@@ -72,13 +72,106 @@ object VoxDiagnosticsPolicy {
     }
 
     /**
+     * Определяет каноническую категорию по коду события.
+     */
+    @JvmStatic
+    fun inferCategoryFromCode(code: String?): String? {
+        if (code.isNullOrBlank()) return null
+        val c = code.uppercase(java.util.Locale.ROOT)
+        return when {
+            c.startsWith("OTA_") -> VoxLogCategory.OTA.name
+            c.startsWith("HUD_") || c.startsWith("SIDEBAR_") || c.startsWith("CARD_") -> VoxLogCategory.UI.name
+            c.startsWith("PLAYER_") || c.startsWith("MEDIA3_") || c.startsWith("DECODER_") || c.startsWith("BUFFER_") || c.startsWith("LIVE_") || c.startsWith("LOCAL_") -> VoxLogCategory.PLAYER.name
+            c.startsWith("DOWNLOAD_") || c.startsWith("MUX_") -> VoxLogCategory.DOWNLOAD.name
+            c.startsWith("TRANSLATION_") || c.startsWith("LIVE_TRANSLATION_") -> VoxLogCategory.TRANSLATION.name
+            c.startsWith("NETWORK_") || c.contains("HTTP_") || c.contains("DNS_") -> VoxLogCategory.NETWORK.name
+            c.startsWith("BACKGROUND_") -> "BACKGROUND"
+            c.startsWith("OFFLINE_") -> "OFFLINE"
+            c.startsWith("CHANNEL_GROUP_") -> VoxLogCategory.CHANNEL_GROUP.name
+            c.startsWith("AUTO_TUNING_") || c.startsWith("AUTO_SETUP_") -> VoxLogCategory.COMPATIBILITY.name
+            else -> VoxLogCategory.DIAGNOSTICS.name
+        }
+    }
+
+    /**
+     * Нормализует название платформы для машинной сигнатуры (строго ASCII, без локализованных строк).
+     */
+    @JvmStatic
+    fun normalizePlatformForSignature(platform: String?, sdkInt: Int): String {
+        val raw = platform?.trim() ?: ""
+        val normalizedPlat = if (raw.isEmpty() ||
+            raw.equals("unknown", ignoreCase = true) ||
+            raw.contains("неизвестн", ignoreCase = true) ||
+            raw.any { it.code > 127 }
+        ) {
+            "UNKNOWN_PLATFORM"
+        } else {
+            raw.uppercase(java.util.Locale.ROOT)
+                .replace(Regex("[^A-Z0-9]+"), "_")
+                .trim('_')
+                .ifEmpty { "UNKNOWN_PLATFORM" }
+        }
+        return if (sdkInt > 0) "${normalizedPlat}_API$sdkInt" else normalizedPlat
+    }
+
+    /**
+     * Строит каноническую машинную сигнатуру ошибки (SINGLE SOURCE OF TRUTH на клиенте).
+     */
+    @JvmStatic
+    fun buildCanonicalErrorSignature(
+        errorCategory: String?,
+        primaryCode: String?,
+        platform: String?,
+        sdkInt: Int,
+        reportPurpose: String?
+    ): String {
+        val platformTag = normalizePlatformForSignature(platform, sdkInt)
+        if (!errorCategory.isNullOrBlank() && !primaryCode.isNullOrBlank()) {
+            return "${errorCategory.uppercase(java.util.Locale.ROOT)}|${primaryCode.uppercase(java.util.Locale.ROOT)}|$platformTag"
+        }
+        if (!errorCategory.isNullOrBlank()) {
+            return "${errorCategory.uppercase(java.util.Locale.ROOT)}|UNKNOWN_CODE|$platformTag"
+        }
+        if (reportPurpose == VoxDiagnosticReport.PURPOSE_AUTO_BETA) {
+            return "SYSTEM|AUTO_BETA_ROUTINE|$platformTag"
+        }
+        if (reportPurpose == VoxDiagnosticReport.PURPOSE_USER_MANUAL) {
+            return "GENERAL|USER_REPORT|$platformTag"
+        }
+        return ""
+    }
+
+    private fun toChronologicalOrder(events: List<VoxLogEvent>): List<VoxLogEvent> {
+        if (events.size < 2) return events
+        return if (events.first().timestamp > events.last().timestamp) {
+            events.asReversed()
+        } else {
+            events
+        }
+    }
+
+    private fun isSyntheticFixtureEvent(event: VoxLogEvent): Boolean {
+        if (event.code != VoxLogCode.DOWNLOAD_STATE_INCONSISTENT) return false
+        val msg = event.message.lowercase(java.util.Locale.ROOT)
+        val dlId = event.context?.get("downloadId")?.lowercase(java.util.Locale.ROOT) ?: ""
+        return msg.contains("p37-") || msg.contains("test-fixture-") || dlId.startsWith("p37-") || dlId.startsWith("test-fixture-")
+    }
+
+    /**
      * Проверяет, было ли событие ошибки устранено последующим успешным событием.
+     * Корректно работает как со списком newest-first (из VoxLogStore), так и со списком oldest-first.
      */
     @JvmStatic
     fun isEventRecovered(event: VoxLogEvent, allEvents: List<VoxLogEvent>): Boolean {
-        val eventIndex = allEvents.indexOf(event)
-        if (eventIndex < 0) return false
-        val laterEvents = allEvents.subList(eventIndex + 1, allEvents.size)
+        val chronoEvents = toChronologicalOrder(allEvents)
+        val eventIndex = chronoEvents.indexOf(event)
+        val laterEvents = if (eventIndex >= 0) {
+            chronoEvents.subList(eventIndex + 1, chronoEvents.size)
+                .filter { it.timestamp >= event.timestamp }
+        } else {
+            chronoEvents.filter { it.timestamp > event.timestamp }
+        }
+        if (laterEvents.isEmpty()) return false
 
         // OTA recovery
         if (event.category == VoxLogCategory.OTA || event.code.startsWith("OTA_")) {
@@ -88,9 +181,9 @@ object VoxDiagnosticsPolicy {
             )
             if (event.code in otaErrors) {
                 val otaSuccesses = listOf(
-                    VoxLogCode.OTA_NO_UPDATE, VoxLogCode.OTA_RELEASE_PARSED,
-                    VoxLogCode.OTA_UPDATE_AVAILABLE, VoxLogCode.OTA_RATE_LIMIT_RECOVERED,
-                    VoxLogCode.OTA_VERSION_COMPARED
+                    VoxLogCode.OTA_NO_UPDATE, VoxLogCode.OTA_CHECK_COMPLETED,
+                    VoxLogCode.OTA_RELEASE_PARSED, VoxLogCode.OTA_UPDATE_AVAILABLE,
+                    VoxLogCode.OTA_RATE_LIMIT_RECOVERED, VoxLogCode.OTA_VERSION_COMPARED
                 )
                 if (laterEvents.any { it.code in otaSuccesses }) return true
             }
@@ -112,12 +205,15 @@ object VoxDiagnosticsPolicy {
     }
 
     /**
-     * Находит наиболее значимое неустранённое событие среди журнала.
+     * Находит наиболее значимое неустранённое событие среди журнала (предпочитая самое свежее).
      */
     @JvmStatic
     fun findProminentUnrecoveredEvent(events: List<VoxLogEvent>): VoxLogEvent? {
-        val candidates = events.filter {
-            (it.level == VoxLogLevel.ERROR || it.level == VoxLogLevel.WARNING) && !isEventRecovered(it, events)
+        val chronoEvents = toChronologicalOrder(events)
+        val candidates = chronoEvents.filter {
+            (it.level == VoxLogLevel.ERROR || it.level == VoxLogLevel.WARNING) &&
+                !isSyntheticFixtureEvent(it) &&
+                !isEventRecovered(it, chronoEvents)
         }
         return candidates.lastOrNull { it.level == VoxLogLevel.ERROR }
             ?: candidates.lastOrNull { it.level == VoxLogLevel.WARNING }

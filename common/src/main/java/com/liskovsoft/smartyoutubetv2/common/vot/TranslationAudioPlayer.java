@@ -112,6 +112,14 @@ public class TranslationAudioPlayer implements Player.EventListener {
         return mPlayer != null ? mPlayer.getCurrentPosition() : 0;
     }
 
+    public long getBufferedPositionMs() {
+        return mPlayer != null ? mPlayer.getBufferedPosition() : 0;
+    }
+
+    public boolean isBuffering() {
+        return mPlayer != null && mPlayer.getPlaybackState() == Player.STATE_BUFFERING;
+    }
+
     public void pause() {
         if (mPlayer != null) {
             mPlayer.setPlayWhenReady(false);

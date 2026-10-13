@@ -47,7 +47,9 @@ public class VotProgressOverlay {
     public static final int STATE_LOOKUP_READY = 9;
     public static final int STATE_ATTACHING = 10;
 
-    public static final long COLLAPSE_DELAY_MS = 4500L;
+    public static final long COLLAPSE_DELAY_MS = 3500L;
+    public static final long BUBBLE_AUTO_HIDE_DELAY_MS = 3500L;
+    public static final long BUBBLE_READY_AUTO_HIDE_DELAY_MS = 2000L;
     private static final long DISMISS_DELAY_READY_MS = 2000L;
     private static final long DISMISS_DELAY_ERROR_MS = 3500L;
     private static final long OVERLAY_WATCHDOG_TIMEOUT_MS = 45000L; // Max 45s before safety dismiss
@@ -71,10 +73,12 @@ public class VotProgressOverlay {
     private ViewGroup mParentView;
     private boolean mIsCollapsed = false;
     private int mRealProgressPercent = -1;
+    private int mLastMilestoneBucket = -1;
     private long mLastProgressUpdateTime = 0L;
 
     private final Runnable mAutoDismissRunnable = this::hide;
-    private final Runnable mCollapseRunnable = this::performCollapseAnimation;
+    private final Runnable mBubbleAutoHideRunnable = this::hideBubbleKeepState;
+    private final Runnable mCollapseRunnable = this::hideBubbleKeepState;
     private final Runnable mSafetyWatchdogRunnable = () -> {
         if (mCurrentState == STATE_PREPARING || mCurrentState == STATE_LOOKING_UP ||
                 mCurrentState == STATE_WAITING_WITH_ETA || mCurrentState == STATE_ETA_EXPIRED_STILL_WAITING ||
@@ -106,6 +110,7 @@ public class VotProgressOverlay {
 
     public void resetRealProgress() {
         mRealProgressPercent = -1;
+        mLastMilestoneBucket = -1;
         if (mIsCollapsed) {
             updateCompactView();
         }
@@ -121,8 +126,15 @@ public class VotProgressOverlay {
 
     private void cancelTimers() {
         Utils.removeCallbacks(mAutoDismissRunnable);
+        Utils.removeCallbacks(mBubbleAutoHideRunnable);
         Utils.removeCallbacks(mCollapseRunnable);
         Utils.removeCallbacks(mSafetyWatchdogRunnable);
+    }
+
+    private void scheduleBubbleAutoHide() {
+        Utils.removeCallbacks(mBubbleAutoHideRunnable);
+        Utils.removeCallbacks(mCollapseRunnable);
+        Utils.postDelayed(mBubbleAutoHideRunnable, BUBBLE_AUTO_HIDE_DELAY_MS);
     }
 
     private void armSafetyWatchdog() {
@@ -135,13 +147,14 @@ public class VotProgressOverlay {
         cancelTimers();
         mCurrentState = STATE_LOOKING_UP;
         mRealProgressPercent = -1;
+        mLastMilestoneBucket = -1;
         expandMode();
         showSpinnerMode();
         setTitle(getStringSafe(R.string.vot_progress_looking_up));
-        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        hideSubtitle();
         hideTimer();
         fadeIn();
-        Utils.postDelayed(mCollapseRunnable, COLLAPSE_DELAY_MS);
+        scheduleBubbleAutoHide();
         armSafetyWatchdog();
     }
 
@@ -163,13 +176,14 @@ public class VotProgressOverlay {
         cancelTimers();
         mCurrentState = STATE_PREPARING;
         mRealProgressPercent = -1;
+        mLastMilestoneBucket = -1;
         expandMode();
         showSpinnerMode();
-        setTitle(getStringSafe(R.string.vot_progress_preparing));
-        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        setTitle("Готовим перевод…");
+        hideSubtitle();
         hideTimer();
         fadeIn();
-        Utils.postDelayed(mCollapseRunnable, COLLAPSE_DELAY_MS);
+        scheduleBubbleAutoHide();
         armSafetyWatchdog();
     }
 
@@ -178,13 +192,14 @@ public class VotProgressOverlay {
         cancelTimers();
         mCurrentState = STATE_ATTACHING;
         mRealProgressPercent = -1;
+        mLastMilestoneBucket = -1;
         expandMode();
         showSpinnerMode();
         setTitle(getStringSafe(R.string.vot_progress_starting));
-        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+        hideSubtitle();
         hideTimer();
         fadeIn();
-        Utils.postDelayed(mCollapseRunnable, COLLAPSE_DELAY_MS);
+        scheduleBubbleAutoHide();
         armSafetyWatchdog();
     }
 
@@ -198,18 +213,17 @@ public class VotProgressOverlay {
         }
         if (stateChanged) {
             armSafetyWatchdog();
-        }
-
-        if (mIsCollapsed) {
-            // Keep compact circle with hourglass, update compact state
-            updateCompactView();
-        } else {
+            expandMode();
             showSpinnerMode();
-            setTitle(getStringSafe(R.string.vot_progress_waiting_title));
-            String etaText = formatStringSafe(R.string.vot_progress_waiting_eta_format, timeRemainingFormatted);
-            setSubtitle(etaText.isEmpty() ? getStringSafe(R.string.vot_progress_subtitle_default) : etaText);
-            setTimer("~ " + timeRemainingFormatted);
+            setTitle("Готовим перевод…");
+            hideSubtitle();
+            if (mRealProgressPercent >= 1 && mRealProgressPercent < 100) {
+                setTimer(mRealProgressPercent + "%");
+            } else {
+                hideTimer();
+            }
             fadeIn();
+            scheduleBubbleAutoHide();
         }
     }
 
@@ -223,16 +237,13 @@ public class VotProgressOverlay {
         }
         if (stateChanged) {
             armSafetyWatchdog();
-        }
-
-        if (mIsCollapsed) {
-            updateCompactView();
-        } else {
+            expandMode();
             showSpinnerMode();
-            setTitle(getStringSafe(R.string.vot_progress_waiting_title));
-            setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+            setTitle("Готовим перевод…");
+            hideSubtitle();
             hideTimer();
             fadeIn();
+            scheduleBubbleAutoHide();
         }
     }
 
@@ -246,25 +257,22 @@ public class VotProgressOverlay {
         }
         if (stateChanged) {
             armSafetyWatchdog();
-        }
-
-        if (mIsCollapsed) {
-            updateCompactView();
-        } else {
+            expandMode();
             showSpinnerMode();
             setTitle(getStringSafe(R.string.vot_progress_delayed));
-            setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
+            hideSubtitle();
             hideTimer();
             fadeIn();
+            scheduleBubbleAutoHide();
         }
     }
 
     public void showAttaching(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
-        Utils.removeCallbacks(mCollapseRunnable);
         mCurrentState = STATE_ATTACHING;
         mRealProgressPercent = -1;
+        mLastMilestoneBucket = -1;
         armSafetyWatchdog();
 
         expandMode();
@@ -273,7 +281,7 @@ public class VotProgressOverlay {
         hideSubtitle();
         hideTimer();
         fadeIn();
-        Utils.postDelayed(mCollapseRunnable, COLLAPSE_DELAY_MS);
+        scheduleBubbleAutoHide();
     }
 
     public void showStillWaiting(@Nullable Activity activity, String timeElapsedFormatted) {
@@ -283,46 +291,64 @@ public class VotProgressOverlay {
     public void showRetryWait(@Nullable Activity activity, int attempt, int maxAttempts, int secondsRemaining) {
         if (!ensureAttached(activity)) return;
         Utils.removeCallbacks(mAutoDismissRunnable);
+        boolean stateChanged = mCurrentState != STATE_RETRY;
         mCurrentState = STATE_RETRY;
         mRealProgressPercent = -1;
-        armSafetyWatchdog();
-
-        expandMode();
-        showIconMode(R.drawable.ic_vot_retry);
-        String title = formatStringSafe(R.string.vot_progress_retry_title, attempt, maxAttempts);
-        if (title.isEmpty()) {
-            title = "Повторная попытка " + attempt + "/" + maxAttempts;
+        if (stateChanged) {
+            armSafetyWatchdog();
+            expandMode();
+            showIconMode(R.drawable.ic_vot_retry);
+            String title = formatStringSafe(R.string.vot_progress_retry_title, attempt, maxAttempts);
+            if (title.isEmpty()) {
+                title = "Повторная попытка " + attempt + "/" + maxAttempts;
+            }
+            setTitle(title);
+            hideSubtitle();
+            String timer = formatStringSafe(R.string.vot_progress_retry_countdown, secondsRemaining);
+            if (timer.isEmpty()) {
+                timer = "через " + secondsRemaining + " с";
+            }
+            setTimer(timer);
+            fadeIn();
+            scheduleBubbleAutoHide();
+        } else if (isShown()) {
+            String timer = formatStringSafe(R.string.vot_progress_retry_countdown, secondsRemaining);
+            if (timer.isEmpty()) {
+                timer = "через " + secondsRemaining + " с";
+            }
+            setTimer(timer);
         }
-        setTitle(title);
-        setSubtitle(getStringSafe(R.string.vot_progress_subtitle_default));
-        String timer = formatStringSafe(R.string.vot_progress_retry_countdown, secondsRemaining);
-        if (timer.isEmpty()) {
-            timer = "через " + secondsRemaining + " с";
-        }
-        setTimer(timer);
-        fadeIn();
     }
 
     /**
      * Updates real verified progress (1..100%) from backend.
-     * Prevents fake progress and throttles UI updates.
+     * Strictly monotonic: repeated equal percentages do NOT reset watchdog or re-show bubble.
      */
     public void updateRealProgress(int percent) {
         if (percent <= 0 || percent > 100) return;
-        if (percent < mRealProgressPercent) return; // Monotonic only
+        if (percent <= mRealProgressPercent) return; // Strictly monotonic only
 
         long now = System.currentTimeMillis();
-        if (now - mLastProgressUpdateTime < 150L && percent != 100) {
+        if (now - mLastProgressUpdateTime < 150L && percent != 100 && mRealProgressPercent > 0) {
             return; // Throttle UI redraw rate
         }
         mLastProgressUpdateTime = now;
         mRealProgressPercent = percent;
         armSafetyWatchdog();
 
-        if (mIsCollapsed) {
-            updateCompactView();
-        } else {
-            setTimer(percent + "%");
+        int bucket = percent == 100 ? 4 : (percent / 25);
+        boolean milestoneReached = (bucket != mLastMilestoneBucket);
+        mLastMilestoneBucket = bucket;
+
+        setTitle("Готовим перевод — " + percent + "%");
+        hideSubtitle();
+        setTimer(percent + "%");
+
+        if (isShown() || milestoneReached) {
+            expandMode();
+            showSpinnerMode();
+            fadeIn();
+            scheduleBubbleAutoHide();
         }
     }
 
@@ -330,27 +356,14 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         cancelTimers();
         mCurrentState = STATE_READY;
+        mRealProgressPercent = -1;
 
-        if (mIsCollapsed) {
-            // In compact mode, show green checkmark on circle
-            if (mCompactIcon != null) {
-                mCompactIcon.setImageDrawable(ContextCompat.getDrawable(mContext, R.drawable.ic_vot_ready));
-                mCompactIcon.setVisibility(View.VISIBLE);
-            }
-            if (mCompactPercent != null) mCompactPercent.setVisibility(View.GONE);
-            if (mCompactSpinner != null) mCompactSpinner.setVisibility(View.GONE);
-            if (mCompactContainer != null) {
-                mCompactContainer.animate().cancel();
-                mCompactContainer.setVisibility(View.VISIBLE);
-                mCompactContainer.setAlpha(1f);
-            }
-        } else {
-            showIconMode(R.drawable.ic_vot_ready);
-            setTitle(getStringSafe(R.string.vot_progress_ready));
-            setSubtitle(getStringSafe(R.string.vot_progress_subtitle_ready));
-            hideTimer();
-            fadeIn();
-        }
+        expandMode();
+        showIconMode(R.drawable.ic_vot_ready);
+        setTitle(getStringSafe(R.string.vot_progress_ready));
+        hideSubtitle();
+        hideTimer();
+        fadeIn();
 
         Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
     }
@@ -359,26 +372,14 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         cancelTimers();
         mCurrentState = STATE_READY;
+        mRealProgressPercent = -1;
 
-        if (mIsCollapsed) {
-            if (mCompactIcon != null) {
-                mCompactIcon.setImageDrawable(ContextCompat.getDrawable(mContext, R.drawable.ic_vot_ready));
-                mCompactIcon.setVisibility(View.VISIBLE);
-            }
-            if (mCompactPercent != null) mCompactPercent.setVisibility(View.GONE);
-            if (mCompactSpinner != null) mCompactSpinner.setVisibility(View.GONE);
-            if (mCompactContainer != null) {
-                mCompactContainer.animate().cancel();
-                mCompactContainer.setVisibility(View.VISIBLE);
-                mCompactContainer.setAlpha(1f);
-            }
-        } else {
-            showIconMode(R.drawable.ic_vot_ready);
-            setTitle(getStringSafe(R.string.vot_translation_activated));
-            hideSubtitle();
-            hideTimer();
-            fadeIn();
-        }
+        expandMode();
+        showIconMode(R.drawable.ic_vot_ready);
+        setTitle(getStringSafe(R.string.vot_translation_activated));
+        hideSubtitle();
+        hideTimer();
+        fadeIn();
 
         Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
     }
@@ -391,6 +392,7 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         cancelTimers();
         mCurrentState = STATE_ERROR;
+        mRealProgressPercent = -1;
 
         expandMode();
         showIconMode(R.drawable.ic_vot_error);
@@ -409,10 +411,11 @@ public class VotProgressOverlay {
         if (!ensureAttached(activity)) return;
         cancelTimers();
         mCurrentState = STATE_TIMEOUT;
+        mRealProgressPercent = -1;
 
         expandMode();
         showIconMode(R.drawable.ic_vot_timeout);
-        setTitle(getStringSafe(R.string.vot_progress_timeout));
+        setTitle("Сервис перевода не ответил вовремя");
         hideSubtitle();
         hideTimer();
         fadeIn();
@@ -420,44 +423,35 @@ public class VotProgressOverlay {
     }
 
     /**
-     * Executes smooth spatial collapse animation from expanded pill to compact circular indicator.
+     * Auto-hides the temporary status bubble while keeping mCurrentState active so
+     * ongoing 1s ticks do not re-pop the bubble until a real stage change occurs.
      */
-    public void performCollapseAnimation() {
-        if (mExpandedContainer == null || mCompactContainer == null) return;
-        if (mCurrentState != STATE_PREPARING && mCurrentState != STATE_LOOKING_UP &&
-                mCurrentState != STATE_WAITING_WITH_ETA && mCurrentState != STATE_ETA_EXPIRED_STILL_WAITING &&
-                mCurrentState != STATE_ATTACHING) {
-            return;
+    public void hideBubbleKeepState() {
+        mIsCollapsed = false;
+        if (mCompactContainer != null) {
+            mCompactContainer.animate().cancel();
+            mCompactContainer.setVisibility(View.GONE);
+            mCompactContainer.setAlpha(0f);
         }
+        if (mOverlayView != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
+                    mOverlayView,
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
+            mOverlayView.animate().cancel();
+            mOverlayView.animate()
+                    .alpha(0f)
+                    .setDuration(220)
+                    .withEndAction(() -> {
+                        if (mOverlayView != null) {
+                            mOverlayView.setVisibility(View.GONE);
+                        }
+                    })
+                    .start();
+        }
+    }
 
-        mIsCollapsed = true;
-        updateCompactView();
-
-        // Spatial continuity: animate expanded pill shrinking to the right, compact circle expanding
-        mExpandedContainer.animate().cancel();
-        mExpandedContainer.animate()
-                .alpha(0f)
-                .scaleX(0.7f)
-                .scaleY(0.7f)
-                .setDuration(350)
-                .withEndAction(() -> {
-                    if (mExpandedContainer != null) {
-                        mExpandedContainer.setVisibility(View.GONE);
-                    }
-                })
-                .start();
-
-        mCompactContainer.animate().cancel();
-        mCompactContainer.setScaleX(0.7f);
-        mCompactContainer.setScaleY(0.7f);
-        mCompactContainer.setAlpha(0f);
-        mCompactContainer.setVisibility(View.VISIBLE);
-        mCompactContainer.animate()
-                .alpha(1f)
-                .scaleX(1.0f)
-                .scaleY(1.0f)
-                .setDuration(350)
-                .start();
+    public void performCollapseAnimation() {
+        hideBubbleKeepState();
     }
 
     private void expandMode() {

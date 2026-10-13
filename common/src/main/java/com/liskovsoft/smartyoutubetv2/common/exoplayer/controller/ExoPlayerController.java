@@ -375,9 +375,13 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         if (aFormats == null || aFormats.isEmpty()) {
             return null;
         }
-        FormatItem mpegFallback = null;
+        int totalAudioTracks = aFormats.size();
+        FormatItem defaultFlagFallback = null;
+        FormatItem secondTrackMpegFallback = null;
+        int trackIndex = 0;
         for (FormatItem item : aFormats) {
             if (item == null || item.getTrack() == null) {
+                trackIndex++;
                 continue;
             }
             String lang = item.getLanguage() != null ? item.getLanguage().toLowerCase() : "";
@@ -385,17 +389,31 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 return item;
             }
             if (item.getTrack() != null && item.getTrack().format != null) {
-                String fLang = item.getTrack().format.language != null ? item.getTrack().format.language.toLowerCase() : "";
+                com.google.android.exoplayer2.Format format = item.getTrack().format;
+                String fLang = format.language != null ? format.language.toLowerCase() : "";
                 if (fLang.startsWith("ru") || fLang.contains("rus") || fLang.contains("рус")) {
                     return item;
                 }
-                String mime = item.getTrack().format.sampleMimeType;
-                if (mpegFallback == null && ("audio/mpeg".equals(mime) || "audio/mp3".equals(mime))) {
-                    mpegFallback = item;
+                String label = format.label != null ? format.label.toLowerCase() : "";
+                if (label.contains("translation") || label.contains("vox_translated") || label.contains("перевод")) {
+                    return item;
+                }
+                if (totalAudioTracks >= 2) {
+                    if (defaultFlagFallback == null && (format.selectionFlags & com.google.android.exoplayer2.C.SELECTION_FLAG_DEFAULT) != 0) {
+                        defaultFlagFallback = item;
+                    }
+                    String mime = format.sampleMimeType;
+                    if (secondTrackMpegFallback == null && trackIndex >= 1 && ("audio/mpeg".equals(mime) || "audio/mp3".equals(mime))) {
+                        secondTrackMpegFallback = item;
+                    }
                 }
             }
+            trackIndex++;
         }
-        return mpegFallback;
+        if (defaultFlagFallback != null) {
+            return defaultFlagFallback;
+        }
+        return secondTrackMpegFallback;
     }
 
     public FormatItem getVideoFormat() {
@@ -455,6 +473,11 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                                 "Local video marked as translated but no Russian/translated audio track found; falling back to original audio",
                                 warnPayload
                         );
+                        if (mContext != null && getVideo().videoId != null) {
+                            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadCoordinator.instance(mContext)
+                                    .selfHealMissingTranslatedAudio(getVideo().videoId);
+                        }
+                        getVideo().translationState = "COMPLETED_UNTRANSLATED";
                         if (mContext != null) {
                             com.liskovsoft.sharedutils.helpers.MessageHelpers.showMessage(mContext, "Файл перевода не найден, воспроизводится оригинал");
                         }

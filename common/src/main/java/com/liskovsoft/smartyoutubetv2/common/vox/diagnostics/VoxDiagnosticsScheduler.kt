@@ -34,7 +34,8 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
         var repeatCount: Int = 1,
         val firstSeenMs: Long = System.currentTimeMillis(),
         var lastSeenMs: Long = System.currentTimeMillis(),
-        var isCritical: Boolean = false
+        var isCritical: Boolean = false,
+        var isSynthetic: Boolean = false
     ) {
         fun toMap(): Map<String, Any> {
             val map = mutableMapOf<String, Any>(
@@ -44,7 +45,8 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 "repeatCount" to repeatCount,
                 "firstSeenMs" to firstSeenMs,
                 "lastSeenMs" to lastSeenMs,
-                "isCritical" to isCritical
+                "isCritical" to isCritical,
+                "isSynthetic" to isSynthetic
             )
             if (playbackSessionId != null) map["playbackSessionId"] = playbackSessionId
             if (hudSessionId != null) map["hudSessionId"] = hudSessionId
@@ -434,7 +436,7 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 val finalReport = rawReport.copy(
                     safeRecentEvents = deduplicatedEvents,
                     triggerEvent = rawReport.triggerEvent ?: prominentEvent?.code
-                )
+                ).withCanonicalClassification()
 
                 VoxDiagnosticsClient.instance().submitReportAsync(finalReport, object : VoxDiagnosticsClient.Callback {
                     override fun onSuccess(reportId: String) {
@@ -469,6 +471,7 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
         playbackSessionId: String? = null,
         hudSessionId: String? = null,
         isImmediate: Boolean = VoxDiagnosticsPolicy.isFatalOrCriticalError(triggerCode),
+        isSyntheticTest: Boolean = false,
         onComplete: CompletionCallback? = null
     ) {
         val signature = "$triggerCode|${playbackSessionId ?: "none"}|${hudSessionId ?: "none"}"
@@ -481,6 +484,9 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 existing.lastSeenMs = now
                 if (isImmediate && !existing.isCritical) {
                     existing.isCritical = true
+                }
+                if (isSyntheticTest) {
+                    existing.isSynthetic = true
                 }
                 val aggCtx = mapOf(
                     "trigger" to triggerCode,
@@ -516,7 +522,8 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 repeatCount = 1,
                 firstSeenMs = now,
                 lastSeenMs = now,
-                isCritical = isImmediate
+                isCritical = isImmediate,
+                isSynthetic = isSyntheticTest
             )
             pendingIncident = newIncident
 
@@ -569,8 +576,11 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                     return@execute
                 }
 
-                val purpose = if (VoxUpdateChannelManager.instance(context).isBetaChannel())
-                    VoxDiagnosticReport.PURPOSE_AUTO_BETA else VoxDiagnosticReport.PURPOSE_USER_MANUAL
+                val purpose = when {
+                    incident.isSynthetic -> VoxDiagnosticReport.PURPOSE_TEST
+                    VoxUpdateChannelManager.instance(context).isBetaChannel() -> VoxDiagnosticReport.PURPOSE_AUTO_BETA
+                    else -> VoxDiagnosticReport.PURPOSE_USER_MANUAL
+                }
 
                 val rawReport = VoxDiagnosticReport.create(
                     context = context,
@@ -586,7 +596,7 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 val filteredEvents = rawReport.safeRecentEvents
                     .filter { VoxDiagnosticsPolicy.isEventAllowedByPrivacy(it) }
                 val deduplicatedEvents = VoxDiagnosticsPolicy.deduplicateEvents(filteredEvents)
-                val finalReport = rawReport.copy(safeRecentEvents = deduplicatedEvents)
+                val finalReport = rawReport.copy(safeRecentEvents = deduplicatedEvents).withCanonicalClassification()
 
                 VoxDiagnosticsClient.instance().submitReportAsync(finalReport, object : VoxDiagnosticsClient.Callback {
                     override fun onSuccess(reportId: String) {

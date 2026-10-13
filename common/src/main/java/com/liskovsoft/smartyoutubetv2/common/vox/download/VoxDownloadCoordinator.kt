@@ -335,7 +335,7 @@ class VoxDownloadCoordinator(
      */
     fun deleteDownload(downloadId: String): Boolean {
         val job = repository.getJob(downloadId) ?: return false
-        if (isJobActive(downloadId) || VoxDownloadServicePolicy.isActiveState(job.state)) return false
+        if (isJobActive(downloadId) || (VoxDownloadServicePolicy.isActiveState(job.state) && job.state != VoxDownloadState.MUXED)) return false
         if (!job.publishedUri.isNullOrBlank()) {
             val removed = try { publisher?.deletePublishedFile(job.publishedUri) ?: false }
                 catch (ignored: Exception) { false }
@@ -359,6 +359,32 @@ class VoxDownloadCoordinator(
     fun findPausedJob(videoId: String): VoxDownloadJob? = repository.findPausedJobByVideoId(videoId)
 
     fun findFailedJob(videoId: String): VoxDownloadJob? = repository.findFailedJobByVideoId(videoId)
+
+    fun reloadFromDiskForTest() {
+        repository.restoreJobsFromStorage()
+    }
+
+    /**
+     * Самовосстановление метаданных: если видео отмечено как переведённое (hasTranslatedAudio=true),
+     * но при локальном открытии дорожка перевода отсутствует или повреждена, сбрасываем флаг
+     * и сохраняем исправленное состояние, чтобы ошибка не повторялась при следующих запусках.
+     */
+    fun selfHealMissingTranslatedAudio(videoId: String): Boolean {
+        val job = repository.findCompletedJobByVideoId(videoId) ?: repository.findJobByVideoId(videoId) ?: return false
+        if (!job.hasTranslatedAudio) return false
+        job.hasTranslatedAudio = false
+        job.translationState = VoxDownloadTranslationState.NONE
+        job.fallbackReason = "TRANSLATED_TRACK_MISSING_SELF_HEALED"
+        repository.persistJob(job, job.state)
+        VoxSafeLogger.w(
+            VoxLogCategory.DOWNLOAD,
+            VoxLogCode.LOCAL_TRANSLATED_METADATA_HEALED,
+            "Self-healed stale hasTranslatedAudio metadata for local video without translated track",
+            mapOf("videoId" to videoId, "downloadId" to job.downloadId)
+        )
+        notifyStateChange(job)
+        return true
+    }
 
     fun isPublishedFileAvailable(job: VoxDownloadJob): Boolean {
         return publisher?.isPublishedFileAvailable(job.publishedUri) ?: false
@@ -960,6 +986,7 @@ class VoxDownloadCoordinator(
         job.updateState(VoxDownloadState.MUXING)
         job.lastOperation = "PACKAGING"
         job.packagingStarted = true
+        job.hasTranslatedAudio = false
         VoxSafeLogger.i(
             VoxLogCategory.DOWNLOAD,
             VoxLogCode.DOWNLOAD_PACKAGING_STARTED,
@@ -1384,13 +1411,20 @@ class VoxDownloadCoordinator(
     }
 
     fun getDiagnosticsSummary(): Map<String, Any> {
-        val allJobs = repository.getAllJobs()
+        val rawJobs = repository.getAllJobs()
+        val nonSyntheticJobs = rawJobs.filterNot { VoxDownloadStorage.isSyntheticFixtureId(it.downloadId) }
+        val allJobs = if (nonSyntheticJobs.isNotEmpty() || rawJobs.all { VoxDownloadStorage.isSyntheticFixtureId(it.downloadId) }) {
+            nonSyntheticJobs
+        } else {
+            rawJobs
+        }
         val lastJob = allJobs.maxByOrNull { it.request.createdAt }
         val freeMb = try { storage.getAvailableBytes() / (1024 * 1024) } catch (ignored: Exception) { -1L }
         val queueLength = getQueuedCount()
         val activeJobs = if (activeJobId != null) 1 else 0
         val pausedJobs = allJobs.count { it.state == VoxDownloadState.PAUSED }
-        val failedJobs = allJobs.count { it.state == VoxDownloadState.FAILED }
+        val historicalFailedJobs = allJobs.count { it.state == VoxDownloadState.FAILED }
+        val currentFailedJobs = if (lastJob?.state == VoxDownloadState.FAILED) historicalFailedJobs else 0
 
         if (lastJob == null) {
             return mapOf(
@@ -1398,7 +1432,10 @@ class VoxDownloadCoordinator(
                 "queueLength" to queueLength,
                 "activeJobs" to activeJobs,
                 "pausedJobs" to pausedJobs,
-                "failedJobs" to failedJobs,
+                "failedJobs" to 0,
+                "historicalFailedJobs" to 0,
+                "expectedTranslatedAudio" to false,
+                "translatedAudioPresent" to false,
                 "freeStorageMb" to freeMb
             )
         }
@@ -1436,17 +1473,22 @@ class VoxDownloadCoordinator(
         lastJob.videoForensics?.let { routeMap["videoForensics"] = it.toMap() }
         lastJob.audioForensics?.let { routeMap["audioForensics"] = it.toMap() }
 
+        val expectedTrans = lastJob.request.translationMode != VoxTranslationMode.NONE
+        val isCompleted = lastJob.state == VoxDownloadState.COMPLETED
+
         return mapOf(
             "queueLength" to queueLength,
             "activeJobs" to activeJobs,
             "pausedJobs" to pausedJobs,
-            "failedJobs" to failedJobs,
-            "lastStage" to (lastJob.lastFailedStage ?: lastJob.state.stageName),
-            "lastErrorCategory" to (lastJob.lastErrorCategory ?: lastJob.errorCode?.name ?: "NONE"),
+            "failedJobs" to currentFailedJobs,
+            "historicalFailedJobs" to historicalFailedJobs,
+            "lastStage" to (if (isCompleted) VoxDownloadState.COMPLETED.stageName else (lastJob.lastFailedStage ?: lastJob.state.stageName)),
+            "lastErrorCategory" to (if (isCompleted) "NONE" else (lastJob.lastErrorCategory ?: lastJob.errorCode?.name ?: "NONE")),
             "lastOperation" to (lastJob.lastOperation ?: "NONE"),
             "retryCount" to lastJob.retryCount,
             "completedVideoBytes" to lastJob.videoProgress.bytesDownloaded,
             "completedAudioBytes" to lastJob.originalAudioProgress.bytesDownloaded,
+            "expectedTranslatedAudio" to expectedTrans,
             "translatedAudioPresent" to lastJob.hasTranslatedAudio,
             "packagingStarted" to lastJob.packagingStarted,
             "packagingCompleted" to lastJob.packagingCompleted,

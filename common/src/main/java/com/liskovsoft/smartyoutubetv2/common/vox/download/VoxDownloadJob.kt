@@ -20,7 +20,7 @@ class VoxDownloadJob(
     val requestedQuality: String? = request.qualityPreference.label,
     var actualQuality: String? = if (initialActualVideoHeight > 0) "${initialActualVideoHeight}p" else null,
     var fallbackReason: String? = null,
-    val translationState: VoxDownloadTranslationState = if (request.translationMode == VoxTranslationMode.NONE)
+    var translationState: VoxDownloadTranslationState = if (request.translationMode == VoxTranslationMode.NONE)
         VoxDownloadTranslationState.NONE else VoxDownloadTranslationState.DOWNLOADED_TRANSLATED
 ) {
     val downloadId: String get() = request.downloadId

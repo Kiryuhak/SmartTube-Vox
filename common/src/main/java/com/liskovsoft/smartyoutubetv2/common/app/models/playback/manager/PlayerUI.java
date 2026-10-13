@@ -29,6 +29,7 @@ public interface PlayerUI {
     int getButtonState(int buttonId);
     void setButtonState(int buttonId, int buttonState);
     void updateVoiceTranslatePendingEta(int remainingTimeSec);
+    default void updateVoiceTranslateProgress(int progressPercent, int stage) {}
     void updateDownloadProgress(int buttonState, String progressText);
     void setChannelIcon(String iconUrl);
     void setSeekPreviewTitle(String title);

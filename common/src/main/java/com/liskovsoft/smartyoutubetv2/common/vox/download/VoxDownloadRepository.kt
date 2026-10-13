@@ -28,10 +28,8 @@ class VoxDownloadRepository(
             // восстанавливаем его в состоянии PAUSED
             val restoredState = when (stored.state) {
                 VoxDownloadState.COMPLETED -> {
-                    if (stored.publishedUri != null) {
+                    if (stored.publishedUri != null || storage.getOutputFile(id).exists()) {
                         VoxDownloadState.COMPLETED
-                    } else if (storage.getOutputFile(id).exists()) {
-                        VoxDownloadState.MUXED
                     } else {
                         VoxDownloadState.PAUSED
                     }

@@ -1,4 +1,4 @@
-import { classifyReport, compareVoxVersions, technicalSummary, STATUSES } from './triage.mjs';
+import { classifyReport, compareVoxVersions, technicalSummary, normalizePlatformTag, isSyntheticTestReport, STATUSES } from './triage.mjs';
 
 export const DEFAULT_RETENTION_DAYS = 30;
 export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -90,11 +90,13 @@ export class ReportStorage {
     const deviceFamily = `${report.manufacturer || ''} ${report.model || ''}`.trim() || 'unknown';
     const classification = classifyReport(report);
     const errorCategory = report.errorCategory || classification.errorCategory || (classification.primaryEvent ? (classification.primaryEvent.category || classification.primaryEvent.errorCategory) : null) || null;
-    const reportPurpose = report.reportPurpose || report.purpose || (reportId && reportId.includes('TEST') ? 'TEST' : 'USER');
-    const rawStatus = report.status || (reportPurpose === 'TEST' ? 'IGNORED_TEST' : 'NEW');
+    const isSynth = isSyntheticTestReport({ ...report, deviceFamily });
+    const reportPurpose = isSynth ? 'TEST' : (report.reportPurpose || report.purpose || 'USER');
+    const rawStatus = report.status || (isSynth ? 'IGNORED_TEST' : 'NEW');
     const status = normalizeStatus(rawStatus);
     const developerNotes = report.developerNotes || report.developer_notes || '';
-    const errorSignature = report.errorSignature || report.error_signature || classification.signature || (errorCategory ? `${errorCategory}|UNKNOWN|${platform}` : (reportPurpose === 'AUTO_BETA' ? `SYSTEM|AUTO_BETA_ROUTINE|${platform}` : `GENERAL|USER_REPORT|${platform}`));
+    const platformTag = normalizePlatformTag(report);
+    const errorSignature = report.errorSignature || report.error_signature || classification.signature || (errorCategory ? `${errorCategory}|UNKNOWN|${platformTag}` : (reportPurpose === 'AUTO_BETA' ? `SYSTEM|AUTO_BETA_ROUTINE|${platformTag}` : `GENERAL|USER_REPORT|${platformTag}`));
     const payloadJson = JSON.stringify({ ...report, errorCategory, errorSignature, structuredEvents: report.structuredEvents || classification.events, technicalSummary: report.technicalSummary || technicalSummary(report) });
 
     if (this.db) {
