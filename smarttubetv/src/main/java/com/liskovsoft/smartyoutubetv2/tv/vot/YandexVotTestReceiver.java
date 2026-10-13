@@ -830,6 +830,46 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.clear();
             com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.clearCache();
             Log.i(TAG, "CACHE_CLEAR_RESULT: cleared=true");
+        } else if ("testCacheStats".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(context);
+            java.util.Map<String, Long> stats = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.getStats();
+            Log.i(TAG, "CACHE_STATS_RESULT: mem=" + stats.get("memoryHitCount")
+                    + " persisted=" + stats.get("persistedHitCount")
+                    + " serverExisting=" + stats.get("serverExistingCount")
+                    + " newReq=" + stats.get("newRequestCount")
+                    + " expired=" + stats.get("expiredRefreshCount"));
+        } else if ("testCorruptCacheEntry".equalsIgnoreCase(action)) {
+            String videoId = intent.getStringExtra("videoId");
+            if (videoId == null || videoId.isEmpty()) videoId = "test-corrupt";
+            android.content.SharedPreferences sp = context.getSharedPreferences("vox_translation_sessions_v2", Context.MODE_PRIVATE);
+            sp.edit().putString("rec_https://www.youtube.com/watch?v=" + videoId + "||ru|false", "{corrupted_json_not_valid").apply();
+            Log.i(TAG, "CACHE_CORRUPT_INJECTED: videoId=" + videoId);
+        } else if ("testDownloadResolution".equalsIgnoreCase(action)) {
+            final String videoId = intent.getStringExtra("videoId") != null ? intent.getStringExtra("videoId") : "UF8uR6Z6KLc";
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.DefaultVoxTranslationResolver resolver =
+                                new com.liskovsoft.smartyoutubetv2.common.vox.download.DefaultVoxTranslationResolver();
+                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxResolvedTranslation res =
+                                resolver.resolveTranslation(
+                                        videoId,
+                                        com.liskovsoft.smartyoutubetv2.common.vox.download.VoxTranslationMode.STANDARD,
+                                        new kotlin.jvm.functions.Function0<Boolean>() {
+                                            @Override
+                                            public Boolean invoke() {
+                                                return false;
+                                            }
+                                        },
+                                        null
+                                );
+                        Log.i(TAG, "DOWNLOAD_RESOLVE_RESULT: success=true videoId=" + videoId + " url=" + res.getUrl());
+                    } catch (Exception e) {
+                        Log.e(TAG, "DOWNLOAD_RESOLVE_RESULT: success=false error=" + e.getMessage());
+                    }
+                }
+            }).start();
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }

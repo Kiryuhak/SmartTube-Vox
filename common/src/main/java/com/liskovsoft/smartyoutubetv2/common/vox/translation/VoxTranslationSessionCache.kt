@@ -25,9 +25,18 @@ object VoxTranslationSessionCache {
 
     private const val TAG = "VoxTranslationSessionCache"
     private const val PREFS_NAME = "vox_translation_sessions_v2"
+    private const val CURRENT_SCHEMA_VERSION = 2
     private const val MAX_MEMORY_ENTRIES = 50
     private const val MAX_PERSISTED_ENTRIES = 100
-    private const val DEFAULT_TTL_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
+    private const val DEFAULT_TTL_MS = 12L * 60 * 60 * 1000 // 12 hours bounded for remote signed URLs
+
+    @Volatile private var customTtlMs: Long? = null
+
+    private val memoryHitCount = java.util.concurrent.atomic.AtomicLong(0)
+    private val persistedHitCount = java.util.concurrent.atomic.AtomicLong(0)
+    private val serverExistingCount = java.util.concurrent.atomic.AtomicLong(0)
+    private val newRequestCount = java.util.concurrent.atomic.AtomicLong(0)
+    private val expiredRefreshCount = java.util.concurrent.atomic.AtomicLong(0)
 
     data class TranslationRecord(
         val videoId: String,
@@ -37,7 +46,8 @@ object VoxTranslationSessionCache {
         val audioUrl: String,
         val durationSec: Double,
         val useLivelyVoice: Boolean,
-        val createdAtMs: Long
+        val createdAtMs: Long,
+        val schemaVersion: Int = CURRENT_SCHEMA_VERSION
     )
 
     enum class JobStatus {
@@ -66,10 +76,51 @@ object VoxTranslationSessionCache {
 
     @JvmStatic
     fun init(context: Context) {
-        if (prefs == null) {
-            prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            loadPersistedRecords()
-        }
+        prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        loadPersistedRecords()
+    }
+
+    @JvmStatic
+    fun setTtlForTesting(ttlMs: Long) {
+        customTtlMs = ttlMs
+    }
+
+    @JvmStatic
+    fun resetTtlForTesting() {
+        customTtlMs = null
+    }
+
+    @JvmStatic
+    fun incrementMemoryHit(): Long = memoryHitCount.incrementAndGet()
+
+    @JvmStatic
+    fun incrementPersistedHit(): Long = persistedHitCount.incrementAndGet()
+
+    @JvmStatic
+    fun incrementServerExisting(): Long = serverExistingCount.incrementAndGet()
+
+    @JvmStatic
+    fun incrementNewRequest(): Long = newRequestCount.incrementAndGet()
+
+    @JvmStatic
+    fun incrementExpiredRefresh(): Long = expiredRefreshCount.incrementAndGet()
+
+    @JvmStatic
+    fun getStats(): Map<String, Long> = mapOf(
+        "memoryHitCount" to memoryHitCount.get(),
+        "persistedHitCount" to persistedHitCount.get(),
+        "serverExistingCount" to serverExistingCount.get(),
+        "newRequestCount" to newRequestCount.get(),
+        "expiredRefreshCount" to expiredRefreshCount.get()
+    )
+
+    @JvmStatic
+    fun resetStats() {
+        memoryHitCount.set(0)
+        persistedHitCount.set(0)
+        serverExistingCount.set(0)
+        newRequestCount.set(0)
+        expiredRefreshCount.set(0)
     }
 
     @JvmStatic
@@ -81,7 +132,8 @@ object VoxTranslationSessionCache {
         useLively: Boolean
     ): LookupResult {
         if (videoId.isNullOrBlank()) return LookupResult.Miss
-        val key = VoxTranslationReusePolicy.buildCacheKey(rawUrl ?: videoId, sourceLang, targetLang, useLively)
+        val effectiveTarget = if (!targetLang.isNullOrBlank()) targetLang.trim().lowercase() else "ru"
+        val key = VoxTranslationReusePolicy.buildCacheKey(rawUrl ?: videoId, sourceLang, effectiveTarget, useLively)
 
         val startMs = System.currentTimeMillis()
         val baseCtx = mapOf(
@@ -90,22 +142,24 @@ object VoxTranslationSessionCache {
         )
         VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATION_LOOKUP_STARTED, "Translation lookup started", baseCtx)
 
-        // 1. Local memory cache (exact key or fallback key)
+        // 1. Local memory cache (exact key or fallback key with targetLang verification)
         val normalizedUrl = VoxTranslationReusePolicy.normalizeVideoUrl(rawUrl ?: videoId)
-        val fallbackKey = VoxTranslationReusePolicy.buildFallbackCacheKey(normalizedUrl, targetLang, useLively)
+        val fallbackKey = VoxTranslationReusePolicy.buildFallbackCacheKey(normalizedUrl, effectiveTarget, useLively)
 
         var memRecord = memoryCache[key]
-        if (memRecord == null || !isValid(memRecord)) {
+        if (memRecord == null || !isValid(memRecord, effectiveTarget)) {
             memRecord = memoryCache[fallbackKey]
         }
-        if (memRecord == null || !isValid(memRecord)) {
+        if (memRecord == null || !isValid(memRecord, effectiveTarget)) {
             memRecord = memoryCache.values.firstOrNull {
                 (it.videoId == videoId || it.canonicalUrl == normalizedUrl) &&
-                        it.useLivelyVoice == useLively && isValid(it)
+                        it.useLivelyVoice == useLively &&
+                        it.targetLang.equals(effectiveTarget, ignoreCase = true) &&
+                        isValid(it, effectiveTarget)
             }
         }
 
-        if (memRecord != null && isValid(memRecord)) {
+        if (memRecord != null && isValid(memRecord, effectiveTarget)) {
             val elapsedMs = System.currentTimeMillis() - startMs
             val ctx = mapOf(
                 "elapsedMs" to elapsedMs.toString(),
@@ -113,19 +167,20 @@ object VoxTranslationSessionCache {
                 "finalPath" to "CACHE"
             )
             VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATION_LOCAL_CACHE_HIT, "Translation memory cache hit", ctx)
+            incrementMemoryHit()
             return LookupResult.Hit(memRecord, "MEMORY_CACHE")
         }
 
-        // 2. Local persisted session (exact key or fallback key)
+        // 2. Local persisted session (exact key or fallback key with targetLang verification)
         var persistedRecord = getPersistedRecord(key)
-        if (persistedRecord == null || !isValid(persistedRecord)) {
+        if (persistedRecord == null || !isValid(persistedRecord, effectiveTarget)) {
             persistedRecord = getPersistedRecord(fallbackKey)
         }
-        if (persistedRecord == null || !isValid(persistedRecord)) {
-            persistedRecord = findPersistedRecordMatching(videoId, normalizedUrl, useLively)
+        if (persistedRecord == null || !isValid(persistedRecord, effectiveTarget)) {
+            persistedRecord = findPersistedRecordMatching(videoId, normalizedUrl, effectiveTarget, useLively)
         }
 
-        if (persistedRecord != null && isValid(persistedRecord)) {
+        if (persistedRecord != null && isValid(persistedRecord, effectiveTarget)) {
             memoryCache[key] = persistedRecord
             val elapsedMs = System.currentTimeMillis() - startMs
             val ctx = mapOf(
@@ -134,6 +189,7 @@ object VoxTranslationSessionCache {
                 "finalPath" to "CACHE"
             )
             VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATION_PERSISTED_SESSION_HIT, "Translation persisted session hit", ctx)
+            incrementPersistedHit()
             return LookupResult.Hit(persistedRecord, "PERSISTED_SESSION")
         }
 
@@ -218,6 +274,12 @@ object VoxTranslationSessionCache {
             createdAtMs = System.currentTimeMillis()
         )
 
+        if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
+            val oldestKey = memoryCache.minByOrNull { it.value.createdAtMs }?.key
+            if (oldestKey != null) {
+                memoryCache.remove(oldestKey)
+            }
+        }
         memoryCache[key] = record
         activeJobs[key]?.let {
             it.status = JobStatus.READY
@@ -239,10 +301,14 @@ object VoxTranslationSessionCache {
         activeJobs[key]?.status = JobStatus.FAILED
     }
 
-    private fun isValid(record: TranslationRecord): Boolean {
-        if (record.audioUrl.isBlank()) return false
+    private fun isValid(record: TranslationRecord, expectedTargetLang: String? = null): Boolean {
+        if (record.audioUrl.isBlank() || record.videoId.isBlank()) return false
+        if (!expectedTargetLang.isNullOrBlank() && !record.targetLang.equals(expectedTargetLang, ignoreCase = true)) {
+            return false
+        }
+        val ttl = customTtlMs ?: DEFAULT_TTL_MS
         val ageMs = System.currentTimeMillis() - record.createdAtMs
-        return ageMs in 0..DEFAULT_TTL_MS
+        return ageMs in 0..ttl
     }
 
     private fun getPersistedRecord(key: String): TranslationRecord? {
@@ -250,17 +316,26 @@ object VoxTranslationSessionCache {
         val rawJson = p.getString("rec_$key", null) ?: return null
         return try {
             val json = JSONObject(rawJson)
+            val videoId = json.getString("videoId")
+            val audioUrl = json.getString("audioUrl")
+            val createdAt = json.optLong("createdAtMs", 0L)
+            if (videoId.isBlank() || audioUrl.isBlank() || createdAt <= 0L) {
+                p.edit().remove("rec_$key").commit()
+                return null
+            }
             TranslationRecord(
-                videoId = json.getString("videoId"),
-                canonicalUrl = json.getString("canonicalUrl"),
+                videoId = videoId,
+                canonicalUrl = json.optString("canonicalUrl", ""),
                 sourceLang = json.optString("sourceLang", ""),
                 targetLang = json.optString("targetLang", "ru"),
-                audioUrl = json.getString("audioUrl"),
+                audioUrl = audioUrl,
                 durationSec = json.optDouble("durationSec", 0.0),
                 useLivelyVoice = json.optBoolean("useLivelyVoice", false),
-                createdAtMs = json.optLong("createdAtMs", 0L)
+                createdAtMs = createdAt,
+                schemaVersion = json.optInt("schemaVersion", CURRENT_SCHEMA_VERSION)
             )
         } catch (e: Exception) {
+            p.edit().remove("rec_$key").commit()
             null
         }
     }
@@ -277,11 +352,38 @@ object VoxTranslationSessionCache {
                 put("durationSec", record.durationSec)
                 put("useLivelyVoice", record.useLivelyVoice)
                 put("createdAtMs", record.createdAtMs)
+                put("schemaVersion", CURRENT_SCHEMA_VERSION)
             }
-            p.edit().putString("rec_$key", json.toString()).apply()
+            val editor = p.edit().putString("rec_$key", json.toString())
+            trimPersistedRecordsIfNeeded(p, editor)
+            editor.apply()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist translation record: %s", e.message)
         }
+    }
+
+    private fun trimPersistedRecordsIfNeeded(p: SharedPreferences, editor: SharedPreferences.Editor) {
+        try {
+            val records = mutableListOf<Pair<String, Long>>()
+            for ((k, v) in p.all) {
+                if (k.startsWith("rec_") && v is String) {
+                    try {
+                        val jobj = JSONObject(v)
+                        val created = jobj.optLong("createdAtMs", 0L)
+                        records.add(Pair(k, created))
+                    } catch (_: Exception) {
+                        editor.remove(k)
+                    }
+                }
+            }
+            if (records.size > MAX_PERSISTED_ENTRIES) {
+                records.sortBy { it.second }
+                val toRemove = records.size - MAX_PERSISTED_ENTRIES
+                for (i in 0 until toRemove) {
+                    editor.remove(records[i].first)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun loadPersistedRecords() {
@@ -302,7 +404,7 @@ object VoxTranslationSessionCache {
         }
     }
 
-    private fun findPersistedRecordMatching(videoId: String, normalizedUrl: String, useLively: Boolean): TranslationRecord? {
+    private fun findPersistedRecordMatching(videoId: String, normalizedUrl: String, targetLang: String, useLively: Boolean): TranslationRecord? {
         val p = prefs ?: return null
         try {
             val all = p.all
@@ -310,7 +412,9 @@ object VoxTranslationSessionCache {
                 if (k.startsWith("rec_") && v is String) {
                     val rec = getPersistedRecord(k.removePrefix("rec_"))
                     if (rec != null && (rec.videoId == videoId || rec.canonicalUrl == normalizedUrl) &&
-                        rec.useLivelyVoice == useLively && isValid(rec)) {
+                        rec.useLivelyVoice == useLively &&
+                        rec.targetLang.equals(targetLang, ignoreCase = true) &&
+                        isValid(rec, targetLang)) {
                         return rec
                     }
                 }

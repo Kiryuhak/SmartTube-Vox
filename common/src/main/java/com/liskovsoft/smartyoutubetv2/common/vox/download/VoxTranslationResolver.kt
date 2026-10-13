@@ -10,6 +10,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.yandex.SmartTubeYandexVotAudioS
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotAudioSourceProvider
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotAudioTransfer
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotAudioUploadTransport
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager
 
 /**
@@ -71,6 +72,29 @@ class DefaultVoxTranslationResolver(
         }
 
         val videoUrl = "https://www.youtube.com/watch?v=$videoId"
+
+        // 0. Cache-First check (Memory & Persisted cache)
+        try {
+            val lookup = VoxTranslationSessionCache.lookup(
+                videoId = videoId,
+                rawUrl = videoUrl,
+                sourceLang = null,
+                targetLang = DEFAULT_TARGET_LANG,
+                useLively = useLiveVoices
+            )
+            if (lookup is VoxTranslationSessionCache.LookupResult.Hit && lookup.record.audioUrl.isNotBlank()) {
+                VoxUrlSecurityValidator.validateUrl(lookup.record.audioUrl)
+                Log.i("DefaultVoxTranslationResolver", "Translation reused from cache for download: source=${lookup.source} videoId=$videoId")
+                return VoxResolvedTranslation(
+                    url = lookup.record.audioUrl,
+                    format = "audio/mp3",
+                    remainingTimeSec = 0
+                )
+            }
+        } catch (e: Exception) {
+            Log.w("DefaultVoxTranslationResolver", "Cache lookup for download failed: ${e.message}")
+        }
+
         var attempts = 0
         var isFirstRequest = true
         var audioUploaded = false
@@ -114,6 +138,17 @@ class DefaultVoxTranslationResolver(
                     val url = result.audioUrl
                     if (!url.isNullOrBlank()) {
                         VoxUrlSecurityValidator.validateUrl(url)
+                        try {
+                            VoxTranslationSessionCache.storeReadyTranslation(
+                                videoId = videoId,
+                                rawUrl = videoUrl,
+                                sourceLang = null,
+                                targetLang = DEFAULT_TARGET_LANG,
+                                audioUrl = url,
+                                durationSec = 0.0,
+                                useLively = useLiveVoices
+                            )
+                        } catch (_: Exception) {}
                         return VoxResolvedTranslation(
                             url = url,
                             format = "audio/mp3",

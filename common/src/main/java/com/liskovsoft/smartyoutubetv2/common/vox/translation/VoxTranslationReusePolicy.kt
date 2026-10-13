@@ -14,21 +14,19 @@ object VoxTranslationReusePolicy {
         if (rawUrlOrId.isNullOrBlank()) return ""
         val trimmed = rawUrlOrId.trim()
         val videoId = when {
-            trimmed.matches(Regex("^[a-zA-Z0-9_-]{11}$")) -> trimmed
+            trimmed.matches(Regex("^[a-zA-Z0-9_-]+$")) -> trimmed
             trimmed.contains("youtu.be/") -> {
-                val after = trimmed.substringAfter("youtu.be/").substringBefore("?").substringBefore("&")
-                if (after.length == 11) after else trimmed
+                trimmed.substringAfter("youtu.be/").substringBefore("?").substringBefore("&")
             }
             trimmed.contains("v=") -> {
-                val after = trimmed.substringAfter("v=").substringBefore("&")
-                if (after.length == 11) after else trimmed
+                trimmed.substringAfter("v=").substringBefore("&")
             }
-            else -> trimmed
+            else -> trimmed.substringBefore("?")
         }
-        return if (videoId.matches(Regex("^[a-zA-Z0-9_-]{11}$"))) {
+        return if (videoId.isNotBlank() && videoId.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
             "https://www.youtube.com/watch?v=$videoId"
         } else {
-            trimmed.substringBefore("?")
+            trimmed
         }
     }
 
@@ -55,7 +53,8 @@ object VoxTranslationReusePolicy {
     fun normalizeSourceLang(sourceLang: String?): String {
         if (sourceLang.isNullOrBlank()) return ""
         val trimmed = sourceLang.trim().lowercase()
-        return if (trimmed == "auto" || trimmed == "und") "" else trimmed
+        if (trimmed == "auto" || trimmed == "und") return ""
+        return trimmed.substringBefore("-")
     }
 
     fun isReusable(status: Int, audioUrl: String?): Boolean {

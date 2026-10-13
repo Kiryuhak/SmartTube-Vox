@@ -1268,6 +1268,7 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
+        com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.incrementNewRequest();
         com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.registerPendingJob(
                 videoId, videoUrl, sourceLang, targetLang, useLively
         );
@@ -1692,6 +1693,7 @@ public class VoiceTranslateController extends BasePlayerController {
                             "Server already had translation ready on first request (Server Existing)",
                             existCtx
                     );
+                    com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.incrementServerExisting();
                 }
                 if (state.getAudioUrl() != null && !state.getAudioUrl().isEmpty()) {
                     TrackInfo audioInfo = resolveAudioInfo();
