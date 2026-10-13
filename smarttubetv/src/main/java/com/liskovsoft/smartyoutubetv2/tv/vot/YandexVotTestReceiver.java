@@ -777,6 +777,59 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     Log.e(TAG, "OTA_CHECK_RESULT: ERROR " + error.getMessage());
                 }
             });
+        } else if ("testCacheLookup".equalsIgnoreCase(action)) {
+            String videoId = intent.getStringExtra("videoId");
+            if (videoId == null || videoId.isEmpty()) videoId = "UF8uR6Z6KLc";
+            String videoUrl = intent.getStringExtra("videoUrl");
+            if (videoUrl == null || videoUrl.isEmpty()) videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+            String sourceLang = intent.getStringExtra("sourceLang");
+            String targetLang = intent.getStringExtra("targetLang");
+            if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
+            boolean useLively = intent.getBooleanExtra("useLively", false);
+
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult res =
+                    com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.lookup(videoId, videoUrl, sourceLang, targetLang, useLively);
+            if (res instanceof com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit) {
+                com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit hit =
+                        (com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit) res;
+                Log.i(TAG, "CACHE_LOOKUP_RESULT: type=HIT source=" + hit.getSource() + " videoId=" + hit.getRecord().getVideoId() + " audioUrl=" + hit.getRecord().getAudioUrl());
+            } else if (res instanceof com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.PendingJob) {
+                Log.i(TAG, "CACHE_LOOKUP_RESULT: type=PENDING videoId=" + videoId);
+            } else {
+                Log.i(TAG, "CACHE_LOOKUP_RESULT: type=MISS videoId=" + videoId);
+            }
+        } else if ("testStoreCache".equalsIgnoreCase(action)) {
+            String videoId = intent.getStringExtra("videoId");
+            if (videoId == null || videoId.isEmpty()) videoId = "test-cache-video";
+            String videoUrl = intent.getStringExtra("videoUrl");
+            if (videoUrl == null || videoUrl.isEmpty()) videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+            String sourceLang = intent.getStringExtra("sourceLang");
+            if (sourceLang == null) sourceLang = "en";
+            String targetLang = intent.getStringExtra("targetLang");
+            if (targetLang == null) targetLang = "ru";
+            String audioUrl = intent.getStringExtra("audioUrl");
+            if (audioUrl == null || audioUrl.isEmpty()) audioUrl = "https://vtrans.s3-private.mds.yandex.net/tts/prod/test.mp3";
+            double durationSec = intent.getDoubleExtra("durationSec", 120.0);
+            boolean useLively = intent.getBooleanExtra("useLively", false);
+
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.storeReadyTranslation(
+                    videoId, videoUrl, sourceLang, targetLang, audioUrl, durationSec, useLively
+            );
+            Log.i(TAG, "CACHE_STORE_RESULT: videoId=" + videoId + " audioUrl=" + audioUrl);
+        } else if ("testInvalidateCache".equalsIgnoreCase(action)) {
+            String videoId = intent.getStringExtra("videoId");
+            String videoUrl = intent.getStringExtra("videoUrl");
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.invalidate(videoId, videoUrl);
+            com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.invalidateCachedResult(videoUrl);
+            Log.i(TAG, "CACHE_INVALIDATE_RESULT: videoId=" + videoId + " videoUrl=" + videoUrl);
+        } else if ("testClearTranslationCache".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(context);
+            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.clear();
+            com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.clearCache();
+            Log.i(TAG, "CACHE_CLEAR_RESULT: cleared=true");
         } else {
             Log.w(TAG, "Unknown diagnostic action: " + action);
         }

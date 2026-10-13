@@ -39,9 +39,23 @@ object VoxTranslationReusePolicy {
         useLiveVoices: Boolean
     ): String {
         val normalizedUrl = normalizeVideoUrl(videoUrl)
-        val sLang = sourceLang?.trim()?.lowercase() ?: ""
+        val sLang = normalizeSourceLang(sourceLang)
         val tLang = if (!targetLang.isNullOrBlank()) targetLang.trim().lowercase() else DEFAULT_TARGET_LANG
         return "$normalizedUrl|$sLang|$tLang|$useLiveVoices"
+    }
+
+    fun buildFallbackCacheKey(
+        videoUrl: String?,
+        targetLang: String?,
+        useLiveVoices: Boolean
+    ): String {
+        return buildCacheKey(videoUrl, "", targetLang, useLiveVoices)
+    }
+
+    fun normalizeSourceLang(sourceLang: String?): String {
+        if (sourceLang.isNullOrBlank()) return ""
+        val trimmed = sourceLang.trim().lowercase()
+        return if (trimmed == "auto" || trimmed == "und") "" else trimmed
     }
 
     fun isReusable(status: Int, audioUrl: String?): Boolean {

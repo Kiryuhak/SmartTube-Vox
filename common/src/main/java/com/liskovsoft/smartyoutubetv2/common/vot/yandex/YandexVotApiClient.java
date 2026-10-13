@@ -337,6 +337,15 @@ public class YandexVotApiClient {
         return cached != null && !cached.isExpired();
     }
 
+    public static void invalidateCachedResult(String videoUrl) {
+        if (videoUrl == null) return;
+        translationCache.entrySet().removeIf(entry -> entry.getKey().startsWith(videoUrl + "|"));
+    }
+
+    public static void clearCache() {
+        translationCache.clear();
+    }
+
     public static void invalidateSession() {
         synchronized (SESSION_LOCK) {
             sessionSecretKey = null;

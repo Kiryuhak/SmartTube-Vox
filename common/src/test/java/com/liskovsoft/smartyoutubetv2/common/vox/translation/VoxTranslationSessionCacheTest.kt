@@ -93,4 +93,71 @@ class VoxTranslationSessionCacheTest {
         )
         assertTrue(afterReadyResult is VoxTranslationSessionCache.LookupResult.Hit)
     }
+
+    @Test
+    fun testFallbackKeyMatchWhenSourceLangEmptyOrAuto() {
+        VoxTranslationSessionCache.storeReadyTranslation(
+            videoId = "videoFallback789",
+            rawUrl = "https://youtube.com/watch?v=videoFallback789",
+            sourceLang = "en",
+            targetLang = "ru",
+            audioUrl = "https://vot.example.com/audio/videoFallback789.mp3",
+            durationSec = 200.0,
+            useLively = false
+        )
+
+        // Lookup with empty sourceLang should hit fallback
+        val lookupEmpty = VoxTranslationSessionCache.lookup(
+            videoId = "videoFallback789",
+            rawUrl = "https://youtube.com/watch?v=videoFallback789",
+            sourceLang = "",
+            targetLang = "ru",
+            useLively = false
+        )
+        assertTrue(lookupEmpty is VoxTranslationSessionCache.LookupResult.Hit)
+
+        // Lookup with 'auto' sourceLang should also hit
+        val lookupAuto = VoxTranslationSessionCache.lookup(
+            videoId = "videoFallback789",
+            rawUrl = "https://youtube.com/watch?v=videoFallback789",
+            sourceLang = "auto",
+            targetLang = "ru",
+            useLively = false
+        )
+        assertTrue(lookupAuto is VoxTranslationSessionCache.LookupResult.Hit)
+    }
+
+    @Test
+    fun testInvalidationRemovesRecordFromCache() {
+        VoxTranslationSessionCache.storeReadyTranslation(
+            videoId = "videoToInvalidate",
+            rawUrl = "https://youtube.com/watch?v=videoToInvalidate",
+            sourceLang = "en",
+            targetLang = "ru",
+            audioUrl = "https://vot.example.com/audio/invalid.mp3",
+            durationSec = 150.0,
+            useLively = false
+        )
+
+        val before = VoxTranslationSessionCache.lookup(
+            videoId = "videoToInvalidate",
+            rawUrl = "https://youtube.com/watch?v=videoToInvalidate",
+            sourceLang = "en",
+            targetLang = "ru",
+            useLively = false
+        )
+        assertTrue(before is VoxTranslationSessionCache.LookupResult.Hit)
+
+        // Invalidate
+        VoxTranslationSessionCache.invalidate("videoToInvalidate", "https://youtube.com/watch?v=videoToInvalidate")
+
+        val after = VoxTranslationSessionCache.lookup(
+            videoId = "videoToInvalidate",
+            rawUrl = "https://youtube.com/watch?v=videoToInvalidate",
+            sourceLang = "en",
+            targetLang = "ru",
+            useLively = false
+        )
+        assertTrue(after is VoxTranslationSessionCache.LookupResult.Miss)
+    }
 }

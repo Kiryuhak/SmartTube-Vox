@@ -90,8 +90,21 @@ object VoxTranslationSessionCache {
         )
         VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.TRANSLATION_LOOKUP_STARTED, "Translation lookup started", baseCtx)
 
-        // 1. Local memory cache
-        val memRecord = memoryCache[key]
+        // 1. Local memory cache (exact key or fallback key)
+        val normalizedUrl = VoxTranslationReusePolicy.normalizeVideoUrl(rawUrl ?: videoId)
+        val fallbackKey = VoxTranslationReusePolicy.buildFallbackCacheKey(normalizedUrl, targetLang, useLively)
+
+        var memRecord = memoryCache[key]
+        if (memRecord == null || !isValid(memRecord)) {
+            memRecord = memoryCache[fallbackKey]
+        }
+        if (memRecord == null || !isValid(memRecord)) {
+            memRecord = memoryCache.values.firstOrNull {
+                (it.videoId == videoId || it.canonicalUrl == normalizedUrl) &&
+                        it.useLivelyVoice == useLively && isValid(it)
+            }
+        }
+
         if (memRecord != null && isValid(memRecord)) {
             val elapsedMs = System.currentTimeMillis() - startMs
             val ctx = mapOf(
@@ -103,8 +116,15 @@ object VoxTranslationSessionCache {
             return LookupResult.Hit(memRecord, "MEMORY_CACHE")
         }
 
-        // 2. Local persisted session
-        val persistedRecord = getPersistedRecord(key)
+        // 2. Local persisted session (exact key or fallback key)
+        var persistedRecord = getPersistedRecord(key)
+        if (persistedRecord == null || !isValid(persistedRecord)) {
+            persistedRecord = getPersistedRecord(fallbackKey)
+        }
+        if (persistedRecord == null || !isValid(persistedRecord)) {
+            persistedRecord = findPersistedRecordMatching(videoId, normalizedUrl, useLively)
+        }
+
         if (persistedRecord != null && isValid(persistedRecord)) {
             memoryCache[key] = persistedRecord
             val elapsedMs = System.currentTimeMillis() - startMs
@@ -118,7 +138,10 @@ object VoxTranslationSessionCache {
         }
 
         // 3. Existing active job
-        val activeJob = activeJobs[key]
+        var activeJob = activeJobs[key]
+        if (activeJob == null) {
+            activeJob = activeJobs[fallbackKey]
+        }
         if (activeJob != null) {
             if (activeJob.status == JobStatus.READY && activeJob.readyRecord != null) {
                 val elapsedMs = System.currentTimeMillis() - startMs
@@ -279,14 +302,111 @@ object VoxTranslationSessionCache {
         }
     }
 
+    private fun findPersistedRecordMatching(videoId: String, normalizedUrl: String, useLively: Boolean): TranslationRecord? {
+        val p = prefs ?: return null
+        try {
+            val all = p.all
+            for ((k, v) in all) {
+                if (k.startsWith("rec_") && v is String) {
+                    val rec = getPersistedRecord(k.removePrefix("rec_"))
+                    if (rec != null && (rec.videoId == videoId || rec.canonicalUrl == normalizedUrl) &&
+                        rec.useLivelyVoice == useLively && isValid(rec)) {
+                        return rec
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
+    @JvmStatic
+    fun invalidate(videoId: String?, rawUrl: String?) {
+        if (videoId.isNullOrBlank() && rawUrl.isNullOrBlank()) return
+        val canonicalUrl = if (!rawUrl.isNullOrBlank()) VoxTranslationReusePolicy.normalizeVideoUrl(rawUrl) else ""
+
+        // 1. Invalidate memory cache
+        val itMem = memoryCache.entries.iterator()
+        while (itMem.hasNext()) {
+            val entry = itMem.next()
+            val rec = entry.value
+            if ((!videoId.isNullOrBlank() && rec.videoId == videoId) ||
+                (canonicalUrl.isNotBlank() && rec.canonicalUrl == canonicalUrl)) {
+                itMem.remove()
+            }
+        }
+
+        // 2. Invalidate active jobs
+        val itJobs = activeJobs.entries.iterator()
+        while (itJobs.hasNext()) {
+            val entry = itJobs.next()
+            if (!videoId.isNullOrBlank() && entry.value.videoId == videoId) {
+                itJobs.remove()
+            }
+        }
+
+        // 3. Invalidate persisted records
+        val p = prefs ?: return
+        try {
+            val editor = p.edit()
+            for ((k, _) in p.all) {
+                if (k.startsWith("rec_")) {
+                    val rec = getPersistedRecord(k.removePrefix("rec_"))
+                    if (rec != null && ((!videoId.isNullOrBlank() && rec.videoId == videoId) ||
+                                (canonicalUrl.isNotBlank() && rec.canonicalUrl == canonicalUrl))) {
+                        editor.remove(k)
+                    }
+                }
+            }
+            editor.apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to invalidate persisted record: %s", e.message)
+        }
+    }
+
+    @JvmStatic
+    fun hasPersistedRecord(videoId: String): Boolean {
+        if (videoId.isBlank()) return false
+        val inMemory = memoryCache.values.any { it.videoId == videoId && isValid(it) }
+        if (inMemory) return true
+        val p = prefs ?: return false
+        try {
+            for ((k, v) in p.all) {
+                if (k.startsWith("rec_") && v is String) {
+                    val rec = getPersistedRecord(k.removePrefix("rec_"))
+                    if (rec != null && rec.videoId == videoId && isValid(rec)) {
+                        return true
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return false
+    }
+
     @JvmStatic
     fun clear() {
         clearMemory()
+        clearPersisted()
     }
 
     @JvmStatic
     fun clearMemory() {
         memoryCache.clear()
         activeJobs.clear()
+    }
+
+    @JvmStatic
+    fun clearPersisted() {
+        val p = prefs ?: return
+        try {
+            val editor = p.edit()
+            for ((k, _) in p.all) {
+                if (k.startsWith("rec_")) {
+                    editor.remove(k)
+                }
+            }
+            editor.apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear persisted records: %s", e.message)
+        }
     }
 }
