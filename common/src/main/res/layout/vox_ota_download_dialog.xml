@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_ota_dialog_root"
+    android:layout_width="480dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_vox_download_overlay"
+    android:padding="28dp">
+
+    <!-- Header: App Name & Version -->
+    <TextView
+        android:id="@+id/vox_ota_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="SmartTube VOX 9.1"
+        android:textColor="@color/vox_text_primary"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="start" />
+
+    <!-- Subtitle: Action -->
+    <TextView
+        android:id="@+id/vox_ota_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Скачивание обновления"
+        android:textColor="@color/vox_text_secondary"
+        android:textSize="14sp"
+        android:gravity="start" />
+
+    <!-- Progress bar & Percent -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ProgressBar
+            android:id="@+id/vox_ota_progressbar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="8dp"
+            android:layout_weight="1"
+            android:progressDrawable="@drawable/vox_download_progressbar"
+            android:max="100"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/vox_ota_percent_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:textColor="@color/vox_accent"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:text="0%" />
+    </LinearLayout>
+
+    <!-- MB counter -->
+    <TextView
+        android:id="@+id/vox_ota_bytes_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textColor="@color/vox_text_primary"
+        android:textSize="14sp"
+        android:gravity="start"
+        android:text="0 МБ / 0 МБ" />
+
+    <!-- Speed counter -->
+    <TextView
+        android:id="@+id/vox_ota_speed_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="@color/vox_text_secondary"
+        android:textSize="13sp"
+        android:gravity="start"
+        android:text="Скорость: 0 КБ/с" />
+
+    <!-- ETA -->
+    <TextView
+        android:id="@+id/vox_ota_eta_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/vox_accent"
+        android:textSize="13sp"
+        android:gravity="start"
+        android:text="Осталось: вычисляется…" />
+
+    <!-- Cancel button (Focused by default for TV) -->
+    <Button
+        android:id="@+id/vox_ota_cancel_btn"
+        android:layout_width="160dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="24dp"
+        android:layout_gravity="end"
+        android:text="@string/cancel"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:background="@drawable/bg_vox_dialog_button" />
+
+</LinearLayout>

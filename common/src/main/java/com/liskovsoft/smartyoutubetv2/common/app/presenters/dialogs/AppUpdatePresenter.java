@@ -18,6 +18,7 @@ import com.liskovsoft.sharedutils.helpers.AppInfoHelpers;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaDownloadDialog;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaErrorCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager;
@@ -90,7 +91,7 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
                         } else if (GeneralData.instance(getContext()).isOldUpdateNotificationsEnabled()) {
                             showVoxUpdateDialog(release, asset);
                         } else {
-                            pinUpdateSection(release.getVersionName(), release.getChangelog(), asset.getDownloadUrl());
+                            pinVoxUpdateSection(release, asset);
                         }
                     }
 
@@ -147,7 +148,6 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
     public void onUpdateError(Exception error) {
         if (mIsForceCheck) {
             LoadingManager.showLoading(getContext(), false);
-
             if (AppUpdateCheckerListener.LATEST_VERSION.equals(error.getMessage())) {
                 MessageHelpers.showMessage(getContext(), R.string.update_not_found);
             } else {
@@ -167,40 +167,61 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         mSettingsPresenter.appendSingleButton(
                 UiOptionItem.from(getContext().getString(R.string.install_update), optionItem -> {
                     GeneralData.instance(getContext()).setChangelog(release.getChangelog());
-                    final com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgressEstimator estimator =
-                            new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgressEstimator(0.3f, 1000L);
-                    VoxOtaUpdateManager.instance(getContext()).downloadAndVerify(
-                            asset,
+                    mSettingsPresenter.closeDialog();
+                    VoxOtaDownloadDialog.show(
+                            getContext(),
                             release,
-                            new VoxOtaUpdateManager.Callback() {
-                                @Override
-                                public void onUpdateAvailable(VoxReleaseInfo r, VoxReleaseAsset a) {}
-
-                                @Override
-                                public void onNoUpdateAvailable(String v) {}
-
-                                @Override
-                                public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {
-                                    com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgress p =
-                                            estimator.update(bytesRead, totalBytes > 0 ? totalBytes : null, System.currentTimeMillis());
-                                }
-
-                                @Override
-                                public void onDownloadCompleted(File apkFile) {
-                                    LoadingManager.showLoading(getContext(), false);
-                                    VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
-                                }
-
-                                @Override
-                                public void onError(VoxOtaException error) {
-                                    LoadingManager.showLoading(getContext(), false);
-                                    MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
-                                }
+                            asset,
+                            apkFile -> {
+                                VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
+                                return kotlin.Unit.INSTANCE;
+                            },
+                            error -> {
+                                MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
+                                return kotlin.Unit.INSTANCE;
                             }
                     );
                 }, false));
         mSettingsPresenter.appendStringsCategory(getContext().getString(R.string.update_changelog), createChangelogOptions(release.getChangelog()));
         mSettingsPresenter.showDialog(String.format("%s %s", getContext().getString(R.string.app_name), release.getVersionName()), AppUpdatePresenter::unhold);
+    }
+
+    private void pinVoxUpdateSection(VoxReleaseInfo release, VoxReleaseAsset asset) {
+        if (getContext() == null) {
+            return;
+        }
+
+        BrowsePresenter.instance(getContext()).pinItem(getContext().getString(R.string.update_found), R.drawable.action_info, new ErrorFragmentData() {
+            @Override
+            public void onAction() {
+                GeneralData.instance(getContext()).setChangelog(release.getChangelog());
+                VoxOtaDownloadDialog.show(
+                        getContext(),
+                        release,
+                        asset,
+                        apkFile -> {
+                            VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
+                            return kotlin.Unit.INSTANCE;
+                        },
+                        error -> {
+                            MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
+                            return kotlin.Unit.INSTANCE;
+                        }
+                );
+            }
+
+            @Override
+            public String getMessage() {
+                return String.format("%s %s", getContext().getString(R.string.app_name), release.getVersionName()) + " " +
+                        getContext().getString(R.string.update_changelog) + ":\n" +
+                        createChangelog(release.getChangelog());
+            }
+
+            @Override
+            public String getActionText() {
+                return getContext().getString(R.string.install_update);
+            }
+        });
     }
 
     private void showUpdateDialog(String versionName, List<String> changelog, String apkPath) {

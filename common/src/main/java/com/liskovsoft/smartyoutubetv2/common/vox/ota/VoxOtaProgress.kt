@@ -106,34 +106,46 @@ class VoxOtaProgressEstimator(
 
         @JvmStatic
         fun formatBytesProgress(progress: VoxOtaProgress): String {
-            val downloadedStr = formatBytes(progress.bytesDownloaded)
-            val total = progress.totalBytes
-            return if (total != null && total > 0L) {
-                "$downloadedStr / ${formatBytes(total)}"
+            return formatBytesProgress(progress.bytesDownloaded, progress.totalBytes)
+        }
+
+        @JvmStatic
+        fun formatBytesProgress(downloadedBytes: Long, totalBytes: Long?): String {
+            val downloadedStr = formatBytes(downloadedBytes)
+            return if (totalBytes != null && totalBytes > 0L) {
+                "$downloadedStr / ${formatBytes(totalBytes)}"
             } else {
-                downloadedStr
+                "Скачано: $downloadedStr"
             }
         }
 
         @JvmStatic
         fun formatSpeedAndEta(progress: VoxOtaProgress): String {
             val speedStr = formatSpeed(progress.speedBytesPerSec)
-            val etaSec = progress.etaSec
-            return if (etaSec != null && etaSec > 0L) {
-                val etaStr = if (etaSec >= 60L) {
-                    "~${(etaSec + 30L) / 60L} мин"
-                } else {
-                    "~$etaSec сек"
-                }
-                if (speedStr.isNotEmpty()) "$speedStr • Осталось $etaStr" else "Осталось $etaStr"
+            val etaStr = formatEta(progress.etaSec)
+            return "$speedStr • $etaStr"
+        }
+
+        @JvmStatic
+        fun formatEta(etaSec: Long?): String {
+            if (etaSec == null || etaSec <= 0L) {
+                return "Осталось: вычисляется…"
+            }
+            return if (etaSec >= 60L) {
+                val mins = (etaSec + 30L) / 60L
+                "Осталось примерно: $mins мин"
             } else {
-                speedStr
+                "Осталось примерно: $etaSec сек"
             }
         }
 
         @JvmStatic
         fun formatBytes(bytes: Long): String {
             if (bytes <= 0L) return "0 Б"
+            val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+            if (gb >= 1.0) {
+                return String.format(Locale.US, "%.1f ГБ", gb).replace('.', ',')
+            }
             val mb = bytes / (1024.0 * 1024.0)
             return if (mb >= 1.0) {
                 String.format(Locale.US, "%.1f МБ", mb).replace('.', ',')
@@ -145,13 +157,13 @@ class VoxOtaProgressEstimator(
 
         @JvmStatic
         fun formatSpeed(bytesPerSec: Double): String {
-            if (bytesPerSec <= 0.0) return ""
+            if (bytesPerSec <= 0.0) return "Скорость: 0 КБ/с"
             val mb = bytesPerSec / (1024.0 * 1024.0)
             return if (mb >= 1.0) {
-                String.format(Locale.US, "%.1f МБ/с", mb).replace('.', ',')
+                String.format(Locale.US, "Скорость: %.1f МБ/с", mb).replace('.', ',')
             } else {
                 val kb = bytesPerSec / 1024.0
-                String.format(Locale.US, "%.0f КБ/с", kb)
+                String.format(Locale.US, "Скорость: %.0f КБ/с", kb)
             }
         }
     }

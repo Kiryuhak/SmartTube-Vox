@@ -60,6 +60,13 @@ class VoxOtaUpdateManager(private val context: Context) {
         }
 
         @JvmStatic
+        fun resetInstanceForTesting() {
+            synchronized(this) {
+                sInstance = null
+            }
+        }
+
+        @JvmStatic
         fun classifyException(
             throwable: Throwable,
             customMessage: String? = null,
@@ -110,6 +117,10 @@ class VoxOtaUpdateManager(private val context: Context) {
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val isInFlight = AtomicBoolean(false)
+    private val isDownloadCancelled = AtomicBoolean(false)
+
+    @Volatile
+    private var activeDownloadConnection: HttpURLConnection? = null
 
     @Volatile
     private var lastSuccessfulCheckTimeMs: Long = 0L
@@ -123,6 +134,28 @@ class VoxOtaUpdateManager(private val context: Context) {
     fun getLastSuccessfulCheckTimeMs(): Long = lastSuccessfulCheckTimeMs
     fun getLastRateLimitTimeMs(): Long = lastRateLimitTimeMs
     fun wasRateLimited(): Boolean = wasRateLimited
+
+    fun cancelDownload() {
+        isDownloadCancelled.set(true)
+        try {
+            activeDownloadConnection?.disconnect()
+        } catch (e: Exception) {
+            // ignore
+        }
+        val cacheDir = FileHelpers.getCacheDir(context) ?: context.cacheDir
+        val tmpFile = File(cacheDir, "update.apk.tmp")
+        if (tmpFile.exists()) {
+            tmpFile.delete()
+        }
+        VoxSafeLogger.info(
+            VoxLogCategory.OTA,
+            VoxLogCode.OTA_DOWNLOAD_CANCELLED,
+            "Скачивание обновления отменено пользователем",
+            mapOf("reason" to "USER_CANCELLED")
+        )
+    }
+
+    fun isDownloadCancelled(): Boolean = isDownloadCancelled.get()
 
     fun resetCooldownForTesting() {
         lastSuccessfulCheckTimeMs = 0L
@@ -327,8 +360,8 @@ class VoxOtaUpdateManager(private val context: Context) {
                 val primaryAbi = try { DeviceHelpers.getPrimaryAbi() } catch (e: Exception) { null }
                 val selectedAsset = VoxReleaseAssetSelector.selectAsset(release.assets, primaryAbi)
                     ?: throw VoxOtaException(
-                        VoxOtaErrorCode.NO_COMPATIBLE_ASSET,
-                        "No compatible APK asset found for ABI: $primaryAbi",
+                        VoxOtaErrorCode.UNIVERSAL_ASSET_NOT_FOUND,
+                        "Universal APK asset not found in release: ${release.tagName}",
                         VoxOtaStage.COMPARE,
                         null,
                         false
@@ -390,6 +423,7 @@ class VoxOtaUpdateManager(private val context: Context) {
         executor.execute {
             var destinationFile: File? = null
             var tmpFile: File? = null
+            isDownloadCancelled.set(false)
             try {
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
@@ -462,7 +496,14 @@ class VoxOtaUpdateManager(private val context: Context) {
             } catch (e: Throwable) {
                 tmpFile?.delete()
                 destinationFile?.delete()
-                handleError(e, "", "", 0L, callback)
+                val otaEx = if (e is VoxOtaException) e else classifyException(e)
+                if (otaEx.code == VoxOtaErrorCode.INSTALL_CANCELLED || isDownloadCancelled.get()) {
+                    Log.d(TAG, "Download cancelled, skipping error callback")
+                } else {
+                    handleError(e, "", "", 0L, callback)
+                }
+            } finally {
+                activeDownloadConnection = null
             }
         }
     }
@@ -602,7 +643,18 @@ class VoxOtaUpdateManager(private val context: Context) {
         onProgress: (bytesRead: Long, totalBytes: Long, percent: Int) -> Unit
     ) {
         val conn = openConnectionWithRedirects(urlStr)
+        activeDownloadConnection = conn
         try {
+            if (isDownloadCancelled.get()) {
+                throw VoxOtaException(
+                    code = VoxOtaErrorCode.INSTALL_CANCELLED,
+                    message = "Download cancelled by user",
+                    stage = VoxOtaStage.HTTP,
+                    httpStatus = null,
+                    isRetryable = false
+                )
+            }
+
             val code = conn.responseCode
             if (code !in 200..299) {
                 val errorCode = when (code) {
@@ -627,11 +679,22 @@ class VoxOtaUpdateManager(private val context: Context) {
                     val buffer = ByteArray(BUFFER_SIZE)
                     var read: Int
                     while (input.read(buffer).also { read = it } != -1) {
+                        if (isDownloadCancelled.get()) {
+                            throw VoxOtaException(
+                                code = VoxOtaErrorCode.INSTALL_CANCELLED,
+                                message = "Download cancelled by user",
+                                stage = VoxOtaStage.HTTP,
+                                httpStatus = null,
+                                isRetryable = false
+                            )
+                        }
                         output.write(buffer, 0, read)
                         bytesCopied += read
                         if (totalBytes > 0L) {
                             val pct = ((bytesCopied * 100) / totalBytes).toInt().coerceIn(0, 100)
                             onProgress(bytesCopied, totalBytes, pct)
+                        } else {
+                            onProgress(bytesCopied, -1L, -1)
                         }
                     }
                     output.flush()
