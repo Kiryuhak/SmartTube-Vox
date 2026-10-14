@@ -67,25 +67,33 @@ class VoxOtaTest {
             VoxReleaseAsset("SmartTube_vot_32.56-vox.7_x86.apk", "https://example.com/x86.apk", 19000000L)
         )
 
-        // Android updater must ignore .wgt and SHA256SUMS.txt
+        // Правило VOX 9.1: встроенный updater ВСЕГДА скачивает только UNIVERSAL APK
         val arm64Selected = VoxReleaseAssetSelector.selectAsset(assets, "arm64-v8a")
         assertNotNull(arm64Selected)
-        assertEquals("SmartTube_vot_32.56-vox.7_arm64-v8a.apk", arm64Selected!!.name)
+        assertEquals("SmartTube_vot_32.56-vox.7_universal.apk", arm64Selected!!.name)
 
         val armv7Selected = VoxReleaseAssetSelector.selectAsset(assets, "armeabi-v7a")
         assertNotNull(armv7Selected)
-        assertEquals("SmartTube_vot_32.56-vox.7_armeabi-v7a.apk", armv7Selected!!.name)
+        assertEquals("SmartTube_vot_32.56-vox.7_universal.apk", armv7Selected!!.name)
 
         val x86Selected = VoxReleaseAssetSelector.selectAsset(assets, "x86")
         assertNotNull(x86Selected)
-        assertEquals("SmartTube_vot_32.56-vox.7_x86.apk", x86Selected!!.name)
+        assertEquals("SmartTube_vot_32.56-vox.7_universal.apk", x86Selected!!.name)
 
-        // Universal fallback when ABI is unknown or null
-        val universalSelected = VoxReleaseAssetSelector.selectAsset(assets, "mips")
-        assertNotNull(universalSelected)
-        assertEquals("SmartTube_vot_32.56-vox.7_universal.apk", universalSelected!!.name)
+        val nullAbiSelected = VoxReleaseAssetSelector.selectAsset(assets, null)
+        assertNotNull(nullAbiSelected)
+        assertEquals("SmartTube_vot_32.56-vox.7_universal.apk", nullAbiSelected!!.name)
 
-        // Finding SHA256SUMS.txt
+        // Если universal APK отсутствует — никакого fallback на ABI-специфичные файлы!
+        val assetsWithoutUniversal = listOf(
+            VoxReleaseAsset("SmartTube_vot_32.56-vox.7_armeabi-v7a.apk", "https://example.com/armv7.apk", 18000000L),
+            VoxReleaseAsset("SmartTube_vot_32.56-vox.7_arm64-v8a.apk", "https://example.com/arm64.apk", 19000000L),
+            VoxReleaseAsset("SmartTube_vot_32.56-vox.7_x86.apk", "https://example.com/x86.apk", 19000000L)
+        )
+        val rejectedAsset = VoxReleaseAssetSelector.selectAsset(assetsWithoutUniversal, "arm64-v8a")
+        org.junit.Assert.assertNull(rejectedAsset)
+
+        // Поиск SHA256SUMS.txt
         val sumsAsset = VoxReleaseAssetSelector.findSha256SumsAsset(assets)
         assertNotNull(sumsAsset)
         assertEquals("SHA256SUMS.txt", sumsAsset!!.name)

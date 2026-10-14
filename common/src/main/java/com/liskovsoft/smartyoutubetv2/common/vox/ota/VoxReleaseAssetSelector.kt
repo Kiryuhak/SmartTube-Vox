@@ -14,11 +14,16 @@ object VoxReleaseAssetSelector {
     private val IGNORED_EXTENSIONS = setOf(".wgt", ".txt", ".json", ".md", ".zip", ".tar.gz")
 
     /**
-     * Выбирает наиболее подходящий APK ассет для архитектуры устройства.
+     * Выбирает APK ассет для OTA-обновления.
+     *
+     * Строгое правило SmartTube VOX 9.1:
+     * Встроенный updater ВСЕГДА скачивает только UNIVERSAL APK.
+     * Никакого автоматического выбора armeabi-v7a / arm64-v8a / x86.
+     * Если universal APK отсутствует — возвращает null (ошибка OTA_UNIVERSAL_ASSET_NOT_FOUND).
      *
      * @param assets Список ассетов из релиза
-     * @param primaryAbi Архитектура устройства (из DeviceHelpers или Build.SUPPORTED_ABIS)
-     * @return Выбранный ассет или null, если подходящий APK не найден
+     * @param primaryAbi Архитектура устройства (игнорируется в VOX 9.1 для OTA)
+     * @return Выбранный universal ассет или null, если universal APK не найден
      */
     @JvmStatic
     @JvmOverloads
@@ -30,54 +35,23 @@ object VoxReleaseAssetSelector {
 
         if (apkAssets.isEmpty()) return null
 
-        // Приоритет отдаётся сборкам с явным тегом VOX / VOT
+        fun isUniversal(name: String): Boolean {
+            val lower = name.lowercase()
+            return lower.endsWith("_universal.apk") || lower.contains("universal")
+        }
+
         fun hasVoxTag(name: String): Boolean {
             val lower = name.lowercase()
             return lower.contains("_vot_") || lower.contains("_vox_") || lower.contains("-vot") || lower.contains("-vox")
         }
 
-        val prioritizedApks = apkAssets.sortedByDescending { if (hasVoxTag(it.name)) 1 else 0 }
-
-        val abi = primaryAbi?.lowercase() ?: ""
-
-        val preferredKey = when {
-            abi.contains("arm64") -> "arm64-v8a"
-            abi.contains("armeabi") || abi.contains("armv7") || abi.contains("arm") -> "armeabi-v7a"
-            abi.contains("x86_64") -> "x86_64"
-            abi.contains("x86") -> "x86"
-            else -> null
+        val universalApks = apkAssets.filter { isUniversal(it.name) }
+        if (universalApks.isEmpty()) {
+            return null
         }
 
-        // 1. Точное совпадение по ABI
-        if (preferredKey != null) {
-            val matched = prioritizedApks.firstOrNull { it.name.lowercase().contains(preferredKey) }
-            if (matched != null) return matched
-
-            // Для arm64 поддерживается совместимый запуск armeabi-v7a
-            if (preferredKey == "arm64-v8a") {
-                val armv7 = prioritizedApks.firstOrNull { it.name.lowercase().contains("armeabi-v7a") }
-                if (armv7 != null) return armv7
-            }
-
-            // Для x86_64 поддерживается запуск x86
-            if (preferredKey == "x86_64") {
-                val x86 = prioritizedApks.firstOrNull { it.name.lowercase().contains("x86") && !it.name.lowercase().contains("x86_64") }
-                if (x86 != null) return x86
-            }
-        }
-
-        // 2. Резервный universal APK
-        val universal = prioritizedApks.firstOrNull { it.name.lowercase().contains("universal") }
-        if (universal != null) return universal
-
-        // 3. Если архитектура устройства не была определена, берём первый доступный APK
-        if (preferredKey == null) {
-            return prioritizedApks.firstOrNull()
-        }
-
-        // 4. Для конкретной архитектуры (например, 32-битного armeabi-v7a) НЕ возвращаем
-        // несовместимые бинарники (arm64/x86), чтобы предотвратить сбой установки на ТВ
-        return null
+        // При наличии нескольких universal APK приоритет отдаётся сборкам с тегом VOX / VOT
+        return universalApks.maxByOrNull { if (hasVoxTag(it.name)) 1 else 0 }
     }
 
     /**

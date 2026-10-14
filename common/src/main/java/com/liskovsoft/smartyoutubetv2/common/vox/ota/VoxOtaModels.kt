@@ -73,6 +73,7 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     CHANNEL_MISMATCH("Обновление не соответствует выбранному каналу"),
     PARSE_ERROR("Ошибка обработки данных обновления"),
     NO_COMPATIBLE_ASSET("Не найден подходящий файл обновления для вашего устройства"),
+    UNIVERSAL_ASSET_NOT_FOUND("Не найден универсальный пакет обновления."),
     ASSET_DOWNLOAD_FAILED("Не удалось скачать обновление"),
     HASH_MISMATCH("Ошибка проверки целостности обновления (не совпадает SHA-256)"),
     SIGNATURE_MISMATCH("Цифровая подпись обновления не совпадает с установленным приложением"),
@@ -108,6 +109,7 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
         val OTA_INSTALL_PERMISSION get() = INSTALL_PERMISSION
         val OTA_INSTALL_CANCELLED get() = INSTALL_CANCELLED
         val OTA_INSTALL_FAILED get() = INSTALL_FAILED
+        val OTA_UNIVERSAL_ASSET_NOT_FOUND get() = UNIVERSAL_ASSET_NOT_FOUND
         val OTA_UNKNOWN get() = UNKNOWN
     }
 }
