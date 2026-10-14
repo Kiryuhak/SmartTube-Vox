@@ -30,6 +30,14 @@ object VoxReleaseAssetSelector {
 
         if (apkAssets.isEmpty()) return null
 
+        // Приоритет отдаётся сборкам с явным тегом VOX / VOT
+        fun hasVoxTag(name: String): Boolean {
+            val lower = name.lowercase()
+            return lower.contains("_vot_") || lower.contains("_vox_") || lower.contains("-vot") || lower.contains("-vox")
+        }
+
+        val prioritizedApks = apkAssets.sortedByDescending { if (hasVoxTag(it.name)) 1 else 0 }
+
         val abi = primaryAbi?.lowercase() ?: ""
 
         val preferredKey = when {
@@ -42,22 +50,34 @@ object VoxReleaseAssetSelector {
 
         // 1. Точное совпадение по ABI
         if (preferredKey != null) {
-            val matched = apkAssets.firstOrNull { it.name.lowercase().contains(preferredKey) }
+            val matched = prioritizedApks.firstOrNull { it.name.lowercase().contains(preferredKey) }
             if (matched != null) return matched
 
             // Для arm64 поддерживается совместимый запуск armeabi-v7a
             if (preferredKey == "arm64-v8a") {
-                val armv7 = apkAssets.firstOrNull { it.name.lowercase().contains("armeabi-v7a") }
+                val armv7 = prioritizedApks.firstOrNull { it.name.lowercase().contains("armeabi-v7a") }
                 if (armv7 != null) return armv7
+            }
+
+            // Для x86_64 поддерживается запуск x86
+            if (preferredKey == "x86_64") {
+                val x86 = prioritizedApks.firstOrNull { it.name.lowercase().contains("x86") && !it.name.lowercase().contains("x86_64") }
+                if (x86 != null) return x86
             }
         }
 
         // 2. Резервный universal APK
-        val universal = apkAssets.firstOrNull { it.name.lowercase().contains("universal") }
+        val universal = prioritizedApks.firstOrNull { it.name.lowercase().contains("universal") }
         if (universal != null) return universal
 
-        // 3. Любой доступный APK
-        return apkAssets.firstOrNull()
+        // 3. Если архитектура устройства не была определена, берём первый доступный APK
+        if (preferredKey == null) {
+            return prioritizedApks.firstOrNull()
+        }
+
+        // 4. Для конкретной архитектуры (например, 32-битного armeabi-v7a) НЕ возвращаем
+        // несовместимые бинарники (arm64/x86), чтобы предотвратить сбой установки на ТВ
+        return null
     }
 
     /**

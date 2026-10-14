@@ -389,6 +389,7 @@ class VoxOtaUpdateManager(private val context: Context) {
     ) {
         executor.execute {
             var destinationFile: File? = null
+            var tmpFile: File? = null
             try {
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
@@ -398,72 +399,68 @@ class VoxOtaUpdateManager(private val context: Context) {
                 )
 
                 val cacheDir = FileHelpers.getCacheDir(context) ?: context.cacheDir
+                val freeSpace = cacheDir.usableSpace
+                val requiredBytes = if (asset.sizeBytes > 0) asset.sizeBytes + 20 * 1024 * 1024L else 50 * 1024 * 1024L
+                if (freeSpace in 1 until requiredBytes) {
+                    throw VoxOtaException(
+                        VoxOtaErrorCode.STORAGE_LOW,
+                        "Недостаточно места на накопителе для загрузки обновления ($freeSpace байт свободно, требуется $requiredBytes байт)",
+                        stage = VoxOtaStage.HTTP,
+                        isRetryable = false
+                    )
+                }
+
                 destinationFile = File(cacheDir, "update.apk")
+                tmpFile = File(cacheDir, "update.apk.tmp")
+                if (tmpFile.exists()) tmpFile.delete()
                 if (destinationFile.exists()) destinationFile.delete()
 
                 val startTime = System.currentTimeMillis()
-                downloadToFile(asset.downloadUrl, destinationFile) { bytesRead, totalBytes, pct ->
+                downloadToFile(asset.downloadUrl, tmpFile) { bytesRead, totalBytes, pct ->
                     mainHandler.post { callback.onDownloadProgress(bytesRead, totalBytes, pct) }
                 }
                 val elapsedMs = System.currentTimeMillis() - startTime
 
-                VoxSafeLogger.info(
-                    VoxLogCategory.OTA,
-                    VoxLogCode.OTA_DOWNLOAD_COMPLETED,
-                    "Скачивание обновления завершено",
-                    mapOf("assetName" to asset.name, "elapsedMs" to elapsedMs.toString(), "sizeBytes" to destinationFile.length().toString())
-                )
-
-                // 1. Проверка контрольной суммы SHA-256 (если доступна)
+                // Проверка контрольной суммы SHA-256 (если доступна в манифесте релиза)
                 val sumsUrl = release.sha256SumsUrl ?: VoxReleaseAssetSelector.findSha256SumsAsset(release.assets)?.downloadUrl
+                var expectedSha256: String? = null
                 if (!sumsUrl.isNullOrBlank()) {
                     try {
                         val sumsContent = downloadString(sumsUrl)
                         val sumsMap = VoxOtaSecurityVerifier.parseSha256Sums(sumsContent)
-                        val expectedHash = sumsMap[asset.name]
-                        if (!expectedHash.isNullOrBlank()) {
-                            val hashMatches = VoxOtaSecurityVerifier.verifyFileSha256(destinationFile, expectedHash)
-                            if (!hashMatches) {
-                                throw VoxOtaException(
-                                    VoxOtaErrorCode.HASH_MISMATCH,
-                                    "SHA-256 mismatch for ${asset.name}"
-                                )
-                            }
-                            VoxSafeLogger.info(
-                                VoxLogCategory.OTA,
-                                VoxLogCode.OTA_HASH_VERIFIED,
-                                "Контрольная сумма SHA-256 успешно подтверждена",
-                                mapOf("assetName" to asset.name)
-                            )
-                        }
+                        expectedSha256 = sumsMap[asset.name]
                     } catch (sumErr: Throwable) {
-                        if (sumErr is VoxOtaException) throw sumErr
                         Log.w(TAG, "SHA256SUMS check skipped due to error: ${sumErr.message}")
                     }
                 }
 
-                // 2. Проверка цифровой подписи официального сертификата VOX
-                val isSignatureValid = VoxOtaSecurityVerifier.verifyApkSignature(context, destinationFile)
-                if (!isSignatureValid) {
-                    val isTestEnv = try { context.packageManager.getPackageArchiveInfo(destinationFile.absolutePath, 0) == null } catch (e: Exception) { true }
-                    if (!isTestEnv) {
-                        throw VoxOtaException(
-                            VoxOtaErrorCode.SIGNATURE_MISMATCH,
-                            "APK signature mismatch for ${asset.name}"
-                        )
-                    }
+                // Строгая предварительная валидация скачанного APK перед переименованием
+                val primaryAbi = try { DeviceHelpers.getPrimaryAbi() } catch (e: Exception) { null }
+                VoxOtaPreInstallValidator.validateOrThrow(
+                    context = context,
+                    apkFile = tmpFile,
+                    expectedSha256 = expectedSha256,
+                    expectedContentLength = if (asset.sizeBytes > 0) asset.sizeBytes else null,
+                    primaryAbi = primaryAbi
+                )
+
+                // Атомарное перемещение временного файла в update.apk
+                if (!tmpFile.renameTo(destinationFile)) {
+                    tmpFile.copyTo(destinationFile, overwrite = true)
+                    tmpFile.delete()
                 }
 
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
-                    VoxLogCode.OTA_SIGNATURE_VERIFIED,
-                    "Цифровая подпись обновления успешно проверена",
-                    mapOf("assetName" to asset.name)
+                    VoxLogCode.OTA_DOWNLOAD_COMPLETED,
+                    "Скачивание и предварительная валидация обновления завершены",
+                    mapOf("assetName" to asset.name, "elapsedMs" to elapsedMs.toString(), "sizeBytes" to destinationFile.length().toString())
                 )
 
                 mainHandler.post { callback.onDownloadCompleted(destinationFile) }
 
             } catch (e: Throwable) {
+                tmpFile?.delete()
                 destinationFile?.delete()
                 handleError(e, "", "", 0L, callback)
             }
@@ -475,6 +472,17 @@ class VoxOtaUpdateManager(private val context: Context) {
      */
     fun installUpdate(apkFile: File): Boolean {
         return try {
+            val validation = VoxOtaPreInstallValidator.validate(context, apkFile)
+            if (!validation.isValid) {
+                VoxSafeLogger.error(
+                    VoxLogCategory.OTA,
+                    VoxLogCode.OTA_PRE_VALIDATION_FAILED,
+                    "Отклонён запуск установщика: предварительная валидация не пройдена (${validation.message})",
+                    validation.details
+                )
+                return false
+            }
+
             VoxSafeLogger.info(
                 VoxLogCategory.OTA,
                 VoxLogCode.OTA_INSTALL_REQUESTED,
@@ -627,7 +635,22 @@ class VoxOtaUpdateManager(private val context: Context) {
                         }
                     }
                     output.flush()
+                    try {
+                        output.fd.sync()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "File descriptor sync skipped: ${e.message}")
+                    }
                 }
+            }
+
+            if (totalBytes > 0L && bytesCopied != totalBytes) {
+                throw VoxOtaException(
+                    VoxOtaErrorCode.DOWNLOAD_INCOMPLETE,
+                    "Загрузка оборвана: получено $bytesCopied байт из ожидаемых $totalBytes",
+                    stage = VoxOtaStage.HTTP,
+                    httpStatus = code,
+                    isRetryable = true
+                )
             }
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e

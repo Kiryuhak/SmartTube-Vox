@@ -1,7 +1,9 @@
 package com.liskovsoft.smartyoutubetv2.common.vox.ota
 
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.Build
 import java.io.File
 import java.io.FileInputStream
@@ -10,7 +12,7 @@ import java.security.MessageDigest
 /**
  * Проверка безопасности скачанных APK файлов обновления:
  * - Сверка контрольной суммы SHA-256 с SHA256SUMS.txt;
- * - Проверка цифровой подписи APK с ожидаемым отпечатком сертификата VOX.
+ * - Проверка цифровой подписи APK с ожидаемым отпечатком сертификата VOX или текущего приложения.
  */
 object VoxOtaSecurityVerifier {
 
@@ -69,7 +71,78 @@ object VoxOtaSecurityVerifier {
     }
 
     /**
-     * Проверяет цифровую подпись APK файла на соответствие доверенному сертификату VOX.
+     * Извлекает массив подписей из PackageInfo с поддержкой Android P+ SigningInfo (включая key history)
+     * и обратной совместимостью со старым массивом signatures.
+     */
+    @JvmStatic
+    fun extractSignatures(packageInfo: PackageInfo?): Array<Signature>? {
+        if (packageInfo == null) return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signingInfo = packageInfo.signingInfo
+            if (signingInfo != null) {
+                val signers = if (signingInfo.hasMultipleSigners()) {
+                    signingInfo.apkContentsSigners
+                } else {
+                    signingInfo.signingCertificateHistory
+                }
+                if (!signers.isNullOrEmpty()) {
+                    return signers
+                }
+            }
+        }
+        @Suppress("DEPRECATION")
+        return packageInfo.signatures
+    }
+
+    @JvmStatic
+    fun getSignatureSha256(signature: Signature): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        val certDigest = md.digest(signature.toByteArray())
+        return certDigest.joinToString("") { "%02x".format(it) }
+    }
+
+    @JvmStatic
+    fun getApkSignaturesSha256(context: Context?, apkFile: File): List<String> {
+        if (context == null || !apkFile.exists()) return emptyList()
+        return try {
+            val pm = context.packageManager
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                PackageManager.GET_SIGNING_CERTIFICATES or @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+            } else {
+                @Suppress("DEPRECATION")
+                PackageManager.GET_SIGNATURES
+            }
+            val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags)
+            val signatures = extractSignatures(packageInfo)
+            signatures?.map { getSignatureSha256(it).lowercase() } ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    @JvmStatic
+    fun getInstalledAppSignaturesSha256(context: Context?): List<String> {
+        if (context == null) return emptyList()
+        return try {
+            val pm = context.packageManager
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                PackageManager.GET_SIGNING_CERTIFICATES or @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+            } else {
+                @Suppress("DEPRECATION")
+                PackageManager.GET_SIGNATURES
+            }
+            val packageInfo = pm.getPackageInfo(context.packageName, flags)
+            val signatures = extractSignatures(packageInfo)
+            signatures?.map { getSignatureSha256(it).lowercase() } ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Проверяет цифровую подпись APK файла:
+     * - совпадает ли она с официальным сертификатом VOX (EXPECTED_SIGNER_SHA256);
+     * - ИЛИ совпадает ли она с подписью текущего установленного приложения (для debug/custom сборок).
      */
     @JvmStatic
     @JvmOverloads
@@ -79,38 +152,23 @@ object VoxOtaSecurityVerifier {
         expectedSha256: String = EXPECTED_SIGNER_SHA256
     ): Boolean {
         if (context == null || !apkFile.exists()) return false
-        return try {
-            val pm = context.packageManager
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                PackageManager.GET_SIGNING_CERTIFICATES
-            } else {
-                @Suppress("DEPRECATION")
-                PackageManager.GET_SIGNATURES
-            }
+        val apkSignatures = getApkSignaturesSha256(context, apkFile)
+        if (apkSignatures.isEmpty()) return false
 
-            val packageInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags) ?: return false
-
-            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageInfo.signingInfo?.apkContentsSigners
-            } else {
-                @Suppress("DEPRECATION")
-                packageInfo.signatures
-            }
-
-            if (signatures.isNullOrEmpty()) return false
-
-            val md = MessageDigest.getInstance("SHA-256")
-            for (sig in signatures) {
-                val certDigest = md.digest(sig.toByteArray())
-                val certHex = certDigest.joinToString("") { "%02x".format(it) }
-                if (certHex.equals(expectedSha256.trim(), ignoreCase = true)) {
-                    return true
-                }
-            }
-            false
-        } catch (e: Exception) {
-            // В среде unit-тестов JVM packageManager может выбросить stub exception
-            false
+        val targetHash = expectedSha256.trim().lowercase()
+        // 1. Проверяем совпадение с официальным ключом выпуска VOX
+        if (apkSignatures.any { it.equals(targetHash, ignoreCase = true) }) {
+            return true
         }
+
+        // 2. Проверяем совпадение с подписью установленного приложения
+        val installedSignatures = getInstalledAppSignaturesSha256(context)
+        if (installedSignatures.isNotEmpty()) {
+            if (apkSignatures.any { apkSig -> installedSignatures.any { instSig -> apkSig.equals(instSig, ignoreCase = true) } }) {
+                return true
+            }
+        }
+
+        return false
     }
 }

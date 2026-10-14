@@ -75,13 +75,41 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     NO_COMPATIBLE_ASSET("Не найден подходящий файл обновления для вашего устройства"),
     ASSET_DOWNLOAD_FAILED("Не удалось скачать обновление"),
     HASH_MISMATCH("Ошибка проверки целостности обновления (не совпадает SHA-256)"),
-    SIGNATURE_MISMATCH("Ошибка проверки цифровой подписи обновления"),
+    SIGNATURE_MISMATCH("Цифровая подпись обновления не совпадает с установленным приложением"),
+    SIGNATURE_UNKNOWN("Не удалось проверить цифровую подпись обновления"),
+    PACKAGE_MISMATCH("Пакет обновления не соответствует установленному приложению"),
+    ARCH_MISMATCH("Пакет обновления несовместим с архитектурой процессора устройства"),
+    DOWNLOAD_INCOMPLETE("Файл обновления загружен не полностью"),
+    INVALID_CONTENT("Сервер вернул некорректный ответ вместо файла обновления"),
+    APK_INVALID("Пакет обновления повреждён или не является APK"),
+    INSTALL_PERMISSION("Для установки обновления требуется разрешение в настройках системы"),
+    INSTALL_CANCELLED("Установка обновления была отменена"),
+    INSTALL_FAILED("Не удалось запустить установку обновления"),
+    STORAGE_LOW("Недостаточно свободного места на устройстве для обновления"),
     INSTALL_INTENT_FAILED("Не удалось открыть программу установки обновления"),
     PERMISSION_REQUIRED("Для установки обновления требуется разрешение"),
     UPDATE_CHECK_FAILED("Не удалось проверить наличие обновлений"),
     RELEASE_PARSE_FAILED("Не удалось обработать данные обновления"),
     VERSION_PARSE_FAILED("Не удалось определить версию приложения"),
     UNKNOWN("Не удалось обновить приложение");
+
+    companion object {
+        val OTA_NO_UPDATE get() = NO_UPDATE
+        val OTA_RATE_LIMIT get() = RATE_LIMIT
+        val OTA_NETWORK_ERROR get() = NETWORK_ERROR
+        val OTA_HTTP_ERROR get() = HTTP_ERROR
+        val OTA_DOWNLOAD_INCOMPLETE get() = DOWNLOAD_INCOMPLETE
+        val OTA_INVALID_CONTENT get() = INVALID_CONTENT
+        val OTA_APK_INVALID get() = APK_INVALID
+        val OTA_SIGNATURE_MISMATCH get() = SIGNATURE_MISMATCH
+        val OTA_SIGNATURE_UNKNOWN get() = SIGNATURE_UNKNOWN
+        val OTA_PACKAGE_MISMATCH get() = PACKAGE_MISMATCH
+        val OTA_ARCH_MISMATCH get() = ARCH_MISMATCH
+        val OTA_INSTALL_PERMISSION get() = INSTALL_PERMISSION
+        val OTA_INSTALL_CANCELLED get() = INSTALL_CANCELLED
+        val OTA_INSTALL_FAILED get() = INSTALL_FAILED
+        val OTA_UNKNOWN get() = UNKNOWN
+    }
 }
 
 /**
