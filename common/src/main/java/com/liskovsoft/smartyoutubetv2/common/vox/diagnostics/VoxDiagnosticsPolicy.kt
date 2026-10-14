@@ -239,7 +239,8 @@ object VoxDiagnosticsPolicy {
     fun findProminentUnrecoveredEvent(events: List<VoxLogEvent>): VoxLogEvent? {
         val chronoEvents = toChronologicalOrder(events)
         val candidates = chronoEvents.filter {
-            (it.level == VoxLogLevel.ERROR || it.level == VoxLogLevel.WARNING) &&
+            !it.isHistorical &&
+                (it.level == VoxLogLevel.ERROR || it.level == VoxLogLevel.WARNING) &&
                 !isSyntheticFixtureEvent(it) &&
                 !isEventRecovered(it, chronoEvents)
         }

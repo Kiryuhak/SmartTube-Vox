@@ -195,7 +195,16 @@ data class VoxDiagnosticReport(
 
             val recentEvents = if (includeEvents) {
                 try {
-                    VoxLogStore.instance(context).getRecentEvents(MAX_REPORT_EVENTS)
+                    val rawEvents = VoxLogStore.instance(context).getRecentEvents(MAX_REPORT_EVENTS)
+                    rawEvents.map { ev ->
+                        val evAppVer = ev.context?.get("appVersion") ?: ev.context?.get("currentVersion")
+                        val isFromOldVer = evAppVer != null && evAppVer != appVer
+                        if (isFromOldVer || ev.isHistorical) {
+                            ev.copy(isHistorical = true)
+                        } else {
+                            ev
+                        }
+                    }
                 } catch (e: Exception) {
                     emptyList()
                 }

@@ -302,6 +302,7 @@ object VoxLogCode {
     const val OTA_ASSET_SELECTED = "OTA_ASSET_SELECTED"
     const val OTA_DOWNLOAD_STARTED = "OTA_DOWNLOAD_STARTED"
     const val OTA_DOWNLOAD_COMPLETED = "OTA_DOWNLOAD_COMPLETED"
+    const val OTA_DOWNLOAD_CANCELLED = "OTA_DOWNLOAD_CANCELLED"
     const val OTA_HASH_VERIFIED = "OTA_HASH_VERIFIED"
     const val OTA_SIGNATURE_VERIFIED = "OTA_SIGNATURE_VERIFIED"
     const val OTA_INSTALL_REQUESTED = "OTA_INSTALL_REQUESTED"
@@ -342,7 +343,8 @@ data class VoxLogEvent(
     val code: String,
     val message: String,
     val context: Map<String, String>? = null,
-    val repeatCount: Int = 1
+    val repeatCount: Int = 1,
+    val isHistorical: Boolean = false
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -352,6 +354,7 @@ data class VoxLogEvent(
         json.put("code", code)
         json.put("message", message)
         if (repeatCount > 1) json.put("repeatCount", repeatCount)
+        if (isHistorical) json.put("isHistorical", true)
         if (!context.isNullOrEmpty()) {
             val ctxObj = JSONObject()
             context.forEach { (k, v) -> ctxObj.put(k, v) }
@@ -370,6 +373,7 @@ data class VoxLogEvent(
                 val category = try { VoxLogCategory.valueOf(catStr) } catch (e: Exception) { VoxLogCategory.APP }
                 val code = json.optString("code", "UNKNOWN")
                 val message = json.optString("message", "")
+                val isHist = json.optBoolean("isHistorical", false)
                 val ctxObj = json.optJSONObject("context")
                 val ctxMap = if (ctxObj != null) {
                     val map = mutableMapOf<String, String>()
@@ -381,7 +385,16 @@ data class VoxLogEvent(
                     map
                 } else null
 
-                VoxLogEvent(ts, level, category, code, message, ctxMap, json.optInt("repeatCount", 1).coerceIn(1, 100000))
+                VoxLogEvent(
+                    timestamp = ts,
+                    level = level,
+                    category = category,
+                    code = code,
+                    message = message,
+                    context = ctxMap,
+                    repeatCount = json.optInt("repeatCount", 1).coerceIn(1, 100000),
+                    isHistorical = isHist
+                )
             } catch (e: Exception) {
                 null
             }
