@@ -56,7 +56,7 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
         return try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
         } catch (e: Exception) {
-            "32.56-vox.8.2-beta.2"
+            "32.56-vox.9"
         }
     }
 

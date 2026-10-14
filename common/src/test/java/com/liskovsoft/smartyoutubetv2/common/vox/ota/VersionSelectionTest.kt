@@ -65,4 +65,43 @@ class VersionSelectionTest {
         // Пользователь на 8.2-rc.1 видит финальный 8.2
         assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.8.2-rc.1", "32.56-vox.8.2", isBetaChannel = false))
     }
+
+    @Test
+    fun testVox9ReleaseUpgradeAndDowngradeMatrix() {
+        val vox9 = "32.56-vox.9"
+        val parsedVox9 = VoxVersionComparator.parseVersion(vox9)
+        assertNotNull(parsedVox9)
+        assertEquals(9, parsedVox9!!.voxMajor)
+        assertEquals(0, parsedVox9.voxMinor)
+        assertEquals(VoxReleaseStage.STABLE, parsedVox9.stage)
+        assertFalse(parsedVox9.isPreRelease)
+
+        // 1. Same VOX 9 final: no update
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, vox9, isBetaChannel = false))
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, vox9, isBetaChannel = true))
+
+        // 2. Older VOX 8 stable upgrades to VOX 9
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.8.1", vox9, isBetaChannel = false))
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.8", vox9, isBetaChannel = false))
+
+        // 3. Older VOX 8 beta upgrades to VOX 9
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.8.2-beta.2", vox9, isBetaChannel = false))
+
+        // 4. Older VOX 9 prerelease upgrades to VOX 9
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.9-beta.1", vox9, isBetaChannel = false))
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.9-rc.1", vox9, isBetaChannel = false))
+
+        // 5. No downgrade: VOX 9 never accepts older VOX 8 or older dev
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.8.1", isBetaChannel = false))
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.8.2-beta.2", isBetaChannel = true))
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.9-dev", isBetaChannel = true))
+
+        // 6. Newer hypothetical VOX 9.1 is available
+        assertTrue(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.9.1", isBetaChannel = false))
+        assertTrue(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.10", isBetaChannel = false))
+
+        // 7. Malformed version handled safely
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "invalid-version", isBetaChannel = false))
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, null, isBetaChannel = false))
+    }
 }

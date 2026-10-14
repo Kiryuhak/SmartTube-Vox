@@ -758,7 +758,8 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager mgr =
                     com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Companion.instance(context);
             mgr.resetCooldownForTesting();
-            mgr.checkForUpdates("32.56-vox.8.2-beta.2", null, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+            String currentVer = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.Companion.instance(context).getAppVersionName();
+            mgr.checkForUpdates(currentVer, null, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
                 @Override
                 public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo release, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset asset) {
                     Log.i(TAG, "OTA_CHECK_RESULT: UPDATE_AVAILABLE " + release.getVersionName());

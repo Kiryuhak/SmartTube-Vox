@@ -22,6 +22,14 @@ class AutoBetaE2EPolicyTest {
     }
 
     @Test
+    fun testVox9StableBuildDefaultsAutoDiagnosticsOff() {
+        val stableChannel = VoxBuildChannel.fromVersion("32.56-vox.9")
+        assertEquals(VoxBuildChannel.STABLE, stableChannel)
+        assertFalse(stableChannel.isPreRelease)
+        assertFalse(VoxUpdateChannelManager.isAutoDiagnosticsAllowedByDefault("32.56-vox.9"))
+    }
+
+    @Test
     fun testBetaUserCanDisableDiagnostics() {
         var userDiagnosticsEnabled = true
         userDiagnosticsEnabled = false
