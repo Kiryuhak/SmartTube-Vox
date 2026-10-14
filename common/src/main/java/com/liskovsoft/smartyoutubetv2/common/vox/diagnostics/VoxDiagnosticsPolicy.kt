@@ -179,13 +179,15 @@ object VoxDiagnosticsPolicy {
         if (event.category == VoxLogCategory.OTA || event.code.startsWith("OTA_")) {
             val otaErrors = listOf(
                 VoxLogCode.OTA_RATE_LIMIT, VoxLogCode.OTA_FAILED,
-                VoxLogCode.OTA_HTTP_ERROR, VoxLogCode.OTA_TIMEOUT, VoxLogCode.OTA_DNS_ERROR
+                VoxLogCode.OTA_HTTP_ERROR, VoxLogCode.OTA_TIMEOUT, VoxLogCode.OTA_DNS_ERROR,
+                VoxLogCode.OTA_PRE_VALIDATION_FAILED
             )
             if (event.code in otaErrors) {
                 val otaSuccesses = listOf(
                     VoxLogCode.OTA_NO_UPDATE, VoxLogCode.OTA_CHECK_COMPLETED,
                     VoxLogCode.OTA_RELEASE_PARSED, VoxLogCode.OTA_UPDATE_AVAILABLE,
-                    VoxLogCode.OTA_RATE_LIMIT_RECOVERED, VoxLogCode.OTA_VERSION_COMPARED
+                    VoxLogCode.OTA_RATE_LIMIT_RECOVERED, VoxLogCode.OTA_VERSION_COMPARED,
+                    VoxLogCode.OTA_PRE_VALIDATION_PASSED
                 )
                 if (laterEvents.any { it.code in otaSuccesses }) return true
             }
@@ -203,11 +205,19 @@ object VoxDiagnosticsPolicy {
             if (laterEvents.any { it.code == VoxLogCode.IMAGE_REQUEST_RECOVERED }) return true
         }
 
+        // Download recovery
+        if (event.category == VoxLogCategory.DOWNLOAD || event.code.startsWith("DOWNLOAD_")) {
+            if (event.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT) {
+                if (laterEvents.any { it.code == VoxLogCode.DOWNLOAD_STATE_REPAIRED || it.code == VoxLogCode.DOWNLOAD_COMPLETED }) return true
+            }
+        }
+
         // Player recovery
         if (event.category == VoxLogCategory.PLAYER || event.code.startsWith("PLAYER_")) {
             val playerErrors = listOf(
                 VoxLogCode.PLAYER_HTTP_ERROR, VoxLogCode.PLAYER_REBUFFER, VoxLogCode.PLAYER_SOURCE_ERROR,
-                VoxLogCode.PLAYER_RENDERER_ERROR, VoxLogCode.PLAYER_DECODER_ERROR
+                VoxLogCode.PLAYER_RENDERER_ERROR, VoxLogCode.PLAYER_DECODER_ERROR,
+                VoxLogCode.PLAYER_RECOVERABLE_403
             )
             if (event.code in playerErrors) {
                 val playerSuccesses = listOf(

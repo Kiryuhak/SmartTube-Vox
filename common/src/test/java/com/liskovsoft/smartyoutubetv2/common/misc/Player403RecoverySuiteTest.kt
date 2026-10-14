@@ -145,4 +145,69 @@ class Player403RecoverySuiteTest {
         assertEquals(VoxLogCategory.PLAYER, playerEvent.category)
         assertEquals(VoxLogCategory.OTA, otaEvent.category)
     }
+
+    @Test
+    fun testPlayer403TelemetryEventsDistinction() {
+        val recoverable = VoxLogEvent(
+            timestamp = 2000L,
+            level = VoxLogLevel.WARNING,
+            category = VoxLogCategory.PLAYER,
+            code = VoxLogCode.PLAYER_RECOVERABLE_403,
+            message = "Recoverable 403",
+            context = mapOf(
+                "recoveryAttempt" to "1",
+                "recoveryEngine" to "Cronet",
+                "recoveryResult" to "RETRYING",
+                "preservedPositionMs" to "50000",
+                "retryCount" to "1"
+            )
+        )
+
+        val terminal = VoxLogEvent(
+            timestamp = 3000L,
+            level = VoxLogLevel.ERROR,
+            category = VoxLogCategory.PLAYER,
+            code = VoxLogCode.PLAYER_FINAL_403,
+            message = "Terminal 403",
+            context = mapOf(
+                "recoveryAttempt" to "FINAL",
+                "recoveryEngine" to "Cronet",
+                "recoveryResult" to "FAILED",
+                "preservedPositionMs" to "50000",
+                "retryCount" to "2"
+            )
+        )
+
+        assertEquals("PLAYER_RECOVERABLE_403", recoverable.code)
+        assertEquals("PLAYER_FINAL_403", terminal.code)
+        assertEquals("RETRYING", recoverable.context?.get("recoveryResult"))
+        assertEquals("FAILED", terminal.context?.get("recoveryResult"))
+        assertEquals("50000", recoverable.context?.get("preservedPositionMs"))
+    }
+
+    @Test
+    fun testLiveVodSessionIsolation() {
+        val liveVideo = Video().apply {
+            id = 123
+            videoId = "live_stream_123"
+            isLive = true
+        }
+
+        val vodVideo = Video().apply {
+            id = 456
+            videoId = "vod_clip_456"
+            isLive = false
+        }
+
+        assertTrue(liveVideo.isLive)
+        assertFalse(vodVideo.isLive)
+
+        // Reset policy between sessions
+        policy.evaluate403Error(false)
+        assertTrue(policy.isRecoveryAttempted())
+
+        policy.reset()
+        assertFalse(policy.isRecoveryAttempted())
+        assertEquals(0, policy.source403Count)
+    }
 }

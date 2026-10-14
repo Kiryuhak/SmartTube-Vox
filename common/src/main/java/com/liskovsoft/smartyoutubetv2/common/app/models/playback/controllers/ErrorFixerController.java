@@ -18,9 +18,14 @@ import com.liskovsoft.smartyoutubetv2.common.misc.YouTubePlayerCacheManager;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ErrorFixerController extends BasePlayerController implements OnLongBuffering {
     private static final String TAG = ErrorFixerController.class.getSimpleName();
@@ -209,16 +214,52 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 getPlayerTweaksData().setHighBitrateFormatsEnabled(false); // Response code: 429
             } else if (is403Error) {
                 PlayerCacheRecoveryPolicy.Error403Type errorType = mPlayerCacheRecoveryPolicy.evaluate403Error(mBufferingDetector.isPlayable());
+                long positionMs = getPlayer() != null ? getPlayer().getPositionMs() : 0L;
+                int retryCount = mPlayerCacheRecoveryPolicy.getSource403Count();
+                String engine = getPlayerTweaksData() != null ? String.valueOf(getPlayerTweaksData().getPlayerDataSource()) : "unknown";
+
                 if (errorType == PlayerCacheRecoveryPolicy.Error403Type.RECOVERABLE_403) {
                     Log.w(TAG, "Recoverable 403 error (count=%d). Invalidate stale player cache, switch client and refresh source.",
-                            mPlayerCacheRecoveryPolicy.getSource403Count());
+                            retryCount);
+
+                    Map<String, String> ctx = new HashMap<>();
+                    ctx.put("recoveryAttempt", "1");
+                    ctx.put("recoveryEngine", engine);
+                    ctx.put("recoveryResult", "RETRYING");
+                    ctx.put("preservedPositionMs", String.valueOf(positionMs));
+                    ctx.put("retryCount", String.valueOf(retryCount));
+                    VoxSafeLogger.warn(
+                            VoxLogCategory.PLAYER,
+                            VoxLogCode.PLAYER_RECOVERABLE_403,
+                            "Обнаружена восстановимая ошибка HTTP 403 источника. Сброс кэша и обновление ссылки.",
+                            ctx
+                    );
+
                     YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
                     YouTubeServiceManager.instance().switchNextClientNow();
                     showMessage = false;
                     restartEngine = false; // reloadVideo() will reload the video at preserved playback position
                 } else {
                     Log.e(TAG, "Terminal 403 error: recovery already attempted for this session, stopping retry loop.");
-                    showMessage = true;
+
+                    Map<String, String> ctx = new HashMap<>();
+                    ctx.put("recoveryAttempt", "FINAL");
+                    ctx.put("recoveryEngine", engine);
+                    ctx.put("recoveryResult", "FAILED");
+                    ctx.put("preservedPositionMs", String.valueOf(positionMs));
+                    ctx.put("retryCount", String.valueOf(retryCount));
+                    VoxSafeLogger.error(
+                            VoxLogCategory.PLAYER,
+                            VoxLogCode.PLAYER_FINAL_403,
+                            "Неустранимая ошибка воспроизведения HTTP 403 (доступ запрещён сервером)",
+                            ctx,
+                            error
+                    );
+
+                    MessageHelpers.showLongMessage(getContext(), errorMessage);
+                    if (getPlayer() != null) {
+                        getPlayer().setTitle(errorContent);
+                    }
                     // Prevent infinite reload loop on permanently forbidden/blocked streams
                     return;
                 }
