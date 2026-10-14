@@ -257,7 +257,7 @@ export function structuredEvents(report = {}) {
           last.timestamp = Math.max(last.timestamp, ev.timestamp);
           continue;
         }
-      } else if (ev.event === 'OTA_FAILED') {
+      } else if (ev.event === 'OTA_FAILED' || ev.event === 'OTA_RATE_LIMIT') {
         const lastOta = last.safeContext?.sessionId || last.safeContext?.otaSessionId;
         const curOta = ev.safeContext?.sessionId || ev.safeContext?.otaSessionId;
         if (!curOta || lastOta === curOta) {

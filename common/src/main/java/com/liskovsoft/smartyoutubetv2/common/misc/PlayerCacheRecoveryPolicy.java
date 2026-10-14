@@ -21,6 +21,29 @@ public final class PlayerCacheRecoveryPolicy {
         mRecoveryAttempted = false;
     }
 
+    public enum Error403Type {
+        RECOVERABLE_403,
+        FINAL_403
+    }
+
+    /**
+     * Evaluates a player source HTTP 403 error.
+     * Returns RECOVERABLE_403 for the first encountered 403 (enabling one-shot bounded refresh),
+     * and FINAL_403 once recovery has already been attempted for this video session to prevent infinite retries.
+     */
+    public Error403Type evaluate403Error(boolean isPlayable) {
+        mSource403Count++;
+        if (!mRecoveryAttempted) {
+            mRecoveryAttempted = true;
+            return Error403Type.RECOVERABLE_403;
+        }
+        return Error403Type.FINAL_403;
+    }
+
+    public boolean shouldAttempt403Recovery() {
+        return evaluate403Error(false) == Error403Type.RECOVERABLE_403;
+    }
+
     /**
      * Determines whether player cache invalidation should be triggered.
      * Triggers only when repeated 403 errors occur before the stream becomes playable.

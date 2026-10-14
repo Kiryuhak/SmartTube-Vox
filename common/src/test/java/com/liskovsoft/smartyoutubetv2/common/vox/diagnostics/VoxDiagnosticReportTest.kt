@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,5 +78,39 @@ class VoxDiagnosticReportTest {
         assertTrue(formatted.contains("--- АУДИОДЕКОДЕРЫ И PASSTHROUGH ---"))
         assertTrue(formatted.contains("--- ЭКРАН И HDR ---"))
         assertTrue(formatted.contains("--- РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ VOX ---"))
+    }
+
+    @Test
+    fun testProductionReportExcludesSyntheticFixturesAndRawUuids() {
+        val context = RuntimeEnvironment.getApplication()
+        val store = VoxLogStore.instance(context)
+        store.clearLogs()
+
+        store.addEvent(
+            VoxLogEvent(
+                timestamp = System.currentTimeMillis() + 1,
+                level = VoxLogLevel.ERROR,
+                category = VoxLogCategory.DOWNLOAD,
+                code = VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
+                message = "Download invariant failed for p37-resume-rick-20261006"
+            )
+        )
+        store.addEvent(
+            VoxLogEvent(
+                timestamp = System.currentTimeMillis() + 2,
+                level = VoxLogLevel.INFO,
+                category = VoxLogCategory.DOWNLOAD,
+                code = "DOWNLOAD_STEP",
+                message = "Legitimate download step"
+            )
+        )
+
+        val report = VoxDiagnosticReport.create(context, "VOX-PROD-TEST", true)
+        val json = report.toJson()
+
+        assertNull("Production report top-level error should not be synthetic p37 fixture", report.errorCategory)
+        assertFalse("Production report top-level signature must not contain synthetic fixture", report.errorSignature?.contains("p37") == true)
+        assertFalse("Production report top-level signature must not contain synthetic download error", report.errorSignature?.contains("DOWNLOAD") == true)
+        assertTrue("Production report must contain real events", json.contains("Legitimate download step"))
     }
 }

@@ -207,21 +207,28 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 disableSubtitles(); // Response code: 429
             } else if (isGeneralError && getPlayerTweaksData().isHighBitrateFormatsEnabled()) {
                 getPlayerTweaksData().setHighBitrateFormatsEnabled(false); // Response code: 429
-            } else if (!mBufferingDetector.isPlayable()) { // Response code: 403
-                if (is403Error && mPlayerCacheRecoveryPolicy.shouldRecoverOnSource403(false)) {
-                    Log.w(TAG, "Repeated 403 error before playback start (count=%d). Invalidate stale player cache and switch client.",
+            } else if (is403Error) {
+                PlayerCacheRecoveryPolicy.Error403Type errorType = mPlayerCacheRecoveryPolicy.evaluate403Error(mBufferingDetector.isPlayable());
+                if (errorType == PlayerCacheRecoveryPolicy.Error403Type.RECOVERABLE_403) {
+                    Log.w(TAG, "Recoverable 403 error (count=%d). Invalidate stale player cache, switch client and refresh source.",
                             mPlayerCacheRecoveryPolicy.getSource403Count());
                     YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
                     YouTubeServiceManager.instance().switchNextClientNow();
                     showMessage = false;
+                    restartEngine = false; // reloadVideo() will reload the video at preserved playback position
                 } else {
-                    // The stream fails instantly if nParam isn't correct.
-                    // Note, nParam generation strictly tied to the client but some reported that OkHttp could help.
-                    YouTubeServiceManager.instance().switchNextClientNow();
+                    Log.e(TAG, "Terminal 403 error: recovery already attempted for this session, stopping retry loop.");
                     showMessage = true;
+                    // Prevent infinite reload loop on permanently forbidden/blocked streams
+                    return;
                 }
+            } else if (!mBufferingDetector.isPlayable()) {
+                // The stream fails instantly if nParam isn't correct.
+                // Note, nParam generation strictly tied to the client but some reported that OkHttp could help.
+                YouTubeServiceManager.instance().switchNextClientNow();
+                showMessage = true;
             } else {
-                YouTubeServiceManager.instance().switchNextClient(); // Response code: 403
+                YouTubeServiceManager.instance().switchNextClient(); // Response code: other source errors
             }
         } else if (type == PlayerEventListener.ERROR_TYPE_RENDERER && rendererIndex == PlayerEventListener.RENDERER_INDEX_SUBTITLE) {
             // "Response code: 429" (subtitle error)

@@ -269,10 +269,13 @@ object VoxDiagnosticsPolicy {
             val isSameInconsistentDownload = last != null &&
                 last.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT &&
                 event.code == VoxLogCode.DOWNLOAD_STATE_INCONSISTENT
+            val isSameOtaRateLimit = last != null &&
+                last.code == VoxLogCode.OTA_RATE_LIMIT &&
+                event.code == VoxLogCode.OTA_RATE_LIMIT
             if (last != null &&
                 last.category == event.category &&
                 last.code == event.code &&
-                (last.message == event.message || isSameInconsistentDownload)
+                (last.message == event.message || isSameInconsistentDownload || isSameOtaRateLimit)
             ) {
                 // Объединяем счетчики повторов
                 deduplicated[deduplicated.size - 1] = last.copy(

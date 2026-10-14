@@ -3,7 +3,7 @@ import test from 'node:test';
 import { handleRequest } from '../src/diagnostics.mjs';
 import { ReportStorage } from '../src/storage.mjs';
 import { resolveAuth, checkAdminAuth } from '../src/admin.mjs';
-import { classifyReport, technicalSummary } from '../src/triage.mjs';
+import { classifyReport, structuredEvents, technicalSummary } from '../src/triage.mjs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -338,5 +338,43 @@ test('Report metadata fidelity and non-contamination across devices', async () =
     developerNotes: 'Patch #31: исправление подготовлено, требуется подтверждение на TUVIO/API30',
   });
   assert.equal(updated.status, 'FIXED_PENDING_VERIFICATION');
+});
+
+test('StructuredEvents never inherit report-level errorCategory into unrelated events', () => {
+  const otaReport = {
+    reportId: 'VOX-TEST-OTA-POLLUTION',
+    errorCategory: 'OTA',
+    triggerEvent: 'OTA_RATE_LIMIT',
+    safeRecentEvents: [
+      { timestamp: 1000, level: 'INFO', category: 'UI', code: 'HUD_SHOWN', message: 'HUD visible' },
+      { timestamp: 2000, level: 'INFO', category: 'BACKGROUND', code: 'BACKGROUND_MEDIASESSION_ACTIVE', message: 'MediaSession on' },
+      { timestamp: 3000, level: 'WARN', category: 'TRANSLATION', code: 'TRANSLATION_CACHED_URL_EXPIRED', message: 'Url expired' },
+      { timestamp: 4000, level: 'ERROR', category: 'PLAYER', code: 'PLAYER_HTTP_ERROR', message: '403 error' },
+      { timestamp: 5000, level: 'ERROR', category: 'OTA', code: 'OTA_RATE_LIMIT', message: 'Rate limit 403' },
+    ]
+  };
+
+  const events = structuredEvents(otaReport);
+  assert.equal(events.length, 5);
+
+  // UI INFO event: category must be UI, errorCategory must NOT be OTA
+  assert.equal(events[0].category, 'UI');
+  assert.equal(events[0].errorCategory, null);
+
+  // BACKGROUND INFO event: category must be BACKGROUND, errorCategory must NOT be OTA
+  assert.equal(events[1].category, 'BACKGROUND');
+  assert.equal(events[1].errorCategory, null);
+
+  // TRANSLATION WARN event: category must be TRANSLATION, errorCategory must NOT be OTA
+  assert.equal(events[2].category, 'TRANSLATION');
+  assert.notEqual(events[2].errorCategory, 'OTA');
+
+  // PLAYER ERROR event: category must be PLAYER, errorCategory must be PLAYER_HTTP_ERROR
+  assert.equal(events[3].category, 'PLAYER');
+  assert.equal(events[3].errorCategory, 'PLAYER_HTTP_ERROR');
+
+  // OTA ERROR event: category must be OTA, errorCategory must be OTA_RATE_LIMIT
+  assert.equal(events[4].category, 'OTA');
+  assert.equal(events[4].errorCategory, 'OTA_RATE_LIMIT');
 });
 
