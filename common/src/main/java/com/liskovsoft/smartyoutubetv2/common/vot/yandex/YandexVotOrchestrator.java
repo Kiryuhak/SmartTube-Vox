@@ -77,9 +77,11 @@ public class YandexVotOrchestrator {
 
     private final Object lock = new Object();
     private static final int MAX_POST_UPLOAD_AUDIO_REQUESTED_RETRIES = 20;
+    public static final int MAX_WAITING_POLL_COUNT = 60;
     private final Set<String> completedUploadKeys = new HashSet<>();
     private final Set<String> inFlightUploadKeys = new HashSet<>();
     private int postUploadAudioRequestedCount = 0;
+    private int waitingPollCount = 0;
     private long generationCounter = 0;
     @NonNull private YandexVotState currentState = YandexVotState.idle();
     @Nullable private Listener listener;
@@ -177,6 +179,7 @@ public class YandexVotOrchestrator {
             cancelActiveOperationsLocked();
             gen = ++generationCounter;
             postUploadAudioRequestedCount = 0;
+            waitingPollCount = 0;
             newState = YandexVotState.requesting(
                     gen,
                     params.getVideoId(),
@@ -203,6 +206,7 @@ public class YandexVotOrchestrator {
         synchronized (lock) {
             cancelActiveOperationsLocked();
             long gen = ++generationCounter;
+            waitingPollCount = 0;
             if (currentState.getStatus() != YandexVotState.Status.IDLE &&
                     currentState.getStatus() != YandexVotState.Status.CANCELLED) {
                 newState = YandexVotState.cancelled(
@@ -222,6 +226,7 @@ public class YandexVotOrchestrator {
             cancelActiveOperationsLocked();
             long gen = ++generationCounter;
             postUploadAudioRequestedCount = 0;
+            waitingPollCount = 0;
             currentState = YandexVotState.idle();
             YandexVotLog.d(TAG, "VOT reset: gen=" + gen);
             notifyListenerLocked(currentState);
@@ -663,6 +668,27 @@ public class YandexVotOrchestrator {
     }
 
     private void schedulePollLocked(final long gen, final RequestParams params, final YandexVotApiClient.TranslationResult result) {
+        waitingPollCount++;
+        if (waitingPollCount > MAX_WAITING_POLL_COUNT) {
+            YandexVotLog.e(TAG, "VOT waiting poll count exceeded limit (" + MAX_WAITING_POLL_COUNT + "): gen=" + gen);
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_TIMEOUT,
+                    "Превышено максимальное число попыток опроса готовности перевода"
+            );
+            YandexVotState errorState = YandexVotState.error(
+                    gen,
+                    params.getVideoId(),
+                    params.getVideoUrl(),
+                    "Превышено время ожидания готовности перевода",
+                    "timeout",
+                    params.isUseLiveVoices()
+            );
+            currentState = errorState;
+            notifyListenerLocked(errorState);
+            return;
+        }
+
         int delaySeconds = YandexVotTiming.pollDelaySeconds(result.getRemainingTime());
         YandexVotState waitingState = YandexVotState.waiting(
                 gen,

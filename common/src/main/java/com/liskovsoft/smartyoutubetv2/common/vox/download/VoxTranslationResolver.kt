@@ -246,7 +246,7 @@ class DefaultVoxTranslationResolver(
         }
 
         throw VoxDownloadException(
-            VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,
+            VoxDownloadErrorCode.TIMEOUT,
             "Timed out waiting for Yandex VOT translation to become ready"
         )
     }

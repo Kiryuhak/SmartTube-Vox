@@ -712,4 +712,32 @@ public class YandexVotOrchestratorTest {
         assertEquals("https://youtube.com/watch?v=vid_upload", state.getVideoUrl());
         assertNull(state.getAudioUrl());
     }
+
+    @Test
+    public void test15_WaitingPollBoundedByMaxCountAndTransitionsToTimeoutError() {
+        fakeApi.setResponse(new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_WAITING,
+                null,
+                5,
+                "trans_timeout_test",
+                null
+        ));
+
+        YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
+                "vid_timeout", "https://youtube.com/watch?v=vid_timeout", 120.0, "en", "ru", "Timeout Test", false, null
+        );
+
+        orchestrator.startTranslation(params);
+
+        // Run polls up to limit
+        for (int i = 0; i < YandexVotOrchestrator.MAX_WAITING_POLL_COUNT; i++) {
+            assertEquals(YandexVotState.Status.WAITING, orchestrator.getCurrentState().getStatus());
+            testExecutor.runAllScheduled();
+        }
+
+        // On exceeding the maximum poll count, orchestrator must transition to ERROR state
+        assertEquals(YandexVotState.Status.ERROR, orchestrator.getCurrentState().getStatus());
+        assertEquals("timeout", orchestrator.getCurrentState().getErrorCategory());
+        assertTrue(orchestrator.getCurrentState().getErrorMessage().contains("Превышено время ожидания"));
+    }
 }
