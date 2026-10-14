@@ -894,6 +894,15 @@ class VoxDownloadCoordinator(
             executeMuxing(job, expectedGen)
 
         } catch (t: Throwable) {
+            try {
+                val tmpOut = storage.getTmpOutputFile(downloadId)
+                if (tmpOut.exists()) {
+                    tmpOut.delete()
+                }
+            } catch (e: Exception) {
+                VoxLog.w(TAG, "Failed to clean up tmp output file for $downloadId: ${e.message}")
+            }
+
             if (job.generation.get() == expectedGen) {
                 val failedStage = job.state.stageName
                 val (category, safeReason) = VoxDownloadFailureClassifier.classifyWithReason(t)

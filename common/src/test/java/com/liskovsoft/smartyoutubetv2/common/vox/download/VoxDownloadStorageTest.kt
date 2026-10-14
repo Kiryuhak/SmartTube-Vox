@@ -146,5 +146,32 @@ class VoxDownloadStorageTest {
         val jobDir = storage.getJobDir("safe-download-id-999")
         assertTrue(jobDir.path.endsWith("safe-download-id-999"))
     }
-}
 
+    @Test
+    fun testTmpOutputFileCreationAndCleanup() {
+        val downloadId = "test-tmp-cleanup"
+        val tmpOut = storage.getTmpOutputFile(downloadId)
+        val finalOut = storage.getOutputFile(downloadId)
+
+        assertEquals("output.mkv.tmp", tmpOut.name)
+        assertEquals("output.mkv", finalOut.name)
+
+        // Write mock temp output
+        tmpOut.writeBytes(ByteArray(1024))
+        assertTrue(tmpOut.exists())
+
+        // Cleanup
+        tmpOut.delete()
+        assertFalse(tmpOut.exists())
+    }
+
+    @Test
+    fun testHasEnoughSpaceThreshold() {
+        // Storage should correctly report whether disk has enough space
+        val freeBytes = storage.getAvailableBytes()
+        if (freeBytes > 0L) {
+            assertTrue(storage.hasEnoughSpace(1024L))
+            assertFalse(storage.hasEnoughSpace(Long.MAX_VALUE))
+        }
+    }
+}

@@ -477,13 +477,15 @@ class VoxDownloadStorage(val context: Context) {
      * @return true если места достаточно
      */
     fun hasEnoughSpace(requiredBytes: Long, safetyMarginBytes: Long = MIN_SAFETY_MARGIN_BYTES): Boolean {
+        if (requiredBytes < 0L) return false
+        val needed = if (Long.MAX_VALUE - safetyMarginBytes < requiredBytes) Long.MAX_VALUE else (requiredBytes + safetyMarginBytes)
         val available = getAvailableBytes()
         if (available <= 0L) {
             val usable = try { baseDir.usableSpace } catch (e: Exception) { 0L }
             if (usable <= 0L) return true
-            return usable >= (requiredBytes + safetyMarginBytes)
+            return usable >= needed
         }
-        return available >= (requiredBytes + safetyMarginBytes)
+        return available >= needed
     }
 
     /**
