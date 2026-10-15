@@ -284,12 +284,23 @@ export function classifyReport(report = {}) {
   // Annotate events with lifecycle: CURRENT_SESSION, RECENT, HISTORICAL
   for (const ev of events) {
     const evSessionId = ev.safeContext?.playbackSessionId || ev.safeContext?.sessionId;
-    if (currentSessionId && evSessionId && evSessionId === currentSessionId) {
+    const isOldVersion = Boolean(
+      report.appVersion && (
+        (ev.safeContext?.appVersion && ev.safeContext.appVersion !== report.appVersion) ||
+        (ev.safeContext?.currentVersion && ev.safeContext.currentVersion !== report.appVersion)
+      )
+    );
+    const isStaleTime = Math.abs(now - ev.timestamp) > 3600000; // > 1 hour
+    if (ev.isHistorical || isOldVersion || isStaleTime) {
+      ev.lifecycle = 'HISTORICAL';
+      ev.isHistorical = true;
+    } else if (currentSessionId && evSessionId && evSessionId === currentSessionId) {
       ev.lifecycle = 'CURRENT_SESSION';
     } else if (Math.abs(now - ev.timestamp) <= 180000) { // within last 3 minutes
       ev.lifecycle = 'RECENT';
     } else {
       ev.lifecycle = 'HISTORICAL';
+      ev.isHistorical = true;
     }
   }
 
@@ -375,17 +386,19 @@ export function classifyReport(report = {}) {
     }
   }
 
+  const unrecovered = chronoEvents.filter(e => !e.recovered && !e.isSyntheticFixture);
+  const currentError = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+  const currentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
+  const recentError = [...unrecovered].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
+  const recentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
+  const freshPrimary = currentError || currentWarn || recentError || recentWarn;
+
   if (!primary) {
-    const unrecovered = chronoEvents.filter(e => !e.recovered && !e.isSyntheticFixture);
-    // Priority: CURRENT ERROR > CURRENT WARNING > RECENT ERROR > RECENT WARNING > HISTORICAL ERROR > HISTORICAL WARNING
-    const currentError = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
-    const currentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'CURRENT_SESSION' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
-    const recentError = [...unrecovered].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
-    const recentWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'RECENT' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
     const histError = [...unrecovered].reverse().find(e => e.lifecycle === 'HISTORICAL' && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity)));
     const histWarn = [...unrecovered].reverse().find(e => e.lifecycle === 'HISTORICAL' && (e.level === 'WARNING' || ['MEDIUM', 'LOW'].includes(e.severity)));
-
-    primary = currentError || currentWarn || recentError || recentWarn || histError || histWarn;
+    primary = freshPrimary || histError || histWarn;
+  } else if (primary.lifecycle === 'HISTORICAL' && freshPrimary) {
+    primary = freshPrimary;
   }
 
   let last = primary;
@@ -402,20 +415,44 @@ export function classifyReport(report = {}) {
   const stage = enumValue(report.stage || primary?.stage || last?.stage);
   const explicit = enumValue(report.severity);
 
+  // Active vs historical counts
+  const hasEvents = chronoEvents.length > 0;
+  const activeEvents = chronoEvents.filter(e => !e.recovered && !e.isSyntheticFixture && !e.isHistorical && e.lifecycle !== 'HISTORICAL' && (e.level === 'ERROR' || e.level === 'WARNING' || ['HIGH', 'CRITICAL', 'MEDIUM'].includes(e.severity)));
+  const historicalEvents = chronoEvents.filter(e => e.isHistorical || e.lifecycle === 'HISTORICAL');
+  const activeEventCount = hasEvents ? activeEvents.length : (errorCategory ? 1 : 0);
+  const historicalEventCount = historicalEvents.length;
+  const reportActiveIncident = hasEvents
+    ? (activeEvents.length > 0 || (primary != null && primary.lifecycle === 'TRIGGER'))
+    : Boolean(errorCategory || explicit === 'HIGH' || explicit === 'CRITICAL');
+
   let computedSeverity = 'INFO';
-  const unrecoveredEvents = chronoEvents.filter(e => !e.recovered && !e.isSyntheticFixture);
-  if (primary && primary.lifecycle === 'TRIGGER') {
+  if (!reportActiveIncident && chronoEvents.length > 0) {
+    computedSeverity = chronoEvents.some(e => e.recovered) ? 'LOW' : 'INFO';
+  } else if (primary && primary.lifecycle === 'TRIGGER') {
     computedSeverity = primary.severity || 'MEDIUM';
-  } else if (unrecoveredEvents.length > 0) {
-    computedSeverity = unrecoveredEvents.reduce((best, event) => rank[event.severity] > rank[best] ? event.severity : best, errorCategory ? 'MEDIUM' : 'INFO');
+  } else if (activeEvents.length > 0) {
+    computedSeverity = activeEvents.reduce((best, event) => rank[event.severity] > rank[best] ? event.severity : best, errorCategory ? 'MEDIUM' : 'INFO');
   } else if (chronoEvents.some(e => e.recovered)) {
     computedSeverity = 'LOW';
   } else if (errorCategory) {
     computedSeverity = 'MEDIUM';
   }
+
   const severity = SEVERITIES.includes(explicit) ? explicit : computedSeverity;
   const signature = buildClassificationSignature(report, { events, errorCategory, subsystem, stage, severity, primaryEvent: primary });
-  return { events, errorCategory, subsystem, stage, severity, primaryEvent: primary || null, signature };
+  return {
+    events,
+    errorCategory,
+    subsystem,
+    stage,
+    severity,
+    primaryEvent: primary || null,
+    signature,
+    reportActiveIncident,
+    activeEventCount,
+    historicalEventCount,
+    isHistorical: !reportActiveIncident
+  };
 }
 
 export function buildClassificationSignature(report = {}, classified = null) {

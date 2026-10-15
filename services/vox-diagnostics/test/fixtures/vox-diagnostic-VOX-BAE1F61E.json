@@ -1,0 +1,569 @@
+{
+  "reportId": "VOX-BAE1F61E",
+  "createdAt": 1792007003785,
+  "platform": "Android TV",
+  "appVersion": "32.56-vox.9",
+  "device": {
+    "family": "TCL Smart TV Pro",
+    "manufacturer": "TCL",
+    "model": "Smart TV Pro",
+    "tier": "Стандартный",
+    "sdkInt": 34,
+    "osVersion": "14 (API 34)"
+  },
+  "errorCategory": "PLAYER",
+  "errorSignature": "PLAYER|PLAYER_HTTP_ERROR|ANDROID_TV_API34",
+  "status": "NEW",
+  "developerNotes": "",
+  "safeRecentEvents": [
+    {
+      "timestamp": 1791948992301,
+      "level": "ERROR",
+      "category": "PLAYER",
+      "code": "PLAYER_HTTP_ERROR",
+      "message": "Сбой воспроизведения ExoPlayer",
+      "repeatCount": 3,
+      "context": {
+        "rendererIndex": "-1",
+        "sourceType": "HTTP",
+        "errorType": "0",
+        "causeClass": "InvalidResponseCodeException",
+        "isDownloadedItem": "false",
+        "responseCode": "403"
+      }
+    },
+    {
+      "timestamp": 1791844662692,
+      "level": "ERROR",
+      "category": "OTA",
+      "code": "OTA_RATE_LIMIT",
+      "message": "Ошибка процесса обновления: Сервер временно ограничил частоту проверок. Попробуйте позже.",
+      "context": {
+        "errorCode": "RATE_LIMIT",
+        "stage": "HTTP",
+        "httpStatus": "403",
+        "isRetryable": "true",
+        "reason": "VoxOtaException",
+        "channel": "beta",
+        "currentVersion": "32.56-vox.8.2-beta.2"
+      }
+    },
+    {
+      "timestamp": 1791838338615,
+      "level": "ERROR",
+      "category": "PLAYER",
+      "code": "PLAYER_HTTP_ERROR",
+      "message": "Сбой воспроизведения ExoPlayer",
+      "context": {
+        "rendererIndex": "-1",
+        "sourceType": "HTTP",
+        "errorType": "0",
+        "causeClass": "InvalidResponseCodeException",
+        "isDownloadedItem": "false",
+        "responseCode": "403"
+      }
+    },
+    {
+      "timestamp": 1791779568464,
+      "level": "ERROR",
+      "category": "OTA",
+      "code": "OTA_FAILED",
+      "message": "Ошибка процесса обновления: Ошибка HTTP-сервера обновлений",
+      "repeatCount": 7,
+      "context": {
+        "errorCode": "HTTP_ERROR",
+        "reason": "VoxOtaException"
+      }
+    },
+    {
+      "timestamp": 1791740730278,
+      "level": "ERROR",
+      "category": "DOWNLOAD",
+      "code": "DOWNLOAD_FAILED",
+      "message": "Ошибка загрузки перевода",
+      "context": {
+        "stage": "PREPARING_TRANSLATION",
+        "errorCategory": "TRANSLATION_FAILED",
+        "reason": "TIMED_OUT_WAITING_FOR_YANDEX_VOT_TRANSLATION_TO_BE",
+        "operation": "PREPARING_TRANSLATION",
+        "retryCount": "0",
+        "videoBytesDownloaded": "0",
+        "audioBytesDownloaded": "0",
+        "translationBytesDownloaded": "0",
+        "freeStorageMb": "41647",
+        "outputContainer": "mkv"
+      }
+    },
+    {
+      "timestamp": 1791735345221,
+      "level": "ERROR",
+      "category": "OTA",
+      "code": "OTA_FAILED",
+      "message": "Ошибка процесса обновления: Ошибка HTTP-сервера обновлений",
+      "repeatCount": 3,
+      "context": {
+        "errorCode": "HTTP_ERROR",
+        "reason": "VoxOtaException"
+      }
+    },
+    {
+      "timestamp": 1791690175635,
+      "level": "ERROR",
+      "category": "DOWNLOAD",
+      "code": "DOWNLOAD_STATE_INCONSISTENT",
+      "message": "Download completed state invariant violated for e7bb3f25-c6d0-457a-b3c1-56ae0be863ee: fileValid=true, packagingValid=false, translationValid=true",
+      "repeatCount": 4
+    },
+    {
+      "timestamp": 1791657549490,
+      "level": "ERROR",
+      "category": "OTA",
+      "code": "OTA_FAILED",
+      "message": "Ошибка процесса обновления: Ошибка HTTP-сервера обновлений",
+      "context": {
+        "errorCode": "HTTP_ERROR",
+        "reason": "VoxOtaException"
+      }
+    },
+    {
+      "timestamp": 1791652798481,
+      "level": "ERROR",
+      "category": "DOWNLOAD",
+      "code": "DOWNLOAD_STATE_INCONSISTENT",
+      "message": "Download completed state invariant violated for e7bb3f25-c6d0-457a-b3c1-56ae0be863ee: fileValid=true, packagingValid=false, translationValid=true",
+      "repeatCount": 4
+    },
+    {
+      "timestamp": 1791567762420,
+      "level": "ERROR",
+      "category": "OTA",
+      "code": "OTA_FAILED",
+      "message": "Ошибка процесса обновления: Ошибка сети при проверке обновления",
+      "repeatCount": 13,
+      "context": {
+        "errorCode": "NETWORK_ERROR",
+        "reason": "VoxOtaException"
+      }
+    }
+  ],
+  "payload": {
+    "schema": "vox-diagnostic-report-v3",
+    "reportId": "VOX-BAE1F61E",
+    "timestamp": 1792007001038,
+    "reportPurpose": "AUTO_BETA",
+    "autoSubmitted": true,
+    "triggerEvent": "PLAYER_HTTP_ERROR",
+    "errorCategory": "PLAYER",
+    "errorSignature": "PLAYER|PLAYER_HTTP_ERROR|ANDROID_TV_API34",
+    "channel": "stable",
+    "appVersion": "32.56-vox.9",
+    "appVersionCode": 2446015,
+    "platform": "Android TV",
+    "manufacturer": "TCL",
+    "model": "Smart TV Pro",
+    "osName": "Android",
+    "osVersion": "14 (API 34)",
+    "sdkInt": 34,
+    "deviceTier": "Стандартный",
+    "videoCodecs": {
+      "AVC": "Поддерживается [HW] (4096x2304@960fps)",
+      "HEVC": "Поддерживается [HW] (4096x2304@960fps)",
+      "VP9": "Поддерживается [HW] (4096x2304@960fps)",
+      "AV1": "Поддерживается [HW] (4096x2304@960fps)"
+    },
+    "audioCodecs": {
+      "AAC": "Декод: Поддерживается, Passthrough: Поддерживается",
+      "OPUS": "Декод: Поддерживается, Passthrough: Не поддерживается",
+      "AC3": "Декод: Поддерживается, Passthrough: Поддерживается",
+      "EAC3": "Декод: Поддерживается, Passthrough: Поддерживается",
+      "EAC3_JOC": "Декод: Поддерживается, Passthrough: Поддерживается"
+    },
+    "display": {
+      "resolution": "3840x2160",
+      "refreshRateHz": 60,
+      "hdr10": "SUPPORTED",
+      "hlg": "SUPPORTED",
+      "hdr10Plus": "SUPPORTED",
+      "dolbyVision": "SUPPORTED"
+    },
+    "currentPolicy": {
+      "mode": "AUTO",
+      "maxQualityHeight": 2160,
+      "preferredVideoCodec": "VP9",
+      "preferredAudioCodec": "AC3",
+      "passthroughEnabled": true
+    },
+    "recommendedSettings": {
+      "tier": "STANDARD",
+      "mode": "AUTO",
+      "maxQualityHeight": 2160,
+      "preferredVideoCodec": "VP9",
+      "preferredAudioCodec": "AC3",
+      "passthroughEnabled": true,
+      "reasonCodes": [
+        "DISPLAY_4K",
+        "HW_AV1_AVAILABLE",
+        "HW_VP9_AVAILABLE",
+        "HW_AVC_AVAILABLE",
+        "CPU_CORES_4_PLUS",
+        "TIER_STANDARD"
+      ]
+    },
+    "downloadDiagnostics": {
+      "queueLength": 0,
+      "activeJobs": 0,
+      "pausedJobs": 0,
+      "failedJobs": 0,
+      "historicalFailedJobs": 1,
+      "lastStage": "COMPLETED",
+      "lastErrorCategory": "NONE",
+      "lastOperation": "NONE",
+      "retryCount": 0,
+      "completedVideoBytes": 76176694,
+      "completedAudioBytes": 20544520,
+      "expectedTranslatedAudio": false,
+      "translatedAudioPresent": false,
+      "packagingStarted": true,
+      "packagingCompleted": true,
+      "finalizeCompleted": true,
+      "freeStorageMb": 41438,
+      "downloadPerformance": {
+        "totalBytes": 96721214,
+        "totalElapsedMs": 654693,
+        "averageBytesPerSecond": 147735,
+        "averageMbps": "1.18",
+        "peakMbps": "1.18",
+        "stallCount": 0,
+        "resumeCount": 1,
+        "rangeResumeCount": 1,
+        "networkReconnectCount": 0,
+        "retryCount": 0,
+        "parallelConnections": 1,
+        "videoElapsedMs": 654644,
+        "audioElapsedMs": 615157,
+        "packagingElapsedMs": 39128,
+        "finalizeElapsedMs": 1317
+      },
+      "networkRouteAnalysis": {
+        "videoHost": "unknown",
+        "audioHost": "unknown",
+        "hostFamily": "UNKNOWN",
+        "bottleneck": "UNKNOWN",
+        "confidence": "LOW",
+        "developerSummary": "Анализ сетевого маршрута завершён."
+      }
+    },
+    "safeRecentEvents": [
+      {
+        "timestamp": 1791948992301,
+        "level": "ERROR",
+        "category": "PLAYER",
+        "code": "PLAYER_HTTP_ERROR",
+        "message": "Сбой воспроизведения ExoPlayer",
+        "repeatCount": 3,
+        "context": {
+          "rendererIndex": "-1",
+          "sourceType": "HTTP",
+          "errorType": "0",
+          "causeClass": "InvalidResponseCodeException",
+          "isDownloadedItem": "false",
+          "responseCode": "403"
+        }
+      },
+      {
+        "timestamp": 1791844662692,
+        "level": "ERROR",
+        "category": "OTA",
+        "code": "OTA_RATE_LIMIT",
+        "message": "Ошибка процесса обновления: Сервер временно ограничил частоту проверок. Попробуйте позже.",
+        "context": {
+          "errorCode": "RATE_LIMIT",
+          "stage": "HTTP",
+          "httpStatus": "403",
+          "isRetryable": "true",
+          "reason": "VoxOtaException",
+          "channel": "beta",
+          "currentVersion": "32.56-vox.8.2-beta.2"
+        }
+      },
+      {
+        "timestamp": 1791838338615,
+        "level": "ERROR",
+        "category": "PLAYER",
+        "code": "PLAYER_HTTP_ERROR",
+        "message": "Сбой воспроизведения ExoPlayer",
+        "context": {
+          "rendererIndex": "-1",
+          "sourceType": "HTTP",
+          "errorType": "0",
+          "causeClass": "InvalidResponseCodeException",
+          "isDownloadedItem": "false",
+          "responseCode": "403"
+        }
+      },
+      {
+        "timestamp": 1791779568464,
+        "level": "ERROR",
+        "category": "OTA",
+        "code": "OTA_FAILED",
+        "message": "Ошибка процесса обновления: Ошибка HTTP-сервера обновлений",
+        "repeatCount": 7,
+        "context": {
+          "errorCode": "HTTP_ERROR",
+          "reason": "VoxOtaException"
+        }
+      },
+      {
+        "timestamp": 1791740730278,
+        "level": "ERROR",
+        "category": "DOWNLOAD",
+        "code": "DOWNLOAD_FAILED",
+        "message": "Ошибка загрузки перевода",
+        "context": {
+          "stage": "PREPARING_TRANSLATION",
+          "errorCategory": "TRANSLATION_FAILED",
+          "reason": "TIMED_OUT_WAITING_FOR_YANDEX_VOT_TRANSLATION_TO_BE",
+          "operation": "PREPARING_TRANSLATION",
+          "retryCount": "0",
+          "videoBytesDownloaded": "0",
+          "audioBytesDownloaded": "0",
+          "translationBytesDownloaded": "0",
+          "freeStorageMb": "41647",
+          "outputContainer": "mkv"
+        }
+      },
+      {
+        "timestamp": 1791735345221,
+        "level": "ERROR",
+        "category": "OTA",
+        "code": "OTA_FAILED",
+        "message": "Ошибка процесса обновления: Ошибка HTTP-сервера обновлений",
+        "repeatCount": 3,
+        "context": {
+          "errorCode": "HTTP_ERROR",
+          "reason": "VoxOtaException"
+        }
+      },
+      {
+        "timestamp": 1791690175635,
+        "level": "ERROR",
+        "category": "DOWNLOAD",
+        "code": "DOWNLOAD_STATE_INCONSISTENT",
+        "message": "Download completed state invariant violated for e7bb3f25-c6d0-457a-b3c1-56ae0be863ee: fileValid=true, packagingValid=false, translationValid=true",
+        "repeatCount": 4
+      },
+      {
+        "timestamp": 1791657549490,
+        "level": "ERROR",
+        "category": "OTA",
+        "code": "OTA_FAILED",
+        "message": "Ошибка процесса обновления: Ошибка HTTP-сервера обновлений",
+        "context": {
+          "errorCode": "HTTP_ERROR",
+          "reason": "VoxOtaException"
+        }
+      },
+      {
+        "timestamp": 1791652798481,
+        "level": "ERROR",
+        "category": "DOWNLOAD",
+        "code": "DOWNLOAD_STATE_INCONSISTENT",
+        "message": "Download completed state invariant violated for e7bb3f25-c6d0-457a-b3c1-56ae0be863ee: fileValid=true, packagingValid=false, translationValid=true",
+        "repeatCount": 4
+      },
+      {
+        "timestamp": 1791567762420,
+        "level": "ERROR",
+        "category": "OTA",
+        "code": "OTA_FAILED",
+        "message": "Ошибка процесса обновления: Ошибка сети при проверке обновления",
+        "repeatCount": 13,
+        "context": {
+          "errorCode": "NETWORK_ERROR",
+          "reason": "VoxOtaException"
+        }
+      }
+    ],
+    "receivedAt": 1792007003785,
+    "structuredEvents": [
+      {
+        "timestamp": 1791948992301,
+        "category": "PLAYER",
+        "subsystem": "PLAYER",
+        "stage": "",
+        "event": "PLAYER_HTTP_ERROR",
+        "severity": "HIGH",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "PLAYER_HTTP_ERROR",
+        "safeContext": {
+          "sourceType": "HTTP",
+          "isDownloadedItem": "false"
+        },
+        "repeatCount": 3
+      },
+      {
+        "timestamp": 1791844662692,
+        "category": "OTA",
+        "subsystem": "OTA",
+        "stage": "",
+        "event": "OTA_RATE_LIMIT",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "OTA_RATE_LIMIT",
+        "safeContext": {
+          "stage": "HTTP",
+          "reason": "VoxOtaException"
+        },
+        "repeatCount": 1
+      },
+      {
+        "timestamp": 1791838338615,
+        "category": "PLAYER",
+        "subsystem": "PLAYER",
+        "stage": "",
+        "event": "PLAYER_HTTP_ERROR",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "PLAYER_HTTP_ERROR",
+        "safeContext": {
+          "sourceType": "HTTP",
+          "isDownloadedItem": "false"
+        },
+        "repeatCount": 1
+      },
+      {
+        "timestamp": 1791779568464,
+        "category": "OTA",
+        "subsystem": "OTA",
+        "stage": "",
+        "event": "OTA_FAILED",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "OTA_FAILED",
+        "safeContext": {
+          "reason": "VoxOtaException"
+        },
+        "repeatCount": 7
+      },
+      {
+        "timestamp": 1791740730278,
+        "category": "DOWNLOAD",
+        "subsystem": "DOWNLOAD",
+        "stage": "DOWNLOAD",
+        "event": "DOWNLOAD_FAILED",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "DOWNLOAD_FAILED",
+        "safeContext": {
+          "stage": "PREPARING_TRANSLATION",
+          "errorCategory": "TRANSLATION_FAILED",
+          "reason": "TIMED_OUT_WAITING_FOR_YANDEX_VOT_TRANSLATION_TO_BE",
+          "operation": "PREPARING_TRANSLATION"
+        },
+        "repeatCount": 1
+      },
+      {
+        "timestamp": 1791735345221,
+        "category": "OTA",
+        "subsystem": "OTA",
+        "stage": "",
+        "event": "OTA_FAILED",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "OTA_FAILED",
+        "safeContext": {
+          "reason": "VoxOtaException"
+        },
+        "repeatCount": 3
+      },
+      {
+        "timestamp": 1791690175635,
+        "category": "DOWNLOAD",
+        "subsystem": "DOWNLOAD",
+        "stage": "DOWNLOAD",
+        "event": "DOWNLOAD_STATE_INCONSISTENT",
+        "severity": "HIGH",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "DOWNLOAD_STATE_INCONSISTENT",
+        "safeContext": {},
+        "repeatCount": 4
+      },
+      {
+        "timestamp": 1791657549490,
+        "category": "OTA",
+        "subsystem": "OTA",
+        "stage": "",
+        "event": "OTA_FAILED",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "OTA_FAILED",
+        "safeContext": {
+          "reason": "VoxOtaException"
+        },
+        "repeatCount": 1
+      },
+      {
+        "timestamp": 1791652798481,
+        "category": "DOWNLOAD",
+        "subsystem": "DOWNLOAD",
+        "stage": "DOWNLOAD",
+        "event": "DOWNLOAD_STATE_INCONSISTENT",
+        "severity": "HIGH",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "DOWNLOAD_STATE_INCONSISTENT",
+        "safeContext": {},
+        "repeatCount": 4
+      },
+      {
+        "timestamp": 1791567762420,
+        "category": "OTA",
+        "subsystem": "OTA",
+        "stage": "",
+        "event": "OTA_FAILED",
+        "severity": "MEDIUM",
+        "level": "ERROR",
+        "result": "",
+        "errorCategory": "OTA_FAILED",
+        "safeContext": {
+          "reason": "VoxOtaException"
+        },
+        "repeatCount": 13
+      }
+    ],
+    "technicalSummary": {
+      "download": {
+        "queueLength": 0,
+        "activeJobs": 0,
+        "pausedJobs": 0,
+        "failedJobs": 0,
+        "stage": "COMPLETED",
+        "retryCount": 0,
+        "bytes": 96721214,
+        "speed": 147735,
+        "stallCount": 0,
+        "resumeCount": 1,
+        "packagingState": "COMPLETED",
+        "finalizeState": "COMPLETED",
+        "freeStorageMb": 41438,
+        "errorCategory": "NONE"
+      },
+      "player": {
+        "isLive": false
+      },
+      "background": {},
+      "ota": {},
+      "offline": {},
+      "channelGroups": {},
+      "autoSetup": {}
+    }
+  }
+}

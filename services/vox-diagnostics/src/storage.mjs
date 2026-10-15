@@ -156,7 +156,9 @@ export class ReportStorage {
     }
 
     await this.recordChange(reportId, 'CREATED');
-    if (errorSignature) await this.reopenRegressedIssue(errorSignature, appVersion);
+    if (errorSignature && classification.reportActiveIncident !== false && !isSynth && reportPurpose !== 'TEST') {
+      await this.reopenRegressedIssue(errorSignature, appVersion);
+    }
 
     return {
       reportId,

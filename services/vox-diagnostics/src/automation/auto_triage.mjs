@@ -1,4 +1,4 @@
-import { compareVoxVersions, generateDeterministicIssueTitle } from '../triage.mjs';
+import { compareVoxVersions, generateDeterministicIssueTitle, classifyReport } from '../triage.mjs';
 import { normalizeStatus } from '../storage.mjs';
 
 /**
@@ -110,9 +110,19 @@ export class AutoTriageService {
           continue;
         }
 
+        const payload = typeof report.payload_json === 'string'
+          ? JSON.parse(report.payload_json || '{}')
+          : (report.payload_json || report.payload || report);
+        const classified = classifyReport({ ...payload, appVersion });
+        const hasActiveIncident = classified.reportActiveIncident !== false;
+
         const issue = await this.storage.getIssue(errorSignature);
         const hasExistingIssue = issue && (issue.title || issue.issue_status !== 'NEW');
-        const isResolvedOrRecentlyReopened = hasExistingIssue && (issue.issue_status === 'RESOLVED' || (issue.reopened_at > 0 && issue.fixed_in_version));
+        const isResolvedOrRecentlyReopened = hasExistingIssue && (
+          issue.issue_status === 'RESOLVED' ||
+          issue.issue_status === 'FIXED_PENDING_VERIFICATION' ||
+          (issue.reopened_at > 0 && issue.fixed_in_version)
+        );
 
         if (hasExistingIssue && isResolvedOrRecentlyReopened) {
           // Анализ исправленной проблемы на предмет регрессии
@@ -121,13 +131,15 @@ export class AutoTriageService {
           if (fixedInVersion && compareVoxVersions(appVersion, fixedInVersion) !== null) {
             const comp = compareVoxVersions(appVersion, fixedInVersion);
 
-            if (comp < 0) {
-              // Историческое проявление (версия старее фикса) -> НЕ переоткрывать Issue
+            if (comp < 0 || !hasActiveIncident) {
+              // Историческое проявление (версия старее фикса ИЛИ все события в отчёте исторические/устаревшие) -> НЕ переоткрывать Issue
               summary.duplicates++;
               summary.knownIssues++;
 
               if (currentStatus === 'NEW') {
-                const noteText = `[AUTOMATION] Историческое проявление известной исправленной проблемы (версия ${appVersion} < ${fixedInVersion}).`;
+                const noteText = !hasActiveIncident
+                  ? `[AUTOMATION] Исторический отчёт: все события произошли до фикса или являются устаревшими (activeEventCount=0). Регрессия отсутствует.`
+                  : `[AUTOMATION] Историческое проявление известной исправленной проблемы (версия ${appVersion} < ${fixedInVersion}).`;
                 summary.plannedMutations.push({
                   type: 'REPORT_STATUS',
                   reportId,
@@ -235,6 +247,40 @@ export class AutoTriageService {
                 status: 'KNOWN_ISSUE',
                 developerNotes: newNotes,
                 reason: 'LINKED_TO_KNOWN_ISSUE'
+              });
+              summary.updatedReports++;
+            }
+          }
+        } else if (!hasExistingIssue && !hasActiveIncident) {
+          // Исторический отчёт без активных событий сбоя
+          summary.duplicates++;
+          summary.knownIssues++;
+          const generatedTitle = generateDeterministicIssueTitle(errorSignature, report);
+          if (currentStatus === 'NEW') {
+            const noteText = '[AUTOMATION] Исторический отчёт: все события произошли до фикса или являются устаревшими (activeEventCount=0).';
+            summary.plannedMutations.push({
+              type: 'REPORT_STATUS',
+              reportId,
+              fromStatus: currentStatus,
+              toStatus: 'KNOWN_ISSUE',
+              note: noteText,
+              reason: 'HISTORICAL_REPORT_NO_ACTIVE_INCIDENT'
+            });
+            summary.statusChanges++;
+            if (!dryRun) {
+              await this.storage.updateIssue(errorSignature, {
+                status: 'RESOLVED',
+                title: generatedTitle,
+                fixedInVersion: appVersion
+              });
+              const existingNotes = report.developer_notes || '';
+              const newNotes = existingNotes.includes(noteText)
+                ? existingNotes
+                : (existingNotes ? `${existingNotes}\n${noteText}` : noteText);
+              await this.storage.updateReport(reportId, {
+                status: 'KNOWN_ISSUE',
+                developerNotes: newNotes,
+                reason: 'HISTORICAL_REPORT_NO_ACTIVE_INCIDENT'
               });
               summary.updatedReports++;
             }
