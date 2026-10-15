@@ -276,7 +276,10 @@ public class PlaybackSupportFragment extends Fragment {
         mProgressBarManager.setInitialDelay(500);
     }
 
-    VerticalGridView getVerticalGridView() {
+    public VerticalGridView getVerticalGridView() {
+        if (mRowsSupportFragment == null && getChildFragmentManager() != null) {
+            mRowsSupportFragment = (RowsSupportFragment) getChildFragmentManager().findFragmentById(R.id.playback_controls_dock);
+        }
         if (mRowsSupportFragment == null) {
             return null;
         }

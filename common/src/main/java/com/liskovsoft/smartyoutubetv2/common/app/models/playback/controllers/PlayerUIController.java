@@ -367,6 +367,8 @@ public class PlayerUIController extends BasePlayerController {
 
     @Override
     public void onViewResumed() {
+        mSelfHealAttempted = false;
+
         if (getPlayer() == null) {
             return;
         }
@@ -795,6 +797,7 @@ public class PlayerUIController extends BasePlayerController {
                 show ? com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SHOW_REQUESTED : com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_HIDE_REQUESTED,
                 (show ? "Запрос показа HUD (sessionId=" : "Запрос скрытия HUD (sessionId=") + mHudSessionId + ")"
         );
+        com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onOverlayState(show, "sessionId=" + mHudSessionId);
 
         getPlayer().showOverlay(show);
 
@@ -806,7 +809,9 @@ public class PlayerUIController extends BasePlayerController {
                     "HUD не отобразился по запросу пользователя. Выполняется ограниченный self-heal (попытка 1/1, sessionId=" + mHudSessionId + ")"
             );
             getPlayer().showControls(true);
-            if (getPlayer().isOverlayShown()) {
+            boolean healed = getPlayer().isOverlayShown();
+            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onSelfHealAttempted(1, healed);
+            if (healed) {
                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_SELF_HEAL_SUCCESS,
@@ -854,8 +859,9 @@ public class PlayerUIController extends BasePlayerController {
                     showOverlayWithSelfHeal(true);
                     return true; // don't show ui
                 case PlayerData.OK_UI_AND_PAUSE:
-                    // NOP
-                    break;
+                    showOverlayWithSelfHeal(true);
+                    getPlayer().setPlayWhenReady(!getPlayer().getPlayWhenReady());
+                    return true;
                 case PlayerData.OK_ONLY_PAUSE:
                     getPlayer().setPlayWhenReady(!getPlayer().getPlayWhenReady());
                     return true; // don't show ui

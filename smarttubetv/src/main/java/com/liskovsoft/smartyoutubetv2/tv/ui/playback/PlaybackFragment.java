@@ -30,6 +30,7 @@ import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.Row;
 import androidx.leanback.widget.RowPresenter;
 import androidx.leanback.widget.RowPresenter.ViewHolder;
+import androidx.leanback.widget.VerticalGridView;
 
 import com.github.vkay94.dtpv.DoubleTapPlayerAdapter;
 import com.github.vkay94.dtpv.DoubleTapPlayerView;
@@ -236,6 +237,9 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             initializePlayer();
         }
 
+        mIsControlsShownPreviously = false;
+        ensureFocus();
+
         // NOTE: don't move this into another place! Multiple components rely on it.
         mPlaybackPresenter.onViewResumed();
 
@@ -262,15 +266,23 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     public void ensureFocus() {
         View root = getView();
         if (root != null && getActivity() != null) {
-            View currentFocus = getActivity().getCurrentFocus();
-            if (currentFocus == null || !root.hasFocus()) {
-                root.requestFocus();
-                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_FOCUS_RESTORED,
-                        "Фокус ввода восстановлен на PlaybackFragment"
-                );
+            VerticalGridView gridView = getVerticalGridView();
+            if (gridView != null) {
+                gridView.setFocusable(true);
+                gridView.requestFocus();
+                com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onFocusRestored("VerticalGridView");
+            } else {
+                View currentFocus = getActivity().getCurrentFocus();
+                if (currentFocus == null || !root.hasFocus()) {
+                    root.requestFocus();
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onFocusRestored("PlaybackRootView");
+                }
             }
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_FOCUS_RESTORED,
+                    "Фокус ввода восстановлен на PlaybackFragment"
+            );
         }
     }
 
@@ -442,11 +454,8 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         setPlaybackSeekUiClient(null);
         setPlaybackRowPresenter(null);
         setOnKeyInterceptListener(null);
-        if (mRowsSupportFragment != null && mRowsSupportFragment.getVerticalGridView() != null) {
-            mRowsSupportFragment.getVerticalGridView().setAdapter(null);
-            mRowsSupportFragment.getBridgeAdapter().clear();
-            mRowsSupportFragment.getBridgeAdapter().getPresenterMapper().clear();
-            mRowsSupportFragment = null;
+        if (mRowsSupportFragment != null) {
+            mRowsSupportFragment.setAdapter(null);
         }
         if (mMediaSessionConnector != null) {
             mMediaSessionConnector.setPlayer(null);

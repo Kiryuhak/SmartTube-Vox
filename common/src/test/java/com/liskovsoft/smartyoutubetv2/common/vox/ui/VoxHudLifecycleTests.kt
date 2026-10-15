@@ -197,3 +197,21 @@ class ProcessWideMonotonicSessionSequenceTest {
         assertTrue(h2 > h1)
     }
 }
+
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+class VoxUiStateTracerTest {
+    @Test
+    fun testTracerRecordsEntriesWithPrefix() {
+        VoxUiStateTracer.resetForTesting()
+        VoxUiStateTracer.onOverlayState(true, "test")
+        VoxUiStateTracer.onFocusRestored("VerticalGridView")
+        VoxUiStateTracer.onSettingsVisibility(true, "HQ")
+
+        val traces = VoxUiStateTracer.getRecentTraces()
+        assertEquals(3, traces.size)
+        assertEquals("OVERLAY_SHOWN", traces[0].event)
+        assertEquals("FOCUS_RESTORED", traces[1].event)
+        assertEquals("SETTINGS_OPENED", traces[2].event)
+    }
+}
+

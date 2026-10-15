@@ -60,6 +60,7 @@ public class HQDialogController extends BasePlayerController {
         appendOptions(mCategoriesInt);
         appendOptions(mCategories);
 
+        com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onSettingsVisibility(true, "PlaybackSettings");
         mAppDialogPresenter.showDialog(getContext().getString(R.string.playback_settings), this::onDialogHide);
     }
 
@@ -158,8 +159,7 @@ public class HQDialogController extends BasePlayerController {
         if (getPlayer() == null) {
             return;
         }
-        addCategoryInt(AppDialogUtil.createNetworkEngineCategory(getContext(),
-                () -> getPlayer().restartEngine()));
+        addCategoryInt(AppDialogUtil.createNetworkEngineCategory(getContext(), null));
     }
 
     private void onDialogHide() {
@@ -172,6 +172,12 @@ public class HQDialogController extends BasePlayerController {
         mHideListeners.clear();
         mCategories.clear();
         mCategoriesInt.clear();
+
+        com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onSettingsVisibility(false, "PlaybackSettings");
+
+        if (getPlayer() != null) {
+            getPlayer().ensureFocus();
+        }
     }
 
     //private void updateBackgroundPlayback() {
