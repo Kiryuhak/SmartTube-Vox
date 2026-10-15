@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "node src/server.mjs",
     "build:client": "node scripts/build_admin_client.mjs",
     "triage": "node scripts/run_auto_triage.mjs --apply",
     "triage:dry-run": "node scripts/run_auto_triage.mjs --dry-run",

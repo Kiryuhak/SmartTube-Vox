@@ -79,8 +79,72 @@ ATTACH SANITIZED JSON (прикрепление безопасного .json ф�
 
 ## 6. Ручное тестирование интеграции
 
-Для проверки связи с Telegram используйте синтетический скрипт:
+Для проверки связи с Telegram используйте тестовый скрипт:
 ```bash
-TELEGRAM_BOT_TOKEN="<токен>" TELEGRAM_CHAT_ID="<chat_id>" node scripts/test_telegram_notification.mjs
+node scripts/test_telegram_notification.mjs
 ```
-Скрипт формирует синтетический отчёт `VOX-TELEGRAM-TEST.json` и отправляет его в чат без использования реальных данных пользователей.
+Скрипт автоматически считывает конфигурацию из безопасного файла окружения (или переменных среды), формирует синтетический отчёт `VOX-TELEGRAM-TEST.json` и отправляет его в чат без использования реальных данных пользователей.
+
+---
+
+## 7. Production configuration (Постоянная конфигурация)
+
+Для постоянной работы сервиса в фоновом режиме на сервере используется выделенный файл конфигурации вне дерева Git и `systemd` user service:
+
+### 1. Безопасное хранилище конфигурации:
+Создайте директорию и файл конфигурации с ограниченными правами доступа:
+```bash
+mkdir -p ~/.config/smarttube-vox
+chmod 700 ~/.config/smarttube-vox
+cat << 'EOF' > ~/.config/smarttube-vox/vox-diagnostics.env
+TELEGRAM_NOTIFICATIONS_ENABLED=true
+TELEGRAM_BOT_TOKEN=<ВАШ_ТОКЕН_БОТА>
+TELEGRAM_CHAT_ID=<ID_ЧАТА_ИЛИ_КАНАЛА>
+TELEGRAM_AGGREGATION_WINDOW_MINUTES=15
+DASHBOARD_BASE_URL=
+EOF
+chmod 600 ~/.config/smarttube-vox/vox-diagnostics.env
+```
+
+### 2. Права доступа:
+- Каталог `~/.config/smarttube-vox`: `700` (`drwx------`)
+- Файл `vox-diagnostics.env`: `600` (`-rw-------`)
+
+### 3. Автозапуск и управление службой (systemd user unit):
+Служба настраивается в `~/.config/systemd/user/smarttube-vox-diagnostics.service`:
+```ini
+[Unit]
+Description=SmartTube VOX Diagnostics Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/SmartTube/services/vox-diagnostics
+ExecStart=/path/to/node src/server.mjs
+EnvironmentFile=%h/.config/smarttube-vox/vox-diagnostics.env
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+Команды управления:
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now smarttube-vox-diagnostics.service
+systemctl --user restart smarttube-vox-diagnostics.service
+systemctl --user status smarttube-vox-diagnostics.service
+```
+
+### 4. Проверка работы:
+Проверка логов без утечки токена:
+```bash
+journalctl --user -u smarttube-vox-diagnostics.service -n 50 --no-pager
+```
+
+Проверка тестовой доставки в изолированном окружении:
+```bash
+env -i PATH="$PATH" HOME="$HOME" node scripts/test_telegram_notification.mjs
+```
+

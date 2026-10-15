@@ -10,14 +10,47 @@
  * node scripts/test_telegram_notification.mjs
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { TelegramClient } from '../src/notifications/telegram.mjs';
 import { formatTestMessage, buildDashboardKeyboard } from '../src/notifications/telegram_formatter.mjs';
 
+function loadSecureEnv() {
+  const candidates = [
+    path.join(os.homedir(), '.config', 'smarttube-vox', 'vox-diagnostics.env'),
+    path.resolve(process.cwd(), '.env'),
+  ];
+  for (const envPath of candidates) {
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx > 0) {
+            const key = trimmed.slice(0, eqIdx).trim();
+            let val = trimmed.slice(eqIdx + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+              val = val.slice(1, -1);
+            }
+            if (process.env[key] === undefined || process.env[key] === '') {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+}
+
 async function main() {
+  loadSecureEnv();
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_TEST_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
   const threadId = process.env.TELEGRAM_MESSAGE_THREAD_ID;
-  const baseUrl = process.env.DASHBOARD_BASE_URL || 'https://diagnostics.smarttube.app';
+  const baseUrl = process.env.DASHBOARD_BASE_URL || '';
 
   if (!token || !chatId) {
     console.log('TELEGRAM_TEST_RESULT: SKIPPED_NO_CONFIG');

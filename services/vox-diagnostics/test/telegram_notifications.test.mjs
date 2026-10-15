@@ -472,3 +472,56 @@ test('Real Fixture VOX-BAE1F61E: old-version events suppress Telegram alert', as
     globalThis.fetch = originalFetch;
   }
 });
+
+test('Report VOX-707B7E10: stale/historical events yield SUPPRESSED_HISTORICAL', async () => {
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    requests.push({ url, opts });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+
+  try {
+    const report = {
+      reportId: 'VOX-707B7E10',
+      status: 'NEW',
+      appVersion: '32.56-vox.9.1',
+      device: { manufacturer: 'TCL', model: 'Beyond TV', osVersion: '11' },
+      safeRecentEvents: [
+        {
+          timestamp: Date.now() - 3600000,
+          category: 'PLAYER',
+          code: 'PLAYER_REBUFFER',
+          level: 'WARN',
+          isHistorical: true
+        }
+      ]
+    };
+
+    const classification = {
+      reportActiveIncident: false,
+      activeEventCount: 0,
+      historicalEventCount: 1,
+      signature: 'PLAYER|REBUFFER|ANDROID_TV'
+    };
+
+    const env = {
+      TELEGRAM_NOTIFICATIONS_ENABLED: 'true',
+      TELEGRAM_BOT_TOKEN: 'FAKE_BOT_TOKEN',
+      TELEGRAM_CHAT_ID: '302331721'
+    };
+
+    const res = await dispatchTelegramNotification({
+      report,
+      classification,
+      issue: { status: 'NEW' },
+      env
+    });
+
+    assert.equal(res.decision, 'SUPPRESSED_HISTORICAL');
+    assert.equal(requests.length, 0, 'No Telegram message should be sent for historical report');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
