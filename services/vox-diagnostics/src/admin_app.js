@@ -561,6 +561,10 @@
     if (modalContent) modalContent.innerHTML = '<p style="color:var(--text-muted);padding:32px;text-align:center;">Загрузка данных отчёта...</p>';
     if (modalOverlay) modalOverlay.style.display = 'flex';
 
+    if (window.location.hash !== '#report=' + encodeURIComponent(reportId)) {
+      history.replaceState(null, '', '#report=' + encodeURIComponent(reportId));
+    }
+
     try {
       const res = await fetch('/v1/admin/reports/' + encodeURIComponent(reportId));
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -578,6 +582,9 @@
   function closeReportModal() {
     if (modalOverlay) modalOverlay.style.display = 'none';
     currentReport = null;
+    if (window.location.hash.startsWith('#report=')) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
     if (lastFocus) lastFocus.focus();
   }
 
@@ -976,6 +983,15 @@
     } finally {
       if (detailSaveBtn) detailSaveBtn.disabled = false;
     }
+  }
+
+  async function quickSetStatus(newStatus, defaultNote = '') {
+    if (!currentReport) return;
+    if (detailStatusSelect) detailStatusSelect.value = newStatus;
+    if (defaultNote && detailNotesText && !detailNotesText.value.trim()) {
+      detailNotesText.value = defaultNote;
+    }
+    await saveReportOperations();
   }
 
   async function deleteCurrentReport() {
@@ -1508,6 +1524,12 @@
         filterReportsTable();
       } else if (action === 'save-issue') {
         saveIssueItem(target.closest('tr'));
+      } else if (action === 'quick-in-progress') {
+        quickSetStatus('IN_PROGRESS', 'Взято в работу разработчиком');
+      } else if (action === 'quick-fixed') {
+        quickSetStatus('FIXED_PENDING_VERIFICATION', 'Исправлено в коде, ожидает верификации');
+      } else if (action === 'quick-resolved') {
+        quickSetStatus('RESOLVED', 'Проблема проверена и решена');
       } else if (action === 'copy-technical-summary') {
         copyTechnicalSummary(currentReport);
       } else if (action === 'copy-antigravity-summary') {
@@ -1540,10 +1562,33 @@
     });
   }
 
+  function handleDeepLink() {
+    let reportId = null;
+    const hash = window.location.hash;
+    if (hash) {
+      const match = hash.match(/report=([A-Za-z0-9_-]+)/i) || hash.match(/^#([A-Za-z0-9_-]+)$/);
+      if (match && match[1].toUpperCase().startsWith('VOX-')) {
+        reportId = match[1].toUpperCase();
+      }
+    }
+    if (!reportId && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('report') || params.get('reportId');
+      if (q && q.toUpperCase().startsWith('VOX-')) {
+        reportId = q.toUpperCase();
+      }
+    }
+    if (reportId) {
+      openReport(reportId);
+    }
+  }
+
   function initAdminApp() {
     cacheDomElements();
     setupEventListeners();
     filterReportsTable();
+    handleDeepLink();
+    window.addEventListener('hashchange', handleDeepLink);
   }
 
   // Initialize on DOM Ready

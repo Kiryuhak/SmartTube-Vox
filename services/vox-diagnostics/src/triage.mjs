@@ -864,3 +864,29 @@ export function getNeedsAttentionSummary(reports = []) {
     .map(([issue, count]) => ({ issue, count }))
     .sort((a, b) => b.count - a.count);
 }
+
+/**
+ * Вычисляет производный статус отчёта с учётом историчности событий и ручных изменений.
+ */
+export function getDerivedStatus(report = {}, classification = null) {
+  const p = report.payload || report;
+  const c = classification || classifyReport(p);
+  const rawStatus = (report.status || report.rawStatus || 'NEW').toUpperCase();
+
+  // Синтетические тесты
+  if (isSyntheticTestReport(p) || rawStatus === 'IGNORED_TEST') {
+    return 'IGNORED_TEST';
+  }
+
+  // Зафиксированные разработчиком статусы жизненного цикла
+  if (['IN_PROGRESS', 'FIXED_PENDING_VERIFICATION', 'RESOLVED', 'CLOSED', 'WONT_FIX', 'KNOWN_ISSUE'].includes(rawStatus)) {
+    return rawStatus;
+  }
+
+  // Если отчёт содержит только исторические события (произошедшие >24ч назад)
+  if (!c.reportActiveIncident || c.isHistorical) {
+    return 'HISTORICAL';
+  }
+
+  return 'NEW';
+}

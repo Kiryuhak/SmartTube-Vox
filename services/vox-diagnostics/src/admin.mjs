@@ -1315,6 +1315,11 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
                 </select>
                 <button class="btn btn-primary" id="detailSaveBtn" data-action="save-detail-ops">Сохранить</button>
               </div>
+              <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+                <button class="btn btn-sm" id="btnQuickInProgress" data-action="quick-in-progress" title="Взять в работу">▶ В работу</button>
+                <button class="btn btn-sm" id="btnQuickFixed" data-action="quick-fixed" title="Отметить как исправленное">✓ Исправлено</button>
+                <button class="btn btn-sm" id="btnQuickResolved" data-action="quick-resolved" title="Отметить как решённое">★ Решено</button>
+              </div>
               <label for="detailNotesText" style="font-size: 11px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 4px; text-transform: uppercase;">Заметка разработчика:</label>
               <textarea id="detailNotesText" class="notes-textarea" style="min-height: 52px;" placeholder="Причина сбоя, ссылка на PR, фикс или пояснение..."></textarea>
             </div>
