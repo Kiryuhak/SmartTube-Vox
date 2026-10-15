@@ -137,6 +137,17 @@ public final class VotAudioTrackHelper {
                 || normalized.equals("russian");
     }
 
+    public static boolean isSameLanguage(@Nullable String langA, @Nullable String langB) {
+        if (langA == null || langB == null) return false;
+        String a = langA.trim().toLowerCase(Locale.US).replace('_', '-');
+        String b = langB.trim().toLowerCase(Locale.US).replace('_', '-');
+        if (a.isEmpty() || b.isEmpty()) return false;
+        if (a.equals(b)) return true;
+        String aPrefix = a.contains("-") ? a.substring(0, a.indexOf('-')) : a;
+        String bPrefix = b.contains("-") ? b.substring(0, b.indexOf('-')) : b;
+        return aPrefix.equals(bPrefix);
+    }
+
     public static boolean isKnownLanguage(@Nullable String langCode) {
         if (langCode == null) {
             return false;

@@ -705,8 +705,12 @@ public class VotProgressOverlay {
             int bottomMarginDp = com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.calculateBottomMarginDp(isPlayback, isControlsShown);
             int newMargin = dpToPx(bottomMarginDp);
             if (lp.bottomMargin != newMargin) {
+                float deltaY = (float) (lp.bottomMargin - newMargin);
+                mOverlayView.animate().cancel();
+                mOverlayView.setTranslationY(deltaY);
                 lp.bottomMargin = newMargin;
                 mOverlayView.setLayoutParams(lp);
+                mOverlayView.animate().translationY(0f).setDuration(250).start();
             }
         }
     }

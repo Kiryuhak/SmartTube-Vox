@@ -278,7 +278,6 @@ public class VoiceTranslateController extends BasePlayerController {
                     }
                     mNewBackendPlaybackStarted = true;
                     mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, System.currentTimeMillis());
-                    duckMainAudio();
                     setState(STATE_ACTIVE);
                     if (mTrackSwitchState == TrackSwitchState.STARTING_VOT) {
                         mTrackSwitchState = TrackSwitchState.VOT_ACTIVE;
@@ -305,6 +304,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 if (!isCurrentNewBackendSession(generationId)) return;
                 Utils.removeCallbacks(mPostProcessWatchdogRunnable);
                 YandexVotLog.e(TAG, "VOT NEW backend: playback error category=" + category);
+                restoreMainVolume();
                 handleNewBackendError(generationId, "playback_error_" + category, true);
             });
         }
@@ -818,6 +818,26 @@ public class VoiceTranslateController extends BasePlayerController {
         if (mState == STATE_READY) {
             Log.i(TAG, "Trigger: manual activate from READY state");
             activateReadyTranslation();
+        } else if (mState == STATE_PENDING) {
+            Log.i(TAG, "Trigger: manual cancel during pending translation");
+            mUserExplicitlySelectedOriginal = true;
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_CANCELLED,
+                    "Translation cancelled by user via button tap while pending"
+            );
+            disarm();
+            MessageHelpers.showMessage(getContext(), R.string.vot_disabled);
+        } else if (mState == STATE_ACTIVE) {
+            Log.i(TAG, "Trigger: manual stop from active translation");
+            mUserExplicitlySelectedOriginal = true;
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_STOPPED,
+                    "Translation stopped by user via button tap while active"
+            );
+            disarm();
+            MessageHelpers.showMessage(getContext(), R.string.vot_disabled);
         } else if (mState == STATE_OFF || buttonState == BTN_OFF || buttonState == BTN_ERROR) {
             Utils.removeCallbacks(mResetErrorButtonRunnable);
             mUserExplicitlySelectedOriginal = false;
@@ -882,7 +902,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 TrackInfo origInfo = VotAudioTrackHelper.from(original);
                 Log.i(TAG, "VOT manual: original audio=" + (origInfo != null ? origInfo.rawLabel : "null"));
                 Log.i(TAG, "VOT manual: russian dubbed track detected");
-                showReplaceDubDialog(info.format != null ? info.format : (getPlayer() != null ? getPlayer().getAudioFormat() : null), original);
+                switchToOriginalAndStartVot(info.format != null ? info.format : (getPlayer() != null ? getPlayer().getAudioFormat() : null), original);
                 return;
             } else {
                 MessageHelpers.showMessage(getContext(), R.string.vot_skip_russian);
@@ -908,6 +928,40 @@ public class VoiceTranslateController extends BasePlayerController {
             progressOverlay().showPreparing(getActivity());
         }
         startYandexTranslation();
+    }
+
+    private void switchToOriginalAndStartVot(FormatItem currentDub, FormatItem original) {
+        String videoId = getPlayer() != null && getPlayer().getVideo() != null ? getPlayer().getVideo().videoId : null;
+        mUserExplicitlySelectedOriginal = false;
+        mTranslationRequestedByUser = true;
+        mRestorableDubFormat = currentDub;
+        mPendingOriginalFormat = original;
+        mTrackSwitchVideoId = videoId;
+        mUserManuallyChangedTrack = false;
+        mTrackSwitchState = TrackSwitchState.SWITCHING_TO_ORIGINAL;
+        Log.i(TAG, "VOT manual: auto switching to original track without dialog");
+        Map<String, String> ctx = new HashMap<>();
+        ctx.put("originalLang", original != null && original.getLanguage() != null ? original.getLanguage() : "unknown");
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_AUDIO_SWITCHED_TO_ORIGINAL,
+                "Auto switched from YouTube dub to original audio track for VOT",
+                ctx
+        );
+        if (progressOverlay() != null) {
+            progressOverlay().showPreparing(getActivity());
+        }
+        saveCurrentAudioFormatBeforeSwitch(original);
+        if (getPlayer() != null) {
+            getPlayer().setFormat(original);
+            FormatItem active = getPlayer().getAudioFormat();
+            if (VotAudioTrackHelper.isSameFormat(active, original)) {
+                onOriginalTrackActivated(original);
+            } else {
+                Utils.removeCallbacks(mTrackSwitchTimeoutRunnable);
+                Utils.postDelayed(mTrackSwitchTimeoutRunnable, 5000L);
+            }
+        }
     }
 
     private void showReplaceDubDialog(FormatItem currentDub, FormatItem original) {
@@ -1226,7 +1280,9 @@ public class VoiceTranslateController extends BasePlayerController {
         String targetLang = votData().getTargetLanguage();
         if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
 
-        if (VotAudioTrackHelper.isUkrainianLang(sourceLang)) {
+        if (VotAudioTrackHelper.isRussianLang(sourceLang) || VotAudioTrackHelper.isSameLanguage(sourceLang, targetLang)) {
+            sourceLang = "auto";
+        } else if (VotAudioTrackHelper.isUkrainianLang(sourceLang)) {
             targetLang = "ru";
         }
 
@@ -1700,7 +1756,9 @@ public class VoiceTranslateController extends BasePlayerController {
                     String srcLang = audioInfo != null && audioInfo.langCode != null ? audioInfo.langCode : "";
                     String tgtLang = votData().getTargetLanguage();
                     if (tgtLang == null || tgtLang.isEmpty()) tgtLang = "ru";
-                    if (VotAudioTrackHelper.isUkrainianLang(srcLang)) {
+                    if (VotAudioTrackHelper.isRussianLang(srcLang) || VotAudioTrackHelper.isSameLanguage(srcLang, tgtLang)) {
+                        srcLang = "auto";
+                    } else if (VotAudioTrackHelper.isUkrainianLang(srcLang)) {
                         tgtLang = "ru";
                     }
                     double durSec = (getPlayer() != null && getPlayer().getDurationMs() > 0) ? (getPlayer().getDurationMs() / 1000.0) : 1.0;
@@ -1929,6 +1987,14 @@ public class VoiceTranslateController extends BasePlayerController {
         if (!mUserManuallyChangedTrack && mRestorableDubFormat != null && getPlayer() != null) {
             Log.d(TAG, "VOT manual: restoring previous audio track");
             mTrackSwitchState = TrackSwitchState.RESTORING_PREVIOUS_TRACK;
+            Map<String, String> ctx = new HashMap<>();
+            ctx.put("restoredDubLang", mRestorableDubFormat.getLanguage() != null ? mRestorableDubFormat.getLanguage() : "unknown");
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_AUDIO_RESTORED_DUB,
+                    "Restored previous YouTube audio track after VOT cancelled or stopped",
+                    ctx
+            );
             getPlayer().setFormat(mRestorableDubFormat);
             mRestorableDubFormat = null;
             mPendingOriginalFormat = null;

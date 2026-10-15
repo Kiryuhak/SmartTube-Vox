@@ -27,6 +27,44 @@ object VoxDiagnosticsPolicy {
     const val OFFLINE_MAX_BACKOFF_MS = 15 * 60 * 1000L                 // 15 минут максимальная задержка
     const val MAX_BATCH_EVENTS = 50
 
+    // Canonical Diagnostic Incident Statuses
+    const val STATUS_NEW = "NEW"
+    const val STATUS_IN_PROGRESS = "IN_PROGRESS"
+    const val STATUS_FIXED_PENDING_VERIFICATION = "FIXED_PENDING_VERIFICATION"
+    const val STATUS_RESOLVED = "RESOLVED"
+    const val STATUS_KNOWN_ISSUE = "KNOWN_ISSUE"
+    const val STATUS_IGNORED_TEST = "IGNORED_TEST"
+
+    val CANONICAL_INCIDENT_STATUSES = setOf(
+        STATUS_NEW,
+        STATUS_IN_PROGRESS,
+        STATUS_FIXED_PENDING_VERIFICATION,
+        STATUS_RESOLVED,
+        STATUS_KNOWN_ISSUE,
+        STATUS_IGNORED_TEST
+    )
+
+    @JvmStatic
+    fun normalizeIncidentStatus(status: String?): String {
+        if (status.isNullOrBlank()) return STATUS_NEW
+        val upper = status.trim().uppercase(java.util.Locale.ROOT)
+        return when (upper) {
+            "NEW" -> STATUS_NEW
+            "IN_PROGRESS", "REVIEWED", "TRIAGED" -> STATUS_IN_PROGRESS
+            "FIXED", "FIXED_PENDING_VERIFICATION", "PENDING_VERIFICATION", "FIXED_PENDING_VALIDATION" -> STATUS_FIXED_PENDING_VERIFICATION
+            "RESOLVED", "CLOSED" -> STATUS_RESOLVED
+            "KNOWN", "KNOWN_ISSUE" -> STATUS_KNOWN_ISSUE
+            "IGNORED", "IGNORED_TEST", "TEST", "WONT_FIX" -> STATUS_IGNORED_TEST
+            else -> STATUS_NEW
+        }
+    }
+
+    @JvmStatic
+    fun isHistoricalVersionEvent(appVersion: String?, currentVersion: String = "32.56-vox.9.1"): Boolean {
+        if (appVersion.isNullOrBlank()) return false
+        return appVersion != currentVersion
+    }
+
     /**
      * Проверяет, разрешена ли отправка автоматической периодической диагностики.
      */
@@ -34,7 +72,6 @@ object VoxDiagnosticsPolicy {
     @JvmOverloads
     fun canSendPeriodicDiagnostics(context: Context, now: Long = System.currentTimeMillis()): Boolean {
         val manager = VoxUpdateChannelManager.instance(context)
-        val channel = manager.getUpdateChannel()
         val lastSubmission = manager.getLastDiagnosticsSubmissionTimestamp()
 
         return if (manager.isBetaChannel()) {
