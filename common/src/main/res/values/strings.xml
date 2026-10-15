@@ -738,6 +738,7 @@
     <string name="okhttp_desc">Compatible and stable network mode. Try it if you encounter issues with Cronet.</string>
     <string name="network_engine_auto">Auto (recommended)</string>
     <string name="network_engine_hint">If video playback works normally, leave on \'Auto\'. Change the network engine only when facing loading or buffering problems.</string>
+    <string name="network_engine_applied_on_next">Will be applied on next playback</string>
     <string name="select_channel_section">Open corresponding section when the app launched from ATV Channels</string>
     <string name="enable_voice_search_desc">The official app will be replaced with a so-called \"bridge\". A bridge helps to transfer global search requests to our app.</string>
     <string name="enable_master_password">Enable master password</string>

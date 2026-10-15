@@ -88,6 +88,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
     private boolean mIsLongSpeedListEnabled;
     private boolean mIsExtraLongSpeedListEnabled;
     private int mPlayerDataSource;
+    private int mRuntimeFallbackEngine = -1;
     private boolean mUnlockAllFormats;
     private boolean mIsBufferOnStreamsDisabled;
     private boolean mIsSectionPlaylistEnabled;
@@ -321,6 +322,28 @@ public class PlayerTweaksData implements ProfileChangeListener {
     public void setPlayerDataSource(int dataSource) {
         mPlayerDataSource = dataSource;
         persistData();
+    }
+
+    public boolean isManualEngineSelected() {
+        return mPlayerDataSource == PLAYER_DATA_SOURCE_OKHTTP || mPlayerDataSource == PLAYER_DATA_SOURCE_CRONET;
+    }
+
+    public void setRuntimeFallbackEngine(int engine) {
+        mRuntimeFallbackEngine = engine;
+    }
+
+    public void clearRuntimeFallbackEngine() {
+        mRuntimeFallbackEngine = -1;
+    }
+
+    public int getEffectivePlayerDataSource() {
+        if (mRuntimeFallbackEngine != -1) {
+            return mRuntimeFallbackEngine;
+        }
+        if (mPlayerDataSource == PLAYER_DATA_SOURCE_DEFAULT) {
+            return Utils.skipCronet() ? PLAYER_DATA_SOURCE_OKHTTP : PLAYER_DATA_SOURCE_CRONET;
+        }
+        return mPlayerDataSource;
     }
 
     public boolean isAltPresetsEnabled() {

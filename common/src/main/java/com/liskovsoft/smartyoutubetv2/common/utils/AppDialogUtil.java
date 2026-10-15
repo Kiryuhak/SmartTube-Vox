@@ -1035,7 +1035,11 @@ public class AppDialogUtil {
                 context.getString(R.string.default_stack_desc),
                 option -> {
                     playerTweaksData.setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT);
-                    onModeSelected.run();
+                    playerTweaksData.clearRuntimeFallbackEngine();
+                    MessageHelpers.showMessage(context, R.string.network_engine_applied_on_next);
+                    if (onModeSelected != null) {
+                        onModeSelected.run();
+                    }
                 },
                 playerTweaksData.getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT));
 
@@ -1043,7 +1047,11 @@ public class AppDialogUtil {
                 context.getString(R.string.cronet_desc),
                 option -> {
                     playerTweaksData.setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET);
-                    onModeSelected.run();
+                    playerTweaksData.clearRuntimeFallbackEngine();
+                    MessageHelpers.showMessage(context, R.string.network_engine_applied_on_next);
+                    if (onModeSelected != null) {
+                        onModeSelected.run();
+                    }
                 },
                 playerTweaksData.getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET));
 
@@ -1051,11 +1059,15 @@ public class AppDialogUtil {
                 context.getString(R.string.okhttp_desc),
                 option -> {
                     playerTweaksData.setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP);
-                    onModeSelected.run();
+                    playerTweaksData.clearRuntimeFallbackEngine();
+                    MessageHelpers.showMessage(context, R.string.network_engine_applied_on_next);
+                    if (onModeSelected != null) {
+                        onModeSelected.run();
+                    }
                 },
                 playerTweaksData.getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP));
 
-        com.liskovsoft.smartyoutubetv2.common.vox.network.VoxNetworkEngineProbe.runProbe(context, onModeSelected);
+        com.liskovsoft.smartyoutubetv2.common.vox.network.VoxNetworkEngineProbe.runProbe(context, null);
 
         return OptionCategory.from(
                 PLAYER_ENGINE_ID,

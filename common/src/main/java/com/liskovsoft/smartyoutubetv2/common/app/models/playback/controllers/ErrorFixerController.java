@@ -76,7 +76,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DNS_RECOVERY_STARTED,
                         "DNS resolution recovery started: switching network engine to OKHTTP"
                 );
-                getPlayerTweaksData().setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP);
+                getPlayerTweaksData().setRuntimeFallbackEngine(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP);
                 mVideoLoaderController.restartEngine();
             } else {
                 // Also, some clients like ANDROID_REEL may just hang at start
@@ -184,7 +184,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             }
         } else if (Helpers.containsAny(errorContent, "Exception in CronetUrlRequest") && !getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
             if (getVideo() != null && !getVideo().isLive) { // Finished live stream may provoke errors in Cronet
-                getPlayerTweaksData().setPlayerDataSource(PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT);
+                getPlayerTweaksData().setRuntimeFallbackEngine(PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT);
             } else {
                 restartEngine = false;
             }
@@ -404,11 +404,11 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
      * Bad idea. Faster source is different among devices
      */
     private void enableFasterDataSource() {
-        if (isFasterDataSourceEnabled()) {
+        if (isFasterDataSourceEnabled() || getPlayerTweaksData().isManualEngineSelected()) {
             return;
         }
 
-        getPlayerTweaksData().setPlayerDataSource(Utils.getFasterDataSource());
+        getPlayerTweaksData().setRuntimeFallbackEngine(Utils.getFasterDataSource());
     }
 
     /**
@@ -416,11 +416,11 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
      */
     private boolean isFasterDataSourceEnabled() {
         int fasterDataSource = Utils.getFasterDataSource();
-        return getPlayerTweaksData().getPlayerDataSource() == fasterDataSource;
+        return getPlayerTweaksData().getEffectivePlayerDataSource() == fasterDataSource;
     }
 
     private void switchNextEngine() {
-        int currentEngine = getPlayerTweaksData().getPlayerDataSource();
+        int currentEngine = getPlayerTweaksData().getEffectivePlayerDataSource();
         int[] engineList = Utils.skipCronet() ?
                 new int[] { PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP } :
                 new int[] { PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET, PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP };
@@ -436,7 +436,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
 
         Log.w(TAG, "Network recovery: switch engine %s -> %s, switches=%s",
                 currentEngine, nextEngine, mNetworkRecoveryPolicy.getSwitchCount(nowMs));
-        getPlayerTweaksData().setPlayerDataSource(nextEngine);
+        getPlayerTweaksData().setRuntimeFallbackEngine(nextEngine);
     }
 
     private boolean isSubtitlesEnabled() {

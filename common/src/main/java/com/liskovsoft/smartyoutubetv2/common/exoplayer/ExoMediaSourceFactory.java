@@ -127,7 +127,7 @@ public class ExoMediaSourceFactory {
      */
     private HttpDataSource.Factory buildHttpDataSourceFactory(boolean useBandwidthMeter) {
         PlayerTweaksData tweaksData = PlayerTweaksData.instance(mContext);
-        int source = tweaksData.getPlayerDataSource();
+        int source = tweaksData.getEffectivePlayerDataSource();
         DefaultBandwidthMeter bandwidthMeter = useBandwidthMeter ? BANDWIDTH_METER : null;
         return source == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP ? buildOkHttpDataSourceFactory(bandwidthMeter) :
                         source == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET && CronetManager.getEngine(mContext) != null ? buildCronetDataSourceFactory(bandwidthMeter) :

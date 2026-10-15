@@ -745,6 +745,7 @@
     <string name="okhttp_desc">Совместимый и стабильный сетевой режим. Попробуйте его, если с Cronet возникают ошибки.</string>
     <string name="network_engine_auto">Авто (рекомендуется)</string>
     <string name="network_engine_hint">Если видео работает нормально — оставьте «Авто». Менять сетевой движок стоит только при проблемах с загрузкой или буферизацией.</string>
+    <string name="network_engine_applied_on_next">Будет применено при следующем воспроизведении</string>
     <string name="select_channel_section">Открывать соответствующий раздел при запуске приложения с каналов ATV.</string>
     <string name="enable_voice_search_desc">Официальное приложение будет заменено так называемым мостом. Мост помогает передавать глобальные поисковые запросы в наше приложение.</string>
     <string name="enable_master_password">Включить мастер-пароль</string>
