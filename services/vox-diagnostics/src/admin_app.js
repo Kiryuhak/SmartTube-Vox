@@ -636,6 +636,17 @@
           </div>
         </div>
 
+        ${(p.telegramDelivery || report.telegramDelivery) ? `
+        <div class="section-card" style="border-left: 3px solid #38bdf8;">
+          <div class="section-title" style="color:#38bdf8;">Уведомление в Telegram</div>
+          <div style="font-size:13px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+            <div>Статус: <strong>${escapeHtml((p.telegramDelivery || report.telegramDelivery).decision || 'UNKNOWN')}</strong></div>
+            <div>Время: <strong>${formatDateTime((p.telegramDelivery || report.telegramDelivery).notifiedAt)}</strong></div>
+            <div>Повторов: <strong>${escapeHtml((p.telegramDelivery || report.telegramDelivery).repeatCount ?? 0)}</strong></div>
+            ${(p.telegramDelivery || report.telegramDelivery).messageId ? `<div>Message ID: <code>${escapeHtml((p.telegramDelivery || report.telegramDelivery).messageId)}</code></div>` : ''}
+          </div>
+        </div>` : ''}
+
         ${(player.rebufferCount !== undefined || player.selectedCodec || player.selectedHeight) ? `
         <div class="section-card">
           <div class="section-title">Воспроизведение (Playback)</div>

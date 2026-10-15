@@ -92,6 +92,7 @@ node_modules/
 # Environment & local secrets
 .env
 .env.*
+!.env.example
 .dev.vars
 .dev.vars.*
 /release_staging/

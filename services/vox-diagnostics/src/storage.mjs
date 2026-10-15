@@ -261,6 +261,40 @@ export class ReportStorage {
     }
   }
 
+  async recordTelegramDelivery(reportId, deliveryResult = {}) {
+    if (!reportId) return;
+    const now = Date.now();
+    const meta = {
+      decision: deliveryResult.decision || 'UNKNOWN',
+      notifiedAt: deliveryResult.notifiedAt || now,
+      messageId: deliveryResult.messageId || null,
+      repeatCount: deliveryResult.repeatCount || 0,
+      error: deliveryResult.error || null,
+    };
+
+    if (this.db) {
+      try {
+        const report = await this.getReportById(reportId);
+        if (report) {
+          const payload = report.payload || {};
+          payload.telegramDelivery = meta;
+          await this.db.prepare('UPDATE reports SET payload_json = ?, updated_at = ? WHERE report_id = ?')
+            .bind(JSON.stringify(payload), now, reportId).run();
+        }
+      } catch {}
+    } else {
+      const existing = this.inMemoryReports.get(reportId);
+      if (existing) {
+        try {
+          const payload = typeof existing.payload_json === 'string' ? JSON.parse(existing.payload_json) : (existing.payload_json || {});
+          payload.telegramDelivery = meta;
+          existing.payload_json = JSON.stringify(payload);
+          existing.telegramDelivery = meta;
+        } catch {}
+      }
+    }
+  }
+
   async addNote(reportId, note, actor = 'ADMIN') {
     if (typeof note !== 'string' || !note.trim() || note.length > 4000) throw new RangeError('Invalid note');
     const report = await this.getReportById(reportId);

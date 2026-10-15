@@ -3,6 +3,7 @@ import { ReportStorage, normalizeStatus } from './storage.mjs';
 import { checkAdminAuth, resolveAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
+import { dispatchTelegramNotification } from './notifications/telegram.mjs';
 import { classifyReport, buildClassificationSignature, isSyntheticTestReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES, inferCategoryFromCode, inferSubsystemFromCode } from './triage.mjs';
 
 /**
@@ -808,7 +809,25 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     // Save report in persistent storage (D1 / in-memory)
     await storage.saveReport(sanitizedReport);
 
-    // Optional safe developer notification
+    // Telegram notification dispatch with failure isolation
+    let telegramDelivery = { decision: 'DISABLED' };
+    try {
+      const issue = await storage.getIssue(errorSignature);
+      telegramDelivery = await dispatchTelegramNotification({
+        report: sanitizedReport,
+        classification,
+        issue: issue || {},
+        env,
+        storage,
+      });
+      if (storage.recordTelegramDelivery) {
+        await storage.recordTelegramDelivery(reportId, telegramDelivery);
+      }
+    } catch (tgErr) {
+      telegramDelivery = { decision: 'FAILED', error: tgErr.message };
+    }
+
+    // Optional safe developer notification (legacy webhook)
     await sendReportNotification(sanitizedReport, env);
 
     return jsonResponse({

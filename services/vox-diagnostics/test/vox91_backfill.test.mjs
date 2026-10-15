@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const fixturesDir = path.resolve(__dirname, 'fixtures');
 
 test('VOX 9.1 Status Matrix Integrity and Canonical Statuses', () => {
-  assert.equal(VOX_9_1_STATUS_MATRIX.length, 14, 'All 14 requested status matrix items must be defined');
+  assert.equal(VOX_9_1_STATUS_MATRIX.length, 17, 'All 17 requested status matrix items must be defined');
 
   const expectedKeys = [
     'PLAYER_DPAD_DIMMING_CONFLICT',
@@ -30,7 +30,10 @@ test('VOX 9.1 Status Matrix Integrity and Canonical Statuses', () => {
     'OTA_PARTIAL_APK',
     'OTA_RATE_LIMIT',
     'DOWNLOAD_STATE_INCONSISTENT',
-    'HISTORICAL_DIAGNOSTIC_NOISE'
+    'HISTORICAL_DIAGNOSTIC_NOISE',
+    'PLAYER_DOUBLE_BACK_PAUSE_REGRESSION',
+    'BACKGROUND_PLAYBACK_PAUSE_REGRESSION',
+    'VOT_FAST_VOCALS_TRANSLATION_FAILURE'
   ];
 
   for (const key of expectedKeys) {
@@ -59,13 +62,19 @@ test('VOX-D134CD89: Historical Events Isolation (No Stale Trigger as Active Inci
 
 test('VOX-BAE1F61E, VOX-82E64C77, VOX-BDDBE424 Fixtures Classification', () => {
   const analysis = analyzeFixtureReports();
-  assert.equal(analysis.length, 4, 'All 4 reference fixtures must be analyzed');
+  assert.equal(analysis.length, 5, 'All 5 reference fixtures must be analyzed');
 
-  for (const item of analysis) {
+  const historicalFixtures = analysis.filter(item => item.reportId !== 'VOX-D0DF1A08');
+  for (const item of historicalFixtures) {
     assert.equal(item.activeEventCount, 0, `Fixture ${item.reportId} must have 0 active events`);
     assert.equal(item.reportActiveIncident, false, `Fixture ${item.reportId} must have reportActiveIncident=false`);
     assert.ok(item.historicalEventCount > 0, `Fixture ${item.reportId} must have historical events`);
   }
+
+  const d0 = analysis.find(item => item.reportId === 'VOX-D0DF1A08');
+  assert.ok(d0, 'VOX-D0DF1A08 fixture must be analyzed');
+  assert.equal(d0.activeEventCount, 1, 'VOX-D0DF1A08 must have 1 active event');
+  assert.equal(d0.reportActiveIncident, true, 'VOX-D0DF1A08 must have reportActiveIncident=true');
 });
 
 test('Auto Triage: VOX-D134CD89 with fixed issue does NOT trigger false regression reopen', async () => {
@@ -114,26 +123,33 @@ test('Backfill SQL generation is valid and contains expected statements', () => 
   assert.ok(sql.includes('TRANSLATION|FAST_VOCALS_FAILURE'), 'Must contain fast vocals translation issue');
 });
 
-test('VOX 9.1 Active Forum Regressions: in IN_PROGRESS without fixedInVersion', () => {
-  assert.equal(VOX_9_1_ACTIVE_ISSUES.length, 3, 'Must have 3 active forum issues');
+test('VOX 9.1 Active Issues and Forum Regressions Matrix Integrity', () => {
+  assert.equal(VOX_9_1_ACTIVE_ISSUES.length, 1, 'Must have 1 active issue (PLAYER_REBUFFER_BUFFER_POLICY)');
 
-  const expectedActive = [
+  const expectedResolvedForumRegressions = [
     'PLAYER_DOUBLE_BACK_PAUSE_REGRESSION',
     'BACKGROUND_PLAYBACK_PAUSE_REGRESSION',
     'VOT_FAST_VOCALS_TRANSLATION_FAILURE'
   ];
 
-  for (const key of expectedActive) {
-    const item = VOX_9_1_ACTIVE_ISSUES.find(i => i.key === key);
-    assert.ok(item, `Active issue ${key} must exist`);
-    assert.equal(item.targetStatus, 'IN_PROGRESS', `Status for ${key} must be IN_PROGRESS`);
-    assert.equal(item.fixedInVersion, undefined, `Active issue ${key} must NOT have fixedInVersion set`);
+  for (const key of expectedResolvedForumRegressions) {
+    const item = VOX_9_1_STATUS_MATRIX.find(i => i.key === key);
+    assert.ok(item, `Resolved issue ${key} must exist in VOX_9_1_STATUS_MATRIX`);
+    assert.equal(item.targetStatus, 'RESOLVED', `Status for ${key} must be RESOLVED after physical TV gate`);
+    assert.equal(item.fixedInVersion, '32.56-vox.9.1', `Resolved issue ${key} must have fixedInVersion set to 32.56-vox.9.1`);
+    assert.equal(item.fixCommit, '9a2feb20b', `Resolved issue ${key} must have fixCommit set to 9a2feb20b`);
+    assert.equal(item.physicallyVerified, true, `Resolved issue ${key} must be physically verified`);
     assert.ok(item.title, `Item ${key} must have a title`);
     assert.ok(item.notes, `Item ${key} must have notes`);
   }
+
+  const rebuffer = VOX_9_1_ACTIVE_ISSUES.find(i => i.key === 'PLAYER_REBUFFER_BUFFER_POLICY');
+  assert.ok(rebuffer, 'PLAYER_REBUFFER_BUFFER_POLICY must exist');
+  assert.equal(rebuffer.targetStatus, 'NEW', 'Status for rebuffer must be NEW');
+  assert.equal(rebuffer.fixedInVersion, undefined, 'Rebuffer issue must NOT have fixedInVersion set');
 });
 
-test('VOX-D0DF1A08 Fixture Classification: Active Player Double Back Incident', () => {
+test('VOX-D0DF1A08 Fixture Classification: Active Player Rebuffer Incident (Separate from Double Back)', () => {
   const filePath = path.join(fixturesDir, 'vox-diagnostic-VOX-D0DF1A08.json');
   assert.ok(fs.existsSync(filePath), 'Fixture VOX-D0DF1A08 must exist');
 
@@ -143,6 +159,9 @@ test('VOX-D0DF1A08 Fixture Classification: Active Player Double Back Incident', 
 
   assert.equal(classified.activeEventCount, 1, 'Must have 1 active event');
   assert.equal(classified.errorCategory, 'PLAYER');
-  assert.equal(classified.primaryEvent?.event, 'PLAYER_DOUBLE_BACK_PAUSE');
+  assert.equal(classified.primaryEvent?.event, 'PLAYER_REBUFFER');
+  assert.equal(classified.signature, 'PLAYER|PLAYER_REBUFFER|ANDROID_TV_API30');
+  assert.notEqual(classified.signature, 'PLAYER|DOUBLE_BACK_PAUSE|ANDROID_TV_API34');
+  assert.notEqual(classified.signature, 'PLAYER|PLAYER_HTTP_ERROR|ANDROID_TV_API34');
 });
 

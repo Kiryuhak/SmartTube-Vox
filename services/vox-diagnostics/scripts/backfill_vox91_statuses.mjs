@@ -202,6 +202,45 @@ export const VOX_9_1_STATUS_MATRIX = [
     physicallyVerified: true,
     needsProductionVerification: false,
     notes: 'Бэкенд и триаж-движок изолируют исторические события, исключая ложные переоткрытия регрессий и статус NEW для стабильных установок.'
+  },
+  {
+    key: 'PLAYER_DOUBLE_BACK_PAUSE_REGRESSION',
+    signatures: ['PLAYER|DOUBLE_BACK_PAUSE|*'],
+    targetStatus: 'RESOLVED',
+    fixedInVersion: '32.56-vox.9.1',
+    fixPatch: 'Patch #46',
+    fixCommit: '9a2feb20b',
+    title: 'Первое нажатие «Назад» при двойном выходе ставит плеер на паузу',
+    evidence: 'Перехват выхода в finish() до вызова teardown и освобождения плеера; сброс счётчика после выхода',
+    physicallyVerified: true,
+    needsProductionVerification: false,
+    notes: 'Исправлена логика двойного нажатия Назад. Первое нажатие не ставит воспроизведение на паузу и не открывает HUD. Физически подтверждено на TCL Smart TV Pro.'
+  },
+  {
+    key: 'BACKGROUND_PLAYBACK_PAUSE_REGRESSION',
+    signatures: ['PLAYER|BACKGROUND_PLAYBACK_PAUSED|*'],
+    targetStatus: 'RESOLVED',
+    fixedInVersion: '32.56-vox.9.1',
+    fixPatch: 'Patch #46',
+    fixCommit: '9a2feb20b',
+    title: 'Фоновое воспроизведение ставится на паузу при сворачивании',
+    evidence: 'Устранена кража AudioFocus со стороны PlaybackActivity; ExoPlayer сохраняет эксклюзивный аудиофокус',
+    physicallyVerified: true,
+    needsProductionVerification: false,
+    notes: 'Устранена пауза при переходе в фоновый режим Только звук. Звук продолжает играть непрерывно. Физически подтверждено на TCL Smart TV Pro.'
+  },
+  {
+    key: 'VOT_FAST_VOCALS_TRANSLATION_FAILURE',
+    signatures: ['TRANSLATION|FAST_VOCALS_FAILURE|*'],
+    targetStatus: 'RESOLVED',
+    fixedInVersion: '32.56-vox.9.1',
+    fixPatch: 'Patch #46',
+    fixCommit: '9a2feb20b',
+    title: 'Сбой перевода быстрых треков / хэви-метал в Yandex VOT',
+    evidence: 'Исключение многоканального AC3/EC3 из источника VOT, приоритизация битрейта речи 96-160k и fallback при lively_unavailable',
+    physicallyVerified: true,
+    needsProductionVerification: false,
+    notes: 'Селектор аудиопотока VOT изолирован от ТВ-настроек AC3 passthrough, приоритизированы стерео Opus 251 / AAC 140. Физически подтверждено на TCL Smart TV Pro.'
   }
 ];
 
@@ -233,30 +272,23 @@ export const REFERENCE_REPORTS = [
     expectedDerivedStatus: 'FIXED_PENDING_VERIFICATION',
     expectedDashboardIncidentStatus: 'FIXED_PENDING_VERIFICATION',
     notes: 'Сформирован на 32.56-vox.9.1 после обновления поверх 8.2. Все ошибки в журнале (PLAYER_HTTP_ERROR, OTA_RATE_LIMIT) произошли 24+ часа назад в старой версии. Активные сбои отсутствуют.'
+  },
+  {
+    reportId: 'VOX-D0DF1A08',
+    file: 'vox-diagnostic-VOX-D0DF1A08.json',
+    expectedDerivedStatus: 'NEW',
+    expectedDashboardIncidentStatus: 'NEW',
+    notes: 'Отчёт DuneHD Pro Vision 4K (Android 11 API 30). Ошибка PLAYER_REBUFFER (BUFFER_POLICY_TOO_SMALL) при воспроизведении 2160p AV1 на 1080p дисплее. Не связан с Double Back.'
   }
 ];
 
 export const VOX_9_1_ACTIVE_ISSUES = [
   {
-    key: 'PLAYER_DOUBLE_BACK_PAUSE_REGRESSION',
-    signatures: ['PLAYER|DOUBLE_BACK_PAUSE|*'],
-    targetStatus: 'IN_PROGRESS',
-    title: 'Первое нажатие «Назад» при двойном выходе ставит плеер на паузу',
-    notes: 'Отчёт VOX-D0DF1A08: при включённой опции «Выход из плеера: Двойное Назад» первое нажатие ошибочно ставит видео на паузу и открывает полосу HUD.'
-  },
-  {
-    key: 'BACKGROUND_PLAYBACK_PAUSE_REGRESSION',
-    signatures: ['PLAYER|BACKGROUND_PLAYBACK_PAUSED|*'],
-    targetStatus: 'IN_PROGRESS',
-    title: 'Фоновое воспроизведение ставится на паузу при сворачивании',
-    notes: 'При переходе в фоновый режим звук останавливается вместо продолжения в фоне.'
-  },
-  {
-    key: 'VOT_FAST_VOCALS_TRANSLATION_FAILURE',
-    signatures: ['TRANSLATION|FAST_VOCALS_FAILURE|*'],
-    targetStatus: 'IN_PROGRESS',
-    title: 'Сбой перевода быстрых треков / хэви-метал в Yandex VOT',
-    notes: 'Быстрые треки / тяжелый металл: сбой распознавания и вечный спиннер. Требуется отвязка источника от TV AC3 passthrough и корректный fallback.'
+    key: 'PLAYER_REBUFFER_BUFFER_POLICY',
+    signatures: ['PLAYER|PLAYER_REBUFFER|*'],
+    targetStatus: 'NEW',
+    title: 'Буферизация воспроизведения из-за размера буфера (2160p на 1080p дисплее)',
+    notes: 'Отчёт VOX-D0DF1A08: DuneHD Pro Vision 4K (API 30) выбрал 2160p AV1 при экране 1080p с rootCause BUFFER_POLICY_TOO_SMALL.'
   }
 ];
 

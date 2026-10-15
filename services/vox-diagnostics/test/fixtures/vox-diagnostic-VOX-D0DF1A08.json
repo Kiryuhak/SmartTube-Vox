@@ -4,29 +4,44 @@
   "timestamp": 1792040000000,
   "platform": "Android TV",
   "appVersion": "32.56-vox.9",
+  "appVersionCode": 2446015,
+  "manufacturer": "DuneHD",
+  "model": "Pro Vision 4K",
+  "sdkInt": 30,
   "device": {
-    "family": "TCL Smart TV Pro",
-    "manufacturer": "TCL",
-    "model": "Smart TV Pro",
+    "family": "DuneHD",
+    "manufacturer": "DuneHD",
+    "model": "Pro Vision 4K",
     "tier": "Стандартный",
-    "sdkInt": 34,
-    "osVersion": "14 (API 34)"
+    "sdkInt": 30,
+    "osVersion": "11 (API 30)"
+  },
+  "display": {
+    "width": 1920,
+    "height": 1080
   },
   "errorCategory": "PLAYER",
-  "errorSignature": "PLAYER|DOUBLE_BACK_PAUSE|ANDROID_TV_API34",
-  "status": "IN_PROGRESS",
-  "developerNotes": "Отчёт с форума: при включённом Двойном Назад первое нажатие ошибочно ставит видео на паузу и открывает HUD управления.",
+  "errorSignature": "PLAYER|PLAYER_REBUFFER|ANDROID_TV_API30",
+  "status": "NEW",
+  "developerNotes": "DuneHD Pro Vision 4K (API 30): буферизация 2160p AV1 при экране 1080p (BUFFER_POLICY_TOO_SMALL)",
   "safeRecentEvents": [
     {
       "timestamp": 1792039950000,
-      "level": "ERROR",
+      "level": "WARN",
       "category": "PLAYER",
-      "code": "PLAYER_DOUBLE_BACK_PAUSE",
-      "message": "Первое нажатие «Назад» ставит видео на паузу и открывает контролы при двойном выходе",
+      "code": "PLAYER_REBUFFER",
+      "message": "Буферизация воспроизведения",
       "context": {
-        "playerState": "PAUSED",
-        "operation": "DOUBLE_BACK_FIRST_PRESS",
-        "reason": "HUD_CONFLICT"
+        "rootCause": "BUFFER_POLICY_TOO_SMALL",
+        "selectedHeight": "2160",
+        "bitrate": "10806992",
+        "selectedCodec": "av01.0.12M.08",
+        "bufferAheadMs": "0",
+        "rebufferCount": "1",
+        "recommendedMaxQualityHeight": "1080",
+        "currentMaxQualityHeight": "0",
+        "displayWidth": "1920",
+        "displayHeight": "1080"
       }
     }
   ]
