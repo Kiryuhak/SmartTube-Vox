@@ -30,6 +30,16 @@ enum class VoxBuildChannel(val id: String, val titleRu: String, val isPreRelease
         fun fromVersion(versionName: String?): VoxBuildChannel {
             if (versionName == null) return STABLE
             val lower = versionName.lowercase()
+            val parsed = VoxVersionComparator.parseVersion(versionName)
+            if (parsed != null && ((parsed.voxMajor >= 9 && parsed.voxMinor > 0) || parsed.stage != VoxReleaseStage.STABLE)) {
+                return when (parsed.stage) {
+                    VoxReleaseStage.DEV -> DEV
+                    VoxReleaseStage.ALPHA -> ALPHA
+                    VoxReleaseStage.BETA -> BETA
+                    VoxReleaseStage.RC -> RC
+                    VoxReleaseStage.STABLE -> BETA // Minor versions (9.1, 9.2, 10.1...) are canonical Betas
+                }
+            }
             return when {
                 lower.contains("-dev") -> DEV
                 lower.contains("-alpha") -> ALPHA
@@ -171,5 +181,6 @@ data class VoxReleaseInfo(
     val changelog: List<String>,
     val assets: List<VoxReleaseAsset>,
     val sha256SumsUrl: String? = null,
-    val isPrerelease: Boolean = false
+    val isPrerelease: Boolean = false,
+    val versionCode: Long? = null
 )

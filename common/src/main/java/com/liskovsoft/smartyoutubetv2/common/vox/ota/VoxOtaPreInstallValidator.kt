@@ -28,7 +28,7 @@ object VoxOtaPreInstallValidator {
 
     const val MIN_SANE_APK_SIZE: Long = 5L * 1024 * 1024 // 5 MB
 
-    private val ALLOWED_PACKAGE_NAMES = setOf(
+    val ALLOWED_PACKAGE_NAMES = setOf(
         "com.liskovsoft.smarttubetv.beta",
         "com.liskovsoft.smarttubetv"
     )
@@ -186,10 +186,10 @@ object VoxOtaPreInstallValidator {
                 0
             }
 
-            if (!allowDowngrade && installedVersionCode > 0 && packageArchiveInfo.versionCode < installedVersionCode) {
+            if (!allowDowngrade && installedVersionCode > 0 && packageArchiveInfo.versionCode <= installedVersionCode) {
                 return fail(
                     VoxOtaErrorCode.VERSION_NOT_NEWER,
-                    "Версия обновления (${packageArchiveInfo.versionCode}) ниже установленной ($installedVersionCode)",
+                    "Версия обновления (${packageArchiveInfo.versionCode}) не новее установленной ($installedVersionCode)",
                     mapOf("apkVersion" to packageArchiveInfo.versionCode.toString(), "installedVersion" to installedVersionCode.toString())
                 )
             }

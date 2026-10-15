@@ -96,8 +96,9 @@ class VersionSelectionTest {
         assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.8.2-beta.2", isBetaChannel = true))
         assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.9-dev", isBetaChannel = true))
 
-        // 6. Newer hypothetical VOX 9.1 is available
-        assertTrue(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.9.1", isBetaChannel = false))
+        // 6. Newer hypothetical VOX 9.1 is available on beta, but blocked on stable; VOX 10 stable is available on stable
+        assertFalse(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.9.1", isBetaChannel = false))
+        assertTrue(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.9.1", isBetaChannel = true))
         assertTrue(VoxVersionComparator.isUpdateAvailable(vox9, "32.56-vox.10", isBetaChannel = false))
 
         // 7. Malformed version handled safely

@@ -42,7 +42,10 @@ object VoxVersionComparator {
             get() = if (stage == VoxReleaseStage.RC) stageNumber else null
 
         val isPreRelease: Boolean
-            get() = stage != VoxReleaseStage.STABLE
+            get() = stage != VoxReleaseStage.STABLE || (voxMajor >= 9 && voxMinor > 0)
+
+        val isCanonicalStable: Boolean
+            get() = stage == VoxReleaseStage.STABLE && (voxMajor < 9 || voxMinor == 0)
 
         override fun compareTo(other: ParsedVersion): Int {
             if (this.voxMajor != other.voxMajor) {
@@ -163,8 +166,9 @@ object VoxVersionComparator {
             return false
         }
 
-        // Правило канала: стабильная версия не должна автоматически обновляться на pre-release (dev/beta/rc) через стабильный канал
-        if (!isBetaChannel && target.isPreRelease && !curr.isPreRelease) {
+        // Правило канала: на стабильном канале pre-release сборки (beta, dev, rc, minor versions 9.x) никогда не предлагаются
+        // если текущая версия пользователя стабильная
+        if (!isBetaChannel && !curr.isPreRelease && target.isPreRelease) {
             return false
         }
 

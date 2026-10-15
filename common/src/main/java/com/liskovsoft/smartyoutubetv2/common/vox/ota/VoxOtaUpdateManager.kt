@@ -40,7 +40,7 @@ class VoxOtaUpdateManager(private val context: Context) {
         const val GITHUB_LATEST_RELEASE_API =
             "https://api.github.com/repos/Kiryuhak/SmartTube-Vox/releases/latest"
         const val GITHUB_RELEASES_LIST_API =
-            "https://api.github.com/repos/Kiryuhak/SmartTube-Vox/releases?per_page=5"
+            "https://api.github.com/repos/Kiryuhak/SmartTube-Vox/releases?per_page=15"
         private const val USER_AGENT = "SmartTube-VOX-OTA/1.0"
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
@@ -48,6 +48,10 @@ class VoxOtaUpdateManager(private val context: Context) {
         private const val BUFFER_SIZE = 128 * 1024
         const val AUTO_CHECK_COOLDOWN_MS = 4L * 60 * 60 * 1000 // 4 hours
         const val RATE_LIMIT_COOLDOWN_MS = 1L * 60 * 60 * 1000 // 1 hour
+
+        @Volatile
+        @JvmStatic
+        var testUpdateBaseUrl: String? = null
 
         @Volatile
         private var sInstance: VoxOtaUpdateManager? = null
@@ -63,6 +67,7 @@ class VoxOtaUpdateManager(private val context: Context) {
         fun resetInstanceForTesting() {
             synchronized(this) {
                 sInstance = null
+                testUpdateBaseUrl = null
             }
         }
 
@@ -271,10 +276,10 @@ class VoxOtaUpdateManager(private val context: Context) {
                 )
 
                 val release = try {
-                    fetchReleaseInfo(manifestUrls, isBetaChannel)
+                    fetchReleaseInfo(manifestUrls, isBetaChannel, currentVersion)
                 } catch (e: VoxOtaException) {
-                    if (e.code == VoxOtaErrorCode.RELEASE_NOT_FOUND) {
-                        // 404 или отсутствие релиза при плановой проверке = NO_UPDATE
+                    if (e.code == VoxOtaErrorCode.RELEASE_NOT_FOUND || e.code == VoxOtaErrorCode.NO_UPDATE) {
+                        // 404, отсутствие релиза или отсутствие подходящих обновлений = NO_UPDATE
                         val elapsed = System.currentTimeMillis() - startTimeMs
                         VoxSafeLogger.info(
                             VoxLogCategory.OTA,
@@ -286,7 +291,7 @@ class VoxOtaUpdateManager(private val context: Context) {
                             VoxLogCategory.OTA,
                             VoxLogCode.OTA_NO_UPDATE,
                             "Новых обновлений нет",
-                            mapOf("currentVersion" to currentVersion, "reason" to "RELEASE_NOT_FOUND")
+                            mapOf("currentVersion" to currentVersion, "reason" to e.code.name)
                         )
                         VoxSafeLogger.info(
                             VoxLogCategory.OTA,
@@ -544,7 +549,17 @@ class VoxOtaUpdateManager(private val context: Context) {
         }
     }
 
-    private fun fetchReleaseInfo(manifestUrls: Array<String>?, isBetaChannel: Boolean): VoxReleaseInfo {
+    private fun fetchReleaseInfo(
+        manifestUrls: Array<String>?,
+        isBetaChannel: Boolean,
+        currentVersion: String? = null
+    ): VoxReleaseInfo {
+        val installedVersionCode = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
+        } catch (e: Throwable) {
+            0L
+        }
+
         // Сначала пробуем конфигурационные URL манифестов
         if (!manifestUrls.isNullOrEmpty()) {
             for (url in manifestUrls) {
@@ -557,7 +572,7 @@ class VoxOtaUpdateManager(private val context: Context) {
                 )
                 try {
                     val content = downloadString(url)
-                    val parsed = VoxOtaReleaseParser.parseRelease(content, isBetaChannel)
+                    val parsed = VoxOtaReleaseParser.parseRelease(content, isBetaChannel, currentVersion, installedVersionCode)
                     return parsed
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to fetch/parse manifest from $url: ${e.message}")
@@ -565,8 +580,15 @@ class VoxOtaUpdateManager(private val context: Context) {
             }
         }
 
-        // Резервный канал: официальный GitHub Releases API
-        val fallbackApi = if (isBetaChannel) GITHUB_RELEASES_LIST_API else GITHUB_LATEST_RELEASE_API
+        // Резервный канал: официальный GitHub Releases API или тестовый источник
+        val testUrl = testUpdateBaseUrl ?: System.getProperty("vox.ota.test_base_url")
+        val fallbackApi = if (!testUrl.isNullOrBlank()) {
+            val clean = testUrl.trimEnd('/')
+            if (isBetaChannel) "$clean/releases" else "$clean/releases/latest"
+        } else {
+            if (isBetaChannel) GITHUB_RELEASES_LIST_API else GITHUB_LATEST_RELEASE_API
+        }
+
         val safeApiUrl = sanitizeUrl(fallbackApi)
         VoxSafeLogger.info(
             VoxLogCategory.OTA,
@@ -576,7 +598,7 @@ class VoxOtaUpdateManager(private val context: Context) {
         )
         try {
             val content = downloadString(fallbackApi)
-            return VoxOtaReleaseParser.parseRelease(content, isBetaChannel)
+            return VoxOtaReleaseParser.parseRelease(content, isBetaChannel, currentVersion, installedVersionCode)
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
             throw classifyException(e, "Failed to reach update servers: ${e.message}", VoxOtaStage.CONNECT)
