@@ -223,4 +223,78 @@ class VoxTranslationServerFirstPipeline(
             }
         }
     }
+    fun evaluateEligibility(request: TranslationRequest): PipelineResult? {
+        val target = if (request.targetLang.isNotBlank()) request.targetLang.trim().lowercase() else "ru"
+        val source = request.sourceLang.trim().lowercase()
+
+        if (target == "ru" && VotAudioTrackHelper.isRussianLang(source)) {
+            return PipelineResult.SkippedSameLanguage("Видео уже содержит аудиодорожку на русском языке")
+        }
+        if (source.isNotBlank() && VotAudioTrackHelper.isSameLanguage(source, target)) {
+            return PipelineResult.SkippedSameLanguage("Язык видео ($source) совпадает с языком перевода ($target)")
+        }
+        return null
+    }
+
+    companion object {
+        @JvmStatic
+        val defaultLocalCache: LocalCacheProvider = object : LocalCacheProvider {
+            override fun lookup(request: TranslationRequest): VoxTranslationSessionCache.LookupResult {
+                return VoxTranslationSessionCache.lookup(
+                    request.videoId,
+                    request.rawUrl,
+                    request.sourceLang,
+                    request.targetLang,
+                    request.useLiveVoices
+                )
+            }
+
+            override fun store(request: TranslationRequest, audioUrl: String, durationSec: Double) {
+                VoxTranslationSessionCache.storeReadyTranslation(
+                    request.videoId,
+                    request.rawUrl,
+                    request.sourceLang,
+                    request.targetLang,
+                    audioUrl,
+                    durationSec,
+                    request.useLiveVoices
+                )
+            }
+        }
+
+        @JvmStatic
+        val defaultServerDatabase: ServerDatabaseService = object : ServerDatabaseService {
+            override fun queryExistingTranslation(
+                videoId: String,
+                sourceLang: String,
+                targetLang: String
+            ): ServerLookupResponse {
+                val videoUrl = "https://www.youtube.com/watch?v=$videoId"
+                val cached = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.getCachedResult(
+                    videoUrl, sourceLang, targetLang, false
+                )
+                if (cached != null && cached.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_FINISHED && !cached.audioUrl.isNullOrBlank()) {
+                    return ServerLookupResponse.Ready(cached.audioUrl, 0.0, isExpired = false)
+                }
+                return ServerLookupResponse.NotFound
+            }
+
+            override fun createTranslationJob(
+                videoId: String,
+                sourceLang: String,
+                targetLang: String
+            ): ServerCreateResponse {
+                val key = VoxTranslationReusePolicy.buildCacheKey("https://www.youtube.com/watch?v=$videoId", sourceLang, targetLang, false)
+                VoxTranslationSessionCache.registerPendingJob(videoId, "https://www.youtube.com/watch?v=$videoId", sourceLang, targetLang, false)
+                return ServerCreateResponse(key, "PROCESSING")
+            }
+
+            override fun refreshSignedUrl(
+                videoId: String,
+                expiredAudioUrl: String
+            ): ServerRefreshResponse {
+                return ServerRefreshResponse(ok = false)
+            }
+        }
+    }
 }

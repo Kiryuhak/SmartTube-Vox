@@ -38,6 +38,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotPlaybackAdapter
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotLog;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotShadowController;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotState;
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline;
 
 import androidx.annotation.NonNull;
 import android.os.Looper;
@@ -1280,9 +1281,20 @@ public class VoiceTranslateController extends BasePlayerController {
         String targetLang = votData().getTargetLanguage();
         if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
 
-        if (VotAudioTrackHelper.isRussianLang(sourceLang) || VotAudioTrackHelper.isSameLanguage(sourceLang, targetLang)) {
-            sourceLang = "auto";
-        } else if (VotAudioTrackHelper.isUkrainianLang(sourceLang)) {
+        VoxTranslationServerFirstPipeline serverFirstPipeline = new VoxTranslationServerFirstPipeline();
+        VoxTranslationServerFirstPipeline.TranslationRequest pipelineReq =
+                new VoxTranslationServerFirstPipeline.TranslationRequest(
+                        videoId, videoUrl, sourceLang, targetLang, useLively
+                );
+
+        VoxTranslationServerFirstPipeline.PipelineResult eligibility =
+                serverFirstPipeline.evaluateEligibility(pipelineReq);
+        if (eligibility instanceof VoxTranslationServerFirstPipeline.PipelineResult.SkippedSameLanguage) {
+            disarmWithMessage(R.string.vot_skip_russian);
+            return;
+        }
+
+        if (VotAudioTrackHelper.isUkrainianLang(sourceLang)) {
             targetLang = "ru";
         }
 
@@ -1292,17 +1304,21 @@ public class VoiceTranslateController extends BasePlayerController {
             com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.init(getContext());
         }
 
-        com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult sessionLookup =
-                com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.lookup(videoId, videoUrl, sourceLang, targetLang, useLively);
+        VoxTranslationServerFirstPipeline.PipelineResult pipelineResult =
+                serverFirstPipeline.execute(
+                        pipelineReq,
+                        VoxTranslationServerFirstPipeline.getDefaultLocalCache(),
+                        VoxTranslationServerFirstPipeline.getDefaultServerDatabase(),
+                        0
+                );
 
-        if (sessionLookup instanceof com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit) {
-            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit hit =
-                    (com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.LookupResult.Hit) sessionLookup;
+        if (pipelineResult instanceof VoxTranslationServerFirstPipeline.PipelineResult.ImmediatePlayback) {
+            VoxTranslationServerFirstPipeline.PipelineResult.ImmediatePlayback hit =
+                    (VoxTranslationServerFirstPipeline.PipelineResult.ImmediatePlayback) pipelineResult;
             com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource rSrc =
-                    com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.MEMORY_CACHE;
-            try {
-                rSrc = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.valueOf(hit.getSource());
-            } catch (Exception ignored) {}
+                    "L1_LOCAL_CACHE".equals(hit.getSource())
+                            ? com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.MEMORY_CACHE
+                            : com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.BACKEND_READY_LOOKUP;
             mStateMachine.markLookupReady(rSrc, System.currentTimeMillis());
             if (mUserArmed && progressOverlay() != null) {
                 progressOverlay().showLookupReady(getActivity());
@@ -1317,9 +1333,17 @@ public class VoiceTranslateController extends BasePlayerController {
                     reuseCtx
             );
             if (sUseNewYandexBackend) {
-                startNewBackendWithReadyAudio(hit.getRecord().getAudioUrl(), rSrc, videoId, videoUrl, useLively);
+                startNewBackendWithReadyAudio(hit.getAudioUrl(), rSrc, videoId, videoUrl, useLively);
             } else {
-                prepareAndStartTranslationAudio(hit.getRecord().getAudioUrl());
+                prepareAndStartTranslationAudio(hit.getAudioUrl());
+            }
+            return;
+        }
+
+        if (pipelineResult instanceof VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob) {
+            mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER, System.currentTimeMillis());
+            if (mUserArmed && progressOverlay() != null) {
+                progressOverlay().showDelayedWaiting(getActivity());
             }
             return;
         }
