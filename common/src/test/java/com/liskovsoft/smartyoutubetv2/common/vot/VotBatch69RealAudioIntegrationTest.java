@@ -396,7 +396,8 @@ public class VotBatch69RealAudioIntegrationTest {
                 "32000", "5000000", "ru", "ru-dubbed", false);
         TestMediaFormat autoDubbed = new TestMediaFormat("https://cdn.example.invalid/auto", "audio/webm; codecs=opus",
                 "24000", "4000000", "ru", "ru-auto-dubbed", true);
-        assertEquals(aac139, VotMediaFormatSelector.selectBestAudioFormat(
+        // Opus 251 (128k optimal speech tier) preferred over low-bitrate AAC 139 (~51k)
+        assertEquals(opus251, VotMediaFormatSelector.selectBestAudioFormat(
                 Arrays.asList(autoDubbed, dubbed, opus251, aac139)));
     }
 

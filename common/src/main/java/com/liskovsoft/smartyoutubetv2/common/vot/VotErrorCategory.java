@@ -87,6 +87,10 @@ public enum VotErrorCategory {
         if (marker == null) {
             return GENERIC_ERROR;
         }
+        String lower = marker.toLowerCase(java.util.Locale.US);
+        if (lower.contains("unsupported") || lower.contains("not_supported") || lower.contains("source_unavailable") || lower.contains("no_audio")) {
+            return UNSUPPORTED_VIDEO;
+        }
         switch (marker) {
             case VotClient.ERROR_MARKER_AUTH_REJECTED:
                 return AUTH_REJECTED;

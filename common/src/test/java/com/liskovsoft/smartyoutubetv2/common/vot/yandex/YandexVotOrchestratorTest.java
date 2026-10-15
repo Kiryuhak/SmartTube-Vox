@@ -444,9 +444,55 @@ public class YandexVotOrchestratorTest {
 
         orchestrator.startTranslation(params);
 
+        // First call failed with lively_unavailable; orchestrator retried with useLiveVoices = false
+        assertEquals(2, fakeApi.getCallCount());
+        assertFalse(fakeApi.isLastUseLiveVoices());
+
         YandexVotState state = orchestrator.getCurrentState();
         assertEquals(YandexVotState.Status.ERROR, state.getStatus());
         assertEquals("lively_unavailable", state.getErrorCategory());
+    }
+
+    @Test
+    public void test5c_LivelyVoiceFallbackSuccess() {
+        final YandexVotApiClient.TranslationResult livelyFail = new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_FAILED,
+                null,
+                0,
+                null,
+                "Для этого видео доступна только обычная озвучка"
+        );
+        final YandexVotApiClient.TranslationResult standardSuccess = new YandexVotApiClient.TranslationResult(
+                YandexVotApiClient.STATUS_FINISHED,
+                "https://example.com/standard_audio.mp3",
+                0,
+                "trans_fallback",
+                null
+        );
+
+        fakeApi.setOnCallAction(new Runnable() {
+            @Override
+            public void run() {
+                if (fakeApi.getCallCount() == 1) {
+                    fakeApi.setResponse(livelyFail);
+                } else {
+                    fakeApi.setResponse(standardSuccess);
+                }
+            }
+        });
+        fakeApi.setResponse(livelyFail);
+
+        YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
+                "vid_fallback", "https://youtube.com/watch?v=vid_fallback", 300.0, "en", "ru", "Title", true, "token123"
+        );
+
+        orchestrator.startTranslation(params);
+
+        assertEquals(2, fakeApi.getCallCount());
+        assertFalse(fakeApi.isLastUseLiveVoices());
+        YandexVotState state = orchestrator.getCurrentState();
+        assertEquals(YandexVotState.Status.READY, state.getStatus());
+        assertEquals("https://example.com/standard_audio.mp3", state.getAudioUrl());
     }
 
     @Test

@@ -1,0 +1,33 @@
+{
+  "reportId": "VOX-D0DF1A08",
+  "createdAt": 1792040000000,
+  "timestamp": 1792040000000,
+  "platform": "Android TV",
+  "appVersion": "32.56-vox.9",
+  "device": {
+    "family": "TCL Smart TV Pro",
+    "manufacturer": "TCL",
+    "model": "Smart TV Pro",
+    "tier": "Стандартный",
+    "sdkInt": 34,
+    "osVersion": "14 (API 34)"
+  },
+  "errorCategory": "PLAYER",
+  "errorSignature": "PLAYER|DOUBLE_BACK_PAUSE|ANDROID_TV_API34",
+  "status": "IN_PROGRESS",
+  "developerNotes": "Отчёт с форума: при включённом Двойном Назад первое нажатие ошибочно ставит видео на паузу и открывает HUD управления.",
+  "safeRecentEvents": [
+    {
+      "timestamp": 1792039950000,
+      "level": "ERROR",
+      "category": "PLAYER",
+      "code": "PLAYER_DOUBLE_BACK_PAUSE",
+      "message": "Первое нажатие «Назад» ставит видео на паузу и открывает контролы при двойном выходе",
+      "context": {
+        "playerState": "PAUSED",
+        "operation": "DOUBLE_BACK_FIRST_PRESS",
+        "reason": "HUD_CONFLICT"
+      }
+    }
+  ]
+}

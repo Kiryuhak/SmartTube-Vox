@@ -39,6 +39,10 @@ public abstract class LeanbackActivity extends MotherActivity {
         mGlobalKeyTranslator.apply();
     }
 
+    protected DoubleBackManager2 getDoubleBackManager() {
+        return mDoubleBackManager;
+    }
+
     @Override
     public boolean onSearchRequested() {
         SearchPresenter.instance(this).startSearch(null);

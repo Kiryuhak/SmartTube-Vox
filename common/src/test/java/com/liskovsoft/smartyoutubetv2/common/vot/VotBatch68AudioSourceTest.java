@@ -172,17 +172,24 @@ public class VotBatch68AudioSourceTest {
     }
 
     @Test
-    public void testSelectBestAudioFormat_LowestBitratePreferred() {
+    public void testSelectBestAudioFormat_SpeechFriendlyBitratePreferred() {
         TestMediaFormat low = new TestMediaFormat("https://rr.googlevideo.com/audio_low", "audio/webm", "50000", "500000", "en", null, false);
         TestMediaFormat mid = new TestMediaFormat("https://rr.googlevideo.com/audio_mid", "audio/webm", "70000", "700000", "en", null, false);
-        TestMediaFormat high = new TestMediaFormat("https://rr.googlevideo.com/audio_high", "audio/webm", "160000", "1600000", "en", null, false);
+        TestMediaFormat speechOptimal = new TestMediaFormat("https://rr.googlevideo.com/audio_speech", "audio/webm", "160000", "1600000", "en", null, false);
 
-        List<MediaFormat> list = Arrays.<MediaFormat>asList(high, low, mid);
+        List<MediaFormat> list = Arrays.<MediaFormat>asList(speechOptimal, low, mid);
         MediaFormat selected = VotMediaFormatSelector.selectBestAudioFormat(list);
 
         assertNotNull(selected);
-        assertEquals(low.getUrl(), selected.getUrl());
-        assertEquals("50000", selected.getBitrate());
+        // Optimal speech tier (96k-160k) is preferred over sub-optimal 50k/70k
+        assertEquals(speechOptimal.getUrl(), selected.getUrl());
+        assertEquals("160000", selected.getBitrate());
+
+        // When only sub-optimal bitrates exist, prefer higher bitrate for better ASR recognition
+        MediaFormat selectedSub = VotMediaFormatSelector.selectBestAudioFormat(Arrays.<MediaFormat>asList(low, mid));
+        assertNotNull(selectedSub);
+        assertEquals(mid.getUrl(), selectedSub.getUrl());
+        assertEquals("70000", selectedSub.getBitrate());
     }
 
     @Test

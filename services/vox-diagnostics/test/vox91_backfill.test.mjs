@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { classifyReport } from '../src/triage.mjs';
 import { ReportStorage, CANONICAL_STATUSES, normalizeStatus } from '../src/storage.mjs';
 import { AutoTriageService } from '../src/automation/auto_triage.mjs';
-import { VOX_9_1_STATUS_MATRIX, REFERENCE_REPORTS, analyzeFixtureReports, generateBackfillSql } from '../scripts/backfill_vox91_statuses.mjs';
+import { VOX_9_1_STATUS_MATRIX, VOX_9_1_ACTIVE_ISSUES, REFERENCE_REPORTS, analyzeFixtureReports, generateBackfillSql } from '../scripts/backfill_vox91_statuses.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,4 +109,40 @@ test('Backfill SQL generation is valid and contains expected statements', () => 
   assert.ok(sql.includes('VOX-82E64C77'), 'Must contain VOX-82E64C77');
   assert.ok(sql.includes('VOX-BAE1F61E'), 'Must contain VOX-BAE1F61E');
   assert.ok(sql.includes('VOX-BDDBE424'), 'Must contain VOX-BDDBE424');
+  assert.ok(sql.includes('PLAYER|DOUBLE_BACK_PAUSE'), 'Must contain double back issue');
+  assert.ok(sql.includes('PLAYER|BACKGROUND_PLAYBACK_PAUSED'), 'Must contain background playback issue');
+  assert.ok(sql.includes('TRANSLATION|FAST_VOCALS_FAILURE'), 'Must contain fast vocals translation issue');
 });
+
+test('VOX 9.1 Active Forum Regressions: in IN_PROGRESS without fixedInVersion', () => {
+  assert.equal(VOX_9_1_ACTIVE_ISSUES.length, 3, 'Must have 3 active forum issues');
+
+  const expectedActive = [
+    'PLAYER_DOUBLE_BACK_PAUSE_REGRESSION',
+    'BACKGROUND_PLAYBACK_PAUSE_REGRESSION',
+    'VOT_FAST_VOCALS_TRANSLATION_FAILURE'
+  ];
+
+  for (const key of expectedActive) {
+    const item = VOX_9_1_ACTIVE_ISSUES.find(i => i.key === key);
+    assert.ok(item, `Active issue ${key} must exist`);
+    assert.equal(item.targetStatus, 'IN_PROGRESS', `Status for ${key} must be IN_PROGRESS`);
+    assert.equal(item.fixedInVersion, undefined, `Active issue ${key} must NOT have fixedInVersion set`);
+    assert.ok(item.title, `Item ${key} must have a title`);
+    assert.ok(item.notes, `Item ${key} must have notes`);
+  }
+});
+
+test('VOX-D0DF1A08 Fixture Classification: Active Player Double Back Incident', () => {
+  const filePath = path.join(fixturesDir, 'vox-diagnostic-VOX-D0DF1A08.json');
+  assert.ok(fs.existsSync(filePath), 'Fixture VOX-D0DF1A08 must exist');
+
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const payload = raw.payload || raw;
+  const classified = classifyReport(payload);
+
+  assert.equal(classified.activeEventCount, 1, 'Must have 1 active event');
+  assert.equal(classified.errorCategory, 'PLAYER');
+  assert.equal(classified.primaryEvent?.event, 'PLAYER_DOUBLE_BACK_PAUSE');
+});
+

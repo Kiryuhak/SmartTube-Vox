@@ -470,6 +470,27 @@ public class YandexVotOrchestrator {
                     String category = YandexVotApiClient.isLivelyVoiceUnavailableError(msg)
                             ? "lively_unavailable"
                             : "api_failed";
+                    if ("lively_unavailable".equals(category) && params.isUseLiveVoices()) {
+                        YandexVotLog.i(TAG, "Lively voice unavailable for gen=" + gen + ", falling back to standard voice");
+                        final RequestParams fallbackParams = new RequestParams(
+                                params.getVideoId(),
+                                params.getVideoUrl(),
+                                params.getDuration(),
+                                params.getSourceLang(),
+                                params.getTargetLang(),
+                                params.getVideoTitle(),
+                                false,
+                                params.getOauthToken()
+                        );
+                        scheduler.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                executeRequest(gen, fallbackParams, true, 0);
+                            }
+                        });
+                        break;
+                    }
+
                     YandexVotState errorState = YandexVotState.error(
                             gen,
                             params.getVideoId(),

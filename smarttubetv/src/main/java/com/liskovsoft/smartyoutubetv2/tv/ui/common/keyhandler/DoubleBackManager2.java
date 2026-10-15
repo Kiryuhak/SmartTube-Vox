@@ -30,6 +30,7 @@ public class DoubleBackManager2 {
         showMsg();
 
         if (isDoubleBackPressed) {
+            resetBackPressed();
             onDoubleBack.run();
         }
     }
@@ -41,7 +42,8 @@ public class DoubleBackManager2 {
         }
     }
 
-    private void resetBackPressed() {
+    public void resetBackPressed() {
         mRepeatCount = 0;
+        mMsgShownTimeMs = 0;
     }
 }

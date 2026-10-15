@@ -236,6 +236,30 @@ export const REFERENCE_REPORTS = [
   }
 ];
 
+export const VOX_9_1_ACTIVE_ISSUES = [
+  {
+    key: 'PLAYER_DOUBLE_BACK_PAUSE_REGRESSION',
+    signatures: ['PLAYER|DOUBLE_BACK_PAUSE|*'],
+    targetStatus: 'IN_PROGRESS',
+    title: 'Первое нажатие «Назад» при двойном выходе ставит плеер на паузу',
+    notes: 'Отчёт VOX-D0DF1A08: при включённой опции «Выход из плеера: Двойное Назад» первое нажатие ошибочно ставит видео на паузу и открывает полосу HUD.'
+  },
+  {
+    key: 'BACKGROUND_PLAYBACK_PAUSE_REGRESSION',
+    signatures: ['PLAYER|BACKGROUND_PLAYBACK_PAUSED|*'],
+    targetStatus: 'IN_PROGRESS',
+    title: 'Фоновое воспроизведение ставится на паузу при сворачивании',
+    notes: 'При переходе в фоновый режим звук останавливается вместо продолжения в фоне.'
+  },
+  {
+    key: 'VOT_FAST_VOCALS_TRANSLATION_FAILURE',
+    signatures: ['TRANSLATION|FAST_VOCALS_FAILURE|*'],
+    targetStatus: 'IN_PROGRESS',
+    title: 'Сбой перевода быстрых треков / хэви-метал в Yandex VOT',
+    notes: 'Быстрые треки / тяжелый металл: сбой распознавания и вечный спиннер. Требуется отвязка источника от TV AC3 passthrough и корректный fallback.'
+  }
+];
+
 export function escapeSql(str = '') {
   return String(str).replace(/'/g, "''");
 }
@@ -255,6 +279,18 @@ export function generateBackfillSql() {
         statements.push(`UPDATE issues SET status = '${item.targetStatus}', fixed_in_version = '${item.fixedInVersion}', fix_patch = '${item.fixPatch}', fix_commit = '${item.fixCommit}', title = '${escapeSql(item.title)}', updated_at = ${now} WHERE signature LIKE '${escapeSql(prefix)}%';`);
       } else {
         statements.push(`INSERT INTO issues (signature, status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, updated_at) VALUES ('${escapeSql(sig)}', '${item.targetStatus}', '${item.fixedInVersion}', '${item.fixPatch}', '${item.fixCommit}', '${escapeSql(item.title)}', 0, ${now}) ON CONFLICT(signature) DO UPDATE SET status = '${item.targetStatus}', fixed_in_version = '${item.fixedInVersion}', fix_patch = '${item.fixPatch}', fix_commit = '${item.fixCommit}', title = '${escapeSql(item.title)}', updated_at = ${now};`);
+      }
+    }
+  }
+
+  // 1.1 Insert Active Forum Issues in IN_PROGRESS
+  for (const active of VOX_9_1_ACTIVE_ISSUES) {
+    for (const sig of active.signatures) {
+      if (sig.endsWith('*')) {
+        const prefix = sig.slice(0, -1);
+        statements.push(`UPDATE issues SET status = '${active.targetStatus}', title = '${escapeSql(active.title)}', updated_at = ${now} WHERE signature LIKE '${escapeSql(prefix)}%';`);
+      } else {
+        statements.push(`INSERT INTO issues (signature, status, title, reopened_at, updated_at) VALUES ('${escapeSql(sig)}', '${active.targetStatus}', '${escapeSql(active.title)}', 0, ${now}) ON CONFLICT(signature) DO UPDATE SET status = '${active.targetStatus}', title = '${escapeSql(active.title)}', updated_at = ${now};`);
       }
     }
   }

@@ -946,14 +946,14 @@
     <string name="vot_pending_waiting" translatable="false"></string>
     <string name="vot_ready" translatable="false"></string>
     <string name="vot_disabled" translatable="false"></string>
-    <string name="vot_error_timeout" translatable="false"></string>
-    <string name="vot_error_network" translatable="false"></string>
-    <string name="vot_error_server_unavailable" translatable="false"></string>
-    <string name="vot_error_rate_limited" translatable="false"></string>
-    <string name="vot_error_unsupported_video" translatable="false"></string>
-    <string name="vot_error_auth_rejected" translatable="false"></string>
-    <string name="vot_error_access_denied" translatable="false"></string>
-    <string name="vot_error_playback" translatable="false"></string>
+    <string name="vot_error_timeout">Translation timed out</string>
+    <string name="vot_error_network">Network error while fetching translation</string>
+    <string name="vot_error_server_unavailable">Yandex translation server is temporarily unavailable</string>
+    <string name="vot_error_rate_limited">Too many translation requests. Please try again later</string>
+    <string name="vot_error_unsupported_video">Translation is not available for this video</string>
+    <string name="vot_error_auth_rejected">Yandex ID authorization failed. Please sign in again in settings</string>
+    <string name="vot_error_access_denied">The translation service denied this request</string>
+    <string name="vot_error_playback">Failed to play translation</string>
     <string name="vot_unknown_lang_manual" translatable="false"></string>
     <string name="vot_progress_preparing" translatable="false"></string>
     <string name="vot_progress_starting" translatable="false"></string>
@@ -994,7 +994,7 @@
     <string name="settings_download_button" translatable="false"></string>
     <string name="settings_download_button_desc" translatable="false"></string>
     <string name="vot_target_language" translatable="false"></string>
-    <string name="vot_error_unsupported_language" translatable="false"></string>
+    <string name="vot_error_unsupported_language">Translation from this language is not yet available</string>
     <string name="vot_player_hud_hint" translatable="false"></string>
     <string name="vot_onboarding_ok" translatable="false"></string>
     <string name="vot_onboarding_never" translatable="false"></string>

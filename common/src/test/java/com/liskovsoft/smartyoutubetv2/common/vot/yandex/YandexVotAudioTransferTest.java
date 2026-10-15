@@ -188,7 +188,7 @@ public class YandexVotAudioTransferTest {
     }
 
     @Test
-    public void test2_PrefersLowerBitrateOpus() {
+    public void test2_PrefersSpeechFriendlyBitrateOpus() {
         YandexVotAudioSourceSelector.Candidate aacLow = new YandexVotAudioSourceSelector.Candidate(
                 "vid1", "https://example.com/aac_low", "audio/mp4", "mp4a", 50000, 3000000, 139, true, false, "main", "en"
         );
@@ -204,10 +204,17 @@ public class YandexVotAudioTransferTest {
         );
 
         assertNotNull(selected);
-        // At 50k equal bitrate, Opus (249) is preferred over AAC (139)
-        assertEquals(249, selected.getItag());
+        // Optimal speech tier (96k-160k, e.g. 160k itag 251) preferred over ultra-low 50k
+        assertEquals(251, selected.getItag());
         assertTrue(selected.isOpus());
-        assertEquals(50000, selected.getBitrate());
+        assertEquals(160000, selected.getBitrate());
+
+        // At equal low bitrate, Opus is preferred over AAC
+        YandexVotAudioSource selectedLow = YandexVotAudioSourceSelector.selectBestAudioSource(
+                Arrays.asList(aacLow, opusLow)
+        );
+        assertNotNull(selectedLow);
+        assertEquals(249, selectedLow.getItag());
     }
 
     @Test

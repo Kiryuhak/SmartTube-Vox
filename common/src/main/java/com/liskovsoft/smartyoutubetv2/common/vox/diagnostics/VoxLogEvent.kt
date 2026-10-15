@@ -31,6 +31,8 @@ enum class VoxLogCategory(val displayNameRu: String) {
 
 object VoxLogCode {
     const val APP_START = "APP_START"
+    const val PLAYER_EXIT_REQUESTED = "PLAYER_EXIT_REQUESTED"
+    const val PLAYER_EXIT_CONFIRMED = "PLAYER_EXIT_CONFIRMED"
     const val PLAYER_INIT_FAILED = "PLAYER_INIT_FAILED"
     const val PLAYER_RENDERER_ERROR = "PLAYER_RENDERER_ERROR"
     const val PLAYER_DECODER_ERROR = "PLAYER_DECODER_ERROR"

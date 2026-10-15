@@ -114,9 +114,9 @@ public final class VotMediaFormatSelector {
         }
 
         // Sort candidates:
-        // 1. Prefer compatible codecs (audio/webm, audio/mp4)
-        // 2. Prefer lower bitrate (saves TV bandwidth and upload time)
-        // 3. Prefer webm/opus over mp4/aac at equal bitrates
+        // 1. Prefer compatible codecs (audio/webm, audio/mp4; stereo Opus/AAC)
+        // 2. Prefer speech-friendly bitrate range (96k-160k Opus/AAC for optimal ASR recognition)
+        // 3. Prefer webm/opus over mp4/aac at equal tier
         Collections.sort(filtered, new Comparator<MediaFormat>() {
             @Override
             public int compare(MediaFormat a, MediaFormat b) {
@@ -128,8 +128,10 @@ public final class VotMediaFormatSelector {
 
                 int bitrateA = parseBitrate(a.getBitrate());
                 int bitrateB = parseBitrate(b.getBitrate());
-                if (bitrateA != bitrateB) {
-                    return Integer.compare(bitrateA, bitrateB); // lower bitrate first
+                int tierA = getSpeechBitrateTier(bitrateA);
+                int tierB = getSpeechBitrateTier(bitrateB);
+                if (tierA != tierB) {
+                    return Integer.compare(tierA, tierB); // Speech-friendly optimal tier first
                 }
 
                 boolean webmA = isWebm(a.getMimeType());
@@ -138,15 +140,43 @@ public final class VotMediaFormatSelector {
                     return webmA ? -1 : 1;
                 }
 
-                return 0;
+                if (tierA == 3 || tierA == 4) {
+                    return Integer.compare(bitrateB, bitrateA); // higher bitrate better for low quality
+                } else {
+                    return Integer.compare(bitrateA, bitrateB); // lowest within optimal tier
+                }
             }
         });
 
         return filtered.get(0);
     }
 
+    public static int getSpeechBitrateTier(int bitrate) {
+        int bps = (bitrate > 0 && bitrate < 1000) ? bitrate * 1000 : bitrate;
+        if (bps >= 96_000 && bps <= 170_000) {
+            return 1; // Optimal speech range: 96k - 160k (standard itag 251 Opus / itag 140 AAC)
+        } else if (bps > 170_000) {
+            return 2; // High bitrate (>160k)
+        } else if (bps >= 64_000 && bps < 96_000) {
+            return 3; // Medium bitrate (64k-96k)
+        } else {
+            return 4; // Low bitrate (<64k, e.g. itag 249 ~50k)
+        }
+    }
+
+    public static boolean isSurroundOrUnsupportedAudio(@Nullable String mimeType) {
+        if (mimeType == null) return false;
+        String lower = mimeType.toLowerCase(Locale.US);
+        return lower.contains("ac-3") || lower.contains("ec-3") || lower.contains("ac3")
+                || lower.contains("eac3") || lower.contains("dts") || lower.contains("surround")
+                || lower.contains("5.1") || lower.contains("7.1");
+    }
+
     public static boolean isValidAudioFormat(@Nullable MediaFormat format) {
         if (format == null) {
+            return false;
+        }
+        if (isSurroundOrUnsupportedAudio(format.getMimeType())) {
             return false;
         }
         String url = format.getUrl();
@@ -176,12 +206,12 @@ public final class VotMediaFormatSelector {
     }
 
     public static boolean isCompatibleMime(@Nullable String mimeType) {
-        if (mimeType == null) {
+        if (mimeType == null || isSurroundOrUnsupportedAudio(mimeType)) {
             return false;
         }
         String lower = mimeType.toLowerCase(Locale.US);
         return lower.contains("webm") || lower.contains("opus")
-                || lower.contains("mp4") || lower.contains("mp4a") || lower.contains("aac");
+                || lower.contains("mp4a") || lower.contains("aac") || lower.startsWith("audio/mp4");
     }
 
     public static boolean isWebm(@Nullable String mimeType) {

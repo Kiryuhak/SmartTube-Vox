@@ -32,6 +32,9 @@ export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   DOWNLOAD_STATE_INCONSISTENT: 'Несоответствие состояния загрузки',
   TRANSLATION_DESYNC_WARNING: 'Рассинхронизация звуковой дорожки перевода',
   TRANSLATION_AUDIO_DOWNLOAD_FAILED: 'Сбой загрузки аудиодорожки перевода',
+  TRANSLATION_FAST_VOCALS_FAILED: 'Сбой перевода быстрых треков / хэви-метал в Yandex VOT',
+  PLAYER_DOUBLE_BACK_PAUSE: 'Первое нажатие «Назад» ставит плеер на паузу при двойном выходе',
+  BACKGROUND_PLAYBACK_PAUSED: 'Фоновое воспроизведение ставится на паузу при сворачивании',
   LOCAL_PLAYBACK_FAIL: 'Не удалось воспроизвести скачанное видео',
 };
 

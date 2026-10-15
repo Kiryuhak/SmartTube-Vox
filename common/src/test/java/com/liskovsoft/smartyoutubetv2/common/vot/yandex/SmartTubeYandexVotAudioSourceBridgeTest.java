@@ -225,7 +225,7 @@ public class SmartTubeYandexVotAudioSourceBridgeTest {
     }
 
     @Test
-    public void test4_PrefersOpusLowerBitrateCandidate() {
+    public void test4_PrefersOpusSpeechFriendlyBitrateCandidate() {
         FakeMediaFormat aac128 = new FakeMediaFormat(
                 "https://googlevideo.com/aac128", "audio/mp4", "140", "128000", "5000000",
                 MediaFormat.FORMAT_TYPE_DASH, false, "en", "main"
@@ -243,9 +243,9 @@ public class SmartTubeYandexVotAudioSourceBridgeTest {
 
         YandexVotAudioSource source = YandexVotAudioSourceSelector.fromMediaItemFormatInfo(info);
         assertNotNull(source);
-        // Opus 50k should be selected
-        assertEquals(249, source.getItag());
-        assertEquals(50000, source.getBitrate());
+        // Opus 160k (itag 251, optimal speech tier) preferred over ultra-low 50k for speech recognition
+        assertEquals(251, source.getItag());
+        assertEquals(160000, source.getBitrate());
         assertTrue(source.isOpus());
     }
 

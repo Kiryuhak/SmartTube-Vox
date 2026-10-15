@@ -178,6 +178,20 @@ public class PlaybackActivity extends LeanbackActivity {
      */
     @Override
     public void finish() {
+        if (getGeneralData().getPlayerExitShortcut() == GeneralData.EXIT_DOUBLE_BACK) {
+            VoxSafeLogger.info(
+                    VoxLogCategory.PLAYER,
+                    VoxLogCode.PLAYER_EXIT_REQUESTED,
+                    "Запрошен выход из плеера (настройка: Двойное Назад)"
+            );
+            getDoubleBackManager().enableDoubleBackExit(this::finishPlaybackInternal);
+            return;
+        }
+
+        finishPlaybackInternal();
+    }
+
+    private void finishPlaybackInternal() {
         Log.d(TAG, "Finishing activity...");
 
         int backgroundMode = getPlayerData().getBackgroundMode();
@@ -200,7 +214,9 @@ public class PlaybackActivity extends LeanbackActivity {
         }
 
         if (doNotDestroy() && !skipPip()) {
-            mPlaybackFragment.blockEngine(true);
+            if (mPlaybackFragment != null) {
+                mPlaybackFragment.blockEngine(true);
+            }
             // Ensure to opening this activity when the user is returning to the app
             getViewManager().blockTop(this);
             getViewManager().startParentView(this);
@@ -217,12 +233,14 @@ public class PlaybackActivity extends LeanbackActivity {
                 getViewManager().startParentView(this);
 
                 // Player with TextureView keeps running in background because onStop() fired with huge delay (~5sec).
-                mPlaybackFragment.maybeReleasePlayer();
+                if (mPlaybackFragment != null) {
+                    mPlaybackFragment.maybeReleasePlayer();
+                }
             } else {
                 if (mPlaybackFragment != null) {
                     mPlaybackFragment.maybeReleasePlayer();
                 }
-                super.finish();
+                finishReally();
             }
         }
     }
@@ -268,6 +286,11 @@ public class PlaybackActivity extends LeanbackActivity {
 
         if (hasDialogBug || isScreenOff) {
             mPlaybackFragment.blockEngine(true);
+        }
+
+        if (getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_SOUND &&
+                !mIsBackgroundAudioOnlyActive && !isFinishing() && !isBackPressed()) {
+            enterBackgroundAudioOnly();
         }
 
         // Run the code before the contained fragment
@@ -370,9 +393,6 @@ public class PlaybackActivity extends LeanbackActivity {
         }
     }
 
-    private AudioManager.OnAudioFocusChangeListener mAudioFocusListener;
-    private AudioFocusRequest mAudioFocusRequest;
-
     public void enterBackgroundAudioOnly() {
         if (mPlaybackFragment == null) return;
         mBackgroundState = VoxBackgroundPlaybackState.REQUESTED;
@@ -392,8 +412,12 @@ public class PlaybackActivity extends LeanbackActivity {
                 VoxLogCode.BACKGROUND_UI_DETACHED,
                 "UI отсоединен от поверхности видео, видеопоток выключен"
         );
-        // Регистрируем управление AudioFocus для отслеживания событий системы
-        registerAudioFocusListener();
+        // Аудиофокус поддерживается ExoPlayer; не перехватываем focus через Activity
+        VoxSafeLogger.info(
+                VoxLogCategory.BACKGROUND,
+                VoxLogCode.BACKGROUND_AUDIO_FOCUS_GAIN,
+                "Audio focus retained by ExoPlayer in background"
+        );
         // Запускаем службу фонового воспроизведения для удержания приоритета процесса
         BackgroundPlaybackService.start(this);
         VoxSafeLogger.info(
@@ -401,6 +425,8 @@ public class PlaybackActivity extends LeanbackActivity {
                 VoxLogCode.BACKGROUND_MEDIA_NOTIFICATION_CREATED,
                 "Уведомление и служба фонового воспроизведения созданы"
         );
+        // Гарантируем продолжение воспроизведения звука
+        mPlaybackFragment.setPlayWhenReady(true);
         mBackgroundState = VoxBackgroundPlaybackState.ACTIVE;
         VoxSafeLogger.info(
                 VoxLogCategory.BACKGROUND,
@@ -413,7 +439,6 @@ public class PlaybackActivity extends LeanbackActivity {
         if (!mIsBackgroundAudioOnlyActive) return;
         mBackgroundState = VoxBackgroundPlaybackState.EXITING;
         mIsBackgroundAudioOnlyActive = false;
-        unregisterAudioFocusListener();
         VoxSafeLogger.info(
                 VoxLogCategory.BACKGROUND,
                 VoxLogCode.BACKGROUND_AUDIO_ONLY_EXIT,
@@ -422,76 +447,18 @@ public class PlaybackActivity extends LeanbackActivity {
         if (mPlaybackFragment != null) {
             mPlaybackFragment.setVideoTrackEnabled(true);
             mPlaybackFragment.blockEngine(false);
+            mPlaybackFragment.setPlayWhenReady(true);
         }
         BackgroundPlaybackService.stop(this);
         mBackgroundState = VoxBackgroundPlaybackState.IDLE;
     }
 
     private void registerAudioFocusListener() {
-        if (mAudioFocusListener == null) {
-            mAudioFocusListener = focusChange -> {
-                if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
-                    mBackgroundState = VoxBackgroundPlaybackState.ACTIVE;
-                    VoxSafeLogger.info(
-                            VoxLogCategory.BACKGROUND,
-                            VoxLogCode.BACKGROUND_AUDIO_FOCUS_GAIN,
-                            "Audio focus gained in background"
-                    );
-                } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
-                           focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
-                    mBackgroundState = VoxBackgroundPlaybackState.FOCUS_LOST_TEMPORARY;
-                    VoxSafeLogger.warn(
-                            VoxLogCategory.BACKGROUND,
-                            VoxLogCode.BACKGROUND_AUDIO_FOCUS_LOSS,
-                            "Audio focus lost temporarily in background (focusChange=" + focusChange + ")"
-                    );
-                } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
-                    mBackgroundState = VoxBackgroundPlaybackState.FAILED;
-                    VoxSafeLogger.warn(
-                            VoxLogCategory.BACKGROUND,
-                            VoxLogCode.BACKGROUND_AUDIO_FOCUS_LOSS,
-                            "Audio focus lost permanently in background (focusChange=" + focusChange + ")"
-                    );
-                }
-            };
-        }
-        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        if (am != null) {
-            int res;
-            if (Build.VERSION.SDK_INT >= 26) {
-                if (mAudioFocusRequest == null) {
-                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build();
-                    mAudioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                            .setAudioAttributes(playbackAttributes)
-                            .setOnAudioFocusChangeListener(mAudioFocusListener)
-                            .build();
-                }
-                res = am.requestAudioFocus(mAudioFocusRequest);
-            } else {
-                res = am.requestAudioFocus(mAudioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-            }
-            if (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                VoxSafeLogger.info(
-                        VoxLogCategory.BACKGROUND,
-                        VoxLogCode.BACKGROUND_AUDIO_FOCUS_GAIN,
-                        "Audio focus granted for background playback"
-                );
-            }
-        }
+        // No-op: ExoPlayer manages audio focus directly, preventing focus stealing
     }
 
     private void unregisterAudioFocusListener() {
-        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        if (am != null) {
-            if (Build.VERSION.SDK_INT >= 26 && mAudioFocusRequest != null) {
-                am.abandonAudioFocusRequest(mAudioFocusRequest);
-            } else if (mAudioFocusListener != null) {
-                am.abandonAudioFocus(mAudioFocusListener);
-            }
-        }
+        // No-op: ExoPlayer manages audio focus directly
     }
 
     public boolean isInPipMode() {

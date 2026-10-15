@@ -411,6 +411,15 @@
     <string name="vot_enabled">Закадровый перевод включён</string>
     <string name="vot_error_no_video">Нет видео для перевода</string>
     <string name="vot_error_generic">Не удалось получить перевод</string>
+    <string name="vot_error_timeout">Время ожидания перевода истекло</string>
+    <string name="vot_error_network">Ошибка сети при получении перевода</string>
+    <string name="vot_error_server_unavailable">Сервер перевода Яндекса временно недоступен</string>
+    <string name="vot_error_rate_limited">Слишком много запросов на перевод. Попробуйте позже</string>
+    <string name="vot_error_unsupported_video">Перевод недоступен для этого видео</string>
+    <string name="vot_error_auth_rejected">Ошибка авторизации Яндекс ID. Войдите заново в настройках</string>
+    <string name="vot_error_access_denied">Сервис перевода отклонил запрос</string>
+    <string name="vot_error_playback">Не удалось воспроизвести перевод</string>
+    <string name="vot_error_unsupported_language">Перевод с этого языка пока недоступен</string>
     <string name="vot_settings_category">Закадровый перевод (Яндекс)</string>
     <string name="vot_token_dialog_title">OAuth-токен Яндекса</string>
     <string name="vot_token_dialog_hint">Вставьте токен с oauth.yandex.ru. На TV удобнее: скопируйте на телефоне → «Вставить из буфера».</string>

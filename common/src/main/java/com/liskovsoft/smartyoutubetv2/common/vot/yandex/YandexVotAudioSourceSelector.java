@@ -190,19 +190,24 @@ public final class YandexVotAudioSourceSelector {
                     return compatA ? -1 : 1;
                 }
 
-                // Prefer lower bitrate
-                if (a.getBitrate() != b.getBitrate()) {
-                    return Integer.compare(a.getBitrate(), b.getBitrate());
+                int tierA = getSpeechBitrateTier(a.getBitrate());
+                int tierB = getSpeechBitrateTier(b.getBitrate());
+                if (tierA != tierB) {
+                    return Integer.compare(tierA, tierB); // Speech-friendly optimal range (96k-160k) first
                 }
 
-                // Prefer Opus / WebM over AAC / MP4 at equal bitrate
+                // Prefer Opus / WebM over AAC / MP4 at equal tier
                 boolean opusA = isOpus(a);
                 boolean opusB = isOpus(b);
                 if (opusA != opusB) {
                     return opusA ? -1 : 1;
                 }
 
-                return 0;
+                if (tierA == 3 || tierA == 4) {
+                    return Integer.compare(b.getBitrate(), a.getBitrate()); // higher bitrate better for low quality
+                } else {
+                    return Integer.compare(a.getBitrate(), b.getBitrate()); // lowest within tier to save TV upload bandwidth
+                }
             }
         });
 
@@ -220,18 +225,43 @@ public final class YandexVotAudioSourceSelector {
         );
     }
 
+    public static int getSpeechBitrateTier(int bitrate) {
+        int bps = (bitrate > 0 && bitrate < 1000) ? bitrate * 1000 : bitrate;
+        if (bps >= 96_000 && bps <= 170_000) {
+            return 1; // Optimal speech range: 96k - 160k (standard itag 251 Opus ~130k / itag 140 AAC ~128k)
+        } else if (bps > 170_000) {
+            return 2; // High bitrate (>160k)
+        } else if (bps >= 64_000 && bps < 96_000) {
+            return 3; // Medium bitrate (64k-96k)
+        } else {
+            return 4; // Ultra-low bitrate (<64k, e.g. itag 249 Opus ~50k)
+        }
+    }
+
+    public static boolean isSurroundOrUnsupportedAudio(@Nullable String mime, @Nullable String codec) {
+        String combined = ((mime != null ? mime : "") + " " + (codec != null ? codec : "")).toLowerCase(Locale.US);
+        return combined.contains("ac-3") || combined.contains("ec-3") || combined.contains("ac3")
+                || combined.contains("eac3") || combined.contains("dts") || combined.contains("surround")
+                || combined.contains("5.1") || combined.contains("7.1");
+    }
+
     public static boolean isValidAudioCandidate(@Nullable Candidate c) {
         if (c == null) return false;
         if (c.getStreamUrl() == null || c.getStreamUrl().isEmpty()) return false;
         if (c.isSabr()) return false; // Reject SABR / segmented non-direct streams
         if (!c.isRangeSupported()) return false; // Must support range requests
         if (c.getMimeType() == null || !c.getMimeType().toLowerCase(Locale.US).startsWith("audio/")) return false;
+        if (isSurroundOrUnsupportedAudio(c.getMimeType(), c.getCodec())) return false;
         return true;
     }
 
     private static boolean isCompatibleMime(@Nullable String mime) {
         if (mime == null) return false;
         String lower = mime.toLowerCase(Locale.US);
+        if (lower.contains("ac-3") || lower.contains("ec-3") || lower.contains("ac3")
+                || lower.contains("eac3") || lower.contains("dts") || lower.contains("surround")) {
+            return false;
+        }
         return lower.startsWith("audio/webm") || lower.startsWith("audio/mp4");
     }
 
