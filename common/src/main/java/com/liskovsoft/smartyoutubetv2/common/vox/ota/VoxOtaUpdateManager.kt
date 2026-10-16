@@ -580,10 +580,14 @@ class VoxOtaUpdateManager(private val context: Context) {
             }
         }
 
-        // Резервный канал: официальный GitHub Releases API или тестовый источник
-        val testUrl = testUpdateBaseUrl
-            ?: System.getProperty("vox.ota.test_base_url")
-            ?: getAndroidDebugProp("debug.vox.ota_base_url")
+        // Резервный канал: официальный GitHub Releases API или тестовый источник (только в debug)
+        val testUrl = if (com.liskovsoft.smartyoutubetv2.common.BuildConfig.DEBUG) {
+            testUpdateBaseUrl
+                ?: System.getProperty("vox.ota.test_base_url")
+                ?: getAndroidDebugProp("debug.vox.ota_base_url")
+        } else {
+            null
+        }
         val fallbackApi = if (!testUrl.isNullOrBlank()) {
             val clean = testUrl.trimEnd('/')
             if (isBetaChannel) "$clean/releases" else "$clean/releases/latest"

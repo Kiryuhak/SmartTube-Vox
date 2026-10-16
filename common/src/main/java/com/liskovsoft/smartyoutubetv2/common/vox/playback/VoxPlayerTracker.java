@@ -5,6 +5,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Tracks active ExoPlayer instances and recreations to enforce the single-player invariant
  * and provide safe telemetry during OutOfMemory diagnostics.
+ *
+ * NOTE: This class functions strictly as an invariant detector and telemetry tracker.
+ * It does NOT hold references to player instances and does NOT own or trigger release().
+ * ExoPlayerController remains the sole owner of player lifecycle and release calls.
  */
 public final class VoxPlayerTracker {
     private static final AtomicInteger sActivePlayerInstances = new AtomicInteger(0);
