@@ -68,6 +68,11 @@ run_downloads_full() {
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.mux.*"
 }
 
+run_downloads_e2e() {
+  echo "--- [SUITE: downloads-e2e] Running downloads end-to-end suite ---"
+  bash "$REPO_ROOT/scripts/verify_downloads_e2e.sh"
+}
+
 run_live_fast() {
   echo "--- [SUITE: live-fast] Running live stream & live translation tests ---"
   ./gradlew :common:testStvotDebugUnitTest \
@@ -152,6 +157,9 @@ case "$SUITE" in
   downloads-full)
     run_downloads_full
     ;;
+  downloads-e2e|local-playback-e2e)
+    run_downloads_e2e
+    ;;
   live-fast)
     run_live_fast
     ;;
@@ -211,7 +219,7 @@ case "$SUITE" in
     ;;
   *)
     echo "Unknown suite: $SUITE"
-    echo "Available suites: ota-fast, ota-integration, ota-e2e, vot-fast, vot-full, player-fast, player-full, channel-groups-fast, downloads-fast, downloads-full, live-fast, live-full, diagnostics-fast, dashboard-fast, telegram-fast, golden-smoke, full-regression"
+    echo "Available suites: ota-fast, ota-integration, ota-e2e, vot-fast, vot-full, player-fast, player-full, channel-groups-fast, downloads-fast, downloads-full, downloads-e2e, live-fast, live-full, diagnostics-fast, dashboard-fast, telegram-fast, golden-smoke, full-regression"
     exit 1
     ;;
 esac
