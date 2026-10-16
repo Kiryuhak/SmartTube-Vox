@@ -51,6 +51,11 @@ run_player_full() {
     --tests "com.liskovsoft.smartyoutubetv2.tv.ui.*"
 }
 
+run_channel_groups_fast() {
+  echo "--- [SUITE: channel-groups-fast] Running channel groups tests ---"
+  ./gradlew :common:testStvotDebugUnitTest --tests "com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.*"
+}
+
 run_downloads_fast() {
   echo "--- [SUITE: downloads-fast] Running download tests ---"
   ./gradlew :common:testStvotDebugUnitTest --tests "com.liskovsoft.smartyoutubetv2.common.vox.download.*"
@@ -138,6 +143,9 @@ case "$SUITE" in
   player-full)
     run_player_full
     ;;
+  channel-groups-fast)
+    run_channel_groups_fast
+    ;;
   downloads-fast)
     run_downloads_fast
     ;;
@@ -187,6 +195,10 @@ case "$SUITE" in
       run_player_fast
       MATCHED=1
     fi
+    if echo "$ALL_CHANGED" | grep -qE "(channelgroup|ChannelGroup)"; then
+      run_channel_groups_fast
+      MATCHED=1
+    fi
     if echo "$ALL_CHANGED" | grep -qE "(download|Download|mux|Mux)"; then
       run_downloads_fast
       MATCHED=1
@@ -199,7 +211,7 @@ case "$SUITE" in
     ;;
   *)
     echo "Unknown suite: $SUITE"
-    echo "Available suites: ota-fast, ota-integration, ota-e2e, vot-fast, vot-full, player-fast, player-full, downloads-fast, downloads-full, live-fast, live-full, diagnostics-fast, dashboard-fast, telegram-fast, golden-smoke, full-regression"
+    echo "Available suites: ota-fast, ota-integration, ota-e2e, vot-fast, vot-full, player-fast, player-full, channel-groups-fast, downloads-fast, downloads-full, live-fast, live-full, diagnostics-fast, dashboard-fast, telegram-fast, golden-smoke, full-regression"
     exit 1
     ;;
 esac
