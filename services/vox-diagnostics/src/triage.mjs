@@ -30,6 +30,11 @@ export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   IMAGE_REQUEST_FAILED: 'Ошибка загрузки обложки / миниатюры',
   DOWNLOAD_FAILED: 'Сбой скачивания видео',
   DOWNLOAD_STATE_INCONSISTENT: 'Несоответствие состояния загрузки',
+  DOWNLOAD_TRANSLATION_STALLED: 'Зависание ожидания перевода при скачивании',
+  DOWNLOAD_STORAGE_LOW: 'Недостаточно места на диске для скачивания',
+  DOWNLOAD_PACKAGING_FAILED: 'Сбой упаковки медиаконтейнера (MKV)',
+  DOWNLOAD_FINALIZE_FAILED: 'Сбой финализации и сохранения файла',
+  DOWNLOAD_STATE_REPAIRED: 'Состояние загрузки автоматически восстановлено',
   TRANSLATION_DESYNC_WARNING: 'Рассинхронизация звуковой дорожки перевода',
   TRANSLATION_AUDIO_DOWNLOAD_FAILED: 'Сбой загрузки аудиодорожки перевода',
   TRANSLATION_FAST_VOCALS_FAILED: 'Сбой перевода быстрых треков / хэви-метал в Yandex VOT',
@@ -131,7 +136,7 @@ function inferStage(code) {
 
 function severityForEvent(code, rawLevel, repeats = 1) {
   if (rawLevel === 'CRITICAL' || /CRASH_LOOP|CORRUPT|DATA_LOSS/.test(code)) return 'CRITICAL';
-  if (/PLAYER_OUT_OF_MEMORY|MUX_FAILED|PACKAGING_FAILED|FINALIZE_FAILED|BACKGROUND.*FAILED|OTA_SIGNATURE_MISMATCH|HUD_SELF_HEAL_FAILED|PLAYER_HUD_MISSING/.test(code)) return 'HIGH';
+  if (/PLAYER_OUT_OF_MEMORY|MUX_FAILED|PACKAGING_FAILED|FINALIZE_FAILED|BACKGROUND.*FAILED|OTA_SIGNATURE_MISMATCH|HUD_SELF_HEAL_FAILED|PLAYER_HUD_MISSING|DOWNLOAD_TRANSLATION_STALLED|DOWNLOAD_STORAGE_LOW|DOWNLOAD_PACKAGING_FAILED|DOWNLOAD_FINALIZE_FAILED/.test(code)) return 'HIGH';
   if (/HUD_STATE_INCONSISTENT/.test(code)) return 'MEDIUM';
   if (/HUD_SELF_HEAL_SUCCESS/.test(code)) return 'INFO';
   if (/REBUFFER|STARTUP_SLOW|NETWORK_TIMEOUT|HTTP_5XX|OTA_FAILED/.test(code)) return 'MEDIUM';
@@ -362,6 +367,19 @@ export function classifyReport(report = {}) {
         ev.recovered = true;
         ev.recoveryEvent = later.event;
         break;
+      }
+      // Download recovery
+      if ((ev.category === 'DOWNLOAD' || ev.event.startsWith('DOWNLOAD_') || ev.event.startsWith('MUX_')) &&
+          ['DOWNLOAD_FAILED', 'DOWNLOAD_STATE_INCONSISTENT', 'DOWNLOAD_TRANSLATION_STALLED', 'DOWNLOAD_STORAGE_LOW', 'DOWNLOAD_PACKAGING_FAILED', 'DOWNLOAD_FINALIZE_FAILED'].includes(ev.event)) {
+        if (['DOWNLOAD_COMPLETED', 'DOWNLOAD_STATE_REPAIRED'].includes(later.event)) {
+          const evDl = ev.safeContext?.downloadId;
+          const laterDl = later.safeContext?.downloadId;
+          if (!evDl || !laterDl || evDl === laterDl) {
+            ev.recovered = true;
+            ev.recoveryEvent = later.event;
+            break;
+          }
+        }
       }
       // Player error recovery
       if ((ev.category === 'PLAYER' || ev.event.startsWith('PLAYER_')) &&
