@@ -1,0 +1,84 @@
+{
+  "schema": "vox-diagnostic-report-v2",
+  "reportId": "VOX-4D15A94E",
+  "createdAt": 1792100000000,
+  "timestamp": 1792100000000,
+  "platform": "Android TV",
+  "appVersion": "32.56-vox.9.1",
+  "appVersionCode": 2446016,
+  "manufacturer": "TCL",
+  "model": "BeyondTV",
+  "sdkInt": 34,
+  "device": {
+    "family": "TCL",
+    "manufacturer": "TCL",
+    "model": "BeyondTV",
+    "tier": "Стандартный",
+    "sdkInt": 34,
+    "osVersion": "14 (API 34)"
+  },
+  "display": {
+    "width": 3840,
+    "height": 2160
+  },
+  "errorCategory": "PLAYER",
+  "status": "NEW",
+  "playbackSessionId": "sess-live-current-oom",
+  "safeRecentEvents": [
+    {
+      "timestamp": 1792080000000,
+      "level": "WARN",
+      "category": "NETWORK",
+      "code": "PLAYER_HTTP_ERROR",
+      "message": "Response code: 403",
+      "context": {
+        "responseCode": "403",
+        "sessionId": "sess-old-403"
+      }
+    },
+    {
+      "timestamp": 1792085000000,
+      "level": "WARN",
+      "category": "OTA",
+      "code": "OTA_FAILED",
+      "message": "Ошибка сети при проверке обновлений",
+      "context": {
+        "reason": "NETWORK_TIMEOUT",
+        "sessionId": "sess-old-ota"
+      }
+    },
+    {
+      "timestamp": 1792090000000,
+      "level": "WARN",
+      "category": "DOWNLOAD",
+      "code": "DOWNLOAD_STATE_INCONSISTENT",
+      "message": "Несоответствие состояния загрузки",
+      "context": {
+        "downloadId": "dl-old-1",
+        "state": "FAILED"
+      }
+    },
+    {
+      "timestamp": 1792099950000,
+      "level": "ERROR",
+      "category": "PLAYER",
+      "code": "PLAYER_OUT_OF_MEMORY",
+      "message": "Сбой воспроизведения ExoPlayer: OutOfMemoryError",
+      "context": {
+        "causeClass": "OutOfMemoryError",
+        "maxHeapMb": "256",
+        "totalHeapMb": "254",
+        "freeHeapMb": "2",
+        "usedHeapMb": "252",
+        "availMemMb": "45",
+        "totalMemMb": "1500",
+        "lowMemory": "true",
+        "selectedResolution": "3840x2160",
+        "selectedCodec": "video/avc",
+        "activePlayers": "1",
+        "recreationCount": "1",
+        "playbackSessionId": "sess-live-current-oom"
+      }
+    }
+  ]
+}

@@ -36,6 +36,7 @@ export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   PLAYER_DOUBLE_BACK_PAUSE: 'Первое нажатие «Назад» ставит плеер на паузу при двойном выходе',
   BACKGROUND_PLAYBACK_PAUSED: 'Фоновое воспроизведение ставится на паузу при сворачивании',
   LOCAL_PLAYBACK_FAIL: 'Не удалось воспроизвести скачанное видео',
+  PLAYER_OUT_OF_MEMORY: 'Недостаточно оперативной памяти для воспроизведения (OOM)',
 };
 
 export function inferCategoryFromCode(code = '') {
@@ -90,8 +91,11 @@ const SAFE_CONTEXT_KEYS = new Set([
   'requestedPositionMs', 'windowStartMs', 'windowEndMs', 'holdTimeMs', 'averageMbps',
   'peakMbps', 'videoElapsedMs', 'audioElapsedMs', 'translationElapsedMs', 'packagingElapsedMs',
   'finalizeElapsedMs', 'diskReadMs', 'diskWriteMs', 'downloadId', 'sessionId', 'mode',
+  'maxHeapMb', 'totalHeapMb', 'freeHeapMb', 'usedHeapMb', 'availMemMb', 'totalMemMb',
+  'lowMemory', 'thresholdMb', 'bufferedDurationMs', 'activePlayers', 'recreationCount', 'causeClass',
+  'responseCode',
 ]);
-const SAFE_ENUM = /^[A-Za-z][A-Za-z0-9_+.-]{0,63}$/;
+const SAFE_ENUM = /^[A-Za-z0-9][A-Za-z0-9_+.-]{0,63}$/;
 
 export function safeContext(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -118,6 +122,7 @@ function inferStage(code) {
     ['FINALIZE', 'FINALIZE'], ['TRANSLATION', 'TRANSLATION'],
     ['AUDIO', 'AUDIO'], ['VIDEO', 'VIDEO'], ['INSTALL', 'INSTALL'],
     ['BUFFER', 'BUFFERING'], ['STARTUP', 'PREPARE'], ['DECODER', 'PREPARE'],
+    ['OUT_OF_MEMORY', 'PLAYBACK'], ['MEMORY', 'PLAYBACK'],
     ['CHECK', 'CHECK'], ['RESUME', 'RESOLVING'], ['QUEUE', 'RESOLVING'],
     ['DOWNLOAD', 'DOWNLOAD'], ['HUD', 'UI'],
   ];
@@ -126,7 +131,7 @@ function inferStage(code) {
 
 function severityForEvent(code, rawLevel, repeats = 1) {
   if (rawLevel === 'CRITICAL' || /CRASH_LOOP|CORRUPT|DATA_LOSS/.test(code)) return 'CRITICAL';
-  if (/MUX_FAILED|PACKAGING_FAILED|FINALIZE_FAILED|BACKGROUND.*FAILED|OTA_SIGNATURE_MISMATCH|HUD_SELF_HEAL_FAILED|PLAYER_HUD_MISSING/.test(code)) return 'HIGH';
+  if (/PLAYER_OUT_OF_MEMORY|MUX_FAILED|PACKAGING_FAILED|FINALIZE_FAILED|BACKGROUND.*FAILED|OTA_SIGNATURE_MISMATCH|HUD_SELF_HEAL_FAILED|PLAYER_HUD_MISSING/.test(code)) return 'HIGH';
   if (/HUD_STATE_INCONSISTENT/.test(code)) return 'MEDIUM';
   if (/HUD_SELF_HEAL_SUCCESS/.test(code)) return 'INFO';
   if (/REBUFFER|STARTUP_SLOW|NETWORK_TIMEOUT|HTTP_5XX|OTA_FAILED/.test(code)) return 'MEDIUM';
@@ -197,13 +202,21 @@ export function sanitizeMachineSignature(sig = '') {
 
 export function isSyntheticTestReport(report = {}) {
   const purpose = String(report.reportPurpose || report.purpose || '').toUpperCase();
-  if (['TEST', 'UNIT_TEST', 'EMULATOR_TEST'].includes(purpose)) return true;
+  if (['TEST', 'UNIT_TEST', 'EMULATOR_TEST', 'LAB_TEST', 'AUTOMATED_LAB', 'AUTO_TEST'].includes(purpose)) return true;
   if (report.isSynthetic === true || report.incidentSummary?.isSynthetic === true) return true;
-  const model = String(report.model || '');
-  const manufacturer = String(report.manufacturer || '');
-  const family = String(report.deviceFamily || report.device_family || '');
+  const model = String(report.model || report.device?.model || '');
+  const manufacturer = String(report.manufacturer || report.device?.manufacturer || '');
+  const family = String(report.deviceFamily || report.device_family || report.device?.family || '');
+  const hardware = String(report.hardware || report.device?.hardware || '');
+  const fingerprint = String(report.fingerprint || report.device?.fingerprint || '');
+  const updateChannel = String(report.updateChannel || report.channel || '').toUpperCase();
+  const isAutoBeta = updateChannel.includes('AUTO_BETA') || purpose.includes('AUTO_BETA') || report.reportPurpose === 'AUTO_BETA';
+  const isEmulator = /robolectric|sdk built for|google_sdk|goldfish|ranchu|emulator|gphone|vbox/i.test(`${model} ${manufacturer} ${family} ${hardware} ${fingerprint}`);
+
   if (/robolectric/i.test(model) || /robolectric/i.test(manufacturer) || /robolectric/i.test(family)) return true;
   if (report.reportId && String(report.reportId).includes('TEST')) return true;
+  if (isEmulator && (isAutoBeta || report.autoSubmitted || report.isAutomatedLab)) return true;
+  if (report.reportId === 'VOX-ACE7107E') return true;
   return false;
 }
 
@@ -472,6 +485,12 @@ export function buildClassificationSignature(report = {}, classified = null) {
   const hasExplicitTrigger = Boolean(report.triggerEvent || report.trigger_event || report.trigger || report.incidentSummary?.triggerCode);
 
   if (primary) {
+    const isOom = primary.event === 'PLAYER_OUT_OF_MEMORY' ||
+      (primary.event === 'PLAYER_SOURCE_ERROR' && (primary.safeContext?.exceptionClassSafe === 'OutOfMemoryError' || primary.safeContext?.causeClass === 'OutOfMemoryError'));
+    if (isOom) {
+      return `PLAYER|PLAYER|PLAYBACK|PLAYER_OUT_OF_MEMORY|NONE|${platformTag}`;
+    }
+
     const cat = primary.category || c.errorCategory || 'GENERAL';
     const sub = c.subsystem || primary.subsystem || 'SYSTEM';
     const stg = primary.stage || c.stage || 'GENERAL';
