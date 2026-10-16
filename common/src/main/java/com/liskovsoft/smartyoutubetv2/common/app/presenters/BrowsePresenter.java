@@ -14,6 +14,7 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaItem;
 import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroup;
 import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager;
 import com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxFilteredMediaGroup;
+import com.liskovsoft.youtubeapi.service.data.YouTubeMediaGroup;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.locale.LocaleUtility;
 import com.liskovsoft.sharedutils.mylogger.Log;
@@ -1432,7 +1433,22 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
 
     private Observable<MediaGroup> createPinnedGridAction(Video item) {
         if (item.channelGroupId != null) {
-            return getContentService().getRssFeedObserve(ChannelGroupServiceWrapper.instance(getContext()).findChannelIdsForGroup(item.channelGroupId));
+            String[] channelIds = ChannelGroupServiceWrapper.instance(getContext()).findChannelIdsForGroup(item.channelGroupId);
+            if (channelIds == null || channelIds.length == 0) {
+                Set<String> voxIds = VoxChannelGroupManager.instance(getContext()).getChannelIdsInGroup(item.channelGroupId);
+                if (voxIds != null && !voxIds.isEmpty()) {
+                    channelIds = voxIds.toArray(new String[0]);
+                }
+            }
+
+            if (channelIds == null || channelIds.length == 0) {
+                YouTubeMediaGroup emptyGroup = new YouTubeMediaGroup(MediaGroup.TYPE_CHANNEL_UPLOADS);
+                emptyGroup.setTitle(item.getTitle());
+                emptyGroup.setMediaItems(new ArrayList<>());
+                return Observable.just(emptyGroup);
+            }
+
+            return getContentService().getRssFeedObserve(channelIds);
         }
 
         return ChannelUploadsPresenter.instance(getContext()).obtainUploadsObservable(item);
