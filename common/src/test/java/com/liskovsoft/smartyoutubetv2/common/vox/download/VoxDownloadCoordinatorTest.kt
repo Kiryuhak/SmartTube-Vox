@@ -315,5 +315,37 @@ class VoxDownloadCoordinatorTest {
         assertEquals(VoxDownloadState.FINALIZING, job.state)
         assertEquals(VoxDownloadState.COMPLETED, storage.loadJobMetadata(job.downloadId)!!.state)
     }
+
+    @Test
+    fun duplicateDownloadReturnsExistingActiveJob() {
+        val req1 = VoxDownloadRequest(downloadId = "dup-1", videoId = "same-video-1", videoTitle = "Title 1")
+        val req2 = VoxDownloadRequest(downloadId = "dup-2", videoId = "same-video-1", videoTitle = "Title 1")
+
+        val res1 = coordinator.startDownload(req1)
+        val res2 = coordinator.startDownload(req2)
+
+        assertEquals("dup-1", res1)
+        assertEquals("dup-1", res2)
+        // Only one job must exist in repository for this video
+        val jobs = coordinator.getAllJobs().filter { it.request.videoId == "same-video-1" }
+        assertEquals(1, jobs.size)
+    }
+
+    @Test
+    fun duplicateDownloadReturnsExistingCompletedJob() {
+        val req1 = VoxDownloadRequest(downloadId = "comp-1", videoId = "same-video-2", videoTitle = "Title 2")
+        val job = VoxDownloadJob(req1, initialState = VoxDownloadState.COMPLETED)
+        job.publishedUri = "file:///dummy/path.mkv"
+        job.packagingCompleted = true
+        job.finalizeCompleted = true
+        job.hasTranslatedAudio = true
+        job.finalFileBytes = 1024L
+        repository.addOrUpdateJob(job)
+
+        val req2 = VoxDownloadRequest(downloadId = "comp-2", videoId = "same-video-2", videoTitle = "Title 2")
+        val res = coordinator.startDownload(req2)
+
+        assertEquals("comp-1", res)
+    }
 }
 

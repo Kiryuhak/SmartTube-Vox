@@ -46,11 +46,14 @@ class DefaultVoxTranslationResolver(
         val service = YouTubeServiceManager.instance()?.mediaItemService
         if (videoId != null && service != null) service.getFormatInfo(videoId) else null
     },
-    private val audioUploadTransport: YandexVotAudioUploadTransport = YandexVotAudioUploadTransport.DEFAULT
+    private val audioUploadTransport: YandexVotAudioUploadTransport = YandexVotAudioUploadTransport.DEFAULT,
+    private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) : VoxTranslationResolver {
 
     companion object {
-        private const val MAX_POLL_ATTEMPTS = 60
+        private const val MAX_NETWORK_RETRIES = 5
+        private const val MAX_STALL_TIMEOUT_MS = 180_000L // 3 minutes without heartbeat
+        private const val MAX_TOTAL_WAIT_MS = 20 * 60 * 1000L // 20 minutes max total translation generation
         private const val DEFAULT_TARGET_LANG = "ru"
     }
 
@@ -95,17 +98,33 @@ class DefaultVoxTranslationResolver(
             Log.w("DefaultVoxTranslationResolver", "Cache lookup for download failed: ${e.message}")
         }
 
-        var attempts = 0
         var isFirstRequest = true
         var audioUploaded = false
+        var consecutiveNetworkFailures = 0
+        val startTimeMs = System.currentTimeMillis()
+        var lastHeartbeatMs = System.currentTimeMillis()
 
-        while (attempts < MAX_POLL_ATTEMPTS) {
+        while (true) {
             if (isCancelled()) {
                 throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation cancelled")
             }
 
+            if (System.currentTimeMillis() - startTimeMs > MAX_TOTAL_WAIT_MS) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.TIMEOUT,
+                    "Timed out waiting for Yandex VOT translation to become ready (exceeded max duration)"
+                )
+            }
+
+            if (System.currentTimeMillis() - lastHeartbeatMs > MAX_STALL_TIMEOUT_MS) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.PROCESSING_STALLED,
+                    "Translation processing stalled: no progress heartbeat from Yandex VOT within ${MAX_STALL_TIMEOUT_MS / 1000}s"
+                )
+            }
+
             val result = try {
-                apiClient.requestTranslation(
+                val res = apiClient.requestTranslation(
                     videoUrl,
                     0.0, // duration
                     null, // sourceLang
@@ -115,21 +134,35 @@ class DefaultVoxTranslationResolver(
                     oauthToken,
                     isFirstRequest
                 )
+                consecutiveNetworkFailures = 0
+                lastHeartbeatMs = System.currentTimeMillis()
+                res
             } catch (e: Exception) {
-                throw VoxDownloadException(
-                    VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,
-                    "Failed to communicate with Yandex VOT API: ${e.message}",
-                    e
-                )
+                consecutiveNetworkFailures++
+                if (consecutiveNetworkFailures > MAX_NETWORK_RETRIES) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.NETWORK_ERROR,
+                        "Failed to communicate with Yandex VOT API after $consecutiveNetworkFailures attempts: ${e.message}",
+                        e
+                    )
+                }
+                Log.w("DefaultVoxTranslationResolver", "Network error polling Yandex VOT (attempt $consecutiveNetworkFailures/$MAX_NETWORK_RETRIES): ${e.message}")
+                sleepWithCancellation(3000L, isCancelled)
+                continue
             }
 
             isFirstRequest = false
 
             if (result == null) {
-                throw VoxDownloadException(
-                    VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,
-                    "Yandex VOT API returned null response"
-                )
+                consecutiveNetworkFailures++
+                if (consecutiveNetworkFailures > MAX_NETWORK_RETRIES) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,
+                        "Yandex VOT API returned null response repeatedly"
+                    )
+                }
+                sleepWithCancellation(2000L, isCancelled)
+                continue
             }
 
             when (result.status) {
@@ -158,17 +191,7 @@ class DefaultVoxTranslationResolver(
                     // Если URL еще не заполнен, переходим к ожиданию
                     val remaining = if (result.remainingTime > 0) result.remainingTime else 5
                     onWaitingProgress?.invoke(remaining)
-                    val sleepMs = 3000L
-                    val startWait = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - startWait < sleepMs) {
-                        if (isCancelled()) {
-                            throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation cancelled")
-                        }
-                        try { Thread.sleep(250) } catch (e: InterruptedException) {
-                            throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation interrupted")
-                        }
-                    }
-                    attempts++
+                    sleepWithCancellation(3000L, isCancelled)
                 }
                 YandexVotApiClient.STATUS_AUDIO_REQUESTED -> {
                     val translationId = result.translationId
@@ -194,19 +217,7 @@ class DefaultVoxTranslationResolver(
 
                     val delaySec = YandexVotTiming.pollDelaySeconds(remaining)
                     val sleepMs = (delaySec * 1000L).coerceIn(1000L, 10000L)
-
-                    val startWait = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - startWait < sleepMs) {
-                        if (isCancelled()) {
-                            throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation cancelled")
-                        }
-                        try {
-                            Thread.sleep(250)
-                        } catch (e: InterruptedException) {
-                            throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation interrupted")
-                        }
-                    }
-                    attempts++
+                    sleepWithCancellation(sleepMs, isCancelled)
                 }
                 YandexVotApiClient.STATUS_WAITING,
                 YandexVotApiClient.STATUS_LONG_WAITING,
@@ -216,19 +227,7 @@ class DefaultVoxTranslationResolver(
 
                     val delaySec = YandexVotTiming.pollDelaySeconds(remaining)
                     val sleepMs = (delaySec * 1000L).coerceIn(1000L, 10000L)
-
-                    val startWait = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - startWait < sleepMs) {
-                        if (isCancelled()) {
-                            throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation cancelled")
-                        }
-                        try {
-                            Thread.sleep(250)
-                        } catch (e: InterruptedException) {
-                            throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation interrupted")
-                        }
-                    }
-                    attempts++
+                    sleepWithCancellation(sleepMs, isCancelled)
                 }
                 YandexVotApiClient.STATUS_FAILED -> {
                     throw VoxDownloadException(
@@ -244,10 +243,21 @@ class DefaultVoxTranslationResolver(
                 }
             }
         }
+    }
 
-        throw VoxDownloadException(
-            VoxDownloadErrorCode.TIMEOUT,
-            "Timed out waiting for Yandex VOT translation to become ready"
-        )
+    private fun sleepWithCancellation(sleepMs: Long, isCancelled: () -> Boolean) {
+        val stepMs = 250L
+        var waited = 0L
+        while (waited < sleepMs) {
+            if (isCancelled()) {
+                throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation cancelled")
+            }
+            try {
+                sleeper(Math.min(stepMs, sleepMs - waited))
+            } catch (e: InterruptedException) {
+                throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Translation interrupted")
+            }
+            waited += stepMs
+        }
     }
 }

@@ -156,6 +156,32 @@ class VoxDownloadCoordinator(
             addListener(request.downloadId, listener)
         }
 
+        val duplicateCompleted = repository.getAllJobs().firstOrNull {
+            it.request.videoId == request.videoId &&
+            it.request.translationMode == request.translationMode &&
+            it.state == VoxDownloadState.COMPLETED
+        }
+        if (duplicateCompleted != null) {
+            if (listener != null) {
+                addListener(duplicateCompleted.downloadId, listener)
+                notifyStateChange(duplicateCompleted)
+            }
+            return duplicateCompleted.downloadId
+        }
+
+        val duplicateActive = repository.getAllJobs().firstOrNull {
+            it.request.videoId == request.videoId &&
+            it.request.translationMode == request.translationMode &&
+            !it.state.isTerminal
+        }
+        if (duplicateActive != null) {
+            if (listener != null) {
+                addListener(duplicateActive.downloadId, listener)
+                notifyProgress(duplicateActive)
+            }
+            return duplicateActive.downloadId
+        }
+
         val existing = repository.getJob(request.downloadId)
         if (existing?.state == VoxDownloadState.COMPLETED) return request.downloadId
         val job = if (existing != null) {
