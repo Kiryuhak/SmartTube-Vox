@@ -78,10 +78,14 @@ public class YandexVotOrchestrator {
     private final Object lock = new Object();
     private static final int MAX_POST_UPLOAD_AUDIO_REQUESTED_RETRIES = 20;
     public static final int MAX_WAITING_POLL_COUNT = 60;
+    public static final int MAX_CONSECUTIVE_STALLED_POLLS = 20;
     private final Set<String> completedUploadKeys = new HashSet<>();
     private final Set<String> inFlightUploadKeys = new HashSet<>();
     private int postUploadAudioRequestedCount = 0;
     private int waitingPollCount = 0;
+    private int consecutiveStalledPolls = 0;
+    private int lastRemainingTime = -1;
+    private boolean isAttachedJob = false;
     private long generationCounter = 0;
     @NonNull private YandexVotState currentState = YandexVotState.idle();
     @Nullable private Listener listener;
@@ -180,6 +184,9 @@ public class YandexVotOrchestrator {
             gen = ++generationCounter;
             postUploadAudioRequestedCount = 0;
             waitingPollCount = 0;
+            consecutiveStalledPolls = 0;
+            lastRemainingTime = -1;
+            isAttachedJob = false;
             newState = YandexVotState.requesting(
                     gen,
                     params.getVideoId(),
@@ -201,12 +208,50 @@ public class YandexVotOrchestrator {
         return gen;
     }
 
+    public long attachToExistingJob(@NonNull RequestParams params, @Nullable String translationId, int remainingSec) {
+        final long gen;
+        YandexVotState newState;
+        synchronized (lock) {
+            cancelActiveOperationsLocked();
+            gen = ++generationCounter;
+            postUploadAudioRequestedCount = 0;
+            waitingPollCount = 0;
+            consecutiveStalledPolls = 0;
+            lastRemainingTime = remainingSec;
+            isAttachedJob = true;
+            newState = YandexVotState.waiting(
+                    gen,
+                    params.getVideoId(),
+                    params.getVideoUrl(),
+                    translationId,
+                    remainingSec,
+                    params.isUseLiveVoices()
+            );
+            currentState = newState;
+            YandexVotLog.d(TAG, "VOT attachToExistingJob: gen=" + gen + " translationId=" + translationId + " remainingSec=" + remainingSec);
+            notifyListenerLocked(newState);
+
+            int delaySeconds = YandexVotTiming.pollDelaySeconds(remainingSec);
+            activePollFuture = scheduler.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    executeRequest(gen, params, false, 0);
+                }
+            }, delaySeconds, TimeUnit.SECONDS);
+        }
+
+        return gen;
+    }
+
     public void cancel() {
         YandexVotState newState = null;
         synchronized (lock) {
             cancelActiveOperationsLocked();
             long gen = ++generationCounter;
             waitingPollCount = 0;
+            consecutiveStalledPolls = 0;
+            lastRemainingTime = -1;
+            isAttachedJob = false;
             if (currentState.getStatus() != YandexVotState.Status.IDLE &&
                     currentState.getStatus() != YandexVotState.Status.CANCELLED) {
                 newState = YandexVotState.cancelled(
@@ -227,6 +272,9 @@ public class YandexVotOrchestrator {
             long gen = ++generationCounter;
             postUploadAudioRequestedCount = 0;
             waitingPollCount = 0;
+            consecutiveStalledPolls = 0;
+            lastRemainingTime = -1;
+            isAttachedJob = false;
             currentState = YandexVotState.idle();
             YandexVotLog.d(TAG, "VOT reset: gen=" + gen);
             notifyListenerLocked(currentState);
@@ -710,6 +758,35 @@ public class YandexVotOrchestrator {
             return;
         }
 
+        if (isAttachedJob) {
+            int remaining = result.getRemainingTime();
+            if (lastRemainingTime == -1 || (remaining > 0 && remaining < lastRemainingTime)) {
+                consecutiveStalledPolls = 0;
+                lastRemainingTime = remaining;
+            } else if (remaining > 0 && remaining == lastRemainingTime) {
+                consecutiveStalledPolls++;
+                if (consecutiveStalledPolls >= MAX_CONSECUTIVE_STALLED_POLLS) {
+                    YandexVotLog.e(TAG, "VOT stalled job detected (" + consecutiveStalledPolls + " identical polls): gen=" + gen);
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
+                            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_TIMEOUT,
+                            "Перевод завис на стороне сервера: прогресс отсутствует"
+                    );
+                    YandexVotState errorState = YandexVotState.error(
+                            gen,
+                            params.getVideoId(),
+                            params.getVideoUrl(),
+                            "Перевод завис: отсутствие прогресса",
+                            "job_stalled",
+                            params.isUseLiveVoices()
+                    );
+                    currentState = errorState;
+                    notifyListenerLocked(errorState);
+                    return;
+                }
+            }
+        }
+
         int delaySeconds = YandexVotTiming.pollDelaySeconds(result.getRemainingTime());
         YandexVotState waitingState = YandexVotState.waiting(
                 gen,
@@ -738,6 +815,12 @@ public class YandexVotOrchestrator {
             } catch (Exception e) {
                 YandexVotLog.d(TAG, "VOT state listener exception: " + e.getMessage());
             }
+        }
+    }
+
+    public int getConsecutiveStalledPolls() {
+        synchronized (lock) {
+            return consecutiveStalledPolls;
         }
     }
 }

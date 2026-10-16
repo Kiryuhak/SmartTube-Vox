@@ -1341,10 +1341,27 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         if (pipelineResult instanceof VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob) {
+            VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob attached =
+                    (VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob) pipelineResult;
             mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER, System.currentTimeMillis());
             if (mUserArmed && progressOverlay() != null) {
                 progressOverlay().showDelayedWaiting(getActivity());
             }
+            ensureNewBackendComponents();
+            if (mYandexPlaybackAdapter != null) {
+                mYandexPlaybackAdapter.stop();
+            }
+            YandexVotOrchestrator.RequestParams params = new YandexVotOrchestrator.RequestParams(
+                    videoId,
+                    videoUrl,
+                    durationSec,
+                    sourceLang,
+                    targetLang,
+                    videoTitle,
+                    useLively,
+                    oauthToken
+            );
+            mNewBackendGenerationId = mYandexOrchestrator.attachToExistingJob(params, attached.getJobId(), attached.getRemainingSec());
             return;
         }
 

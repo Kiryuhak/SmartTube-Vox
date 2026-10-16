@@ -103,8 +103,28 @@ class VoxTranslationServerFirstPipeline(
 
         data class Failed(
             val error: String,
-            val retryable: Boolean = true
+            val retryable: Boolean = true,
+            val isAuthError: Boolean = false,
+            val isServerError: Boolean = false,
+            val isTimeout: Boolean = false
         ) : ServerLookupResponse()
+
+        companion object {
+            @JvmStatic
+            fun fromHttpStatus(status: Int, message: String): ServerLookupResponse {
+                return when (status) {
+                    401, 403 -> Failed("Authentication required ($status): $message", retryable = false, isAuthError = true)
+                    404 -> NotFound
+                    in 500..599 -> Failed("Server error ($status): $message", retryable = true, isServerError = true)
+                    else -> Failed("HTTP error ($status): $message", retryable = true)
+                }
+            }
+
+            @JvmStatic
+            fun timeout(message: String = "Server lookup timed out"): ServerLookupResponse {
+                return Failed(message, retryable = true, isTimeout = true)
+            }
+        }
     }
 
     data class ServerCreateResponse(
@@ -167,12 +187,19 @@ class VoxTranslationServerFirstPipeline(
                 durationSec = localResult.record.durationSec
             )
         }
+        if (localResult is VoxTranslationSessionCache.LookupResult.PendingJob) {
+            return PipelineResult.AttachToJob(
+                jobId = localResult.job.key,
+                status = "PROCESSING",
+                remainingSec = 0
+            )
+        }
 
         // 3. L2: Server Database Lookup (Existing Translation Check)
         val serverResponse = serverDb.queryExistingTranslation(request.videoId, request.sourceLang, target)
         return when (serverResponse) {
             is ServerLookupResponse.Ready -> {
-                if (serverResponse.isExpired) {
+                if (serverResponse.isExpired || !VoxTranslationStateMachine.isValidAudioUrl(serverResponse.audioUrl)) {
                     val refreshRes = serverDb.refreshSignedUrl(request.videoId, serverResponse.audioUrl)
                     if (refreshRes.ok && !refreshRes.refreshedAudioUrl.isNullOrBlank()) {
                         localCache.store(request, refreshRes.refreshedAudioUrl, serverResponse.durationSec)
@@ -182,7 +209,7 @@ class VoxTranslationServerFirstPipeline(
                             durationSec = serverResponse.durationSec
                         )
                     } else {
-                        // Failed to refresh expired URL -> initiate fresh job
+                        // Failed to refresh expired/invalid URL -> initiate fresh job
                         val newJob = serverDb.createTranslationJob(request.videoId, request.sourceLang, target)
                         PipelineResult.InitiatedNewJob(newJob.jobId)
                     }
