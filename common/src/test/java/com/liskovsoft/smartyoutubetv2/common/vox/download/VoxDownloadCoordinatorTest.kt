@@ -300,6 +300,8 @@ class VoxDownloadCoordinatorTest {
         job.hasTranslatedAudio = true
         job.durationMs = 240_000
         job.finalFileBytes = 1024
+        job.packagingCompleted = true
+        job.finalizeCompleted = true
         repository.persistJob(job, VoxDownloadState.COMPLETED)
         assertEquals(VoxDownloadState.FINALIZING, job.state)
         val restored = VoxDownloadRepository(storage).getJob(job.downloadId)!!

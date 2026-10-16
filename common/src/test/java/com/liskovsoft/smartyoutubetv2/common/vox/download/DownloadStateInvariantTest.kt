@@ -62,8 +62,8 @@ class DownloadStateInvariantTest {
     }
 
     @Test
-    fun completedJobWithoutPackagingIsRepairedWhenFileIsValid() {
-        // Create valid file on disk but job.json has packagingCompleted = false (legacy/interrupted metadata)
+    fun packagingCrashDoesNotMarkCompleted() {
+        // Create file on disk but job.json has packagingCompleted = false (interrupted packaging/crash)
         val outputFile = storage.getOutputFile(downloadId)
         outputFile.parentFile?.mkdirs()
         outputFile.writeBytes(ByteArray(1024))
@@ -72,7 +72,7 @@ class DownloadStateInvariantTest {
         val oProgress = VoxTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, 512, 512, VoxTrackState.COMPLETED)
         val tProgress = VoxTrackProgress(VoxDownloadTrack.TRANSLATED_AUDIO, 256, 256, VoxTrackState.COMPLETED)
 
-        // Write directly inconsistent json to disk simulating legacy report
+        // Write inconsistent json to disk simulating interrupted packaging
         val jobDir = storage.getJobDir(downloadId)
         val json = org.json.JSONObject().apply {
             put("downloadId", downloadId)
@@ -86,7 +86,7 @@ class DownloadStateInvariantTest {
             put("hasTranslatedAudio", true)
             put("finalFileBytes", 1024L)
             put("packagingStarted", true)
-            put("packagingCompleted", false) // legacy/interrupted metadata
+            put("packagingCompleted", false) // interrupted
             put("finalizeCompleted", false)
             put("durationMs", 60_000L)
             put("video", org.json.JSONObject().apply {
@@ -103,10 +103,11 @@ class DownloadStateInvariantTest {
 
         val loaded = storage.loadJobMetadata(downloadId)
         assertNotNull(loaded)
-        // Must be REPAIRED to COMPLETED because file is physically valid on disk!
-        assertEquals(VoxDownloadState.COMPLETED, loaded!!.state)
-        assertTrue(loaded.packagingCompleted)
-        assertTrue(loaded.finalizeCompleted)
+        // Must fail with DOWNLOAD_STATE_INCONSISTENT because packaging was interrupted / incomplete!
+        assertEquals(VoxDownloadState.FAILED, loaded!!.state)
+        assertEquals(VoxDownloadErrorCode.STORAGE_ERROR, loaded.errorCode)
+        assertTrue(loaded.errorMessage?.contains("DOWNLOAD_STATE_INCONSISTENT") == true)
+        assertFalse(loaded.packagingCompleted)
     }
 
     @Test

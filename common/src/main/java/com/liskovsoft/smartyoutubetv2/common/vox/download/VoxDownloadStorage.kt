@@ -168,8 +168,8 @@ class VoxDownloadStorage(val context: Context) {
 
         val isCompleted = state == VoxDownloadState.COMPLETED
         val effectivePackagingStarted = packagingStarted || isCompleted
-        val effectivePackagingCompleted = packagingCompleted || isCompleted
-        val effectiveFinalizeCompleted = finalizeCompleted || isCompleted
+        val effectivePackagingCompleted = packagingCompleted
+        val effectiveFinalizeCompleted = finalizeCompleted
 
         val json = JSONObject().apply {
             put("downloadId", request.downloadId)
@@ -350,31 +350,16 @@ class VoxDownloadStorage(val context: Context) {
                     fallbackReason == "TRANSLATED_TRACK_MISSING_SELF_HEALED"
                 val packagingValid = packagingCompleted && finalizeCompleted
 
-                if (!fileValid || !translationValid) {
+                if (!fileValid || !translationValid || !packagingValid) {
                     effectiveState = VoxDownloadState.FAILED
                     effectiveErrorCode = VoxDownloadErrorCode.STORAGE_ERROR
-                    effectiveErrorMessage = "DOWNLOAD_STATE_INCONSISTENT: invariant check failed (fileValid=$fileValid, translationValid=$translationValid)"
+                    effectiveErrorMessage = "DOWNLOAD_STATE_INCONSISTENT: invariant check failed (fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid)"
                     if (!isSyntheticFixtureId(downloadId) && reportedInconsistentJobs.add(downloadId)) {
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.e(
                             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
                             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_INCONSISTENT,
                             "Download completed state invariant violated: fileValid=$fileValid, packagingValid=$packagingValid, translationValid=$translationValid"
                         )
-                    }
-                } else if (!packagingValid) {
-                    effectivePackagingCompleted = true
-                    effectiveFinalizeCompleted = true
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.DOWNLOAD,
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.DOWNLOAD_STATE_REPAIRED,
-                        "Download completed state metadata repaired: valid file found, restored packaging flags"
-                    )
-                    try {
-                        json.put("packagingCompleted", true)
-                        json.put("finalizeCompleted", true)
-                        file.writeText(json.toString(2), StandardCharsets.UTF_8)
-                    } catch (e: Exception) {
-                        // ignore write error on repair
                     }
                 }
             }

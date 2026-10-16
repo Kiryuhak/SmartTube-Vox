@@ -1007,6 +1007,10 @@ class VoxDownloadCoordinator(
         val origAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO)
         val transAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)
         val outputFile = storage.getOutputFile(downloadId)
+        val tmpOutputFile = storage.getTmpOutputFile(downloadId)
+        if (tmpOutputFile.exists()) {
+            tmpOutputFile.delete()
+        }
 
         val translated = job.request.translationMode != VoxTranslationMode.NONE
         val requiredBytes = videoFile.length() + origAudioFile.length() +
@@ -1077,7 +1081,7 @@ class VoxDownloadCoordinator(
             val muxer = com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxMatroskaMuxer()
             val result = muxer.mux(
                 sources = sources,
-                outputFile = outputFile,
+                outputFile = tmpOutputFile,
                 videoTitle = job.request.videoTitle,
                 isCancelled = job.isCancelledFlag,
                 progressListener = { muxProgress ->
@@ -1094,7 +1098,6 @@ class VoxDownloadCoordinator(
                 onFinalizing = {
                     job.updateState(VoxDownloadState.FINALIZING)
                     job.lastOperation = "FINALIZE"
-                    job.packagingCompleted = true
                     VoxSafeLogger.i(
                         VoxLogCategory.DOWNLOAD,
                         VoxLogCode.DOWNLOAD_PACKAGING_COMPLETED,
@@ -1120,14 +1123,31 @@ class VoxDownloadCoordinator(
                 }
             )
 
-            if (isStale(job, expectedGen)) return
+            if (isStale(job, expectedGen)) {
+                if (tmpOutputFile.exists()) tmpOutputFile.delete()
+                return
+            }
 
-            // Валидация созданного MKV перед присвоением MUXED
-            validateOutputFile(outputFile, translated)
+            // Валидация созданного временного MKV перед перемещением
+            validateOutputFile(tmpOutputFile, translated)
             if (result.videoSamplesCount <= 0 || result.origAudioSamplesCount <= 0 ||
                 (translated && result.transAudioSamplesCount <= 0)) {
+                if (tmpOutputFile.exists()) tmpOutputFile.delete()
                 throw VoxDownloadException(VoxDownloadErrorCode.MEDIA_PARSE_ERROR, "Empty output track")
             }
+
+            // Атомарное переименование временного файла в итоговый файл
+            if (outputFile.exists()) {
+                outputFile.delete()
+            }
+            if (!tmpOutputFile.renameTo(outputFile)) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.OUTPUT_MOVE_FAILED,
+                    "Failed to atomically rename muxed temp file to final output: ${tmpOutputFile.absolutePath} -> ${outputFile.absolutePath}"
+                )
+            }
+
+            job.packagingCompleted = true
             job.hasTranslatedAudio = translated
             job.durationMs = result.durationMs
             job.finalFileBytes = result.totalBytesWritten
@@ -1144,7 +1164,7 @@ class VoxDownloadCoordinator(
             job.updateState(VoxDownloadState.MUXED)
             repository.persistJob(job)
             notifyStateChange(job)
-            VoxLog.d(TAG, "Download job $downloadId successfully multiplexed into MKV: ${result.outputFile.absolutePath} (${result.totalBytesWritten} bytes, duration=${result.durationMs}ms)")
+            VoxLog.d(TAG, "Download job $downloadId successfully multiplexed into MKV: ${outputFile.absolutePath} (${result.totalBytesWritten} bytes, duration=${result.durationMs}ms)")
 
             publishCompletedFile(job, expectedGen, outputFile)
         } catch (e: com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxProcessingStalledException) {
@@ -1164,7 +1184,6 @@ class VoxDownloadCoordinator(
         val downloadId = job.downloadId
         val finalizeStart = System.currentTimeMillis()
         job.lastOperation = "PUBLISH"
-        job.finalizeCompleted = true
         // Публикация в MediaStore
         if (publisher != null) {
             if (isStale(job, expectedGen)) return
@@ -1200,7 +1219,8 @@ class VoxDownloadCoordinator(
                 finalizeElapsedMs = job.finalizeElapsedMs
             )
             emitRouteSummary(job, effectiveSize, moveUsed = false)
-            // Сначала фиксируем метаданные; UI не увидит COMPLETED до успешной записи.
+            // Сначала фиксируем флаг завершения и метаданные; UI не увидит COMPLETED до успешной записи.
+            job.finalizeCompleted = true
             VoxDownloadCompletionValidator.check(job, effectiveSize)
             repository.persistJob(job, VoxDownloadState.COMPLETED)
             job.updateState(VoxDownloadState.COMPLETED)
@@ -1224,6 +1244,7 @@ class VoxDownloadCoordinator(
                 finalizeElapsedMs = job.finalizeElapsedMs
             )
             emitRouteSummary(job, effectiveSize, moveUsed = true)
+            job.finalizeCompleted = true
             VoxDownloadCompletionValidator.check(job, effectiveSize)
             repository.persistJob(job, VoxDownloadState.COMPLETED)
             job.updateState(VoxDownloadState.COMPLETED)
