@@ -704,6 +704,104 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                 com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxDiagnosticsPresenter.instance(context).show();
                 Log.i(TAG, "DIAGNOSTICS_PRESENTER_SHOWN");
             });
+        } else if ("testShowChannelGroupSelector".equalsIgnoreCase(action)) {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupDialogs.showGroupSelectorDialog(context, null);
+                Log.i(TAG, "CHANNEL_GROUP_SELECTOR_SHOWN");
+            });
+        } else if ("testShowChannelGroupManage".equalsIgnoreCase(action)) {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupDialogs.showManageGroupsDialog(context, null);
+                Log.i(TAG, "CHANNEL_GROUP_MANAGE_SHOWN");
+            });
+        } else if ("testShowChannelGroupAddToGroup".equalsIgnoreCase(action)) {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(() -> {
+                com.liskovsoft.smartyoutubetv2.common.app.models.data.Video video = new com.liskovsoft.smartyoutubetv2.common.app.models.data.Video();
+                video.channelId = intent.getStringExtra("channelId") != null ? intent.getStringExtra("channelId") : "UC_24_NEWS";
+                video.title = intent.getStringExtra("title") != null ? intent.getStringExtra("title") : "24 News";
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupDialogs.showAddToGroupDialog(context, video, null);
+                Log.i(TAG, "CHANNEL_GROUP_ADD_TO_GROUP_SHOWN: channel=" + video.title);
+            });
+        } else if ("testCreateChannelGroup".equalsIgnoreCase(action)) {
+            String name = intent.getStringExtra("name") != null ? intent.getStringExtra("name") : "Test Group";
+            String channelId = intent.getStringExtra("channelId");
+            String channelTitle = intent.getStringExtra("channelTitle") != null ? intent.getStringExtra("channelTitle") : name;
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager mgr =
+                        com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager.instance(context);
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroup g = mgr.createGroup(name);
+                if (channelId != null && !channelId.isEmpty()) {
+                    mgr.addChannelToGroup(g.getId(), channelId, channelTitle, null);
+                }
+                Log.i(TAG, "CHANNEL_GROUP_CREATED: id=" + g.getId() + " name=" + g.getName());
+            } catch (Exception e) {
+                Log.e(TAG, "CHANNEL_GROUP_CREATE_ERROR: " + e.getMessage());
+            }
+        } else if ("testAddChannelToGroup".equalsIgnoreCase(action)) {
+            String groupId = intent.getStringExtra("groupId");
+            String channelId = intent.getStringExtra("channelId");
+            String channelTitle = intent.getStringExtra("channelTitle");
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager mgr =
+                        com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager.instance(context);
+                mgr.addChannelToGroup(groupId, channelId, channelTitle, null);
+                Log.i(TAG, "CHANNEL_GROUP_CHANNEL_ADDED: groupId=" + groupId + " channelId=" + channelId);
+            } catch (Exception e) {
+                Log.e(TAG, "CHANNEL_GROUP_CHANNEL_ADD_ERROR: " + e.getMessage());
+            }
+        } else if ("testPinChannelGroup".equalsIgnoreCase(action)) {
+            String groupId = intent.getStringExtra("groupId");
+            boolean pinned = intent.getBooleanExtra("pinned", true);
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager mgr =
+                        com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager.instance(context);
+                mgr.setGroupPinnedToSidebar(groupId, pinned);
+                android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                h.post(() -> com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.instance(context).updateSections());
+                Log.i(TAG, "CHANNEL_GROUP_PINNED: groupId=" + groupId + " pinned=" + pinned);
+            } catch (Exception e) {
+                Log.e(TAG, "CHANNEL_GROUP_PIN_ERROR: " + e.getMessage());
+            }
+        } else if ("testRenameChannelGroup".equalsIgnoreCase(action)) {
+            String groupId = intent.getStringExtra("groupId");
+            String newName = intent.getStringExtra("newName");
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager mgr =
+                        com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager.instance(context);
+                mgr.renameGroup(groupId, newName);
+                android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                h.post(() -> com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.instance(context).updateSections());
+                Log.i(TAG, "CHANNEL_GROUP_RENAMED: groupId=" + groupId + " newName=" + newName);
+            } catch (Exception e) {
+                Log.e(TAG, "CHANNEL_GROUP_RENAME_ERROR: " + e.getMessage());
+            }
+        } else if ("testDeleteChannelGroup".equalsIgnoreCase(action)) {
+            String groupId = intent.getStringExtra("groupId");
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager mgr =
+                        com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager.instance(context);
+                mgr.deleteGroup(groupId);
+                android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                h.post(() -> com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.instance(context).updateSections());
+                Log.i(TAG, "CHANNEL_GROUP_DELETED: groupId=" + groupId);
+            } catch (Exception e) {
+                Log.e(TAG, "CHANNEL_GROUP_DELETE_ERROR: " + e.getMessage());
+            }
+        } else if ("testReorderChannelsInGroup".equalsIgnoreCase(action)) {
+            String groupId = intent.getStringExtra("groupId");
+            String channelId = intent.getStringExtra("channelId");
+            String direction = intent.getStringExtra("direction");
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager mgr =
+                        com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroupManager.instance(context);
+                boolean res = "up".equalsIgnoreCase(direction) ? mgr.moveChannelUp(groupId, channelId) : mgr.moveChannelDown(groupId, channelId);
+                Log.i(TAG, "CHANNEL_GROUP_REORDERED: groupId=" + groupId + " channelId=" + channelId + " success=" + res);
+            } catch (Exception e) {
+                Log.e(TAG, "CHANNEL_GROUP_REORDER_ERROR: " + e.getMessage());
+            }
         } else if ("testShowJournal".equalsIgnoreCase(action)) {
             android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
             h.post(() -> {
