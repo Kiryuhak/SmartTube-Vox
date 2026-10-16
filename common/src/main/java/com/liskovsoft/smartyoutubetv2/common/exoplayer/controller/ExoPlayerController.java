@@ -37,6 +37,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerTracker;
 
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.Timeline;
@@ -298,8 +299,12 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     }
 
     public void setPlayer(SimpleExoPlayer player) {
+        if (mPlayer != null && mPlayer != player) {
+            releasePlayer();
+        }
         mPlayer = player;
         if (player != null) {
+            VoxPlayerTracker.onPlayerCreated();
             player.addListener(this);
             player.addVideoListener(this);
         }
@@ -598,8 +603,21 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             errorCtx.put("responseCode", String.valueOf(httpCode));
         }
 
+        Throwable cause = error;
+        boolean isOom = false;
+        while (cause != null) {
+            if (cause instanceof OutOfMemoryError || (cause.getMessage() != null && cause.getMessage().contains("OutOfMemoryError"))) {
+                isOom = true;
+                break;
+            }
+            cause = cause.getCause();
+        }
+
         String logCode = VoxLogCode.PLAYER_RENDERER_ERROR;
-        if (error.type == ExoPlaybackException.TYPE_RENDERER) {
+        if (isOom) {
+            logCode = VoxLogCode.PLAYER_OUT_OF_MEMORY;
+            collectSafeMemoryTelemetry(errorCtx);
+        } else if (error.type == ExoPlaybackException.TYPE_RENDERER) {
             logCode = VoxLogCode.PLAYER_DECODER_ERROR;
         } else if (error.type == ExoPlaybackException.TYPE_SOURCE) {
             if (isLocalSource) {
@@ -941,6 +959,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             e.printStackTrace();
         } finally {
             mPlayer = null;
+            VoxPlayerTracker.onPlayerReleased();
         }
     }
 
@@ -965,5 +984,54 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
     @Override
     public void onSurfaceSizeChanged(int width, int height) {
+    }
+
+    private void collectSafeMemoryTelemetry(java.util.Map<String, String> errorCtx) {
+        try {
+            Runtime runtime = Runtime.getRuntime();
+            long maxHeap = runtime.maxMemory();
+            long totalHeap = runtime.totalMemory();
+            long freeHeap = runtime.freeMemory();
+            long usedHeap = totalHeap - freeHeap;
+            errorCtx.put("maxHeapMb", String.valueOf(maxHeap / (1024 * 1024)));
+            errorCtx.put("totalHeapMb", String.valueOf(totalHeap / (1024 * 1024)));
+            errorCtx.put("freeHeapMb", String.valueOf(freeHeap / (1024 * 1024)));
+            errorCtx.put("usedHeapMb", String.valueOf(usedHeap / (1024 * 1024)));
+
+            if (mContext != null) {
+                android.app.ActivityManager am = (android.app.ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
+                if (am != null) {
+                    android.app.ActivityManager.MemoryInfo memInfo = new android.app.ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(memInfo);
+                    errorCtx.put("availMemMb", String.valueOf(memInfo.availMem / (1024 * 1024)));
+                    errorCtx.put("totalMemMb", String.valueOf(memInfo.totalMem / (1024 * 1024)));
+                    errorCtx.put("lowMemory", String.valueOf(memInfo.lowMemory));
+                    errorCtx.put("thresholdMb", String.valueOf(memInfo.threshold / (1024 * 1024)));
+                }
+            }
+
+            if (mPlayer != null) {
+                Format format = mPlayer.getVideoFormat();
+                if (format != null) {
+                    errorCtx.put("selectedResolution", format.width + "x" + format.height);
+                    if (format.sampleMimeType != null) {
+                        errorCtx.put("selectedCodec", format.sampleMimeType + (format.codecs != null ? ("/" + format.codecs) : ""));
+                    }
+                }
+                long bufferedDurationMs = Math.max(0, mPlayer.getBufferedPosition() - mPlayer.getCurrentPosition());
+                errorCtx.put("bufferedDurationMs", String.valueOf(bufferedDurationMs));
+            }
+
+            errorCtx.put("activePlayers", String.valueOf(VoxPlayerTracker.getActivePlayerInstances()));
+            errorCtx.put("recreationCount", String.valueOf(VoxPlayerTracker.getRecreationCount()));
+
+            Video video = getVideo();
+            if (video != null) {
+                errorCtx.put("isDownloaded", String.valueOf(video.isLocal));
+                errorCtx.put("isLive", String.valueOf(video.isLive));
+            }
+        } catch (Exception e) {
+            // Safe telemetry collection must never throw
+        }
     }
 }

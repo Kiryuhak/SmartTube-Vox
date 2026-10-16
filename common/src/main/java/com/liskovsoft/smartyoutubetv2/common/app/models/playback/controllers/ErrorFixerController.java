@@ -21,6 +21,7 @@ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerTracker;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
 import java.util.HashMap;
@@ -34,10 +35,12 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private final NetworkEngineRecoveryPolicy mNetworkRecoveryPolicy = new NetworkEngineRecoveryPolicy();
     private final PlayerCacheRecoveryPolicy mPlayerCacheRecoveryPolicy = new PlayerCacheRecoveryPolicy();
     private VideoLoaderController mVideoLoaderController;
+    private int mOomRecoveryAttempts = 0;
 
     @Override
     public void onInit() {
         mVideoLoaderController = getController(VideoLoaderController.class);
+        mOomRecoveryAttempts = 0;
     }
 
     @Override
@@ -129,6 +132,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     public void onNewVideo(Video item) {
         mNetworkRecoveryPolicy.reset();
         mPlayerCacheRecoveryPolicy.reset();
+        mOomRecoveryAttempts = 0;
         mBufferingDetector.start();
     }
 
@@ -173,14 +177,25 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             if (!getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
                 switchNextEngine();
             }
-        } else if (error instanceof OutOfMemoryError || (error != null && error.getCause() instanceof OutOfMemoryError)) {
-            if (getPlayerTweaksData().getPlayerDataSource() == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP) {
-                // OkHttp has memory leak problems
-                enableFasterDataSource();
-            } else if (getPlayerData().getVideoBufferType() == PlayerData.BUFFER_HIGH || getPlayerData().getVideoBufferType() == PlayerData.BUFFER_HIGHEST) {
-                getPlayerData().setVideoBufferType(PlayerData.BUFFER_MEDIUM);
+        } else if (isOutOfMemory(error)) {
+            if (mOomRecoveryAttempts < 1) {
+                mOomRecoveryAttempts++;
+                Log.w(TAG, "Attempting bounded OutOfMemory recovery (attempt 1/1)");
+                System.gc();
+                VoxPlayerTracker.onPlayerRecreated();
+                if (mVideoLoaderController != null) {
+                    mVideoLoaderController.restartEngine();
+                }
+                return;
             } else {
-                lowerVideoQuality(); // NOTE: restart engine is required after lower the quality
+                Log.e(TAG, "OutOfMemory recovery attempts exhausted");
+                String oomMsg = getContext().getString(R.string.vox_player_oom_error);
+                MessageHelpers.showLongMessage(getContext(), oomMsg);
+                if (getPlayer() != null) {
+                    getPlayer().setTitle(oomMsg);
+                    getPlayer().setPlayWhenReady(false);
+                }
+                return;
             }
         } else if (Helpers.containsAny(errorContent, "Exception in CronetUrlRequest") && !getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
             if (getVideo() != null && !getVideo().isLive) { // Finished live stream may provoke errors in Cronet
@@ -496,5 +511,16 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             // This helps to persist the format between engine restart
             getPlayerData().setTempVideoFormat(formatItem);
         }
+    }
+
+    private boolean isOutOfMemory(Throwable error) {
+        Throwable curr = error;
+        while (curr != null) {
+            if (curr instanceof OutOfMemoryError || (curr.getMessage() != null && curr.getMessage().contains("OutOfMemoryError"))) {
+                return true;
+            }
+            curr = curr.getCause();
+        }
+        return false;
     }
 }
