@@ -25,6 +25,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.Voi
  */
 public class YandexVotTestReceiver extends BroadcastReceiver {
     public static final String ACTION_TEST_YANDEX_VOT = "com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT";
+    public static final String ACTION_TEST_OTA = "com.liskovsoft.smartyoutubetv2.TEST_OTA";
     private static final String TAG = "YANDEX_VOT_TEST";
 
     @Override
@@ -32,7 +33,14 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         if (!com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG) {
             return;
         }
-        if (intent == null || !ACTION_TEST_YANDEX_VOT.equals(intent.getAction())) {
+        if (intent == null) {
+            return;
+        }
+        if (ACTION_TEST_OTA.equals(intent.getAction())) {
+            handleOtaTestAction(context, intent);
+            return;
+        }
+        if (!ACTION_TEST_YANDEX_VOT.equals(intent.getAction())) {
             return;
         }
 
@@ -911,6 +919,113 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             }
         } finally {
             in.close();
+        }
+    }
+
+    private void handleOtaTestAction(Context context, Intent intent) {
+        String action = intent.getStringExtra("action");
+        Log.i("VOX_OTA_TEST", "OTA test broadcast received: action=" + action);
+
+        if ("setSafeMarker".equalsIgnoreCase(action)) {
+            String marker = intent.getStringExtra("marker");
+            context.getSharedPreferences("ota_test_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("safe_marker", marker)
+                    .commit();
+            Log.i("VOX_OTA_TEST", "setSafeMarker: " + marker);
+        } else if ("getSafeMarker".equalsIgnoreCase(action)) {
+            String marker = context.getSharedPreferences("ota_test_prefs", Context.MODE_PRIVATE)
+                    .getString("safe_marker", "NONE");
+            Log.i("VOX_OTA_TEST", "getSafeMarker: " + marker);
+        } else if ("setChannel".equalsIgnoreCase(action)) {
+            String ch = intent.getStringExtra("channel");
+            boolean isBeta = "beta".equalsIgnoreCase(ch);
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context)
+                    .setUpdateChannel(isBeta ? com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel.TEST : com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel.STABLE);
+            Log.i("VOX_OTA_TEST", "setChannel: " + ch + " (isBeta=" + isBeta + ")");
+        } else if ("checkUpdate".equalsIgnoreCase(action)) {
+            String currentVersion = com.liskovsoft.sharedutils.helpers.AppInfoHelpers.getAppVersionName(context);
+            boolean isBeta = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).isBetaChannel();
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context)
+                    .checkForUpdates(currentVersion, null, isBeta, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+                        @Override
+                        public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo release, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset asset) {
+                            Log.i("VOX_OTA_TEST", "checkUpdate onUpdateAvailable: version=" + release.getVersionName() + " asset=" + asset.getName());
+                        }
+
+                        @Override
+                        public void onNoUpdateAvailable(String currentVersion) {
+                            Log.i("VOX_OTA_TEST", "checkUpdate onNoUpdateAvailable: current=" + currentVersion);
+                        }
+
+                        @Override
+                        public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {
+                        }
+
+                        @Override
+                        public void onDownloadCompleted(java.io.File apkFile) {
+                        }
+
+                        @Override
+                        public void onError(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException error) {
+                            Log.i("VOX_OTA_TEST", "checkUpdate onError: code=" + error.getCode().name() + " msg=" + error.getMessage());
+                        }
+                    });
+        } else if ("downloadAndVerify".equalsIgnoreCase(action)) {
+            String currentVersion = com.liskovsoft.sharedutils.helpers.AppInfoHelpers.getAppVersionName(context);
+            boolean isBeta = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).isBetaChannel();
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context)
+                    .checkForUpdates(currentVersion, null, isBeta, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+                        @Override
+                        public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo release, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset asset) {
+                            Log.i("VOX_OTA_TEST", "downloadAndVerify starting download for asset: " + asset.getName());
+                            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context)
+                                    .downloadAndVerify(asset, release, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+                                        @Override
+                                        public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo r, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset a) {}
+                                        @Override
+                                        public void onNoUpdateAvailable(String currentVersion) {}
+                                        @Override
+                                        public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {
+                                            if (percent % 25 == 0) Log.i("VOX_OTA_TEST", "downloadProgress: " + percent + "%");
+                                        }
+                                        @Override
+                                        public void onDownloadCompleted(java.io.File apkFile) {
+                                            Log.i("VOX_OTA_TEST", "downloadCompleted: file=" + apkFile.getAbsolutePath() + " size=" + apkFile.length());
+                                            boolean installLaunched = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context).installUpdate(apkFile);
+                                            Log.i("VOX_OTA_TEST", "installUpdateResult: " + installLaunched);
+                                        }
+                                        @Override
+                                        public void onError(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException error) {
+                                            Log.i("VOX_OTA_TEST", "downloadOnError: code=" + error.getCode().name() + " msg=" + error.getMessage());
+                                        }
+                                    });
+                        }
+
+                        @Override
+                        public void onNoUpdateAvailable(String currentVersion) {
+                            Log.i("VOX_OTA_TEST", "downloadAndVerify onNoUpdateAvailable: " + currentVersion);
+                        }
+
+                        @Override
+                        public void onDownloadProgress(long bytesRead, long totalBytes, int percent) {}
+                        @Override
+                        public void onDownloadCompleted(java.io.File apkFile) {}
+                        @Override
+                        public void onError(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException error) {
+                            Log.i("VOX_OTA_TEST", "downloadAndVerify checkError: code=" + error.getCode().name());
+                        }
+                    });
+        } else if ("cancelDownload".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context).cancelDownload();
+            Log.i("VOX_OTA_TEST", "cancelDownload: invoked");
+        } else if ("validateApk".equalsIgnoreCase(action)) {
+            String path = intent.getStringExtra("path");
+            if (path != null) {
+                com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaPreInstallValidator.ValidationResult res =
+                        com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaPreInstallValidator.validate(context, new java.io.File(path));
+                Log.i("VOX_OTA_TEST", "validateApk: isValid=" + res.isValid() + " code=" + (res.getErrorCode() != null ? res.getErrorCode().name() : "NONE") + " msg=" + res.getMessage());
+            }
         }
     }
 }

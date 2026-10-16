@@ -581,7 +581,9 @@ class VoxOtaUpdateManager(private val context: Context) {
         }
 
         // Резервный канал: официальный GitHub Releases API или тестовый источник
-        val testUrl = testUpdateBaseUrl ?: System.getProperty("vox.ota.test_base_url")
+        val testUrl = testUpdateBaseUrl
+            ?: System.getProperty("vox.ota.test_base_url")
+            ?: getAndroidDebugProp("debug.vox.ota_base_url")
         val fallbackApi = if (!testUrl.isNullOrBlank()) {
             val clean = testUrl.trimEnd('/')
             if (isBetaChannel) "$clean/releases" else "$clean/releases/latest"
@@ -849,6 +851,17 @@ class VoxOtaUpdateManager(private val context: Context) {
             mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
         } else {
             mainHandler.post { callback.onError(otaError) }
+        }
+    }
+
+    private fun getAndroidDebugProp(key: String): String? {
+        return try {
+            val clazz = Class.forName("android.os.SystemProperties")
+            val method = clazz.getMethod("get", String::class.java)
+            val value = method.invoke(null, key) as? String
+            if (value.isNullOrBlank()) null else value
+        } catch (e: Throwable) {
+            null
         }
     }
 }

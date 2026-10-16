@@ -30,7 +30,9 @@ object VoxOtaPreInstallValidator {
 
     val ALLOWED_PACKAGE_NAMES = setOf(
         "com.liskovsoft.smarttubetv.beta",
-        "com.liskovsoft.smarttubetv"
+        "com.liskovsoft.smarttubetv",
+        "io.github.kiryuhak.smarttubevot.stable",
+        "io.github.kiryuhak.smarttubevot.beta"
     )
 
     data class ValidationResult(

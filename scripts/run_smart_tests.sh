@@ -95,6 +95,11 @@ run_telegram_fast() {
   (cd "$REPO_ROOT/services/vox-diagnostics" && node --test test/telegram_notifications.test.mjs)
 }
 
+run_ota_e2e() {
+  echo "--- [SUITE: ota-e2e] Running OTA lab end-to-end suite on emulator ---"
+  bash "$REPO_ROOT/scripts/ota_lab/run_ota_e2e.sh"
+}
+
 run_golden_smoke() {
   echo "--- [SUITE: golden-smoke] Running fast smoke across core subsystems ---"
   run_ota_fast
@@ -119,6 +124,7 @@ case "$SUITE" in
   ota-e2e)
     run_ota_fast
     run_ota_integration
+    run_ota_e2e
     ;;
   vot-fast)
     run_vot_fast

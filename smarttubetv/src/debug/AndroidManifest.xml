@@ -13,6 +13,7 @@
             android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="com.liskovsoft.smartyoutubetv2.TEST_YANDEX_VOT" />
+                <action android:name="com.liskovsoft.smartyoutubetv2.TEST_OTA" />
             </intent-filter>
         </receiver>
 

@@ -71,8 +71,11 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
      * Возвращает текущий выбранный канал обновлений.
      */
     fun getUpdateChannel(): VoxUpdateChannel {
-        val channelId = prefs.getString(KEY_UPDATE_CHANNEL, VoxUpdateChannel.STABLE.id)
-        return VoxUpdateChannel.fromId(channelId)
+        val channelId = prefs.getString(KEY_UPDATE_CHANNEL, null)
+        if (channelId != null) {
+            return VoxUpdateChannel.fromId(channelId)
+        }
+        return if (getBuildChannel().isPreRelease) VoxUpdateChannel.TEST else VoxUpdateChannel.STABLE
     }
 
     /**
@@ -101,7 +104,7 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
      * Проверяет, активен ли тестовый/бета канал.
      */
     fun isBetaChannel(): Boolean {
-        return getUpdateChannel() == VoxUpdateChannel.TEST || getBuildChannel().isPreRelease
+        return getUpdateChannel() == VoxUpdateChannel.TEST
     }
 
     /**

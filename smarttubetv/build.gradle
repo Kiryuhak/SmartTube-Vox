@@ -39,9 +39,14 @@ android {
         // Trying to fix VerifyError/ClassNotFoundException
         multiDexKeepProguard file("multidex-keep.pro")
 
-        // The content of Universal apk
+        // The content of Universal apk (Production: ARM only; Lab/debug: includes x86_64)
         ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a'
+            def labAbis = (project.findProperty("voxLabAbis") == "true")
+            if (labAbis) {
+                abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            } else {
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
         }
     }
 
@@ -52,7 +57,6 @@ android {
             enable true
             reset()
             // Note, Android could soon start warning users when they run 32-bit apps
-            //include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a' //select ABIs to build APKs for
             include 'armeabi-v7a', 'arm64-v8a', 'x86' // v7a main build, x86 for WSL, v8a for Pixel Tablet (no 32 bit support)
             universalApk true //generate an additional APK that contains all the ABIs
         }
@@ -80,11 +84,19 @@ android {
             // minifyEnabled true
 
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (project.findProperty("voxLabAbis") != "true") {
+                ndk {
+                    abiFilters 'armeabi-v7a', 'arm64-v8a'
+                }
+            }
         }
 
         debug {
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
+            }
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
             }
         }
     }
