@@ -233,6 +233,16 @@ public final class Video {
         return video;
     }
 
+    public static Video from(com.liskovsoft.smartyoutubetv2.common.vox.channelgroup.VoxChannelGroup group) {
+        if (group == null) {
+            return null;
+        }
+        Video video = new Video();
+        video.title = group.getName();
+        video.channelGroupId = group.getId();
+        return video;
+    }
+
     public static Video from(Item channel) {
         Video video = new Video();
         video.title = channel.getTitle();
@@ -329,7 +339,7 @@ public final class Video {
 
     public String getAuthor() {
         if (author != null && !Helpers.startsWith(author, "@")) { // not a channel handle (alias)
-            return extractAuthor(author);
+            return author.trim();
         }
 
         String mainTitle = metadataTitle != null ? metadataTitle : title;
@@ -371,8 +381,36 @@ public final class Video {
             }
         }
 
-        // Skip subtitles starting with number of views (e.g. 1.4M views). Usually found in channel uploads.
-        return !TextUtils.isEmpty(result) && (!belongsToChannelUploads() || !Helpers.isNumeric(result.substring(0, 1))) ? result.trim() : null;
+        if (TextUtils.isEmpty(result)) {
+            return null;
+        }
+
+        String trimmed = result.trim();
+        // Skip subtitles starting with number of views (e.g. 1.4M views). Only applicable to video items in channel uploads.
+        if (hasVideo() && belongsToChannelUploads() && isViewCountSubtitle(trimmed)) {
+            return null;
+        }
+
+        return trimmed;
+    }
+
+    private boolean isViewCountSubtitle(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        String lower = str.toLowerCase();
+        if (Helpers.isNumeric(str.substring(0, 1))) {
+            return lower.contains("view") ||
+                    lower.contains("просмотр") ||
+                    lower.contains("перегляд") ||
+                    lower.contains("aufruf") ||
+                    lower.contains("vue") ||
+                    lower.contains("visualiz") ||
+                    lower.contains("vista") ||
+                    lower.contains("wyświetl") ||
+                    lower.contains("seances");
+        }
+        return false;
     }
 
     public static List<Video> findVideosByAuthor(VideoGroup group, String author) {
@@ -726,10 +764,17 @@ public final class Video {
             return channelId;
         }
 
-        // Fallback: use author name if no ID available (less reliable but better than
-        // nothing)
+        // Fallback: use author name if no ID available (less reliable but better than nothing)
         String authorName = getAuthor();
-        return authorName != null && !authorName.isEmpty() ? authorName : null;
+        if (authorName != null && !authorName.isEmpty()) {
+            return authorName;
+        }
+
+        if (title != null && !title.trim().isEmpty()) {
+            return title.trim();
+        }
+
+        return null;
     }
 
     private boolean belongsToGroup(int groupId) {

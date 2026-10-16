@@ -11,7 +11,8 @@ data class VoxChannelGroup(
     var name: String,
     val createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),
-    var sortOrder: Int = 0
+    var sortOrder: Int = 0,
+    var isPinnedToSidebar: Boolean = false
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -20,6 +21,7 @@ data class VoxChannelGroup(
         json.put("createdAt", createdAt)
         json.put("updatedAt", updatedAt)
         json.put("sortOrder", sortOrder)
+        json.put("isPinnedToSidebar", isPinnedToSidebar)
         return json
     }
 
@@ -39,7 +41,8 @@ data class VoxChannelGroup(
             val createdAt = json.optLong("createdAt", System.currentTimeMillis())
             val updatedAt = json.optLong("updatedAt", createdAt)
             val sortOrder = json.optInt("sortOrder", 0)
-            return VoxChannelGroup(id, name, createdAt, updatedAt, sortOrder)
+            val isPinnedToSidebar = json.optBoolean("isPinnedToSidebar", false)
+            return VoxChannelGroup(id, name, createdAt, updatedAt, sortOrder, isPinnedToSidebar)
         }
     }
 }
@@ -52,7 +55,8 @@ data class VoxChannelGroupMembership(
     val channelId: String,
     var channelTitle: String? = null,
     var channelAvatarUrl: String? = null,
-    val addedAt: Long = System.currentTimeMillis()
+    val addedAt: Long = System.currentTimeMillis(),
+    var orderIndex: Int = 0
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -61,6 +65,7 @@ data class VoxChannelGroupMembership(
         if (channelTitle != null) json.put("channelTitle", channelTitle)
         if (channelAvatarUrl != null) json.put("channelAvatarUrl", channelAvatarUrl)
         json.put("addedAt", addedAt)
+        json.put("orderIndex", orderIndex)
         return json
     }
 
@@ -74,7 +79,8 @@ data class VoxChannelGroupMembership(
             val title = if (json.has("channelTitle") && !json.isNull("channelTitle")) json.optString("channelTitle") else null
             val avatar = if (json.has("channelAvatarUrl") && !json.isNull("channelAvatarUrl")) json.optString("channelAvatarUrl") else null
             val addedAt = json.optLong("addedAt", System.currentTimeMillis())
-            return VoxChannelGroupMembership(groupId, channelId, title, avatar, addedAt)
+            val orderIndex = json.optInt("orderIndex", 0)
+            return VoxChannelGroupMembership(groupId, channelId, title, avatar, addedAt, orderIndex)
         }
     }
 }

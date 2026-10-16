@@ -3,6 +3,9 @@ package com.liskovsoft.smartyoutubetv2.common.vox.channelgroup
 import android.annotation.SuppressLint
 import android.content.Context
 import com.liskovsoft.sharedutils.mylogger.Log
+import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.service.SidebarService
 import com.liskovsoft.smartyoutubetv2.common.prefs.AppPrefs
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode
@@ -39,7 +42,7 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
 
     private val storage = VoxChannelGroupStorage(context)
     private val groups = ConcurrentHashMap<String, VoxChannelGroup>()
-    private val groupMembers = ConcurrentHashMap<String, MutableSet<String>>()
+    private val groupMembers = ConcurrentHashMap<String, CopyOnWriteArrayList<String>>()
     private val channelGroups = ConcurrentHashMap<String, MutableSet<String>>()
     private val memberships = ConcurrentHashMap<String, VoxChannelGroupMembership>()
     private val listeners = CopyOnWriteArrayList<OnGroupsChangedListener>()
@@ -67,14 +70,19 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
         val (loadedGroups, loadedMemberships) = storage.load()
         for (g in loadedGroups) {
             groups[g.id] = g
-            groupMembers[g.id] = ConcurrentHashMap.newKeySet()
+            groupMembers[g.id] = CopyOnWriteArrayList()
         }
 
-        for (m in loadedMemberships) {
+        // Sort memberships by orderIndex, then addedAt to strictly preserve custom order
+        val sortedMemberships = loadedMemberships.sortedWith(compareBy({ it.orderIndex }, { it.addedAt }))
+        for (m in sortedMemberships) {
             if (groups.containsKey(m.groupId)) {
                 val key = membershipKey(m.groupId, m.channelId)
                 memberships[key] = m
-                groupMembers.getOrPut(m.groupId) { ConcurrentHashMap.newKeySet() }.add(m.channelId)
+                val list = groupMembers.getOrPut(m.groupId) { CopyOnWriteArrayList() }
+                if (!list.contains(m.channelId)) {
+                    list.add(m.channelId)
+                }
                 channelGroups.getOrPut(m.channelId) { ConcurrentHashMap.newKeySet() }.add(m.groupId)
             }
         }
@@ -144,7 +152,16 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
     }
 
     fun getChannelIdsInGroup(groupId: String): Set<String> {
-        return groupMembers[groupId]?.toSet() ?: emptySet()
+        return groupMembers[groupId]?.let { LinkedHashSet(it) } ?: emptySet()
+    }
+
+    fun getOrderedChannelIdsInGroup(groupId: String): List<String> {
+        return groupMembers[groupId]?.toList() ?: emptyList()
+    }
+
+    fun getOrderedMembershipsInGroup(groupId: String): List<VoxChannelGroupMembership> {
+        val members = groupMembers[groupId] ?: return emptyList()
+        return members.mapNotNull { memberships[membershipKey(groupId, it)] }
     }
 
     fun getGroupIdsForChannel(channelId: String?): Set<String> {
@@ -192,7 +209,7 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
             sortOrder = nextOrder
         )
         groups[group.id] = group
-        groupMembers[group.id] = ConcurrentHashMap.newKeySet()
+        groupMembers[group.id] = CopyOnWriteArrayList()
 
         persist()
 
@@ -239,6 +256,18 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
         group.name = cleanName
         group.updatedAt = System.currentTimeMillis()
 
+        if (group.isPinnedToSidebar) {
+            val video = Video()
+            video.title = cleanName
+            video.channelGroupId = group.id
+            try {
+                BrowsePresenter.instance(context)?.renameSection(video)
+                    ?: SidebarService.instance(context).renameSection(video.id, cleanName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not rename sidebar section: ${e.message}")
+            }
+        }
+
         persist()
 
         VoxSafeLogger.i(
@@ -253,9 +282,21 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
 
     @Synchronized
     fun deleteGroup(groupId: String): Boolean {
-        if (groups.remove(groupId) == null) return false
+        val group = groups.remove(groupId) ?: return false
 
-        val channelIds = groupMembers.remove(groupId) ?: emptySet()
+        if (group.isPinnedToSidebar) {
+            val video = Video()
+            video.title = group.name
+            video.channelGroupId = group.id
+            try {
+                BrowsePresenter.instance(context)?.unpinItem(video)
+                    ?: SidebarService.instance(context).removePinnedItem(video)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not unpin group on delete: ${e.message}")
+            }
+        }
+
+        val channelIds = groupMembers.remove(groupId) ?: emptyList()
         for (channelId in channelIds) {
             val set = channelGroups[channelId]
             set?.remove(groupId)
@@ -301,14 +342,19 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
             return true
         }
 
+        val currentMembers = groupMembers.getOrPut(groupId) { CopyOnWriteArrayList() }
+        val orderIndex = currentMembers.size
         val membership = VoxChannelGroupMembership(
             groupId = groupId,
             channelId = cleanChannelId,
             channelTitle = channelTitle,
-            channelAvatarUrl = channelAvatarUrl
+            channelAvatarUrl = channelAvatarUrl,
+            orderIndex = orderIndex
         )
         memberships[key] = membership
-        groupMembers.getOrPut(groupId) { ConcurrentHashMap.newKeySet() }.add(cleanChannelId)
+        if (!currentMembers.contains(cleanChannelId)) {
+            currentMembers.add(cleanChannelId)
+        }
         channelGroups.getOrPut(cleanChannelId) { ConcurrentHashMap.newKeySet() }.add(groupId)
 
         persist()
@@ -330,7 +376,11 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
 
         val key = membershipKey(groupId, cleanChannelId)
         val removed = memberships.remove(key) != null
-        groupMembers[groupId]?.remove(cleanChannelId)
+        val members = groupMembers[groupId]
+        members?.remove(cleanChannelId)
+        if (members != null) {
+            updateOrderIndices(groupId, members)
+        }
 
         val set = channelGroups[cleanChannelId]
         set?.remove(groupId)
@@ -366,6 +416,98 @@ class VoxChannelGroupManager private constructor(private val context: Context) :
         } else {
             addChannelToGroup(groupId, channelId, channelTitle, channelAvatarUrl)
             true
+        }
+    }
+
+    @Synchronized
+    fun moveChannelUp(groupId: String, channelId: String): Boolean {
+        val members = groupMembers[groupId] ?: return false
+        val cleanId = channelId.trim()
+        val index = members.indexOf(cleanId)
+        if (index <= 0) return false
+
+        val prevId = members[index - 1]
+        members[index - 1] = cleanId
+        members[index] = prevId
+        updateOrderIndices(groupId, members)
+        persist()
+        notifyListeners()
+        return true
+    }
+
+    @Synchronized
+    fun moveChannelDown(groupId: String, channelId: String): Boolean {
+        val members = groupMembers[groupId] ?: return false
+        val cleanId = channelId.trim()
+        val index = members.indexOf(cleanId)
+        if (index < 0 || index >= members.size - 1) return false
+
+        val nextId = members[index + 1]
+        members[index + 1] = cleanId
+        members[index] = nextId
+        updateOrderIndices(groupId, members)
+        persist()
+        notifyListeners()
+        return true
+    }
+
+    @Synchronized
+    fun setChannelOrder(groupId: String, orderedChannelIds: List<String>): Boolean {
+        val members = groupMembers[groupId] ?: return false
+        val validIds = orderedChannelIds.map { it.trim() }.filter { members.contains(it) }
+        val remaining = members.filter { !validIds.contains(it) }
+        members.clear()
+        members.addAll(validIds)
+        members.addAll(remaining)
+        updateOrderIndices(groupId, members)
+        persist()
+        notifyListeners()
+        return true
+    }
+
+    @Synchronized
+    fun setGroupPinnedToSidebar(groupId: String, pinned: Boolean): Boolean {
+        val group = groups[groupId] ?: return false
+        if (group.isPinnedToSidebar == pinned) return true
+        group.isPinnedToSidebar = pinned
+        group.updatedAt = System.currentTimeMillis()
+
+        val video = Video()
+        video.title = group.name
+        video.channelGroupId = group.id
+
+        try {
+            val presenter = BrowsePresenter.instance(context)
+            if (presenter != null && presenter.view != null) {
+                if (pinned) {
+                    presenter.pinItem(video)
+                } else {
+                    presenter.unpinItem(video)
+                }
+            } else {
+                val sidebar = SidebarService.instance(context)
+                if (pinned) {
+                    sidebar.addPinnedItem(video)
+                } else {
+                    sidebar.removePinnedItem(video)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not update sidebar for group ${group.id}: ${e.message}")
+        }
+
+        persist()
+        notifyListeners()
+        return true
+    }
+
+    fun isGroupPinnedToSidebar(groupId: String): Boolean {
+        return groups[groupId]?.isPinnedToSidebar ?: false
+    }
+
+    private fun updateOrderIndices(groupId: String, orderedIds: List<String>) {
+        orderedIds.forEachIndexed { idx, chId ->
+            memberships[membershipKey(groupId, chId)]?.orderIndex = idx
         }
     }
 

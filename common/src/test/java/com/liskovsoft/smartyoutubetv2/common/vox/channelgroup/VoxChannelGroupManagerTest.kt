@@ -280,4 +280,135 @@ class VoxChannelGroupManagerTest {
         assertEquals(1, filteredGroup.mediaItems.size)
         assertEquals("UC_ALLOWED", filteredGroup.mediaItems[0].channelId)
     }
+
+    @Test
+    fun testChannelStartingWithDigitCanBeGrouped() {
+        val group = manager.createGroup("ТВ Каналы")
+        val video = com.liskovsoft.smartyoutubetv2.common.app.models.data.Video().apply {
+            title = "1 канал"
+            author = "1 канал"
+        }
+        val channelIdOrName = video.channelIdOrName
+        assertNotNull("channelIdOrName must not be null for digit-prefixed channel", channelIdOrName)
+        assertEquals("1 канал", channelIdOrName)
+
+        val added = manager.addChannelToGroup(group.id, channelIdOrName!!, video.author)
+        assertTrue(added)
+        assertTrue(manager.isChannelInGroup(group.id, "1 канал"))
+    }
+
+    @Test
+    fun testNumericOnlyChannelNameCanBeAddedToGroup() {
+        val group = manager.createGroup("Цифровые")
+        val video = com.liskovsoft.smartyoutubetv2.common.app.models.data.Video().apply {
+            title = "123"
+            author = "123"
+        }
+        val channelIdOrName = video.channelIdOrName
+        assertNotNull(channelIdOrName)
+        assertEquals("123", channelIdOrName)
+
+        val added = manager.addChannelToGroup(group.id, channelIdOrName!!, video.author)
+        assertTrue(added)
+        assertTrue(manager.isChannelInGroup(group.id, "123"))
+    }
+
+    @Test
+    fun testUnicodeChannelNameCanBeAddedToGroup() {
+        val group = manager.createGroup("Юникод")
+        val video = com.liskovsoft.smartyoutubetv2.common.app.models.data.Video().apply {
+            title = "Канал с эмодзи 🚀"
+            author = "Канал с эмодзи 🚀"
+        }
+        val channelIdOrName = video.channelIdOrName
+        assertNotNull(channelIdOrName)
+        assertTrue(manager.addChannelToGroup(group.id, channelIdOrName!!, video.author))
+        assertTrue(manager.isChannelInGroup(group.id, channelIdOrName))
+    }
+
+    @Test
+    fun testRenamedChannelKeepsGroupMembership() {
+        val group = manager.createGroup("Избранное")
+        val channelId = "UC_STABLE_CHANNEL_ID_1"
+        manager.addChannelToGroup(group.id, channelId, "Old Name")
+
+        assertTrue(manager.isChannelInGroup(group.id, channelId))
+        manager.addChannelToGroup(group.id, channelId, "New Name")
+        assertTrue(manager.isChannelInGroup(group.id, channelId))
+        val memberships = manager.getOrderedMembershipsInGroup(group.id)
+        assertEquals(1, memberships.size)
+        assertEquals("New Name", memberships[0].channelTitle)
+    }
+
+    @Test
+    fun testChannelDisplayNameIsNotUsedAsPrimaryKey() {
+        val group = manager.createGroup("Технические")
+        val channelId = "UC_TECH_123"
+        manager.addChannelToGroup(group.id, channelId, "123")
+
+        assertTrue(manager.isChannelInGroup(group.id, channelId))
+        assertFalse(manager.isChannelInGroup(group.id, "123"))
+    }
+
+    @Test
+    fun testChannelOrderPersists() {
+        val context = RuntimeEnvironment.getApplication()
+        val group = manager.createGroup("Порядок")
+        manager.addChannelToGroup(group.id, "ch_1", "Channel 1")
+        manager.addChannelToGroup(group.id, "ch_2", "Channel 2")
+        manager.addChannelToGroup(group.id, "ch_3", "Channel 3")
+
+        assertEquals(listOf("ch_1", "ch_2", "ch_3"), manager.getOrderedChannelIdsInGroup(group.id))
+
+        val movedUp = manager.moveChannelUp(group.id, "ch_2")
+        assertTrue(movedUp)
+        assertEquals(listOf("ch_2", "ch_1", "ch_3"), manager.getOrderedChannelIdsInGroup(group.id))
+
+        manager.moveChannelUp(group.id, "ch_3")
+        assertEquals(listOf("ch_2", "ch_3", "ch_1"), manager.getOrderedChannelIdsInGroup(group.id))
+
+        manager.moveChannelDown(group.id, "ch_2")
+        assertEquals(listOf("ch_3", "ch_2", "ch_1"), manager.getOrderedChannelIdsInGroup(group.id))
+
+        val storage = VoxChannelGroupStorage(context)
+        val (_, memberships) = storage.load()
+        val sortedMemberships = memberships.filter { it.groupId == group.id }.sortedWith(compareBy({ it.orderIndex }, { it.addedAt }))
+        assertEquals(listOf("ch_3", "ch_2", "ch_1"), sortedMemberships.map { it.channelId })
+    }
+
+    @Test
+    fun testGroupSidebarPinPersists() {
+        val context = RuntimeEnvironment.getApplication()
+        val group = manager.createGroup("Боковая панель")
+        assertFalse(manager.isGroupPinnedToSidebar(group.id))
+
+        manager.setGroupPinnedToSidebar(group.id, true)
+        assertTrue(manager.isGroupPinnedToSidebar(group.id))
+
+        val sidebar = com.liskovsoft.smartyoutubetv2.common.app.presenters.service.SidebarService.instance(context)
+        val pinned = sidebar.pinnedItems.any { it.channelGroupId == group.id }
+        assertTrue(pinned)
+
+        val storage = VoxChannelGroupStorage(context)
+        val (groups, _) = storage.load()
+        val loadedGroup = groups.firstOrNull { it.id == group.id }
+        assertNotNull(loadedGroup)
+        assertTrue(loadedGroup!!.isPinnedToSidebar)
+    }
+
+    @Test
+    fun testDeleteGroupRemovesSidebarEntry() {
+        val context = RuntimeEnvironment.getApplication()
+        val group = manager.createGroup("Для удаления")
+        manager.addChannelToGroup(group.id, "ch_keep", "Keep Channel")
+        manager.setGroupPinnedToSidebar(group.id, true)
+
+        val sidebar = com.liskovsoft.smartyoutubetv2.common.app.presenters.service.SidebarService.instance(context)
+        assertTrue(sidebar.pinnedItems.any { it.channelGroupId == group.id })
+
+        manager.deleteGroup(group.id)
+
+        assertFalse(sidebar.pinnedItems.any { it.channelGroupId == group.id })
+        assertNull(manager.getGroup(group.id))
+    }
 }

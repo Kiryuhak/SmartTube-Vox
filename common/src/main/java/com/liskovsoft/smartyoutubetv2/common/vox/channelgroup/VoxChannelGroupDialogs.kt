@@ -329,6 +329,7 @@ object VoxChannelGroupDialogs {
         onUpdated: Runnable? = null
     ) {
         val dialogPresenter = AppDialogPresenter.instance(context)
+        val manager = VoxChannelGroupManager.instance(context)
 
         dialogPresenter.appendSingleButton(
             UiOptionItem.from(
@@ -340,6 +341,33 @@ object VoxChannelGroupDialogs {
                 }
             )
         )
+
+        val isPinned = manager.isGroupPinnedToSidebar(group.id)
+        dialogPresenter.appendCheckedCategory(
+            context.getString(R.string.vox_channel_group_pin_to_sidebar),
+            listOf(
+                UiOptionItem.from(
+                    context.getString(R.string.vox_channel_group_pin_to_sidebar),
+                    { optionItem ->
+                        manager.setGroupPinnedToSidebar(group.id, optionItem.isSelected)
+                        onUpdated?.run()
+                    },
+                    isPinned
+                )
+            )
+        )
+
+        val channelCount = manager.getChannelCountInGroup(group.id)
+        if (channelCount > 1) {
+            dialogPresenter.appendSingleButton(
+                UiOptionItem.from(
+                    context.getString(R.string.vox_channel_group_channel_order),
+                    {
+                        showReorderChannelsDialog(context, group, onUpdated)
+                    }
+                )
+            )
+        }
 
         dialogPresenter.appendSingleButton(
             UiOptionItem.from(
@@ -353,5 +381,69 @@ object VoxChannelGroupDialogs {
         )
 
         dialogPresenter.showDialog(group.name)
+    }
+
+    private fun showReorderChannelsDialog(
+        context: Context,
+        group: VoxChannelGroup,
+        onUpdated: Runnable? = null
+    ) {
+        val dialogPresenter = AppDialogPresenter.instance(context)
+        val manager = VoxChannelGroupManager.instance(context)
+        val memberships = manager.getOrderedMembershipsInGroup(group.id)
+
+        if (memberships.isEmpty()) {
+            MessageHelpers.showMessage(context, R.string.vox_channel_group_empty)
+            return
+        }
+
+        for (membership in memberships) {
+            val title = membership.channelTitle ?: membership.channelId
+            dialogPresenter.appendSingleButton(
+                UiOptionItem.from(
+                    title,
+                    {
+                        showChannelMoveOptionsDialog(context, group, membership, onUpdated)
+                    }
+                )
+            )
+        }
+
+        dialogPresenter.showDialog(context.getString(R.string.vox_channel_group_channel_order))
+    }
+
+    private fun showChannelMoveOptionsDialog(
+        context: Context,
+        group: VoxChannelGroup,
+        membership: VoxChannelGroupMembership,
+        onUpdated: Runnable? = null
+    ) {
+        val dialogPresenter = AppDialogPresenter.instance(context)
+        val manager = VoxChannelGroupManager.instance(context)
+        val title = membership.channelTitle ?: membership.channelId
+
+        dialogPresenter.appendSingleButton(
+            UiOptionItem.from(
+                context.getString(R.string.vox_channel_group_move_up),
+                {
+                    manager.moveChannelUp(group.id, membership.channelId)
+                    onUpdated?.run()
+                    showReorderChannelsDialog(context, group, onUpdated)
+                }
+            )
+        )
+
+        dialogPresenter.appendSingleButton(
+            UiOptionItem.from(
+                context.getString(R.string.vox_channel_group_move_down),
+                {
+                    manager.moveChannelDown(group.id, membership.channelId)
+                    onUpdated?.run()
+                    showReorderChannelsDialog(context, group, onUpdated)
+                }
+            )
+        )
+
+        dialogPresenter.showDialog(title)
     }
 }

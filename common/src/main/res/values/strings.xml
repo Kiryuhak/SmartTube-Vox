@@ -1082,6 +1082,11 @@
     <string name="vox_channel_group_name_empty">Name cannot be empty</string>
     <string name="vox_channel_group_name_too_long">Name cannot exceed 50 characters</string>
     <string name="vox_channel_group_save_error">Failed to save channel group</string>
+    <string name="vox_channel_group_pin_to_sidebar">Pin to sidebar</string>
+    <string name="vox_channel_group_channel_order">Channel order</string>
+    <string name="vox_channel_group_move_up">Move up</string>
+    <string name="vox_channel_group_move_down">Move down</string>
+    <string name="vox_player_oom_error">Недостаточно памяти для продолжения воспроизведения</string>
 
     <!-- VOX Update Channels & Diagnostics Policy -->
     <string name="vox_update_channel">Update Channel</string>
