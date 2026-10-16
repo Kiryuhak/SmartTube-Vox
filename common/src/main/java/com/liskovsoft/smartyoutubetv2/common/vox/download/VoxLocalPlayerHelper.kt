@@ -44,7 +44,7 @@ object VoxLocalPlayerHelper {
         videoId: String,
         title: String,
         mediaUri: String,
-        translationState: String? = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED.name,
+        translationState: String? = null,
         badge: String? = null,
         durationMs: Long = 0L,
         ageRating: String? = null
@@ -54,7 +54,7 @@ object VoxLocalPlayerHelper {
         video.cardImageUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
         video.mediaUrl = mediaUri
         video.isLocal = true
-        video.translationState = translationState ?: VoxDownloadTranslationState.DOWNLOADED_TRANSLATED.name
+        video.translationState = translationState ?: VoxDownloadTranslationState.NONE.name
         if (badge != null) {
             video.badge = badge
         }

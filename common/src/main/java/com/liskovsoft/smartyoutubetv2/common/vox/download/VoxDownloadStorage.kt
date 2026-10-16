@@ -138,7 +138,8 @@ class VoxDownloadStorage(val context: Context) {
         requestedQuality: String? = request.qualityPreference.label,
         actualQuality: String? = if (actualVideoHeight > 0) "${actualVideoHeight}p" else null,
         fallbackReason: String? = null,
-        translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
+        translationState: VoxDownloadTranslationState = if (request.translationMode == VoxTranslationMode.NONE)
+            VoxDownloadTranslationState.NONE else VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
         durationMs: Long = 0L,
         ageRating: String? = null,
         hasTranslatedAudio: Boolean = false,
@@ -568,7 +569,8 @@ data class StoredJobData(
     val requestedQuality: String? = null,
     val actualQuality: String? = null,
     val fallbackReason: String? = null,
-    val translationState: VoxDownloadTranslationState = VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
+    val translationState: VoxDownloadTranslationState = if (request.translationMode == VoxTranslationMode.NONE)
+        VoxDownloadTranslationState.NONE else VoxDownloadTranslationState.DOWNLOADED_TRANSLATED,
     val durationMs: Long = 0L,
     val ageRating: String? = null,
     val hasTranslatedAudio: Boolean = false,

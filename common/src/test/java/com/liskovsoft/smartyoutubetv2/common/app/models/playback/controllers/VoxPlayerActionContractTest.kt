@@ -56,4 +56,19 @@ class VoxPlayerActionContractTest {
         val allowDownload = !downloadedVideo.isLocal && !downloadedVideo.isDownloadedTranslated()
         assertFalse(allowDownload)
     }
+
+    @Test
+    fun testLocalPlayerHelperDefaultDoesNotMarkUntranslatedVideoAsTranslated() {
+        val video = Video.from("local_123").apply {
+            isLocal = true
+            translationState = "NONE"
+        }
+        assertFalse(video.isDownloadedTranslated())
+
+        val transVideo = Video.from("local_456").apply {
+            isLocal = true
+            translationState = "DOWNLOADED_TRANSLATED"
+        }
+        assertTrue(transVideo.isDownloadedTranslated())
+    }
 }
