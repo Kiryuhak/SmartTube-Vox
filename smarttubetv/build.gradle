@@ -56,8 +56,11 @@ android {
         abi {
             enable true
             reset()
-            // Note, Android could soon start warning users when they run 32-bit apps
-            include 'armeabi-v7a', 'arm64-v8a', 'x86' // v7a main build, x86 for WSL, v8a for Pixel Tablet (no 32 bit support)
+            def abis = ['armeabi-v7a', 'arm64-v8a', 'x86']
+            if (project.findProperty("voxLabAbis") == "true") {
+                abis.add('x86_64')
+            }
+            include(abis as String[])
             universalApk true //generate an additional APK that contains all the ABIs
         }
     }
