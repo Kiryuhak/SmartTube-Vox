@@ -122,6 +122,22 @@ class VoxDownloadRepository(
         return jobs.values.firstOrNull { it.request.videoId == videoId }
     }
 
+    fun findDuplicateCompleted(videoId: String, translationMode: VoxTranslationMode): VoxDownloadJob? {
+        return jobs.values.firstOrNull {
+            it.request.videoId == videoId &&
+            it.request.translationMode == translationMode &&
+            it.state == VoxDownloadState.COMPLETED
+        }
+    }
+
+    fun findDuplicateActive(videoId: String, translationMode: VoxTranslationMode): VoxDownloadJob? {
+        return jobs.values.firstOrNull {
+            it.request.videoId == videoId &&
+            it.request.translationMode == translationMode &&
+            !it.state.isTerminal
+        }
+    }
+
     fun findCompletedJobByVideoId(videoId: String): VoxDownloadJob? {
         return jobs.values.firstOrNull { it.request.videoId == videoId && it.state == VoxDownloadState.COMPLETED && !it.publishedUri.isNullOrBlank() }
     }

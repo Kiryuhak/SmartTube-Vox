@@ -340,7 +340,8 @@ public class PlayerTweaksData implements ProfileChangeListener {
         if (mRuntimeFallbackEngine != -1) {
             return mRuntimeFallbackEngine;
         }
-        if (mPlayerDataSource == PLAYER_DATA_SOURCE_DEFAULT) {
+        if (mPlayerDataSource == PLAYER_DATA_SOURCE_DEFAULT ||
+                (mPlayerDataSource != PLAYER_DATA_SOURCE_OKHTTP && mPlayerDataSource != PLAYER_DATA_SOURCE_CRONET)) {
             return Utils.skipCronet() ? PLAYER_DATA_SOURCE_OKHTTP : PLAYER_DATA_SOURCE_CRONET;
         }
         return mPlayerDataSource;
