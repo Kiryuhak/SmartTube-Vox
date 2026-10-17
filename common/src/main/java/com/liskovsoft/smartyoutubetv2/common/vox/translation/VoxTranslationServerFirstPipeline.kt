@@ -296,13 +296,51 @@ class VoxTranslationServerFirstPipeline(
                 sourceLang: String,
                 targetLang: String
             ): ServerLookupResponse {
-                val videoUrl = "https://www.youtube.com/watch?v=$videoId"
+                val videoUrl = VoxTranslationReusePolicy.normalizeVideoUrl(videoId)
+
+                // 1. In-memory / client cache check
                 val cached = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.getCachedResult(
                     videoUrl, sourceLang, targetLang, false
                 )
                 if (cached != null && cached.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_FINISHED && !cached.audioUrl.isNullOrBlank()) {
                     return ServerLookupResponse.Ready(cached.audioUrl, 0.0, isExpired = false)
                 }
+
+                // 2. Server cache endpoint lookup (/video-translation/cache)
+                try {
+                    val cacheRes = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.requestTranslationCache(
+                        videoUrl, 0.0, sourceLang, targetLang, false
+                    )
+                    if (cacheRes != null) {
+                        if (cacheRes.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_FINISHED) {
+                            val translateRes = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.requestTranslation(
+                                videoUrl, 0.0, sourceLang, targetLang, "", false, null, true
+                            )
+                            if (translateRes != null && translateRes.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_FINISHED && !translateRes.audioUrl.isNullOrBlank()) {
+                                return ServerLookupResponse.Ready(translateRes.audioUrl, 0.0, isExpired = false)
+                            }
+                        } else if (cacheRes.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_WAITING) {
+                            val jobId = if (!cacheRes.translationId.isNullOrBlank()) cacheRes.translationId else videoId
+                            return ServerLookupResponse.Processing(jobId, cacheRes.remainingTime, -1)
+                        }
+                    }
+                } catch (ignored: Exception) {}
+
+                // 3. Fallback: try translate endpoint directly with bypassCache=false
+                try {
+                    val directRes = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.requestTranslation(
+                        videoUrl, 0.0, sourceLang, targetLang, "", false, null, true
+                    )
+                    if (directRes != null) {
+                        if (directRes.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_FINISHED && !directRes.audioUrl.isNullOrBlank()) {
+                            return ServerLookupResponse.Ready(directRes.audioUrl, 0.0, isExpired = false)
+                        } else if (directRes.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_WAITING) {
+                            val jobId = if (!directRes.translationId.isNullOrBlank()) directRes.translationId else videoId
+                            return ServerLookupResponse.Processing(jobId, directRes.remainingTime, -1)
+                        }
+                    }
+                } catch (ignored: Exception) {}
+
                 return ServerLookupResponse.NotFound
             }
 
@@ -311,8 +349,9 @@ class VoxTranslationServerFirstPipeline(
                 sourceLang: String,
                 targetLang: String
             ): ServerCreateResponse {
-                val key = VoxTranslationReusePolicy.buildCacheKey("https://www.youtube.com/watch?v=$videoId", sourceLang, targetLang, false)
-                VoxTranslationSessionCache.registerPendingJob(videoId, "https://www.youtube.com/watch?v=$videoId", sourceLang, targetLang, false)
+                val videoUrl = VoxTranslationReusePolicy.normalizeVideoUrl(videoId)
+                val key = VoxTranslationReusePolicy.buildCacheKey(videoUrl, sourceLang, targetLang, false)
+                VoxTranslationSessionCache.registerPendingJob(videoId, videoUrl, sourceLang, targetLang, false)
                 return ServerCreateResponse(key, "PROCESSING")
             }
 
@@ -320,6 +359,15 @@ class VoxTranslationServerFirstPipeline(
                 videoId: String,
                 expiredAudioUrl: String
             ): ServerRefreshResponse {
+                val videoUrl = VoxTranslationReusePolicy.normalizeVideoUrl(videoId)
+                try {
+                    val res = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.requestTranslation(
+                        videoUrl, 0.0, "", "ru", "", false, null, true
+                    )
+                    if (res != null && res.status == com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.STATUS_FINISHED && !res.audioUrl.isNullOrBlank()) {
+                        return ServerRefreshResponse(ok = true, refreshedAudioUrl = res.audioUrl)
+                    }
+                } catch (ignored: Exception) {}
                 return ServerRefreshResponse(ok = false)
             }
         }

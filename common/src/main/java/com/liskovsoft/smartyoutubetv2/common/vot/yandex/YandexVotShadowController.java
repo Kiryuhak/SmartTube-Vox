@@ -281,7 +281,7 @@ public class YandexVotShadowController extends BasePlayerController {
         double durationSec = getPlayer() != null && getPlayer().getDurationMs() > 0
                 ? (getPlayer().getDurationMs() / 1000.0) : 212.0;
 
-        String videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+        String videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(videoId);
 
         YandexVotLog.i(TAG, "startCurrentTranslation videoId=" + videoId + " duration=" + durationSec);
 

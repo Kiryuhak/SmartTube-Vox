@@ -24,7 +24,7 @@ object VoxTranslationReusePolicy {
             else -> trimmed.substringBefore("?")
         }
         return if (videoId.isNotBlank() && videoId.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
-            "https://www.youtube.com/watch?v=$videoId"
+            "https://youtu.be/$videoId"
         } else {
             trimmed
         }

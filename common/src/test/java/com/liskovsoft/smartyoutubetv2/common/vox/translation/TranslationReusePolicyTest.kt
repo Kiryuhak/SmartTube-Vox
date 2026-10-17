@@ -10,13 +10,13 @@ class TranslationReusePolicyTest {
     @Test
     fun testNormalizeVideoUrl() {
         // Plain 11-char ID
-        assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("dQw4w9WgXcQ"))
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("dQw4w9WgXcQ"))
 
         // Standard watch URL with parameters
-        assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s"))
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s"))
 
         // youtu.be short URL
-        assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://youtu.be/dQw4w9WgXcQ?si=12345"))
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://youtu.be/dQw4w9WgXcQ?si=12345"))
 
         // Blank or null
         assertEquals("", VoxTranslationReusePolicy.normalizeVideoUrl(null))

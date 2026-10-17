@@ -107,6 +107,27 @@ public class YandexVotProtobuf {
         }
     }
 
+    public static byte[] encodeTranslationCacheRequest(String url, double duration, String language, String responseLanguage) {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            if (url != null && !url.isEmpty()) {
+                writeString(out, 1, url);
+            }
+            if (duration > 0) {
+                writeDouble(out, 2, duration);
+            }
+            if (language != null && !language.isEmpty()) {
+                writeString(out, 3, language);
+            }
+            if (responseLanguage != null && !responseLanguage.isEmpty()) {
+                writeString(out, 4, responseLanguage);
+            }
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to encode translation cache request", e);
+        }
+    }
+
     public static byte[] encodeAudioRequest(
             String translationId,
             String url,
@@ -178,6 +199,98 @@ public class YandexVotProtobuf {
         public String translationId;
         public String language;
         public String message;
+    }
+
+    public static class TranslationCacheItem {
+        public int status;
+        public int remainingTime = -1;
+        public String message;
+    }
+
+    public static class TranslationCacheResponse {
+        public TranslationCacheItem defaultItem;
+        public TranslationCacheItem cloningItem;
+    }
+
+    public static TranslationCacheResponse decodeTranslationCacheResponse(byte[] data) {
+        TranslationCacheResponse response = new TranslationCacheResponse();
+        if (data == null || data.length == 0) return response;
+        int pos = 0;
+        while (pos < data.length) {
+            int[] tagResult = readVarint(data, pos);
+            int tag = tagResult[0];
+            pos = tagResult[1];
+            int fieldNumber = tag >>> 3;
+            int wireType = tag & 0x7;
+
+            switch (fieldNumber) {
+                case 1: // defaultItem (message)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        response.defaultItem = decodeTranslationCacheItem(data, pos, len);
+                        pos += len;
+                    }
+                    break;
+                case 2: // cloningItem (message)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        response.cloningItem = decodeTranslationCacheItem(data, pos, len);
+                        pos += len;
+                    }
+                    break;
+                default:
+                    pos = skipField(data, pos, wireType);
+                    break;
+            }
+        }
+        return response;
+    }
+
+    private static TranslationCacheItem decodeTranslationCacheItem(byte[] data, int startPos, int length) {
+        TranslationCacheItem item = new TranslationCacheItem();
+        int pos = startPos;
+        int end = startPos + length;
+        while (pos < end && pos < data.length) {
+            int[] tagResult = readVarint(data, pos);
+            int tag = tagResult[0];
+            pos = tagResult[1];
+            int fieldNumber = tag >>> 3;
+            int wireType = tag & 0x7;
+
+            switch (fieldNumber) {
+                case 1: // status (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        item.status = valResult[0];
+                        pos = valResult[1];
+                    }
+                    break;
+                case 2: // remainingTime (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        item.remainingTime = valResult[0];
+                        pos = valResult[1];
+                    }
+                    break;
+                case 3: // message (string)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        item.message = new String(data, pos, len, StandardCharsets.UTF_8);
+                        pos += len;
+                    }
+                    break;
+                default:
+                    pos = skipField(data, pos, wireType);
+                    break;
+            }
+        }
+        return item;
     }
 
     /**
@@ -301,11 +414,15 @@ public class YandexVotProtobuf {
         out.write(value ? 1 : 0);
     }
 
-    private static void writeDouble(ByteArrayOutputStream out, double value) throws IOException {
-        writeTag(out, 6, WIRETYPE_64BIT);
+    private static void writeDouble(ByteArrayOutputStream out, int fieldNumber, double value) throws IOException {
+        writeTag(out, fieldNumber, WIRETYPE_64BIT);
         ByteBuffer buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
         buf.putDouble(value);
         out.write(buf.array());
+    }
+
+    private static void writeDouble(ByteArrayOutputStream out, double value) throws IOException {
+        writeDouble(out, 6, value);
     }
 
     private static void writeRawVarint(ByteArrayOutputStream out, int value) {

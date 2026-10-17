@@ -563,9 +563,8 @@ public class VoiceTranslateController extends BasePlayerController {
                 }
             }
 
-            if (getPlayer() != null) {
-                getPlayer().updateVoiceTranslatePendingEta((int) remainingSec);
-            }
+            // Contract: HUD button must not render secondary progress or ETA labels.
+            // The right-side VotProgressOverlay is the single source of truth for VOT progress.
 
             Utils.postDelayed(mProgressTickRunnable, PROGRESS_TICK_INTERVAL_MS);
         }
@@ -831,6 +830,12 @@ public class VoiceTranslateController extends BasePlayerController {
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_CANCELLED,
                     "Translation cancelled by user via button tap while pending"
+            );
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_CANCELLED,
+                    "VOT cancelled by user",
+                    null
             );
             disarm();
             MessageHelpers.showMessage(getContext(), R.string.vot_disabled);
@@ -1215,7 +1220,14 @@ public class VoiceTranslateController extends BasePlayerController {
             MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
             return;
         }
-        String videoUrl = "https://www.youtube.com/watch?v=" + videoId;
+        String videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(videoId);
+
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_REQUEST_START,
+                "VOT request started for " + videoId,
+                null
+        );
 
         boolean useLively = votData().isLivelyVoiceEnabled();
         if (mIsNewBackendActive && mState == STATE_PENDING && Objects.equals(mCurrentVideoId, videoId)) {
@@ -1332,6 +1344,27 @@ public class VoiceTranslateController extends BasePlayerController {
             Map<String, String> reuseCtx = new HashMap<>();
             reuseCtx.put("source", hit.getSource());
             reuseCtx.put("finalPath", "CACHE");
+            if ("L1_LOCAL_CACHE".equals(hit.getSource())) {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_LOCAL_CACHE_HIT,
+                        "L1 Local cache hit for " + videoId,
+                        reuseCtx
+                );
+            } else {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_SERVER_CACHE_HIT,
+                        "L2 Server cache hit for " + videoId,
+                        reuseCtx
+                );
+            }
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_EXISTING_READY,
+                    "VOT existing ready translation found for " + videoId,
+                    reuseCtx
+            );
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_REUSED,
@@ -1349,6 +1382,12 @@ public class VoiceTranslateController extends BasePlayerController {
         if (pipelineResult instanceof VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob) {
             VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob attached =
                     (VoxTranslationServerFirstPipeline.PipelineResult.AttachToJob) pipelineResult;
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_EXISTING_PROCESSING,
+                    "VOT existing processing job attached: " + attached.getJobId(),
+                    null
+            );
             mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER, System.currentTimeMillis());
             if (mUserArmed && progressOverlay() != null) {
                 progressOverlay().showDelayedWaiting(getActivity());
@@ -1371,6 +1410,12 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_NEW_JOB_CREATED,
+                "VOT new job created for " + videoId,
+                null
+        );
         com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.incrementNewRequest();
         com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.registerPendingJob(
                 videoId, videoUrl, sourceLang, targetLang, useLively
@@ -1492,7 +1537,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         String videoUrl = getPlayer().getVideo().videoId != null
-                ? "https://www.youtube.com/watch?v=" + getPlayer().getVideo().videoId
+                ? com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(getPlayer().getVideo().videoId)
                 : null;
         if (videoUrl == null) {
             MessageHelpers.showMessage(getContext(), R.string.vot_error_no_video);
@@ -2260,7 +2305,7 @@ public class VoiceTranslateController extends BasePlayerController {
         if (!mArmed || getPlayer() == null || getPlayer().getVideo() == null) {
             return false;
         }
-        String currentVideoUrl = "https://www.youtube.com/watch?v=" + getPlayer().getVideo().videoId;
+        String currentVideoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(getPlayer().getVideo().videoId);
         return VotRequestGuard.isCurrent(
                 requestSessionId,
                 requestVideoUrl,
@@ -2755,15 +2800,11 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
         getPlayer().setButtonState(ACTION_VOICE_TRANSLATE, index);
-        if (index == BTN_PENDING) {
-            getPlayer().updateVoiceTranslatePendingEta(mPendingEtaSec);
-        }
     }
 
     private void updateVoiceButtonProgress(int progressPercent, int stage) {
-        if (getPlayer() != null) {
-            getPlayer().updateVoiceTranslateProgress(progressPercent, stage);
-        }
+        // Contract: HUD button must not render secondary progress or ETA labels.
+        // The right-side VotProgressOverlay is the single source of truth for VOT progress.
     }
 
     public int getTranslationRetryCount() {

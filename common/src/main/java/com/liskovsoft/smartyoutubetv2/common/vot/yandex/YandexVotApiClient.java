@@ -324,6 +324,70 @@ public class YandexVotApiClient {
         return null;
     }
 
+    public static TranslationResult requestTranslationCache(
+            String videoUrl, double duration,
+            String sourceLang, String targetLang,
+            boolean useLiveVoices
+    ) {
+        if (!ensureSession()) {
+            YandexVotLog.d(TAG, "VOT cache: unable to establish session");
+            return null;
+        }
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                if (duration <= 0) {
+                    duration = DEFAULT_DURATION;
+                }
+                String apiSourceLang = (sourceLang == null || sourceLang.isEmpty() || "auto".equalsIgnoreCase(sourceLang))
+                        ? "" : sourceLang;
+
+                byte[] body = YandexVotProtobuf.encodeTranslationCacheRequest(
+                        videoUrl, duration, apiSourceLang, targetLang
+                );
+
+                String path = "/video-translation/cache";
+                byte[] responseBytes = sendApiRequest(path, body, null);
+
+                if (responseBytes == null || responseBytes.length == 0) {
+                    return null;
+                }
+
+                YandexVotProtobuf.TranslationCacheResponse response =
+                        YandexVotProtobuf.decodeTranslationCacheResponse(responseBytes);
+
+                YandexVotProtobuf.TranslationCacheItem item = useLiveVoices && response.cloningItem != null
+                        ? response.cloningItem
+                        : (response.defaultItem != null ? response.defaultItem : response.cloningItem);
+
+                if (item == null) {
+                    return null;
+                }
+
+                if (item.status == STATUS_SESSION_REQUIRED && attempt == 0) {
+                    YandexVotLog.d(TAG, "VOT cache: session required, refreshing session...");
+                    invalidateSession();
+                    if (createSession()) {
+                        continue;
+                    }
+                }
+
+                return new TranslationResult(
+                        item.status,
+                        null,
+                        item.remainingTime,
+                        null,
+                        item.message
+                );
+
+            } catch (Exception e) {
+                YandexVotLog.d(TAG, "VOT requestTranslationCache failed: " + networkFailureCategory(e));
+                return null;
+            }
+        }
+        return null;
+    }
+
     public static String getCacheKey(String videoUrl, String sourceLang, String targetLang, boolean useLiveVoices) {
         return (videoUrl != null ? videoUrl : "") + "|" +
                 (sourceLang != null ? sourceLang : "") + "|" +
