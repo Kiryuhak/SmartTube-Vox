@@ -64,6 +64,8 @@ public class VoiceTranslateAction extends MultiAction {
 
         mProgressDrawable = new VoxProgressButtonDrawable(baseBitmap, intrinsicW, intrinsicH, density, voxAccentColor, orangeAccent);
 
+        BitmapDrawable pendingDrawable = offDrawable == null ? null
+                : ActionHelpers.createDrawable(context, offDrawable, orangeAccent);
         BitmapDrawable onDrawable = offDrawable == null ? null
                 : ActionHelpers.createDrawable(context, offDrawable, voxAccentColor);
         BitmapDrawable errorDrawable = offDrawable == null ? null
@@ -71,7 +73,7 @@ public class VoiceTranslateAction extends MultiAction {
 
         Drawable[] drawables = new Drawable[4];
         drawables[INDEX_OFF] = offDrawable;
-        drawables[INDEX_PENDING] = mProgressDrawable;
+        drawables[INDEX_PENDING] = pendingDrawable != null ? pendingDrawable : offDrawable;
         drawables[INDEX_ON] = onDrawable;
         drawables[INDEX_ERROR] = errorDrawable;
         setDrawables(drawables);
@@ -86,38 +88,12 @@ public class VoiceTranslateAction extends MultiAction {
     }
 
     public boolean updateProgressState(int progressPercent, int stage) {
-        int normalizedPercent = (progressPercent >= 1 && progressPercent <= 100) ? progressPercent : -1;
-        boolean labelChanged = false;
-
-        if (mProgressPercent != normalizedPercent || mStage != stage) {
-            mProgressPercent = normalizedPercent;
-            mStage = stage;
-            mProgressDrawable.setState(normalizedPercent, stage);
-            String newLabel = buildPendingLabel();
-            if (!newLabel.equals(mLabels[INDEX_PENDING])) {
-                mLabels[INDEX_PENDING] = newLabel;
-                setLabels(mLabels);
-                labelChanged = true;
-            }
-        } else if (stage == STAGE_PREPARING || stage == STAGE_ATTACHING) {
-            mProgressDrawable.stepActivityPhase();
-        }
-        return labelChanged;
+        // HUD_VOT_PROGRESS = DISABLED: canonical right overlay is single source of truth.
+        return false;
     }
 
     public void updatePendingLabel(int remainingTimeSec) {
-        mRemainingEtaSec = remainingTimeSec;
-        if (mStage == STAGE_IDLE) {
-            mStage = STAGE_PREPARING;
-            mProgressDrawable.setState(mProgressPercent, mStage);
-        } else {
-            mProgressDrawable.stepActivityPhase();
-        }
-        String newLabel = buildPendingLabel();
-        if (!newLabel.equals(mLabels[INDEX_PENDING])) {
-            mLabels[INDEX_PENDING] = newLabel;
-            setLabels(mLabels);
-        }
+        // HUD_VOT_PROGRESS = DISABLED: keep static button label in HUD.
     }
 
     private String buildPendingLabel() {

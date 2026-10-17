@@ -84,4 +84,25 @@ class VotRightSideOverlayContractTest {
         progress.reset()
         assertEquals(0, progress.displayProgress)
     }
+
+    @Test
+    fun testTimingConstantsConformToMockupContract() {
+        val show100Ms = com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay.SHOW_100_DURATION_MS
+        assertTrue("100% state must be held 250..400ms before expanding to ready", show100Ms in 250L..400L)
+
+        val readyHoldMs = com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay.BUBBLE_READY_AUTO_HIDE_DELAY_MS
+        assertTrue("Ready confirmation pill must be held 1000..2000ms before auto-dismiss", readyHoldMs in 1000L..2000L)
+    }
+
+    @Test
+    fun testCanonicalUrlNormalizationConformsToYandexContract() {
+        val normalized1 = VoxTranslationReusePolicy.normalizeVideoUrl("dQw4w9WgXcQ")
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", normalized1)
+
+        val normalized2 = VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", normalized2)
+
+        val normalized3 = VoxTranslationReusePolicy.normalizeVideoUrl("https://youtu.be/dQw4w9WgXcQ?si=test1234")
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", normalized3)
+    }
 }

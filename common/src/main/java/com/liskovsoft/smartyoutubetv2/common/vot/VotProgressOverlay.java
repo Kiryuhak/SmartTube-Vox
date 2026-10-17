@@ -22,6 +22,9 @@ import androidx.core.content.ContextCompat;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 import com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator;
 import com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy;
 
@@ -123,10 +126,16 @@ public class VotProgressOverlay {
         mCurrentState = state;
         mMotionState = MotionState.PREPARING;
         mRealProgressPercent = -1;
-        showExpandedContent(text, R.drawable.ic_vot_hourglass, false);
+        showExpandedContent(text, R.drawable.ic_vot_sparkles, false);
         setWidthImmediately(wideWidthPx());
         reveal();
         armWatchdog();
+        VoxSafeLogger.d(
+                VoxLogCategory.UI,
+                VoxLogCode.VOT_UI_PREPARING,
+                "VOT UI preparing overlay shown: " + text,
+                null
+        );
     }
 
     /** A real backend processing/poll event starts the pill-to-circle transition at 0%. */
@@ -191,6 +200,12 @@ public class VotProgressOverlay {
         if (clamped < mRealProgressPercent) return;
         mRealProgressPercent = clamped;
         if (mRing != null) mRing.setProgress(clamped);
+        VoxSafeLogger.d(
+                VoxLogCategory.UI,
+                VoxLogCode.VOT_UI_PROGRESS,
+                "VOT UI progress: " + clamped + "%",
+                null
+        );
     }
 
     /** Called only after translated audio is attached, selected and reported active. */
@@ -205,6 +220,12 @@ public class VotProgressOverlay {
         showRingContent();
         setWidthImmediately(circleWidthPx());
         reveal();
+        VoxSafeLogger.d(
+                VoxLogCategory.UI,
+                VoxLogCode.VOT_UI_100,
+                "VOT UI reached 100% (audio active and confirmed)",
+                null
+        );
         final int generation = mCallbackGeneration;
         Utils.postDelayed(() -> {
             if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
@@ -213,6 +234,12 @@ public class VotProgressOverlay {
             animateWidth(wideWidthPx(), () -> {
                 if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
                 mMotionState = MotionState.READY;
+                VoxSafeLogger.d(
+                        VoxLogCategory.UI,
+                        VoxLogCode.VOT_UI_READY,
+                        "VOT UI expanded to ready pill",
+                        null
+                );
                 Utils.postDelayed(mAutoDismissRunnable, BUBBLE_READY_AUTO_HIDE_DELAY_MS);
             });
         }, SHOW_100_DURATION_MS);
@@ -361,6 +388,12 @@ public class VotProgressOverlay {
         cancelPendingCallbacks();
         mCurrentState = STATE_IDLE;
         mMotionState = MotionState.DISMISSING;
+        VoxSafeLogger.d(
+                VoxLogCategory.UI,
+                VoxLogCode.VOT_UI_HIDDEN,
+                "VOT UI overlay hidden",
+                null
+        );
         if (mOverlayView == null) return;
         VoxTransientStatusCoordinator.release(mOverlayView, VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
         mOverlayView.animate().cancel();
@@ -378,6 +411,12 @@ public class VotProgressOverlay {
         mMotionState = MotionState.HIDDEN;
         mRealProgressPercent = -1;
         mIsCollapsed = false;
+        VoxSafeLogger.d(
+                VoxLogCategory.UI,
+                VoxLogCode.VOT_UI_HIDDEN,
+                "VOT UI overlay dismissed immediately",
+                null
+        );
         if (mOverlayView != null) {
             VoxTransientStatusCoordinator.release(mOverlayView, VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
             mOverlayView.animate().cancel();
