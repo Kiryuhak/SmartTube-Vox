@@ -27,6 +27,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.VotMediaFormatSelector;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotYouTubeAudioSource;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotErrorCategory;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgress;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotBackendProgressEstimator;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotProgressTimer;
 import com.liskovsoft.smartyoutubetv2.common.vot.VotRequestGuard;
@@ -114,6 +115,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private Disposable mTranslationDisposable;
     private VotProgressOverlay mProgressOverlay;
     private final VotProgressTimer mProgressTimer = new VotProgressTimer();
+    private final VotBackendProgressEstimator mOverlayProgress = new VotBackendProgressEstimator();
     private float mSavedMainVolume = 1f;
     private boolean mIsAudioDucked;
     private FormatItem mSavedAudioFormat;
@@ -227,6 +229,7 @@ public class VoiceTranslateController extends BasePlayerController {
                     return;
                 }
                 mNewBackendPlaybackStarted = true;
+                mOverlayProgress.onAudioAttachedAndSelected();
                 long nowMs = System.currentTimeMillis();
                 mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, nowMs);
                 mStateMachine.onAudioProgressCheck(
@@ -278,6 +281,7 @@ public class VoiceTranslateController extends BasePlayerController {
                         return;
                     }
                     mNewBackendPlaybackStarted = true;
+                    mOverlayProgress.onAudioAttachedAndSelected();
                     mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, System.currentTimeMillis());
                     setState(STATE_ACTIVE);
                     if (mTrackSwitchState == TrackSwitchState.STARTING_VOT) {
@@ -595,6 +599,7 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onNewVideo(Video item) {
         Log.d(TAG, "VOT reset reason: new video (%s)", item != null ? item.videoId : "null");
+        mOverlayProgress.reset();
         mTranslationSessionId++;
         stopNewYandexBackend();
         mIsNewBackendActive = false;
@@ -1245,6 +1250,7 @@ public class VoiceTranslateController extends BasePlayerController {
             mFallbackTriggered = false;
             mNewBackendPlaybackStarted = false;
             mCachedUrlRefreshAttempted = false;
+            mOverlayProgress.reset();
         }
 
         mIsNewBackendActive = true;
@@ -1525,6 +1531,7 @@ public class VoiceTranslateController extends BasePlayerController {
             mTranslationRetryCount = 0;
             mRetrySecondsRemaining = 0;
             Utils.removeCallbacks(mRetryCountdownRunnable);
+            mOverlayProgress.reset();
         }
         final int requestSessionId = ++mTranslationSessionId;
         mPendingToastShown = false;
@@ -1688,6 +1695,7 @@ public class VoiceTranslateController extends BasePlayerController {
         switch (status) {
             case REQUESTING:
                 setState(STATE_PENDING);
+                mOverlayProgress.onLookup();
                 updateVoiceButtonProgress(-1, BTN_STAGE_PREPARING);
                 break;
             case WAITING:
@@ -1707,6 +1715,9 @@ public class VoiceTranslateController extends BasePlayerController {
                     mLastRealStageProgressTimestamp = nowElapsed;
                 }
                 mProgressTimer.reconcileEta(remainingSec, mLastBackendPendingTimestamp);
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showProcessing(getActivity(), mOverlayProgress.onProcessingHeartbeat(remainingSec));
+                }
                 Utils.removeCallbacks(mProgressTickRunnable);
                 mProgressTickRunnable.run();
                 break;
@@ -1718,7 +1729,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.PROCESSING, System.currentTimeMillis());
                 updateVoiceButtonProgress(-1, BTN_STAGE_PREPARING);
                 if (mUserArmed && progressOverlay() != null) {
-                    progressOverlay().showPreparing(getActivity());
+                    progressOverlay().showProcessing(getActivity(), mOverlayProgress.onProcessingHeartbeat(-1));
                 }
                 break;
             case PREPARING_AUDIO:
@@ -1730,7 +1741,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 Utils.removeCallbacks(mTranslationWatchdogRunnable);
                 Utils.postDelayed(mTranslationWatchdogRunnable, TRANSLATION_WATCHDOG_TIMEOUT_MS);
                 if (mUserArmed && progressOverlay() != null) {
-                    progressOverlay().showPreparing(getActivity());
+                    progressOverlay().showProcessing(getActivity(), mOverlayProgress.onProcessingHeartbeat(-1));
                 }
                 break;
             case UPLOADING:
@@ -1740,7 +1751,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 Utils.removeCallbacks(mTranslationWatchdogRunnable);
                 Utils.postDelayed(mTranslationWatchdogRunnable, TRANSLATION_WATCHDOG_TIMEOUT_MS);
                 if (state.getTotalParts() > 0 && state.getCurrentPart() >= 0) {
-                    int percent = Math.min(100, Math.max(1, ((state.getCurrentPart() + 1) * 100) / state.getTotalParts()));
+                    int percent = mOverlayProgress.onUploadPart(state.getCurrentPart(), state.getTotalParts());
                     if (mStateMachine.onProgressPoll(percent, -1, System.currentTimeMillis()) ==
                             com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ProgressUpdateType.REAL_PROGRESS) {
                         mLastRealStageProgressTimestamp = mLastBackendPendingTimestamp;
@@ -1838,26 +1849,16 @@ public class VoiceTranslateController extends BasePlayerController {
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_REUSE_ACTIVE,
                         "Translation ready/active for video: " + state.getVideoId()
                 );
-                updateVoiceButtonProgress(100, BTN_STAGE_REAL_PROGRESS);
-                boolean autoActivateNew = votData().isAutoActivateReadyTranslation();
-                if (autoActivateNew) {
-                    mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
-                    updateVoiceButtonProgress(100, BTN_STAGE_ATTACHING);
-                    Utils.removeCallbacks(mPostProcessWatchdogRunnable);
-                    Utils.postDelayed(mPostProcessWatchdogRunnable, TRANSLATION_POSTPROCESS_TIMEOUT_MS);
-                    if (mUserArmed && progressOverlay() != null) {
-                        progressOverlay().showAttaching(getActivity());
-                    }
-                    if (mYandexPlaybackAdapter != null) {
-                        mYandexPlaybackAdapter.onStateChanged(state);
-                    }
-                } else {
-                    mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, System.currentTimeMillis());
-                    mPendingReadyNewState = state;
-                    setState(STATE_READY);
-                    if (mUserArmed && progressOverlay() != null) {
-                        progressOverlay().showReady(getActivity());
-                    }
+                mOverlayProgress.onArtifactReady();
+                updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
+                mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
+                Utils.removeCallbacks(mPostProcessWatchdogRunnable);
+                Utils.postDelayed(mPostProcessWatchdogRunnable, TRANSLATION_POSTPROCESS_TIMEOUT_MS);
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showAttaching(getActivity());
+                }
+                if (mYandexPlaybackAdapter != null) {
+                    mYandexPlaybackAdapter.onStateChanged(state);
                 }
                 break;
             case ERROR:
@@ -2116,6 +2117,10 @@ public class VoiceTranslateController extends BasePlayerController {
                     mLastRealStageProgressTimestamp = nowElapsed;
                 }
                 mProgressTimer.reconcileEta(progress.remainingTimeSec, mLastBackendPendingTimestamp);
+                if (mUserArmed && progressOverlay() != null) {
+                    progressOverlay().showProcessing(getActivity(),
+                            mOverlayProgress.onProcessingHeartbeat(progress.remainingTimeSec));
+                }
                 if (progress.remainingTimeSec > 0) {
                     Log.d(TAG, "VOT ETA received: %ds, expected ready at +%ds", progress.remainingTimeSec, progress.remainingTimeSec);
                 } else {
@@ -2161,18 +2166,9 @@ public class VoiceTranslateController extends BasePlayerController {
                             isLiveVoice
                     );
                 }
-                updateVoiceButtonProgress(100, BTN_STAGE_REAL_PROGRESS);
-                boolean autoActivateOld = votData().isAutoActivateReadyTranslation();
-                if (autoActivateOld) {
-                    prepareAndStartTranslationAudio(progress.audioUrl);
-                } else {
-                    mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, System.currentTimeMillis());
-                    mPendingReadyAudioUrl = progress.audioUrl;
-                    setState(STATE_READY);
-                    if (mUserArmed && progressOverlay() != null) {
-                        progressOverlay().showReady(getActivity());
-                    }
-                }
+                mOverlayProgress.onArtifactReady();
+                updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
+                prepareAndStartTranslationAudio(progress.audioUrl);
                 break;
             case VotProgress.TYPE_FAILED:
                 Log.e(TAG, "VOT translation failed: %s", progress.message);
@@ -2298,7 +2294,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
         mStateMachine.markLookupReady(reuseSource, System.currentTimeMillis());
         mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
-        updateVoiceButtonProgress(100, BTN_STAGE_ATTACHING);
+        updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
         Utils.postDelayed(mPostProcessWatchdogRunnable, TRANSLATION_POSTPROCESS_TIMEOUT_MS);
 
@@ -2332,7 +2328,7 @@ public class VoiceTranslateController extends BasePlayerController {
         final String videoId = getPlayer().getVideo().videoId;
 
         mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
-        updateVoiceButtonProgress(100, BTN_STAGE_ATTACHING);
+        updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
         Utils.postDelayed(mPostProcessWatchdogRunnable, TRANSLATION_POSTPROCESS_TIMEOUT_MS);
 
@@ -2392,6 +2388,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
+        mOverlayProgress.onAudioAttachedAndSelected();
         long nowMs = System.currentTimeMillis();
         mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, nowMs);
         mStateMachine.onAudioProgressCheck(mTranslationPlayer.getPositionMs(), mTranslationPlayer.getBufferedPositionMs(), nowMs);
