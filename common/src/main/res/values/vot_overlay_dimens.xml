@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="vot_overlay_wide_width">280dp</dimen>
+    <dimen name="vot_overlay_height">56dp</dimen>
+    <dimen name="vot_overlay_circle_size">48dp</dimen>
+</resources>

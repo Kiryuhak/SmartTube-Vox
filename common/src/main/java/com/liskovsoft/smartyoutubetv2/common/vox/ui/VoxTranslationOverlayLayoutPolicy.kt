@@ -11,6 +11,16 @@ object VoxTranslationOverlayLayoutPolicy {
     /** Standard TV overscan margin (safe area 5% on 960x540dp TV layout = 48dp). */
     const val DEFAULT_OVERSCAN_MARGIN_DP = 48
 
+    /** Canonical VOT bubble anchor; invariant across HUD/settings state changes. */
+    const val VOT_FIXED_END_MARGIN_DP = 48
+    const val VOT_FIXED_BOTTOM_MARGIN_DP = 256
+
+    @JvmStatic
+    fun fixedVotEndMarginDp(): Int = VOT_FIXED_END_MARGIN_DP
+
+    @JvmStatic
+    fun fixedVotBottomMarginDp(): Int = VOT_FIXED_BOTTOM_MARGIN_DP
+
     /**
      * Vertical offset when HUD is hidden.
      * Placed strictly ABOVE the subtitle zone (which occupies the bottom ~140-160dp).

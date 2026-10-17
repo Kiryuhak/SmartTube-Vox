@@ -1,15 +1,18 @@
 package com.liskovsoft.smartyoutubetv2.common.vot;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -19,22 +22,17 @@ import androidx.core.content.ContextCompat;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator;
+import com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy;
 
 /**
- * SmartTube VOX — Translation Motion UI 2.0.
- *
- * Provides a modern, responsive, subtitle-safe overlay for voice translation:
- * 1. Initial State (~4.5s): Large horizontal glass-style pill ("Подготавливаем перевод…")
- * 2. Spatial Continuity Collapse: Smooth scale/alpha/translation bounds animation into a compact circular indicator.
- * 3. Compact Preparing State: Centered Hourglass icon with subtle circular ring animation (NO fake %).
- * 4. Real Progress State: Displays actual 1..100% only when the backend provider gives verified progress.
- * 5. Ready State: Green checkmark, green accent, brief "Перевод готов" confirmation (~1.5-2.5s), smooth fade out.
- * 6. Error/Timeout UX: Compact failure icon ('!'), clear failure text, bounded auto-dismiss.
- * 7. Hard State Watchdog: Prevents overlay from getting stuck indefinitely in preparing state.
+ * The single canonical VOT status overlay. Its END edge never moves: the same view
+ * changes width from a pill to a circle and expands back towards START.
  */
 public class VotProgressOverlay {
     private static final String TAG = "VotProgressOverlay";
 
+    // Kept stable for compatibility with existing callers and tests.
     public static final int STATE_IDLE = 0;
     public static final int STATE_PREPARING = 1;
     public static final int STATE_WAITING_WITH_ETA = 2;
@@ -50,40 +48,38 @@ public class VotProgressOverlay {
     public static final long COLLAPSE_DELAY_MS = 3500L;
     public static final long BUBBLE_AUTO_HIDE_DELAY_MS = 3500L;
     public static final long BUBBLE_READY_AUTO_HIDE_DELAY_MS = 2000L;
-    private static final long DISMISS_DELAY_READY_MS = 2000L;
-    private static final long DISMISS_DELAY_ERROR_MS = 3500L;
-    private static final long OVERLAY_WATCHDOG_TIMEOUT_MS = 45000L; // Max 45s before safety dismiss
+    public static final long SHOW_100_DURATION_MS = 320L;
+    private static final long SHAPE_ANIMATION_MS = 250L;
+    private static final long DISMISS_ERROR_MS = 3500L;
+    private static final long WATCHDOG_MS = 90000L;
+
+    private enum MotionState {
+        HIDDEN, PREPARING, COLLAPSING, PROGRESS, FINALIZING_99,
+        SHOWING_100, EXPANDING_READY, READY, ERROR, DISMISSING
+    }
 
     private final Context mContext;
     private View mOverlayView;
     private View mExpandedContainer;
-    private View mCompactContainer;
     private ProgressBar mSpinner;
     private ImageView mIcon;
     private TextView mTitle;
     private TextView mSubtitle;
     private TextView mTimer;
-
-    // Compact motion elements
-    private ProgressBar mCompactSpinner;
-    private ImageView mCompactIcon;
-    private TextView mCompactPercent;
-
-    private int mCurrentState = STATE_IDLE;
+    private VotProgressRingView mRing;
     private ViewGroup mParentView;
-    private boolean mIsCollapsed = false;
+    private ValueAnimator mWidthAnimator;
+    private MotionState mMotionState = MotionState.HIDDEN;
+    private int mCurrentState = STATE_IDLE;
     private int mRealProgressPercent = -1;
-    private int mLastMilestoneBucket = -1;
-    private long mLastProgressUpdateTime = 0L;
+    private boolean mIsCollapsed;
+    private int mCallbackGeneration;
 
     private final Runnable mAutoDismissRunnable = this::hide;
-    private final Runnable mBubbleAutoHideRunnable = this::hideBubbleKeepState;
-    private final Runnable mCollapseRunnable = this::hideBubbleKeepState;
     private final Runnable mSafetyWatchdogRunnable = () -> {
-        if (mCurrentState == STATE_PREPARING || mCurrentState == STATE_LOOKING_UP ||
-                mCurrentState == STATE_WAITING_WITH_ETA || mCurrentState == STATE_ETA_EXPIRED_STILL_WAITING ||
-                mCurrentState == STATE_ATTACHING) {
-            Log.w(TAG, "VOT overlay watchdog triggered: stuck in preparing state for > %d ms", OVERLAY_WATCHDOG_TIMEOUT_MS);
+        if (mMotionState == MotionState.PREPARING || mMotionState == MotionState.PROGRESS ||
+                mMotionState == MotionState.FINALIZING_99) {
+            Log.w(TAG, "VOT overlay watchdog dismissed stale state");
             dismissImmediately();
         }
     };
@@ -92,441 +88,298 @@ public class VotProgressOverlay {
         mContext = context;
     }
 
-    public int getState() {
-        return mCurrentState;
-    }
-
-    public boolean isShown() {
-        return mOverlayView != null && mOverlayView.getVisibility() == View.VISIBLE && mCurrentState != STATE_IDLE;
-    }
-
-    public boolean isCollapsed() {
-        return mIsCollapsed;
-    }
-
-    public int getRealProgressPercent() {
-        return mRealProgressPercent;
-    }
+    public int getState() { return mCurrentState; }
+    public boolean isShown() { return mOverlayView != null && mOverlayView.getVisibility() == View.VISIBLE && mCurrentState != STATE_IDLE; }
+    public boolean isCollapsed() { return mIsCollapsed; }
+    public int getRealProgressPercent() { return mRealProgressPercent; }
+    public boolean isCompactContainerVisible() { return mRing != null && mRing.getVisibility() == View.VISIBLE; }
+    public boolean isExpandedContainerVisible() { return mExpandedContainer != null && mExpandedContainer.getVisibility() == View.VISIBLE; }
 
     public void resetRealProgress() {
         mRealProgressPercent = -1;
-        mLastMilestoneBucket = -1;
-        if (mIsCollapsed) {
-            updateCompactView();
-        }
-    }
-
-    public boolean isCompactContainerVisible() {
-        return mCompactContainer != null && mCompactContainer.getVisibility() == View.VISIBLE;
-    }
-
-    public boolean isExpandedContainerVisible() {
-        return mExpandedContainer != null && mExpandedContainer.getVisibility() == View.VISIBLE;
-    }
-
-    private void cancelTimers() {
-        Utils.removeCallbacks(mAutoDismissRunnable);
-        Utils.removeCallbacks(mBubbleAutoHideRunnable);
-        Utils.removeCallbacks(mCollapseRunnable);
-        Utils.removeCallbacks(mSafetyWatchdogRunnable);
-    }
-
-    private void scheduleBubbleAutoHide() {
-        Utils.removeCallbacks(mBubbleAutoHideRunnable);
-        Utils.removeCallbacks(mCollapseRunnable);
-        Utils.postDelayed(mBubbleAutoHideRunnable, BUBBLE_AUTO_HIDE_DELAY_MS);
-    }
-
-    private void armSafetyWatchdog() {
-        Utils.removeCallbacks(mSafetyWatchdogRunnable);
-        Utils.postDelayed(mSafetyWatchdogRunnable, OVERLAY_WATCHDOG_TIMEOUT_MS);
+        if (mRing != null) mRing.setProgress(0);
     }
 
     public void showLookingUp(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        cancelTimers();
-        mCurrentState = STATE_LOOKING_UP;
-        mRealProgressPercent = -1;
-        mLastMilestoneBucket = -1;
-        expandMode();
-        showSpinnerMode();
-        setTitle(getStringSafe(R.string.vot_progress_looking_up));
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        scheduleBubbleAutoHide();
-        armSafetyWatchdog();
+        showPreparingText(activity, STATE_LOOKING_UP, getStringSafe(R.string.vot_progress_looking_up));
     }
 
     public void showLookupReady(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        cancelTimers();
-        mCurrentState = STATE_LOOKUP_READY;
-        expandMode();
-        showIconMode(R.drawable.ic_vot_ready);
-        setTitle(getStringSafe(R.string.vot_progress_lookup_ready));
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
+        // Cache hit follows the same short visual path; it must not claim UI-ready before audio attach.
+        showPreparingText(activity, STATE_LOOKUP_READY, getStringSafe(R.string.vot_progress_preparing));
     }
 
     public void showPreparing(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        cancelTimers();
-        mCurrentState = STATE_PREPARING;
-        mRealProgressPercent = -1;
-        mLastMilestoneBucket = -1;
-        expandMode();
-        showSpinnerMode();
-        setTitle("Готовим перевод…");
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        scheduleBubbleAutoHide();
-        armSafetyWatchdog();
+        showPreparingText(activity, STATE_PREPARING, getStringSafe(R.string.vot_progress_preparing));
     }
 
     public void showStarting(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        cancelTimers();
-        mCurrentState = STATE_ATTACHING;
-        mRealProgressPercent = -1;
-        mLastMilestoneBucket = -1;
-        expandMode();
-        showSpinnerMode();
-        setTitle(getStringSafe(R.string.vot_progress_starting));
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        scheduleBubbleAutoHide();
-        armSafetyWatchdog();
+        showPreparingText(activity, STATE_ATTACHING, getStringSafe(R.string.vot_progress_starting));
     }
 
-    public void showWaitingWithEta(@Nullable Activity activity, String timeRemainingFormatted) {
+    private void showPreparingText(@Nullable Activity activity, int state, String text) {
         if (!ensureAttached(activity)) return;
-        Utils.removeCallbacks(mAutoDismissRunnable);
-        boolean stateChanged = mCurrentState != STATE_WAITING_WITH_ETA;
+        cancelPendingCallbacks();
+        mCurrentState = state;
+        mMotionState = MotionState.PREPARING;
+        mRealProgressPercent = -1;
+        showExpandedContent(text, R.drawable.ic_vot_hourglass, false);
+        setWidthImmediately(wideWidthPx());
+        reveal();
+        armWatchdog();
+    }
+
+    /** A real backend processing/poll event starts the pill-to-circle transition at 0%. */
+    public void showProcessing(@Nullable Activity activity, int backendDerivedPercent) {
+        if (!ensureAttached(activity)) return;
         mCurrentState = STATE_WAITING_WITH_ETA;
-        if (mRealProgressPercent >= 100) {
-            mRealProgressPercent = -1;
-        }
-        if (stateChanged) {
-            armSafetyWatchdog();
-            expandMode();
-            showSpinnerMode();
-            setTitle("Готовим перевод…");
-            hideSubtitle();
-            if (mRealProgressPercent >= 1 && mRealProgressPercent < 100) {
-                setTimer(mRealProgressPercent + "%");
-            } else {
-                hideTimer();
-            }
-            fadeIn();
-            scheduleBubbleAutoHide();
-        }
+        updateRealProgressInternal(Math.max(0, Math.min(95, backendDerivedPercent)));
+        collapseToProgress();
+        reveal();
+        armWatchdog();
+    }
+
+    public void showWaitingWithEta(@Nullable Activity activity, String ignored) {
+        showProcessing(activity, Math.max(0, mRealProgressPercent));
     }
 
     public void showWaitingWithoutEta(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        Utils.removeCallbacks(mAutoDismissRunnable);
-        boolean stateChanged = mCurrentState != STATE_PREPARING;
-        mCurrentState = STATE_PREPARING;
-        if (mRealProgressPercent >= 100) {
-            mRealProgressPercent = -1;
-        }
-        if (stateChanged) {
-            armSafetyWatchdog();
-            expandMode();
-            showSpinnerMode();
-            setTitle("Готовим перевод…");
-            hideSubtitle();
-            hideTimer();
-            fadeIn();
-            scheduleBubbleAutoHide();
-        }
+        showProcessing(activity, Math.max(0, mRealProgressPercent));
     }
 
     public void showDelayedWaiting(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        Utils.removeCallbacks(mAutoDismissRunnable);
-        boolean stateChanged = mCurrentState != STATE_ETA_EXPIRED_STILL_WAITING;
         mCurrentState = STATE_ETA_EXPIRED_STILL_WAITING;
-        if (mRealProgressPercent >= 100) {
-            mRealProgressPercent = -1;
-        }
-        if (stateChanged) {
-            armSafetyWatchdog();
-            expandMode();
-            showSpinnerMode();
-            setTitle(getStringSafe(R.string.vot_progress_delayed));
-            hideSubtitle();
-            hideTimer();
-            fadeIn();
-            scheduleBubbleAutoHide();
-        }
+        showProcessing(activity, Math.max(0, mRealProgressPercent));
     }
 
-    public void showAttaching(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        Utils.removeCallbacks(mAutoDismissRunnable);
-        mCurrentState = STATE_ATTACHING;
-        mRealProgressPercent = -1;
-        mLastMilestoneBucket = -1;
-        armSafetyWatchdog();
-
-        expandMode();
-        showSpinnerMode();
-        setTitle(getStringSafe(R.string.vot_progress_attaching));
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        scheduleBubbleAutoHide();
-    }
-
-    public void showStillWaiting(@Nullable Activity activity, String timeElapsedFormatted) {
+    public void showStillWaiting(@Nullable Activity activity, String ignored) {
         showDelayedWaiting(activity);
     }
 
-    public void showRetryWait(@Nullable Activity activity, int attempt, int maxAttempts, int secondsRemaining) {
+    /** Backend READY/audio preparation stays at 99 until audible playback is confirmed. */
+    public void showAttaching(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
-        Utils.removeCallbacks(mAutoDismissRunnable);
-        boolean stateChanged = mCurrentState != STATE_RETRY;
+        mCurrentState = STATE_ATTACHING;
+        updateRealProgressInternal(99);
+        mMotionState = MotionState.FINALIZING_99;
+        collapseToProgress();
+        reveal();
+        armWatchdog();
+    }
+
+    public void showRetryWait(@Nullable Activity activity, int attempt, int maxAttempts, int ignored) {
+        if (!ensureAttached(activity)) return;
+        cancelPendingCallbacks();
         mCurrentState = STATE_RETRY;
-        mRealProgressPercent = -1;
-        if (stateChanged) {
-            armSafetyWatchdog();
-            expandMode();
-            showIconMode(R.drawable.ic_vot_retry);
-            String title = formatStringSafe(R.string.vot_progress_retry_title, attempt, maxAttempts);
-            if (title.isEmpty()) {
-                title = "Повторная попытка " + attempt + "/" + maxAttempts;
-            }
-            setTitle(title);
-            hideSubtitle();
-            String timer = formatStringSafe(R.string.vot_progress_retry_countdown, secondsRemaining);
-            if (timer.isEmpty()) {
-                timer = "через " + secondsRemaining + " с";
-            }
-            setTimer(timer);
-            fadeIn();
-            scheduleBubbleAutoHide();
-        } else if (isShown()) {
-            String timer = formatStringSafe(R.string.vot_progress_retry_countdown, secondsRemaining);
-            if (timer.isEmpty()) {
-                timer = "через " + secondsRemaining + " с";
-            }
-            setTimer(timer);
-        }
+        String title = formatStringSafe(R.string.vot_progress_retry_title, attempt, maxAttempts);
+        showExpandedContent(title, R.drawable.ic_vot_retry, false);
+        animateWidth(wideWidthPx(), null);
+        reveal();
+        armWatchdog();
     }
 
-    /**
-     * Updates real verified progress (1..100%) from backend.
-     * Strictly monotonic: repeated equal percentages do NOT reset watchdog or re-show bubble.
-     */
+    /** Monotonic backend-derived progress only. Values above 99 require audio activation. */
     public void updateRealProgress(int percent) {
-        if (percent <= 0 || percent > 100) return;
-        if (percent <= mRealProgressPercent) return; // Strictly monotonic only
-
-        long now = System.currentTimeMillis();
-        if (now - mLastProgressUpdateTime < 150L && percent != 100 && mRealProgressPercent > 0) {
-            return; // Throttle UI redraw rate
-        }
-        mLastProgressUpdateTime = now;
-        mRealProgressPercent = percent;
-        armSafetyWatchdog();
-
-        int bucket = percent == 100 ? 4 : (percent / 25);
-        boolean milestoneReached = (bucket != mLastMilestoneBucket);
-        mLastMilestoneBucket = bucket;
-
-        setTitle("Готовим перевод — " + percent + "%");
-        hideSubtitle();
-        setTimer(percent + "%");
-
-        if (isShown() || milestoneReached) {
-            expandMode();
-            showSpinnerMode();
-            fadeIn();
-            scheduleBubbleAutoHide();
-        }
+        int clamped = Math.max(0, Math.min(99, percent));
+        if (clamped <= mRealProgressPercent) return;
+        updateRealProgressInternal(clamped);
+        if (mOverlayView != null) collapseToProgress();
     }
 
-    public void showReady(@Nullable Activity activity) {
-        if (!ensureAttached(activity)) return;
-        cancelTimers();
-        mCurrentState = STATE_READY;
-        mRealProgressPercent = -1;
-
-        expandMode();
-        showIconMode(R.drawable.ic_vot_ready);
-        setTitle(getStringSafe(R.string.vot_progress_ready));
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-
-        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
+    private void updateRealProgressInternal(int percent) {
+        int clamped = Math.max(0, Math.min(100, percent));
+        if (clamped < mRealProgressPercent) return;
+        mRealProgressPercent = clamped;
+        if (mRing != null) mRing.setProgress(clamped);
     }
 
+    /** Called only after translated audio is attached, selected and reported active. */
     public void showActivated(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
-        cancelTimers();
+        if (mMotionState == MotionState.SHOWING_100 || mMotionState == MotionState.EXPANDING_READY ||
+                mMotionState == MotionState.READY) return;
+        cancelPendingCallbacks();
         mCurrentState = STATE_READY;
-        mRealProgressPercent = -1;
-
-        expandMode();
-        showIconMode(R.drawable.ic_vot_ready);
-        setTitle(getStringSafe(R.string.vot_translation_activated));
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-
-        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_READY_MS);
+        mMotionState = MotionState.SHOWING_100;
+        updateRealProgressInternal(100);
+        showRingContent();
+        setWidthImmediately(circleWidthPx());
+        reveal();
+        final int generation = mCallbackGeneration;
+        Utils.postDelayed(() -> {
+            if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
+            mMotionState = MotionState.EXPANDING_READY;
+            showExpandedContent(getStringSafe(R.string.vot_progress_ready), R.drawable.ic_vot_ready, false);
+            animateWidth(wideWidthPx(), () -> {
+                if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
+                mMotionState = MotionState.READY;
+                Utils.postDelayed(mAutoDismissRunnable, BUBBLE_READY_AUTO_HIDE_DELAY_MS);
+            });
+        }, SHOW_100_DURATION_MS);
     }
 
-    public void showError(@Nullable Activity activity) {
-        showError(activity, null);
+    /** Manual-ready compatibility path; production auto-activation uses showActivated(). */
+    public void showReady(@Nullable Activity activity) {
+        showActivated(activity);
     }
+
+    public void showError(@Nullable Activity activity) { showError(activity, null); }
 
     public void showError(@Nullable Activity activity, @Nullable String errorMessage) {
         if (!ensureAttached(activity)) return;
-        cancelTimers();
+        cancelPendingCallbacks();
         mCurrentState = STATE_ERROR;
-        mRealProgressPercent = -1;
-
-        expandMode();
-        showIconMode(R.drawable.ic_vot_error);
-        if (errorMessage != null && !errorMessage.isEmpty()) {
-            setTitle(errorMessage);
-        } else {
-            setTitle(getStringSafe(R.string.vot_progress_error));
-        }
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_ERROR_MS);
+        mMotionState = MotionState.ERROR;
+        String message = errorMessage == null || errorMessage.isEmpty()
+                ? getStringSafe(R.string.vot_progress_error) : errorMessage;
+        showExpandedContent(message, R.drawable.ic_vot_error, false);
+        animateWidth(wideWidthPx(), null);
+        reveal();
+        Utils.postDelayed(mAutoDismissRunnable, DISMISS_ERROR_MS);
     }
 
     public void showTimeout(@Nullable Activity activity) {
         if (!ensureAttached(activity)) return;
-        cancelTimers();
         mCurrentState = STATE_TIMEOUT;
-        mRealProgressPercent = -1;
-
-        expandMode();
-        showIconMode(R.drawable.ic_vot_timeout);
-        setTitle("Сервис перевода не ответил вовремя");
-        hideSubtitle();
-        hideTimer();
-        fadeIn();
-        Utils.postDelayed(mAutoDismissRunnable, DISMISS_DELAY_ERROR_MS);
+        showError(activity, getStringSafe(R.string.vot_progress_timeout));
+        mCurrentState = STATE_TIMEOUT;
     }
 
-    /**
-     * Auto-hides the temporary status bubble while keeping mCurrentState active so
-     * ongoing 1s ticks do not re-pop the bubble until a real stage change occurs.
-     */
     public void hideBubbleKeepState() {
-        mIsCollapsed = false;
-        if (mCompactContainer != null) {
-            mCompactContainer.animate().cancel();
-            mCompactContainer.setVisibility(View.GONE);
-            mCompactContainer.setAlpha(0f);
-        }
-        if (mOverlayView != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
-                    mOverlayView,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
-            mOverlayView.animate().cancel();
-            mOverlayView.animate()
-                    .alpha(0f)
-                    .setDuration(220)
-                    .withEndAction(() -> {
-                        if (mOverlayView != null) {
-                            mOverlayView.setVisibility(View.GONE);
-                        }
-                    })
-                    .start();
-        }
+        // Processing must stay visible; only terminal confirmations auto-dismiss.
+        if (mMotionState == MotionState.READY || mMotionState == MotionState.ERROR) hide();
     }
 
     public void performCollapseAnimation() {
-        hideBubbleKeepState();
+        collapseToProgress();
     }
 
-    private void expandMode() {
-        mIsCollapsed = false;
+    private void collapseToProgress() {
+        if (mOverlayView == null) return;
+        if (mIsCollapsed && (mWidthAnimator == null || !mWidthAnimator.isRunning())) {
+            showRingContent();
+            return;
+        }
+        mMotionState = MotionState.COLLAPSING;
         if (mExpandedContainer != null) {
             mExpandedContainer.animate().cancel();
-            mExpandedContainer.setScaleX(1f);
-            mExpandedContainer.setScaleY(1f);
-            mExpandedContainer.setAlpha(1f);
-            mExpandedContainer.setVisibility(View.VISIBLE);
+            mExpandedContainer.animate().alpha(0f).setDuration(140L).start();
         }
-        if (mCompactContainer != null) {
-            mCompactContainer.animate().cancel();
-            mCompactContainer.setVisibility(View.GONE);
-            mCompactContainer.setAlpha(0f);
+        animateWidth(circleWidthPx(), () -> {
+            mIsCollapsed = true;
+            mMotionState = mRealProgressPercent >= 99 ? MotionState.FINALIZING_99 : MotionState.PROGRESS;
+            showRingContent();
+        });
+    }
+
+    private void showRingContent() {
+        if (mExpandedContainer != null) {
+            mExpandedContainer.animate().cancel();
+            mExpandedContainer.setVisibility(View.GONE);
+            mExpandedContainer.setAlpha(0f);
+        }
+        if (mRing != null) {
+            mRing.setProgress(Math.max(0, mRealProgressPercent));
+            mRing.setVisibility(View.VISIBLE);
+            mRing.setAlpha(1f);
+        }
+        mIsCollapsed = true;
+    }
+
+    private void showExpandedContent(String text, int iconRes, boolean spinner) {
+        if (mRing != null) mRing.setVisibility(View.GONE);
+        if (mExpandedContainer != null) {
+            mExpandedContainer.animate().cancel();
+            mExpandedContainer.setVisibility(View.VISIBLE);
+            mExpandedContainer.setAlpha(1f);
+        }
+        if (mSpinner != null) mSpinner.setVisibility(spinner ? View.VISIBLE : View.GONE);
+        if (mIcon != null) {
+            mIcon.setImageDrawable(ContextCompat.getDrawable(mContext, iconRes));
+            mIcon.setVisibility(spinner ? View.GONE : View.VISIBLE);
+        }
+        if (mTitle != null) mTitle.setText(text);
+        if (mSubtitle != null) mSubtitle.setVisibility(View.GONE);
+        if (mTimer != null) mTimer.setVisibility(View.GONE);
+        mIsCollapsed = false;
+    }
+
+    private void animateWidth(int targetWidth, @Nullable Runnable endAction) {
+        if (mOverlayView == null) return;
+        if (mWidthAnimator != null) mWidthAnimator.cancel();
+        int startWidth = mOverlayView.getWidth() > 0 ? mOverlayView.getWidth() : currentLayoutWidth();
+        if (startWidth == targetWidth) {
+            setWidthImmediately(targetWidth);
+            if (endAction != null) endAction.run();
+            return;
+        }
+        mWidthAnimator = ValueAnimator.ofInt(startWidth, targetWidth);
+        mWidthAnimator.setDuration(SHAPE_ANIMATION_MS);
+        mWidthAnimator.setInterpolator(new DecelerateInterpolator());
+        mWidthAnimator.addUpdateListener(animation -> setWidthImmediately((Integer) animation.getAnimatedValue()));
+        mWidthAnimator.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
+            @Override public void onAnimationEnd(Animator animation) {
+                if (!mCancelled && endAction != null) endAction.run();
+            }
+        });
+        mWidthAnimator.start();
+    }
+
+    private void setWidthImmediately(int width) {
+        if (mOverlayView == null) return;
+        ViewGroup.LayoutParams lp = mOverlayView.getLayoutParams();
+        if (lp != null && lp.width != width) {
+            lp.width = width;
+            lp.height = overlayHeightPx();
+            mOverlayView.setLayoutParams(lp);
         }
     }
 
-    private void updateCompactView() {
-        if (mCompactContainer == null) return;
+    private int currentLayoutWidth() {
+        ViewGroup.LayoutParams lp = mOverlayView != null ? mOverlayView.getLayoutParams() : null;
+        return lp != null && lp.width > 0 ? lp.width : wideWidthPx();
+    }
 
-        if (mRealProgressPercent >= 1 && mRealProgressPercent <= 100) {
-            // Real percentage mode
-            if (mCompactIcon != null) mCompactIcon.setVisibility(View.GONE);
-            if (mCompactPercent != null) {
-                mCompactPercent.setText(mRealProgressPercent + "%");
-                mCompactPercent.setVisibility(View.VISIBLE);
-            }
-            if (mCompactSpinner != null) {
-                mCompactSpinner.setVisibility(View.VISIBLE);
-            }
-        } else {
-            // Preparation mode: Hourglass in center, subtle spinning ring
-            if (mCompactPercent != null) mCompactPercent.setVisibility(View.GONE);
-            if (mCompactIcon != null) {
-                mCompactIcon.setImageDrawable(ContextCompat.getDrawable(mContext, R.drawable.ic_vot_hourglass));
-                mCompactIcon.setVisibility(View.VISIBLE);
-            }
-            if (mCompactSpinner != null) {
-                mCompactSpinner.setVisibility(View.VISIBLE);
-            }
+    private void reveal() {
+        if (mOverlayView == null) return;
+        if (VoxTransientStatusCoordinator.shouldSuppressTranslationToast() ||
+                !VoxTransientStatusCoordinator.claim(mOverlayView, VoxTransientStatusCoordinator.StatusOwner.TRANSLATION)) {
+            return;
         }
+        mOverlayView.bringToFront();
+        mOverlayView.animate().cancel();
+        if (mOverlayView.getVisibility() != View.VISIBLE) {
+            mOverlayView.setAlpha(0f);
+            mOverlayView.setVisibility(View.VISIBLE);
+        }
+        mOverlayView.animate().alpha(1f).setDuration(180L).start();
     }
 
     public void hide() {
-        cancelTimers();
+        cancelPendingCallbacks();
         mCurrentState = STATE_IDLE;
-        mIsCollapsed = false;
-        mRealProgressPercent = -1;
-        if (mOverlayView != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
-                    mOverlayView,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
-            mOverlayView.animate().cancel();
-            mOverlayView.animate()
-                    .alpha(0f)
-                    .setDuration(250)
-                    .withEndAction(() -> {
-                        if (mOverlayView != null) {
-                            mOverlayView.setVisibility(View.GONE);
-                        }
-                    })
-                    .start();
-        }
+        mMotionState = MotionState.DISMISSING;
+        if (mOverlayView == null) return;
+        VoxTransientStatusCoordinator.release(mOverlayView, VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
+        mOverlayView.animate().cancel();
+        mOverlayView.animate().alpha(0f).setDuration(200L).withEndAction(() -> {
+            if (mOverlayView != null && mCurrentState == STATE_IDLE) {
+                mOverlayView.setVisibility(View.GONE);
+                mMotionState = MotionState.HIDDEN;
+            }
+        }).start();
     }
 
     public void dismissImmediately() {
-        cancelTimers();
+        cancelPendingCallbacks();
         mCurrentState = STATE_IDLE;
-        mIsCollapsed = false;
+        mMotionState = MotionState.HIDDEN;
         mRealProgressPercent = -1;
+        mIsCollapsed = false;
         if (mOverlayView != null) {
-            com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.release(
-                    mOverlayView,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
+            VoxTransientStatusCoordinator.release(mOverlayView, VoxTransientStatusCoordinator.StatusOwner.TRANSLATION);
             mOverlayView.animate().cancel();
             mOverlayView.setVisibility(View.GONE);
             mOverlayView.setAlpha(0f);
@@ -535,162 +388,76 @@ public class VotProgressOverlay {
 
     public void destroy() {
         dismissImmediately();
-        if (mOverlayView != null && mParentView != null) {
-            mParentView.removeView(mOverlayView);
-        }
+        if (mOverlayView != null && mParentView != null) mParentView.removeView(mOverlayView);
         mOverlayView = null;
-        mExpandedContainer = null;
-        mCompactContainer = null;
         mParentView = null;
+        mExpandedContainer = null;
         mSpinner = null;
         mIcon = null;
         mTitle = null;
         mSubtitle = null;
         mTimer = null;
-        mCompactSpinner = null;
-        mCompactIcon = null;
-        mCompactPercent = null;
+        mRing = null;
     }
 
-    private void showSpinnerMode() {
-        if (mSpinner != null) mSpinner.setVisibility(View.VISIBLE);
-        if (mIcon != null) mIcon.setVisibility(View.GONE);
-    }
-
-    private void showIconMode(int iconResId) {
-        if (mSpinner != null) mSpinner.setVisibility(View.GONE);
-        if (mIcon != null) {
-            mIcon.setImageDrawable(ContextCompat.getDrawable(mContext, iconResId));
-            mIcon.setVisibility(View.VISIBLE);
+    private void cancelPendingCallbacks() {
+        mCallbackGeneration++;
+        Utils.removeCallbacks(mAutoDismissRunnable);
+        Utils.removeCallbacks(mSafetyWatchdogRunnable);
+        if (mWidthAnimator != null) {
+            mWidthAnimator.cancel();
+            mWidthAnimator = null;
         }
     }
 
-    private void setTitle(String text) {
-        if (mTitle != null) {
-            mTitle.setText(text);
-        }
-    }
-
-    private void setSubtitle(String text) {
-        if (mSubtitle != null) {
-            if (text != null && !text.isEmpty()) {
-                mSubtitle.setText(text);
-                mSubtitle.setVisibility(View.VISIBLE);
-            } else {
-                mSubtitle.setVisibility(View.GONE);
-            }
-        }
-    }
-
-    private void hideSubtitle() {
-        if (mSubtitle != null) {
-            mSubtitle.setVisibility(View.GONE);
-        }
-    }
-
-    private void setTimer(String text) {
-        if (mTimer != null) {
-            mTimer.setText(text);
-            mTimer.setVisibility(View.VISIBLE);
-        }
-    }
-
-    private void hideTimer() {
-        if (mTimer != null) {
-            mTimer.setVisibility(View.GONE);
-        }
-    }
-
-    private void fadeIn() {
-        if (mOverlayView != null) {
-            if (com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.shouldSuppressTranslationToast()
-                    || !com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.claim(mOverlayView,
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTransientStatusCoordinator.StatusOwner.TRANSLATION)) {
-                mOverlayView.animate().cancel();
-                mOverlayView.setVisibility(View.GONE);
-                mOverlayView.setAlpha(0f);
-                return;
-            }
-            mOverlayView.bringToFront();
-            mOverlayView.animate().cancel();
-            if (mOverlayView.getVisibility() != View.VISIBLE) {
-                mOverlayView.setAlpha(0f);
-                mOverlayView.setVisibility(View.VISIBLE);
-            }
-            mOverlayView.animate().alpha(1f).setDuration(200).start();
-        }
+    private void armWatchdog() {
+        Utils.removeCallbacks(mSafetyWatchdogRunnable);
+        Utils.postDelayed(mSafetyWatchdogRunnable, WATCHDOG_MS);
     }
 
     private boolean ensureAttached(@Nullable Activity activity) {
         if (activity == null || activity.isFinishing()) return false;
-        if (mOverlayView != null && mOverlayView.getParent() != findTargetContainer(activity)) destroy();
-        if (mOverlayView != null && mOverlayView.getParent() != null) {
-            mOverlayView.bringToFront();
-            return true;
-        }
-
-        ViewGroup targetContainer = findTargetContainer(activity);
-        if (targetContainer == null) {
-            Log.w(TAG, "Cannot attach overlay: no target container found");
-            return false;
-        }
-
+        ViewGroup target = findTargetContainer(activity);
+        if (target == null) return false;
+        if (mOverlayView != null && mOverlayView.getParent() != target) destroy();
+        if (mOverlayView != null && mOverlayView.getParent() != null) return true;
         try {
-            View existing = targetContainer.findViewById(R.id.vot_progress_root);
+            View existing = target.findViewById(R.id.vot_progress_root);
             if (existing != null) {
                 bindViews(existing);
-                mParentView = targetContainer;
-                mOverlayView.bringToFront();
+                mParentView = target;
                 return true;
             }
-
-            LayoutInflater inflater = LayoutInflater.from(mContext);
-            mOverlayView = inflater.inflate(R.layout.vot_progress_overlay, targetContainer, false);
-            bindViews(mOverlayView);
-
-            mOverlayView.setFocusable(false);
-            mOverlayView.setFocusableInTouchMode(false);
-            mOverlayView.setClickable(false);
-
-            int playbackRootId = activity.getResources().getIdentifier("playback_fragment_root", "id", activity.getPackageName());
-            boolean isPlayback = (playbackRootId != 0 && (targetContainer.getId() == playbackRootId || targetContainer.findViewById(playbackRootId) != null));
-            int bottomMarginDp = com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.calculateBottomMarginDp(isPlayback, false);
-            int bottomMargin = dpToPx(bottomMarginDp);
-            int overscanMargin = dpToPx(com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.DEFAULT_OVERSCAN_MARGIN_DP);
-
-            if (targetContainer instanceof FrameLayout) {
-                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                );
+            View root = LayoutInflater.from(mContext).inflate(R.layout.vot_progress_overlay, target, false);
+            bindViews(root);
+            root.setFocusable(false);
+            root.setFocusableInTouchMode(false);
+            root.setClickable(false);
+            int endMargin = dpToPx(VoxTranslationOverlayLayoutPolicy.fixedVotEndMarginDp());
+            int bottomMargin = dpToPx(VoxTranslationOverlayLayoutPolicy.fixedVotBottomMarginDp());
+            if (target instanceof FrameLayout) {
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(wideWidthPx(), overlayHeightPx());
                 lp.gravity = Gravity.BOTTOM | Gravity.END;
-                lp.rightMargin = overscanMargin;
+                lp.setMarginEnd(endMargin);
                 lp.bottomMargin = bottomMargin;
-                mOverlayView.setLayoutParams(lp);
-            } else if (targetContainer instanceof LinearLayout) {
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                );
+                root.setLayoutParams(lp);
+            } else if (target instanceof LinearLayout) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(wideWidthPx(), overlayHeightPx());
                 lp.gravity = Gravity.END;
+                lp.setMarginEnd(endMargin);
                 lp.bottomMargin = bottomMargin;
-                mOverlayView.setLayoutParams(lp);
+                root.setLayoutParams(lp);
             } else {
-                ViewGroup.MarginLayoutParams lp = new ViewGroup.MarginLayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                );
-                lp.rightMargin = overscanMargin;
+                ViewGroup.MarginLayoutParams lp = new ViewGroup.MarginLayoutParams(wideWidthPx(), overlayHeightPx());
+                lp.setMarginEnd(endMargin);
                 lp.bottomMargin = bottomMargin;
-                mOverlayView.setLayoutParams(lp);
+                root.setLayoutParams(lp);
             }
-
-            mOverlayView.setVisibility(View.GONE);
-            mOverlayView.setAlpha(0f);
-
-            targetContainer.addView(mOverlayView);
-            mOverlayView.bringToFront();
-            mParentView = targetContainer;
+            root.setVisibility(View.GONE);
+            root.setAlpha(0f);
+            target.addView(root);
+            root.bringToFront();
+            mParentView = target;
             return true;
         } catch (Exception e) {
             Log.e(TAG, "Failed to inflate VOT progress overlay: %s", e.getMessage());
@@ -698,109 +465,42 @@ public class VotProgressOverlay {
         }
     }
 
-    public void updateControlsVisibility(boolean isControlsShown) {
-        if (mOverlayView != null && mOverlayView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) mOverlayView.getLayoutParams();
-            boolean isPlayback = mParentView != null;
-            int bottomMarginDp = com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxTranslationOverlayLayoutPolicy.calculateBottomMarginDp(isPlayback, isControlsShown);
-            int newMargin = dpToPx(bottomMarginDp);
-            if (lp.bottomMargin != newMargin) {
-                float deltaY = (float) (lp.bottomMargin - newMargin);
-                mOverlayView.animate().cancel();
-                mOverlayView.setTranslationY(deltaY);
-                lp.bottomMargin = newMargin;
-                mOverlayView.setLayoutParams(lp);
-                mOverlayView.animate().translationY(0f).setDuration(250).start();
-            }
-        }
+    /** HUD visibility deliberately does not move the fixed side anchor. */
+    public void updateControlsVisibility(boolean ignored) {
+        // Position is invariant by design; the fixed bottom margin is safe for both HUD states.
     }
 
     private void bindViews(View root) {
         mOverlayView = root;
         mExpandedContainer = root.findViewById(R.id.vot_progress_expanded_container);
-        mCompactContainer = root.findViewById(R.id.vot_progress_compact_container);
         mSpinner = root.findViewById(R.id.vot_progress_spinner);
         mIcon = root.findViewById(R.id.vot_progress_icon);
         mTitle = root.findViewById(R.id.vot_progress_text);
         mSubtitle = root.findViewById(R.id.vot_progress_subtitle);
         mTimer = root.findViewById(R.id.vot_progress_timer);
-
-        mCompactSpinner = root.findViewById(R.id.vot_progress_compact_spinner);
-        mCompactIcon = root.findViewById(R.id.vot_progress_compact_icon);
-        mCompactPercent = root.findViewById(R.id.vot_progress_compact_percent);
+        mRing = root.findViewById(R.id.vot_progress_ring);
     }
 
-    private ViewGroup findTargetContainer(@Nullable Activity activity) {
-        if (activity == null) {
-            return null;
-        }
+    private ViewGroup findTargetContainer(Activity activity) {
         int rootId = activity.getResources().getIdentifier("playback_fragment_root", "id", activity.getPackageName());
         if (rootId != 0) {
             View root = activity.findViewById(rootId);
-            if (root instanceof ViewGroup) {
-                return (ViewGroup) root;
-            }
+            if (root instanceof ViewGroup) return (ViewGroup) root;
         }
         View content = activity.findViewById(android.R.id.content);
-        if (content instanceof ViewGroup) {
-            return (ViewGroup) content;
-        }
-        View decor = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
-        if (decor instanceof ViewGroup) {
-            return (ViewGroup) decor;
-        }
-        return null;
+        return content instanceof ViewGroup ? (ViewGroup) content : null;
     }
 
+    private int wideWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_wide_width); }
+    private int circleWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_height); }
+    private int overlayHeightPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_height); }
+    private int dpToPx(int dp) { return Math.round(dp * mContext.getResources().getDisplayMetrics().density); }
+
     private String getStringSafe(int resId) {
-        if (mContext == null || resId == 0) return "";
-        try {
-            return mContext.getString(resId);
-        } catch (Exception e) {
-            return "";
-        }
+        try { return mContext.getString(resId); } catch (Exception e) { return ""; }
     }
 
     private String formatStringSafe(int resId, Object... args) {
-        if (mContext == null || resId == 0) return "";
-        try {
-            return mContext.getString(resId, args);
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private int dpToPx(float dp) {
-        return (int) TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                dp,
-                mContext.getResources().getDisplayMetrics()
-        );
-    }
-
-    // --- Helpers for regression tests ---
-
-    public String getTitleText() {
-        return mTitle != null && mTitle.getText() != null ? mTitle.getText().toString() : "";
-    }
-
-    public String getSubtitleText() {
-        return mSubtitle != null && mSubtitle.getText() != null ? mSubtitle.getText().toString() : "";
-    }
-
-    public String getTimerText() {
-        return mTimer != null && mTimer.getText() != null ? mTimer.getText().toString() : "";
-    }
-
-    public boolean isSpinnerVisible() {
-        return mSpinner != null && mSpinner.getVisibility() == View.VISIBLE;
-    }
-
-    public boolean isIconVisible() {
-        return mIcon != null && mIcon.getVisibility() == View.VISIBLE;
-    }
-
-    public boolean isTimerVisible() {
-        return mTimer != null && mTimer.getVisibility() == View.VISIBLE;
+        try { return mContext.getString(resId, args); } catch (Exception e) { return ""; }
     }
 }

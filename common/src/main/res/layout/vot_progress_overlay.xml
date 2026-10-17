@@ -1,34 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/vot_progress_root"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
+    android:layout_width="@dimen/vot_overlay_wide_width"
+    android:layout_height="@dimen/vot_overlay_height"
+    android:layout_gravity="end|bottom"
+    android:background="@drawable/bg_vot_progress_overlay"
     android:clipChildren="false"
     android:clipToPadding="false"
+    android:clickable="false"
+    android:elevation="8dp"
     android:focusable="false"
-    android:clickable="false">
+    android:importantForAccessibility="no">
 
-    <!-- Expanded Pill Mode (initial ~4.5 seconds) -->
     <LinearLayout
         android:id="@+id/vot_progress_expanded_container"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="end|bottom"
-        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:gravity="center_vertical"
-        android:background="@drawable/bg_vot_progress_overlay"
+        android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingEnd="18dp"
-        android:paddingTop="9dp"
-        android:paddingBottom="9dp"
-        android:elevation="8dp">
+        android:paddingEnd="18dp">
 
         <ProgressBar
             android:id="@+id/vot_progress_spinner"
             style="?android:attr/progressBarStyleSmall"
             android:layout_width="22dp"
             android:layout_height="22dp"
-            android:layout_gravity="center_vertical"
             android:indeterminate="true"
             android:indeterminateTint="@color/vox_accent" />
 
@@ -36,89 +33,74 @@
             android:id="@+id/vot_progress_icon"
             android:layout_width="22dp"
             android:layout_height="22dp"
-            android:layout_gravity="center_vertical"
-            android:visibility="gone"
-            android:contentDescription="@null" />
+            android:contentDescription="@null"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/vot_progress_text_container"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
             android:layout_marginStart="12dp"
+            android:layout_weight="1"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/vot_progress_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/vox_text_primary"
-                android:textSize="14sp"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
-                android:singleLine="true" />
+                android:maxLines="1"
+                android:textColor="@color/vox_text_primary"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/vot_progress_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:fontFamily="sans-serif"
+                android:maxLines="1"
                 android:textColor="@color/vox_text_secondary"
                 android:textSize="11sp"
-                android:fontFamily="sans-serif"
-                android:singleLine="true" />
+                android:visibility="gone" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/vot_progress_timer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:layout_marginStart="14dp"
+            android:fontFamily="sans-serif-medium"
             android:textColor="@color/vox_accent"
             android:textSize="14sp"
-            android:fontFamily="sans-serif-medium"
-            android:singleLine="true" />
-
+            android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Compact Circle Mode (post-collapse: hourglass or real % progress) -->
+    <com.liskovsoft.smartyoutubetv2.common.vot.VotProgressRingView
+        android:id="@+id/vot_progress_ring"
+        android:layout_width="@dimen/vot_overlay_circle_size"
+        android:layout_height="@dimen/vot_overlay_circle_size"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+    <!-- Compatibility ids retained for old callers; these are not a second visual. -->
     <FrameLayout
         android:id="@+id/vot_progress_compact_container"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_gravity="end|bottom"
-        android:background="@drawable/bg_vot_progress_circle"
-        android:elevation="8dp"
-        android:visibility="gone">
-
-        <ProgressBar
-            android:id="@+id/vot_progress_compact_spinner"
-            style="?android:attr/progressBarStyleSmall"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_gravity="center"
-            android:indeterminate="true"
-            android:indeterminateTint="@color/vox_accent" />
-
-        <ImageView
-            android:id="@+id/vot_progress_compact_icon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:layout_gravity="center"
-            android:src="@drawable/ic_vot_hourglass"
-            android:contentDescription="@null" />
-
-        <TextView
-            android:id="@+id/vot_progress_compact_percent"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:textColor="@color/vox_accent"
-            android:textSize="11sp"
-            android:fontFamily="sans-serif-medium"
-            android:visibility="gone"
-            android:singleLine="true" />
-
-    </FrameLayout>
-
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+    <ProgressBar
+        android:id="@+id/vot_progress_compact_spinner"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+    <ImageView
+        android:id="@+id/vot_progress_compact_icon"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+    <TextView
+        android:id="@+id/vot_progress_compact_percent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
 </FrameLayout>
