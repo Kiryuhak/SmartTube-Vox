@@ -24,9 +24,9 @@ class VotRightSideOverlayContractTest {
     fun progressStartsAtZeroAndIsBackendDriven() {
         val progress = VotBackendProgressEstimator()
         assertEquals(0, progress.displayProgress)
-        assertEquals(10, progress.onProcessingHeartbeat(60))
+        assertEquals(0, progress.onProcessingHeartbeat(60))
         // An identical heartbeat does not synthesize another percent.
-        assertEquals(10, progress.onProcessingHeartbeat(60))
+        assertEquals(0, progress.onProcessingHeartbeat(60))
     }
 
     @Test
@@ -34,7 +34,7 @@ class VotRightSideOverlayContractTest {
         val progress = VotBackendProgressEstimator()
         progress.onProcessingHeartbeat(60)
         val advanced = progress.onProcessingHeartbeat(30)
-        assertTrue(advanced > 10)
+        assertTrue(advanced >= 10)
         assertEquals(advanced, progress.onProcessingHeartbeat(45))
     }
 

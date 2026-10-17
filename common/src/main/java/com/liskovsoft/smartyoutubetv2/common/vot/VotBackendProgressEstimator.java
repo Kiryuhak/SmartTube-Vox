@@ -8,12 +8,21 @@ public final class VotBackendProgressEstimator {
     private int mDisplayProgress;
     private int mInitialRemainingSec = -1;
     private int mLowestRemainingSec = Integer.MAX_VALUE;
+    private boolean mProcessingStarted;
 
     public int onLookup() {
-        return advanceTo(5);
+        return mDisplayProgress;
     }
 
     public int onProcessingHeartbeat(int remainingSec) {
+        if (!mProcessingStarted) {
+            mProcessingStarted = true;
+            if (remainingSec > 0) {
+                mInitialRemainingSec = remainingSec;
+                mLowestRemainingSec = remainingSec;
+            }
+            return mDisplayProgress; // The collapsed circle is first shown at exactly 0%.
+        }
         int candidate = 10;
         if (remainingSec > 0) {
             if (mInitialRemainingSec < 0) mInitialRemainingSec = remainingSec;
@@ -56,6 +65,7 @@ public final class VotBackendProgressEstimator {
         mDisplayProgress = 0;
         mInitialRemainingSec = -1;
         mLowestRemainingSec = Integer.MAX_VALUE;
+        mProcessingStarted = false;
     }
 
     private int advanceTo(int candidate) {
