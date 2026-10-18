@@ -104,6 +104,29 @@ public class YandexVotPlaybackAdapterTest {
         boolean mainVideoPlaying = true;
         float translationVolume = 1.0f;
 
+        float videoVolume = 1.0f;
+        boolean muted = false;
+
+        @Override
+        public void setOriginalVideoVolume(float volume01) {
+            this.videoVolume = volume01;
+        }
+
+        @Override
+        public float getOriginalVideoVolume() {
+            return videoVolume;
+        }
+
+        @Override
+        public boolean isOriginalVideoMuted() {
+            return muted;
+        }
+
+        @Override
+        public void setOriginalVideoMuted(boolean muted) {
+            this.muted = muted;
+        }
+
         @Override
         public void duckOriginalAudio() {
             ducked = true;
@@ -655,5 +678,27 @@ public class YandexVotPlaybackAdapterTest {
         assertEquals(25000L, fakePlayer.positionMs);
         fakePlayer.callback.onSeekProcessed();
         assertTrue(adapter.isPlaying());
+    }
+
+    @Test
+    public void test20_AdaptiveVolumeControllerIntegratedWithPlaybackAdapter() {
+        assertNotNull(adapter.getAdaptiveVolumeController());
+
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/trans.mp3", false, false
+        );
+
+        adapter.onStateChanged(readyState);
+        assertFalse(adapter.getAdaptiveVolumeController().isActive());
+
+        fakePlayer.callback.onPrepared();
+        assertTrue(adapter.isPlaying());
+        assertTrue(adapter.getAdaptiveVolumeController().isActive());
+        assertTrue(fakeDucking.ducked);
+
+        adapter.stop();
+        assertFalse(adapter.getAdaptiveVolumeController().isActive());
+        assertFalse(fakeDucking.ducked);
     }
 }

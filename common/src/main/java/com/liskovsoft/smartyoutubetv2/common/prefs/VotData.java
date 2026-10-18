@@ -28,6 +28,11 @@ public class VotData extends SharedPreferencesBase {
     private static final String VOX_PROXY_PORT = "vox_proxy_port";
     private static final String VOX_PROXY_USERNAME = "vox_proxy_username";
     private static final String VOX_PROXY_PASSWORD = "vox_proxy_password";
+    private static final String AUTO_VOLUME_ENABLED = "auto_volume_enabled";
+    private static final String SMART_DUCKING_ENABLED = "smart_ducking_enabled";
+    private static final String SYNC_VOLUME_ENABLED = "sync_volume_enabled";
+    private static final String AUDIO_BOOSTER_ENABLED = "audio_booster_enabled";
+    private static final String AUDIO_BOOSTER_PERCENT = "audio_booster_percent";
     private static final int DEFAULT_ORIGINAL_VOLUME_PERCENT = 5;
     private static final int DEFAULT_TRANSLATION_VOLUME_PERCENT = 100;
 
@@ -226,6 +231,47 @@ public class VotData extends SharedPreferencesBase {
 
     public void setTranslationVolumePercent(int percent) {
         putInt(TRANSLATION_VOLUME_PERCENT, clampPercent(percent));
+    }
+
+    public boolean isAutoVolumeEnabled() {
+        return getBoolean(AUTO_VOLUME_ENABLED, true);
+    }
+
+    public void setAutoVolumeEnabled(boolean enabled) {
+        putBoolean(AUTO_VOLUME_ENABLED, enabled);
+    }
+
+    public boolean isSmartDuckingEnabled() {
+        return getBoolean(SMART_DUCKING_ENABLED, true);
+    }
+
+    public void setSmartDuckingEnabled(boolean enabled) {
+        putBoolean(SMART_DUCKING_ENABLED, enabled);
+    }
+
+    public boolean isSyncVolumeEnabled() {
+        return getBoolean(SYNC_VOLUME_ENABLED, false);
+    }
+
+    public void setSyncVolumeEnabled(boolean enabled) {
+        putBoolean(SYNC_VOLUME_ENABLED, enabled);
+    }
+
+    public boolean isAudioBoosterEnabled() {
+        return getBoolean(AUDIO_BOOSTER_ENABLED, false);
+    }
+
+    public void setAudioBoosterEnabled(boolean enabled) {
+        putBoolean(AUDIO_BOOSTER_ENABLED, enabled);
+    }
+
+    public int getAudioBoosterPercent() {
+        int percent = getInt(AUDIO_BOOSTER_PERCENT, 100);
+        return Math.max(100, Math.min(300, percent));
+    }
+
+    public void setAudioBoosterPercent(int percent) {
+        putInt(AUDIO_BOOSTER_PERCENT, Math.max(100, Math.min(300, percent)));
     }
 
     public boolean isAutoTranslateEnabled() {

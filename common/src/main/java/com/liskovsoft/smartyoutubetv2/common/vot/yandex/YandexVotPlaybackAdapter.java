@@ -12,6 +12,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.liskovsoft.smartyoutubetv2.common.vot.TranslationAudioPlayer;
+import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAdaptiveVolumeController;
+import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioBooster;
+import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioLevelProcessor;
 import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxAudioProxyFallback;
 import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxAudioSyncDecision;
 import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxAudioSyncPolicy;
@@ -50,6 +53,15 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         void release();
         boolean isReady();
         boolean isPlaying();
+        default @Nullable VoxAudioLevelProcessor getAudioLevelProcessor() { return null; }
+        default @Nullable VoxAudioBooster getAudioBooster() { return null; }
+        default void configureBooster(boolean enabled, int boostPercent) {
+            VoxAudioBooster booster = getAudioBooster();
+            if (booster != null) {
+                booster.setEnabled(enabled);
+                booster.setBoostPercent(boostPercent);
+            }
+        }
     }
 
     public interface AudioDuckingBridge {
@@ -65,6 +77,16 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         default long determineInitialPlaybackPosition() {
             return getCurrentVideoPositionMs();
         }
+        default void setOriginalVideoVolume(float volume01) {}
+        default float getOriginalVideoVolume() { return 1.0f; }
+        default boolean isOriginalVideoMuted() { return false; }
+        default void setOriginalVideoMuted(boolean muted) {}
+        default boolean isAudioBoosterEnabled() { return false; }
+        default int getAudioBoosterPercent() { return 100; }
+        default boolean isAutoVolumeEnabled() { return true; }
+        default boolean isSmartDuckingEnabled() { return true; }
+        default boolean isSyncVolumeEnabled() { return false; }
+        default float getOriginalVolumeMultiplier() { return 0.15f; }
     }
 
     public interface PlaybackStateListener {
@@ -82,6 +104,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     private final AudioPlayerFactory playerFactory;
     private final AudioDuckingBridge duckingBridge;
     private final VoxAudioSyncPolicy syncPolicy;
+    private final VoxAdaptiveVolumeController adaptiveVolumeController;
     @Nullable private PlaybackStateListener stateListener;
 
     private final Object lock = new Object();
@@ -104,7 +127,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                 VoxAudioSyncPolicy.DEFAULT_TOLERANCE_MS,
                 SYNC_THRESHOLD_MS,
                 SYNC_SEEK_COOLDOWN_MS
-        ));
+        ), null);
     }
 
     public YandexVotPlaybackAdapter(
@@ -112,9 +135,58 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
             @NonNull AudioDuckingBridge duckingBridge,
             @NonNull VoxAudioSyncPolicy syncPolicy
     ) {
+        this(playerFactory, duckingBridge, syncPolicy, null);
+    }
+
+    public YandexVotPlaybackAdapter(
+            @NonNull AudioPlayerFactory playerFactory,
+            @NonNull final AudioDuckingBridge duckingBridge,
+            @NonNull VoxAudioSyncPolicy syncPolicy,
+            @Nullable VoxAdaptiveVolumeController adaptiveVolumeController
+    ) {
         this.playerFactory = Objects.requireNonNull(playerFactory, "playerFactory cannot be null");
         this.duckingBridge = Objects.requireNonNull(duckingBridge, "duckingBridge cannot be null");
         this.syncPolicy = Objects.requireNonNull(syncPolicy, "syncPolicy cannot be null");
+        this.adaptiveVolumeController = adaptiveVolumeController != null
+                ? adaptiveVolumeController
+                : new VoxAdaptiveVolumeController(new VoxAdaptiveVolumeController.Bridge() {
+                    @Override
+                    public void setOriginalVideoVolume(float volume01) {
+                        duckingBridge.setOriginalVideoVolume(volume01);
+                    }
+
+                    @Override
+                    public float getOriginalVideoVolume() {
+                        return duckingBridge.getOriginalVideoVolume();
+                    }
+
+                    @Override
+                    public boolean isOriginalVideoMuted() {
+                        return duckingBridge.isOriginalVideoMuted();
+                    }
+
+                    @Override
+                    public void setOriginalVideoMuted(boolean muted) {
+                        duckingBridge.setOriginalVideoMuted(muted);
+                    }
+
+                    @Override
+                    public boolean isTranslationPlaying() {
+                        synchronized (lock) {
+                            return isPlaying && activePlayer != null && activePlayer.isPlaying();
+                        }
+                    }
+
+                    @Override
+                    public boolean isMainVideoPlaying() {
+                        return duckingBridge.isMainVideoPlaying();
+                    }
+                });
+    }
+
+    @NonNull
+    public VoxAdaptiveVolumeController getAdaptiveVolumeController() {
+        return adaptiveVolumeController;
     }
 
     public static AudioPlayerFactory createDefaultPlayerFactory(@NonNull final Context context) {
@@ -204,6 +276,21 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                     public boolean isPlaying() {
                         return player.isPlaying();
                     }
+
+                    @Override
+                    public VoxAudioLevelProcessor getAudioLevelProcessor() {
+                        return player.getAudioLevelProcessor();
+                    }
+
+                    @Override
+                    public VoxAudioBooster getAudioBooster() {
+                        return player.getAudioBooster();
+                    }
+
+                    @Override
+                    public void configureBooster(boolean enabled, int boostPercent) {
+                        player.configureBooster(enabled, boostPercent);
+                    }
                 };
             }
         };
@@ -255,6 +342,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
             routeTracker = new VoxAudioProxyFallback.BoundedRouteTracker(audioUrl, duckingBridge.getProxyWorkerHost());
 
             final AudioPlayer player = playerFactory.createPlayer();
+            player.configureBooster(duckingBridge.isAudioBoosterEnabled(), duckingBridge.getAudioBoosterPercent());
             activePlayer = player;
             isPrepared = false;
             isPlaying = false;
@@ -341,6 +429,19 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         if (isPlaying) {
             return;
         }
+
+        adaptiveVolumeController.setLevelProcessor(player.getAudioLevelProcessor());
+        VoxAdaptiveVolumeController.AutoVolumeMode mode;
+        if (!duckingBridge.isAutoVolumeEnabled()) {
+            mode = VoxAdaptiveVolumeController.AutoVolumeMode.OFF;
+        } else if (duckingBridge.isSmartDuckingEnabled()) {
+            mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
+        } else {
+            mode = VoxAdaptiveVolumeController.AutoVolumeMode.FIXED;
+        }
+        adaptiveVolumeController.setMode(mode);
+        adaptiveVolumeController.setFixedTarget(duckingBridge.getOriginalVolumeMultiplier());
+        adaptiveVolumeController.setSyncVolumeEnabled(duckingBridge.isSyncVolumeEnabled());
 
         duckOriginalAudioLocked();
 
@@ -477,6 +578,8 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                 default:
                     break;
             }
+
+            adaptiveVolumeController.performTick();
         }
     }
 
@@ -495,6 +598,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
             routeTracker = new VoxAudioProxyFallback.BoundedRouteTracker(newAudioUrl, duckingBridge.getProxyWorkerHost());
 
             final AudioPlayer player = playerFactory.createPlayer();
+            player.configureBooster(duckingBridge.isAudioBoosterEnabled(), duckingBridge.getAudioBoosterPercent());
             activePlayer = player;
             isPrepared = false;
             isPlaying = false;
@@ -563,6 +667,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         synchronized (lock) {
             YandexVotLog.i(TAG, "generation=" + currentGeneration + " video_switch");
             currentGeneration++;
+            adaptiveVolumeController.onVideoChanged();
             handleStopLocked(currentGeneration, "video_switch");
         }
     }
@@ -587,6 +692,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
     private void duckOriginalAudioLocked() {
         if (!isDucked) {
+            adaptiveVolumeController.start(duckingBridge.getOriginalVideoVolume(), duckingBridge.isOriginalVideoMuted());
             duckingBridge.duckOriginalAudio();
             isDucked = true;
         }
@@ -594,6 +700,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
     private void restoreOriginalAudioLocked() {
         if (isDucked) {
+            adaptiveVolumeController.stop();
             duckingBridge.restoreOriginalAudio();
             isDucked = false;
         }
@@ -693,6 +800,22 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     public VoxAudioProxyFallback.BoundedRouteTracker getRouteTracker() {
         synchronized (lock) {
             return routeTracker;
+        }
+    }
+
+    public void onUserVideoVolumeChanged(float newVolume01) {
+        adaptiveVolumeController.onUserVideoVolumeChanged(newVolume01);
+    }
+
+    public int onTranslationVolumeChanged(int newTranslationPercent, int currentVideoPercent) {
+        return adaptiveVolumeController.onTranslationVolumeChanged(newTranslationPercent, currentVideoPercent);
+    }
+
+    public void configureBooster(boolean enabled, int boostPercent) {
+        synchronized (lock) {
+            if (activePlayer != null) {
+                activePlayer.configureBooster(enabled, boostPercent);
+            }
         }
     }
 }

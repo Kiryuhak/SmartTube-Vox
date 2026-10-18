@@ -15,18 +15,19 @@
 - **ALREADY_EQUIVALENT**: 23
 - **IMPLEMENTED_PHASE_B**: 9
 - **IMPLEMENTED_PHASE_C**: 2
-- **PARTIAL**: 7
-- **MISSING**: 3
+- **IMPLEMENTED_PHASE_D**: 5
+- **PARTIAL**: 5
+- **MISSING**: 0
 - **NOT_APPLICABLE_ANDROID**: 3 (Browser DOM scrapers/site adapters, Dynamic GitHub i18n localization, Keyboard hotkeys)
 - **UI_PHASE_LATER**: 2 (Right translation plaque redesign, Telegram admin notifications)
 - **BLOCKED_BY_EXTERNAL_SERVICE**: 0
 
 ### Functional Parity Calculation
 Applicable native features: $49 - 3\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHASE\_LATER)} = 44$ features.
-- Fully equivalent or implemented (Phase B & C): $23 + 9 + 2 = 34$ ($77.3\%$)
-- Partial (Baseline tracking, Mute state, Video language cache, Auto subtitles, Subtitle styling, Account auth, Voice catalog): $7$ ($15.9\%$)
-- Missing (Smart Ducking RMS speech gate, Volume Sync delta linking, Audio Booster): $3$ ($6.8\%$)
-- **Core Protocol & Audio Lifecycle Parity**: **100%** of network, caching, dedup, and playback synchronization logic is fully verified.
+- Fully equivalent or implemented (Phases B, C & D): $23 + 9 + 2 + 5 = 39$ ($88.6\%$)
+- Partial (Video language cache, Auto subtitles, Subtitle styling, Account auth, Voice catalog): $5$ ($11.4\%$)
+- Missing: $0$ ($0.0\%$)
+- **Core Protocol, Audio Lifecycle & Audio Mixing/Ducking Parity**: **100%** of network, caching, dedup, playback synchronization, smart ducking, baseline tracking, and volume linking logic is fully verified.
 
 ---
 
@@ -80,21 +81,40 @@ Applicable native features: $49 - 3\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHAS
 6. **In-Place Source Refresh**:
    - `refreshSource()` updating signed audio URL while preserving current position and speed.
 
+### Phase D — Audio Mixing, Smart Ducking & Volume Parity (Commit Phase D)
+1. **Deterministic `VoxSmartDuckingPolicy`**:
+   - 1:1 mathematical port of userscript `ducking.ts` and `smartDuckingRuntime.ts`.
+   - Complete state machine: `IDLE`, `ATTACK`, `DUCKED`, `HOLD`, `RELEASE`.
+   - Exact speech gate constants: `tickInterval=50ms`, `thresholdOn=0.012`, `thresholdOff=0.009`, `holdMs=520ms`, `attackTau=110ms`, `releaseTau=600ms`, `rmsMissingGraceMs=200ms`.
+   - Slew rate clamping: `maxDownPerSec=3.5` (max duck step 0.175/tick), `maxUpPerSec=0.9` (max release step 0.045/tick).
+   - Envelope calculation: $y_n = y_{n-1} + (x_n - y_{n-1}) \cdot (1 - e^{-\Delta t / \tau})$.
+2. **Zero-Allocation `VoxAudioLevelProcessor`**:
+   - ExoPlayer `BaseAudioProcessor` tap reading live PCM directly from the secondary audio rendering thread.
+   - Calculates true RMS energy ($\sqrt{\sum s^2 / N}$) from 16-bit and float PCM buffers without memory allocations.
+3. **Dynamic Baseline Volume Tracking & Remote Override**:
+   - Protects user baseline volume; never overwrites with hardcoded 100% or 15%.
+   - Detects remote control adjustments during ducking ($|\Delta\text{volume}| > 0.02$) and updates `baseline` dynamically so un-ducking smoothly targets the newly chosen volume.
+4. **Mute State Preservation**:
+   - Records `autoVolumeMutedOnStart`; reliably restores pre-duck mute state across stop, cancel, error, and un-duck.
+5. **Delta-Based Volume Linking (`applyVolumeLinkDelta`)**:
+   - Pure `VoxVolumeLinkCoordinator` implementing reference relative volume offset arithmetic with reentrancy protection (`withProgrammaticGuard`).
+   - Automatically switches ducking mode to classic fixed auto-volume when volume sync is active, matching reference userscript behavior.
+6. **Hardware/DSP Audio Booster**:
+   - Native Android `LoudnessEnhancer` wrapper on the translation `audioSessionId`.
+   - Maps 100%–300% to 0–1200 mB (+12 dB max gain) with fail-safe error isolation preventing player crashes.
+
 ---
 
 ## 4. Remaining Scope Breakdown
 
-1. **PHASE D: Audio Mixing, Adaptive Volume & Smart Ducking**:
-   - Real-time RMS speech gating on translated audio stream (`tickMs=50`, `thresholdOn=0.012`, `thresholdOff=0.009`, `holdMs=520`, `attackTau=110ms`, `releaseTau=600ms`).
-   - Dynamic baseline volume tracking and manual remote volume override preservation.
-   - Delta-based Volume Sync (`applyVolumeLinkDelta`).
-   - Audio Booster gain amplification via Android `LoudnessEnhancer`.
-2. **PHASE E: Language Policy & Subtitle Layout**:
+1. **PHASE E: Language Policy & Subtitle Layout**:
    - Persistent `VideoLangCache` store.
    - Auto-subtitles fetching and presentation.
    - Subtitle text line wrapping and layout constraints.
-3. **PHASE F: Account Auth & Voice Catalog**:
+2. **PHASE F: Account Auth & Voice Catalog**:
    - Yandex OAuth account token storage and expiration checks.
    - Full voice actor selection catalog.
+3. **PHASE LIVE: Stream Translation Hardening**:
+   - Long-session stream stability and ping keep-alive reliability.
 4. **PHASE UI: Visual Overlays**:
    - Redesign of right-side translation plaque and TV HUD overlay.

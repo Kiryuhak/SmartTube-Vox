@@ -39,6 +39,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotPlaybackAdapter
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotLog;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotShadowController;
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotState;
+import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAdaptiveVolumeController;
 import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline;
 
 import androidx.annotation.NonNull;
@@ -1730,12 +1731,12 @@ public class VoiceTranslateController extends BasePlayerController {
         return new YandexVotPlaybackAdapter.AudioDuckingBridge() {
             @Override
             public void duckOriginalAudio() {
-                duckMainAudio();
+                mIsAudioDucked = true;
             }
 
             @Override
             public void restoreOriginalAudio() {
-                restoreMainVolume();
+                mIsAudioDucked = false;
             }
 
             @Override
@@ -1772,6 +1773,60 @@ public class VoiceTranslateController extends BasePlayerController {
             @Override
             public long determineInitialPlaybackPosition() {
                 return VoiceTranslateController.this.determineInitialPlaybackPosition();
+            }
+
+            @Override
+            public void setOriginalVideoVolume(float volume01) {
+                if (getPlayer() != null) {
+                    getPlayer().setVolume(volume01);
+                }
+            }
+
+            @Override
+            public float getOriginalVideoVolume() {
+                return getPlayer() != null ? getPlayer().getVolume() : 1.0f;
+            }
+
+            @Override
+            public boolean isOriginalVideoMuted() {
+                return getPlayer() != null && getPlayer().getVolume() <= 0.001f;
+            }
+
+            @Override
+            public void setOriginalVideoMuted(boolean muted) {
+                if (getPlayer() != null && muted) {
+                    getPlayer().setVolume(0f);
+                }
+            }
+
+            @Override
+            public boolean isAudioBoosterEnabled() {
+                return votData().isAudioBoosterEnabled();
+            }
+
+            @Override
+            public int getAudioBoosterPercent() {
+                return votData().getAudioBoosterPercent();
+            }
+
+            @Override
+            public boolean isAutoVolumeEnabled() {
+                return votData().isAutoVolumeEnabled();
+            }
+
+            @Override
+            public boolean isSmartDuckingEnabled() {
+                return votData().isSmartDuckingEnabled();
+            }
+
+            @Override
+            public boolean isSyncVolumeEnabled() {
+                return votData().isSyncVolumeEnabled();
+            }
+
+            @Override
+            public float getOriginalVolumeMultiplier() {
+                return votData().getOriginalVolumeMultiplier();
             }
         };
     }
@@ -2601,9 +2656,25 @@ public class VoiceTranslateController extends BasePlayerController {
 		
 		if (mTranslationPlayer != null) {
 			mTranslationPlayer.setVolume(votData().getTranslationVolumeMultiplier());
+            mTranslationPlayer.configureBooster(votData().isAudioBoosterEnabled(), votData().getAudioBoosterPercent());
         }
         if (mYandexPlaybackAdapter != null) {
             mYandexPlaybackAdapter.setVolume(votData().getTranslationVolumeMultiplier());
+            mYandexPlaybackAdapter.configureBooster(votData().isAudioBoosterEnabled(), votData().getAudioBoosterPercent());
+            VoxAdaptiveVolumeController controller = mYandexPlaybackAdapter.getAdaptiveVolumeController();
+            boolean autoVolEnabled = votData().isAutoVolumeEnabled();
+            boolean smartDucking = votData().isSmartDuckingEnabled();
+            VoxAdaptiveVolumeController.AutoVolumeMode mode;
+            if (!autoVolEnabled) {
+                mode = VoxAdaptiveVolumeController.AutoVolumeMode.OFF;
+            } else if (smartDucking) {
+                mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
+            } else {
+                mode = VoxAdaptiveVolumeController.AutoVolumeMode.FIXED;
+            }
+            controller.setMode(mode);
+            controller.setFixedTarget(votData().getOriginalVolumeMultiplier());
+            controller.setSyncVolumeEnabled(votData().isSyncVolumeEnabled());
         }
     }
 

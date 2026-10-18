@@ -5,15 +5,20 @@ import android.net.Uri;
 
 import androidx.annotation.Nullable;
 
+import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.ExoPlayerFactory;
 import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.audio.AudioProcessor;
 import com.google.android.exoplayer2.source.ExtractorMediaSource;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
 import com.google.android.exoplayer2.util.Util;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioBooster;
+import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioLevelProcessor;
 
 public class TranslationAudioPlayer implements Player.EventListener {
     private static final String TAG = TranslationAudioPlayer.class.getSimpleName();
@@ -25,6 +30,8 @@ public class TranslationAudioPlayer implements Player.EventListener {
     }
 
     private final Context mContext;
+    private final VoxAudioLevelProcessor mLevelProcessor = new VoxAudioLevelProcessor();
+    private final VoxAudioBooster mBooster = new VoxAudioBooster(false, 100);
     private SimpleExoPlayer mPlayer;
     private int mSessionId;
     @Nullable
@@ -34,6 +41,19 @@ public class TranslationAudioPlayer implements Player.EventListener {
 
     public TranslationAudioPlayer(Context context) {
         mContext = context.getApplicationContext();
+    }
+
+    public VoxAudioLevelProcessor getAudioLevelProcessor() {
+        return mLevelProcessor;
+    }
+
+    public VoxAudioBooster getAudioBooster() {
+        return mBooster;
+    }
+
+    public void configureBooster(boolean enabled, int boostPercent) {
+        mBooster.setEnabled(enabled);
+        mBooster.setBoostPercent(boostPercent);
     }
 
     public void prepare(int sessionId, String url, float speed, PlaybackCallback callback) {
@@ -50,8 +70,15 @@ public class TranslationAudioPlayer implements Player.EventListener {
                 .createMediaSource(Uri.parse(url));
         Log.i(TAG, "VOT_AUDIO session=" + mSessionId + " source_set");
 
-        mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
+        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(mContext) {
+            @Override
+            protected AudioProcessor[] buildAudioProcessors() {
+                return new AudioProcessor[] { mLevelProcessor };
+            }
+        };
+        mPlayer = ExoPlayerFactory.newSimpleInstance(mContext, renderersFactory, new DefaultTrackSelector());
         mPlayer.addListener(this);
+        mPlayer.addAudioListener(mBooster);
 
         // Silent pre-buffer barrier: volume is 0 until initial seek completes
         mPlayer.setVolume(0f);
@@ -134,12 +161,15 @@ public class TranslationAudioPlayer implements Player.EventListener {
 
     public void release() {
         mCallback = null;
+        mBooster.release();
         if (mPlayer != null) {
             Log.i(TAG, "VOT_AUDIO session=" + mSessionId + " release");
+            mPlayer.removeAudioListener(mBooster);
             mPlayer.removeListener(this);
             mPlayer.release();
             mPlayer = null;
         }
+        mLevelProcessor.reset();
         mIsPrepared = false;
         mIsPlaying = false;
     }

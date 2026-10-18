@@ -9,9 +9,8 @@
 
 ## 1. Summary of Remaining Scope
 
-Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Session) and **Phase C** (Audio Lifecycle / AV Sync / Route Fallback / Source Refresh), the remaining applicable features are organized into targeted subsequent phases:
+Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Session), **Phase C** (Audio Lifecycle / AV Sync / Route Fallback / Source Refresh), and **Phase D** (Audio Engine / Smart Ducking / Volume Sync / Audio Booster), the remaining applicable features are organized into targeted subsequent phases:
 
-- **PHASE D**: Audio Engine, Smart Ducking, Volume Sync & Audio Booster
 - **PHASE E**: Language Policy, Language Cache & Subtitles Presentation
 - **PHASE F**: Account Authentication & Voice Selection Catalog
 - **PHASE LIVE**: Live Stream Translation Verification & Hardening
@@ -23,11 +22,11 @@ Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Sessi
 
 | PRIORITY | FEATURE | REFERENCE SYMBOLS | CURRENT STATE | WHAT IS MISSING | ANDROID NATIVE PLAN | NEXT PHASE | ESTIMATED COMPLEXITY |
 |---|---|---|---|---|---|---|---|
-| **P0** | Smart Ducking (Adaptive Volume) | `SMART_DUCKING_DEFAULT_CONFIG`, `updateSpeechGate`, `computeSmartDuckingStep` in `src/videoHandler/modules/ducking.ts` | MISSING | Real-time RMS calculation on translation PCM; speech gate state machine (`thresholdOn=0.012`, `thresholdOff=0.009`, `holdMs=520`, `attackTau=110ms`, `releaseTau=600ms`, `maxDownPerSec=3.5`, `maxUpPerSec=0.9`) | ExoPlayer `AudioProcessor` PCM tap reading 16-bit time-domain samples -> pass to pure Kotlin `VoxSmartDuckingPolicy` -> apply smooth volume steps to master video player | PHASE D | Medium |
-| **P0** | Baseline Volume Tracking & Remote Override | `resolveBaseline`, `resolveDesiredVolume` in `ducking.ts` | PARTIAL | Baseline tracking when user adjusts TV volume using physical remote during ducking (`abs(delta) > 0.02`) | Track manual remote volume adjustments in `VoiceTranslateController`; update `runtime.baseline` so un-ducking returns to the newly chosen volume level | PHASE D | Low |
-| **P1** | Mute State Preservation | `restoreAutoVolumeMute` in `ducking.ts` | PARTIAL | Explicit preservation of pre-translation mute state across ducking and stop events | Store `autoVolumeMutedOnStart`; restore `player.setMute(true)` on finish if user was previously muted | PHASE D | Low |
-| **P1** | Volume Sync (Delta Linking) | `syncVolume`, `applyVolumeLinkDelta` in `src/videoHandler/volumeLink.ts` | MISSING | Bi-directional delta-based linked sliders (`video <-> translation`) preserving relative offset; forces classic auto-volume | Implement `VoxVolumeLinkCoordinator` with exact `applyVolumeLinkDelta` arithmetic; auto-switch smart ducking to classic mode when active | PHASE D | Low |
-| **P1** | Audio Booster (> 100% Volume) | `AudioPlayer.initAudioBooster`, WebAudio `gainNode` in `src/videoHandler/translationVolume.ts` (max up to 900%) | MISSING | Gain amplification beyond 1.0 (e.g. 150% - 300%) without digital clipping | Attach Android `LoudnessEnhancer` effect to translation `AudioTrack` audioSessionId (+6dB = 200%, +10dB = 316%) utilizing hardware/DSP limiter | PHASE D | Medium |
+| **P0** | Smart Ducking (Adaptive Volume) | `SMART_DUCKING_DEFAULT_CONFIG`, `updateSpeechGate`, `computeSmartDuckingStep` in `src/videoHandler/modules/ducking.ts` | COMPLETED | None (1:1 reference math fully implemented) | ExoPlayer `VoxAudioLevelProcessor` PCM tap -> pure Kotlin `VoxSmartDuckingPolicy` -> `VoxAdaptiveVolumeController` smooth volume attenuation | COMPLETED (PHASE D) | Done |
+| **P0** | Baseline Volume Tracking & Remote Override | `resolveBaseline`, `resolveDesiredVolume` in `ducking.ts` | COMPLETED | None (preserves user baseline across remote adjustments `abs(delta) > 0.02`) | Track manual remote volume adjustments in `VoxSmartDuckingPolicy` & `VoxAdaptiveVolumeController`; un-ducking returns to newly chosen volume | COMPLETED (PHASE D) | Done |
+| **P1** | Mute State Preservation | `restoreAutoVolumeMute` in `ducking.ts` | COMPLETED | None (preserves mute state across duck/stop/switch) | Store `autoVolumeMutedOnStart`; restore player mute state on finish/un-duck in `VoxAdaptiveVolumeController` | COMPLETED (PHASE D) | Done |
+| **P1** | Volume Sync (Delta Linking) | `syncVolume`, `applyVolumeLinkDelta` in `src/videoHandler/volumeLink.ts` | COMPLETED | None (bi-directional delta linking with programmatic guard) | `VoxVolumeLinkCoordinator` with reference arithmetic; auto-switches smart ducking to classic mode when active | COMPLETED (PHASE D) | Done |
+| **P1** | Audio Booster (> 100% Volume) | `AudioPlayer.initAudioBooster`, WebAudio `gainNode` in `src/videoHandler/translationVolume.ts` (max up to 900%) | COMPLETED | None (Android DSP boost up to 300% safe TV limit) | `VoxAudioBooster` wrapping Android `LoudnessEnhancer` on translation audioSessionId (up to +12 dB) with safe error isolation | COMPLETED (PHASE D) | Done |
 | **P2** | Video Language Cache | `VideoLangCacheRequest`, `VideoLangCacheResponse` in `@vot.js/core/dist/protobuf.js` | PARTIAL | Dedicated protobuf request/response to `/video-translation/lang-cache` and persistent store | Add `VideoLangCacheRequest` to `YandexVotProtobuf` and persist detected video language in Room DB / SharedPreferences | PHASE E | Low |
 | **P2** | Auto Subtitles on Video Start | `autoSubtitles` in `src/VideoHandler.ts` | PARTIAL | Automatic background fetch of AI subtitles on eligible foreign videos | Add autoSubtitles trigger in `VoiceTranslateController.onNewVideo()` obeying language skip policies | PHASE E | Low |
 | **P3** | Subtitles Layout & Word Highlighting | `subtitlesSmartLayout`, `highlightWords`, `src/subtitles/*` | PARTIAL | Word-level highlighting synchronized with speech audio and smart text wrapping | Parse word timing cues from `SubtitlesObject` into ExoPlayer `SpannableString` with dynamic background spans | PHASE E | Medium |
@@ -40,13 +39,14 @@ Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Sessi
 
 ## 3. Phase Transition Roadmaps
 
-### PHASE D: Audio Engine & Mixing Parity
+### PHASE D: Audio Engine & Mixing Parity (COMPLETED)
 - **Goal**: Full parity with userscript volume controls, smart ducking, and audio amplification.
-- **Components to Create/Modify**:
-  - `VoxSmartDuckingPolicy.kt` (pure deterministic RMS speech gate math ported from `ducking.ts`).
-  - `VoxAudioProcessor.kt` (ExoPlayer PCM audio processor calculating RMS energy of translated audio).
-  - `VoxVolumeLinkCoordinator.kt` (delta linking between video and translation sliders).
-  - `VoxAudioBooster.kt` (Android `LoudnessEnhancer` wrapper for > 100% amplification).
+- **Implemented Components**:
+  - `VoxSmartDuckingPolicy.kt` (pure deterministic RMS speech gate state machine and math ported from `ducking.ts` & `smartDuckingRuntime.ts`).
+  - `VoxAudioLevelProcessor.java` (ExoPlayer zero-allocation PCM tap in rendering thread calculating RMS energy).
+  - `VoxVolumeLinkCoordinator.kt` (bi-directional delta linking between video and translation sliders with programmatic guard).
+  - `VoxAudioBooster.java` (Android `LoudnessEnhancer` wrapper on translation audioSessionId for up to +12 dB amplification).
+  - `VoxAdaptiveVolumeController.java` (orchestration, baseline tracking, mute preservation, tick scheduling).
   - Integration into `YandexVotPlaybackAdapter.java` and `VoiceTranslateController.java`.
 
 ### PHASE E: Language & Subtitle Parity
