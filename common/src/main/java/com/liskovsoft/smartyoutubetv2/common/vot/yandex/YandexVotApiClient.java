@@ -88,6 +88,7 @@ public class YandexVotApiClient {
     private static final int CONNECT_TIMEOUT_MS = 15000;
     private static final int READ_TIMEOUT_MS = 30000;
 
+    public static final int STATUS_TRANSPORT_ERROR = -1;
     public static final int STATUS_FAILED = 0;
     public static final int STATUS_FINISHED = 1;
     public static final int STATUS_WAITING = 2;
@@ -101,6 +102,7 @@ public class YandexVotApiClient {
     private static String sessionUuid = null;
     private static String sessionSecretKey = null;
     private static long sessionExpiresAt = 0;
+    private static boolean sessionCreationInFlight = false;
 
     /** Translation result cache — keyed by videoUrl + sourceLang + targetLang + liveVoices. */
     private static final long CACHE_TTL_MS = 30 * 60_000; // 30 minutes
@@ -167,20 +169,43 @@ public class YandexVotApiClient {
         return null;
     }
 
+    public static class VotHttpException extends IOException {
+        public final int responseCode;
+
+        public VotHttpException(int responseCode, String message) {
+            super(message);
+            this.responseCode = responseCode;
+        }
+    }
+
     public static final class TranslationResult {
         private final int status;
         private final String audioUrl;
         private final int remainingTime;
         private final String translationId;
         private final String message;
+        private final String errorCategory;
+        private final boolean isNetworkError;
 
         public TranslationResult(int status, String audioUrl, int remainingTime,
                                  String translationId, String message) {
+            this(status, audioUrl, remainingTime, translationId, message, null, false);
+        }
+
+        public TranslationResult(int status, String audioUrl, int remainingTime,
+                                 String translationId, String message,
+                                 String errorCategory, boolean isNetworkError) {
             this.status = status;
             this.audioUrl = audioUrl;
             this.remainingTime = remainingTime;
             this.translationId = translationId;
             this.message = message;
+            this.errorCategory = errorCategory;
+            this.isNetworkError = isNetworkError;
+        }
+
+        public static TranslationResult networkError(String message, String errorCategory) {
+            return new TranslationResult(STATUS_TRANSPORT_ERROR, null, -1, null, message, errorCategory, true);
         }
 
         public int getStatus() {
@@ -201,6 +226,30 @@ public class YandexVotApiClient {
 
         public String getMessage() {
             return message;
+        }
+
+        public String getErrorCategory() {
+            return errorCategory;
+        }
+
+        public boolean isNetworkError() {
+            return isNetworkError;
+        }
+
+        public boolean isTransportError() {
+            return status == STATUS_TRANSPORT_ERROR || isNetworkError;
+        }
+
+        public boolean isReady() {
+            return (status == STATUS_FINISHED || status == STATUS_PART_CONTENT) && audioUrl != null && !audioUrl.isEmpty();
+        }
+
+        public boolean isWaiting() {
+            return status == STATUS_WAITING || status == STATUS_LONG_WAITING;
+        }
+
+        public boolean isAudioRequested() {
+            return status == STATUS_AUDIO_REQUESTED;
         }
 
         @Override
@@ -227,6 +276,7 @@ public class YandexVotApiClient {
                     ", remainingTime=" + remainingTime +
                     ", translationId='" + translationId + '\'' +
                     ", message='" + message + '\'' +
+                    ", errorCategory='" + errorCategory + '\'' +
                     '}';
         }
     }
@@ -242,6 +292,8 @@ public class YandexVotApiClient {
             String videoTitle, boolean useLiveVoices,
             @Nullable String oauthToken, boolean firstRequest
     ) {
+        videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(videoUrl);
+
         TranslationResult cachedResult = getCachedResult(videoUrl, sourceLang, targetLang, useLiveVoices);
         if (cachedResult != null) {
             YandexVotLog.d(TAG, "VOT translation cache hit");
@@ -256,7 +308,7 @@ public class YandexVotApiClient {
 
         if (!ensureSession()) {
             YandexVotLog.d(TAG, "VOT: unable to establish session, network may be unavailable");
-            return null;
+            return TranslationResult.networkError("VOT: unable to establish session", "session_network");
         }
 
         String effectiveToken = useLiveVoices ? oauthToken : null;
@@ -266,7 +318,7 @@ public class YandexVotApiClient {
 
         if (effectiveToken != null && !isValidOAuthToken(effectiveToken)) {
             YandexVotLog.d(TAG, "VOT OAuth token is invalid");
-            return new TranslationResult(STATUS_SESSION_REQUIRED, null, 0, null, null);
+            return new TranslationResult(STATUS_SESSION_REQUIRED, null, 0, null, null, "auth", false);
         }
 
         // Retry once on SESSION_REQUIRED
@@ -289,7 +341,7 @@ public class YandexVotApiClient {
                 byte[] responseBytes = sendApiRequest(path, body, effectiveToken);
 
                 if (responseBytes == null || responseBytes.length == 0) {
-                    return null;
+                    return TranslationResult.networkError("Empty response from translate", "empty_response");
                 }
 
                 YandexVotProtobuf.TranslationResponse response = YandexVotProtobuf.decodeTranslationResponse(responseBytes);
@@ -307,7 +359,9 @@ public class YandexVotApiClient {
                         response.url,
                         response.remainingTime,
                         response.translationId,
-                        response.message
+                        response.message,
+                        response.status == STATUS_FAILED ? "failed" : null,
+                        false
                 );
 
                 if (result.getStatus() == STATUS_FINISHED || result.getStatus() == STATUS_PART_CONTENT) {
@@ -317,11 +371,12 @@ public class YandexVotApiClient {
                 return result;
 
             } catch (Exception e) {
-                YandexVotLog.d(TAG, "VOT requestTranslation failed: " + networkFailureCategory(e));
-                return null;
+                String cat = networkFailureCategory(e);
+                YandexVotLog.d(TAG, "VOT requestTranslation failed: " + cat);
+                return TranslationResult.networkError(e.getMessage() != null ? e.getMessage() : "Request failed", cat);
             }
         }
-        return null;
+        return TranslationResult.networkError("Exhausted retries", "retry_exhausted");
     }
 
     public static TranslationResult requestTranslationCache(
@@ -329,9 +384,11 @@ public class YandexVotApiClient {
             String sourceLang, String targetLang,
             boolean useLiveVoices
     ) {
+        videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(videoUrl);
+
         if (!ensureSession()) {
             YandexVotLog.d(TAG, "VOT cache: unable to establish session");
-            return null;
+            return TranslationResult.networkError("VOT cache: unable to establish session", "session_network");
         }
 
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -350,7 +407,7 @@ public class YandexVotApiClient {
                 byte[] responseBytes = sendApiRequest(path, body, null);
 
                 if (responseBytes == null || responseBytes.length == 0) {
-                    return null;
+                    return TranslationResult.networkError("Empty response from cache endpoint", "empty_response");
                 }
 
                 YandexVotProtobuf.TranslationCacheResponse response =
@@ -361,7 +418,7 @@ public class YandexVotApiClient {
                         : (response.defaultItem != null ? response.defaultItem : response.cloningItem);
 
                 if (item == null) {
-                    return null;
+                    return new TranslationResult(STATUS_FAILED, null, -1, null, "Item is null", "not_found", false);
                 }
 
                 if (item.status == STATUS_SESSION_REQUIRED && attempt == 0) {
@@ -377,15 +434,18 @@ public class YandexVotApiClient {
                         null,
                         item.remainingTime,
                         null,
-                        item.message
+                        item.message,
+                        item.status == STATUS_FAILED ? "not_found" : null,
+                        false
                 );
 
             } catch (Exception e) {
-                YandexVotLog.d(TAG, "VOT requestTranslationCache failed: " + networkFailureCategory(e));
-                return null;
+                String cat = networkFailureCategory(e);
+                YandexVotLog.d(TAG, "VOT requestTranslationCache failed: " + cat);
+                return TranslationResult.networkError(e.getMessage() != null ? e.getMessage() : "Cache request failed", cat);
             }
         }
-        return null;
+        return TranslationResult.networkError("Exhausted cache retries", "retry_exhausted");
     }
 
     public static String getCacheKey(String videoUrl, String sourceLang, String targetLang, boolean useLiveVoices) {
@@ -426,6 +486,14 @@ public class YandexVotApiClient {
         Throwable current = error;
         boolean sawIOException = false;
         for (int depth = 0; current != null && depth < 8; depth++) {
+            if (current instanceof VotHttpException) {
+                int code = ((VotHttpException) current).responseCode;
+                if (code >= 500) return "http_server_error";
+                if (code == 401 || code == 403) return "auth";
+                if (code == 404) return "not_found";
+                if (code == 429) return "rate_limited";
+                return "http_" + code;
+            }
             if (current instanceof UnknownHostException) return "dns";
             if (current instanceof SocketTimeoutException) return "timeout";
             if (current instanceof SSLException) return "tls";
@@ -485,7 +553,7 @@ public class YandexVotApiClient {
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
                 YandexVotLog.d(TAG, "VOT sendApiRequest: endpoint=" + path + " status=" + responseCode);
-                return null;
+                throw new VotHttpException(responseCode, "HTTP " + responseCode + " for " + path);
             }
 
             return readBytes(connection.getInputStream());
@@ -754,8 +822,28 @@ public class YandexVotApiClient {
     public static boolean ensureSession() {
         synchronized (SESSION_LOCK) {
             if (hasValidSession()) return true;
-            return createSession();
+            while (sessionCreationInFlight) {
+                try {
+                    SESSION_LOCK.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+                if (hasValidSession()) return true;
+            }
+            sessionCreationInFlight = true;
         }
+
+        boolean success = false;
+        try {
+            success = createSession();
+        } finally {
+            synchronized (SESSION_LOCK) {
+                sessionCreationInFlight = false;
+                SESSION_LOCK.notifyAll();
+            }
+        }
+        return success;
     }
 
     public static void setSessionStateForTesting(String uuid, String secretKey, long expiresAt) {

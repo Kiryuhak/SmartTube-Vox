@@ -15,12 +15,28 @@ class TranslationReusePolicyTest {
         // Standard watch URL with parameters
         assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s"))
 
+        // Mobile youtube URL
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://m.youtube.com/watch?v=dQw4w9WgXcQ&feature=share"))
+
         // youtu.be short URL
         assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://youtu.be/dQw4w9WgXcQ?si=12345"))
+
+        // Embed URL
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/embed/dQw4w9WgXcQ"))
+
+        // Shorts URL
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/shorts/dQw4w9WgXcQ"))
+
+        // Live URL
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", VoxTranslationReusePolicy.normalizeVideoUrl("https://www.youtube.com/live/dQw4w9WgXcQ?feature=shared"))
 
         // Blank or null
         assertEquals("", VoxTranslationReusePolicy.normalizeVideoUrl(null))
         assertEquals("", VoxTranslationReusePolicy.normalizeVideoUrl("   "))
+
+        // Direct extractVideoId test
+        assertEquals("dQw4w9WgXcQ", VoxTranslationReusePolicy.extractVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
+        assertEquals("dQw4w9WgXcQ", VoxTranslationReusePolicy.extractVideoId("dQw4w9WgXcQ"))
     }
 
     @Test

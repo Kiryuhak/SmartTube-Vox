@@ -10,23 +10,47 @@ object VoxTranslationReusePolicy {
     const val SLOW_STARTUP_THRESHOLD_STANDARD_MS = 5_000L
     const val SLOW_STARTUP_THRESHOLD_LIVE_VOICE_MS = 8_000L
 
-    fun normalizeVideoUrl(rawUrlOrId: String?): String {
-        if (rawUrlOrId.isNullOrBlank()) return ""
+    fun extractVideoId(rawUrlOrId: String?): String? {
+        if (rawUrlOrId.isNullOrBlank()) return null
         val trimmed = rawUrlOrId.trim()
-        val videoId = when {
-            trimmed.matches(Regex("^[a-zA-Z0-9_-]+$")) -> trimmed
-            trimmed.contains("youtu.be/") -> {
-                trimmed.substringAfter("youtu.be/").substringBefore("?").substringBefore("&")
-            }
-            trimmed.contains("v=") -> {
-                trimmed.substringAfter("v=").substringBefore("&")
-            }
-            else -> trimmed.substringBefore("?")
+
+        // 1. Plain Video ID (YouTube IDs are alphanumeric, '-' or '_')
+        if (trimmed.matches(Regex("^[a-zA-Z0-9_-]{6,32}$"))) {
+            return trimmed
         }
-        return if (videoId.isNotBlank() && videoId.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+
+        // 2. youtu.be short link: https://youtu.be/<id>?si=...
+        if (trimmed.contains("youtu.be/")) {
+            val after = trimmed.substringAfter("youtu.be/").substringBefore("?").substringBefore("&").substringBefore("#")
+            val id = after.trimEnd('/').substringBefore("/")
+            if (id.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+                return id
+            }
+        }
+
+        // 3. /watch, /embed, /shorts, /live, /v, /e path patterns
+        val pathRegex = Regex("/(?:watch|embed|shorts|live|v|e)/([a-zA-Z0-9_-]+)")
+        val match = pathRegex.find(trimmed)
+        if (match != null) {
+            return match.groupValues[1]
+        }
+
+        // 4. Query parameter v= or video_id=
+        val queryRegex = Regex("[?&](?:v|video_id)=([a-zA-Z0-9_-]+)")
+        val queryMatch = queryRegex.find(trimmed)
+        if (queryMatch != null) {
+            return queryMatch.groupValues[1]
+        }
+
+        return null
+    }
+
+    fun normalizeVideoUrl(rawUrlOrId: String?): String {
+        val videoId = extractVideoId(rawUrlOrId)
+        return if (!videoId.isNullOrBlank()) {
             "https://youtu.be/$videoId"
         } else {
-            trimmed
+            rawUrlOrId?.trim() ?: ""
         }
     }
 

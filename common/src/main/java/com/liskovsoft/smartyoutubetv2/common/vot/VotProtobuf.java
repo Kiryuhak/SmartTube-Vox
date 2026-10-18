@@ -69,18 +69,53 @@ public final class VotProtobuf {
             boolean firstRequest,
             boolean useLivelyVoice
     ) {
+        return encodeTranslationRequest(
+                url, duration, requestLang, responseLang, firstRequest, useLivelyVoice, false, false, null
+        );
+    }
+
+    public static byte[] encodeTranslationRequest(
+            String url,
+            double duration,
+            String requestLang,
+            String responseLang,
+            boolean firstRequest,
+            boolean useLivelyVoice,
+            boolean bypassCache,
+            boolean wasStream,
+            String deviceId
+    ) {
         VotWireWriter w = new VotWireWriter();
-        w.writeString(3, url);
+        if (url != null && !url.isEmpty()) {
+            w.writeString(3, url);
+        }
+        if (deviceId != null && !deviceId.isEmpty()) {
+            w.writeString(4, deviceId);
+        }
         w.writeBool(5, firstRequest);
-        w.writeDouble(6, duration);
+        if (duration != 0.0) {
+            w.writeDouble(6, duration);
+        }
         w.writeInt32(7, 1);
-        w.writeString(8, requestLang);
+        if (requestLang != null && !requestLang.isEmpty()) {
+            w.writeString(8, requestLang);
+        }
         w.writeBool(9, false);
         w.writeInt32(10, 0);
-        w.writeString(14, responseLang);
+        if (wasStream) {
+            w.writeBool(13, true);
+        }
+        if (responseLang != null && !responseLang.isEmpty()) {
+            w.writeString(14, responseLang);
+        }
         w.writeInt32(15, 1);
         w.writeInt32(16, 2);
-        w.writeBool(18, useLivelyVoice);
+        if (bypassCache) {
+            w.writeBool(17, true);
+        }
+        if (useLivelyVoice) {
+            w.writeBool(18, true);
+        }
         return w.toByteArray();
     }
 

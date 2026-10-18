@@ -350,4 +350,76 @@ class VoxTranslationServerFirstSuiteTest {
         )
         assertNotEquals(req1.cacheKey, reqLive.cacheKey)
     }
+
+    // ---------------------------------------------------------------------
+    // Scenario 11: Network transport error / timeout / 5xx is NEVER treated as NotFound
+    // ---------------------------------------------------------------------
+    @Test
+    fun test11_NetworkFailureNeverTreatedAsNotFound() {
+        val req = VoxTranslationServerFirstPipeline.TranslationRequest(
+            videoId = "networkFailVid",
+            sourceLang = "en",
+            targetLang = "ru"
+        )
+
+        // 1. Timeout failure
+        serverDb.nextLookupResponse = VoxTranslationServerFirstPipeline.ServerLookupResponse.timeout("Connection timed out to Yandex VOT")
+        val resultTimeout = pipeline.execute(req, localCache, serverDb, retryAttempt = 0)
+        assertTrue("Timeout must schedule retry or fail with error, NEVER initiate fresh job",
+            resultTimeout is VoxTranslationServerFirstPipeline.PipelineResult.RetryScheduled)
+        assertEquals(0, serverDb.createCount)
+
+        // 2. HTTP 502 Bad Gateway
+        serverDb.nextLookupResponse = VoxTranslationServerFirstPipeline.ServerLookupResponse.fromHttpStatus(502, "Bad Gateway")
+        val result502 = pipeline.execute(req, localCache, serverDb, retryAttempt = 0)
+        assertTrue("502 must schedule retry or fail with error, NEVER initiate fresh job",
+            result502 is VoxTranslationServerFirstPipeline.PipelineResult.RetryScheduled)
+        assertEquals(0, serverDb.createCount)
+
+        // 3. Max retry reached must result in Failed, never InitiatedNewJob
+        val resultExhausted = pipeline.execute(req, localCache, serverDb, retryAttempt = 3)
+        assertTrue(resultExhausted is VoxTranslationServerFirstPipeline.PipelineResult.Failed)
+        assertEquals(0, serverDb.createCount)
+    }
+
+    // ---------------------------------------------------------------------
+    // Scenario 12: Session single-flight concurrent calls in YandexVotApiClient
+    // ---------------------------------------------------------------------
+    @Test
+    fun test12_SessionSingleFlightConcurrentCalls() {
+        com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.invalidateSession()
+        assertFalse(com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.hasValidSession())
+
+        // Set session state safely for testing
+        com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.setSessionStateForTesting(
+            "test-uuid-1", "test-secret-key-1", System.currentTimeMillis() + 3600_000L
+        )
+
+        val threadCount = 8
+        val startLatch = java.util.concurrent.CountDownLatch(1)
+        val doneLatch = java.util.concurrent.CountDownLatch(threadCount)
+        val successFlags = BooleanArray(threadCount)
+        val executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount)
+
+        for (i in 0 until threadCount) {
+            val idx = i
+            executor.submit {
+                try {
+                    startLatch.await()
+                    successFlags[idx] = com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.ensureSession()
+                } finally {
+                    doneLatch.countDown()
+                }
+            }
+        }
+
+        startLatch.countDown()
+        doneLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+        executor.shutdown()
+
+        for (i in 0 until threadCount) {
+            assertTrue("Thread $i must succeed in ensureSession", successFlags[i])
+        }
+        assertTrue(com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.hasValidSession())
+    }
 }

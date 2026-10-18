@@ -330,17 +330,19 @@ public class YandexVotOrchestrator {
                 return;
             }
 
-            if (result == null) {
+            if (result == null || result.isTransportError()) {
+                String errorMsg = (result != null && result.getMessage() != null) ? result.getMessage() : "Translation request failed";
+                String errorCat = (result != null && result.getErrorCategory() != null) ? result.getErrorCategory() : "network";
                 YandexVotState errorState = YandexVotState.error(
                         gen,
                         params.getVideoId(),
                         params.getVideoUrl(),
-                        "Translation request failed",
-                        "network",
+                        errorMsg,
+                        errorCat,
                         params.isUseLiveVoices()
                 );
                 currentState = errorState;
-                YandexVotLog.d(TAG, "VOT request error (null result): gen=" + gen);
+                YandexVotLog.d(TAG, "VOT request error: gen=" + gen + ", cat=" + errorCat);
                 notifyListenerLocked(errorState);
                 return;
             }

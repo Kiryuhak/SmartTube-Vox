@@ -62,42 +62,105 @@ public class YandexVotProtobuf {
     private static final int WIRETYPE_64BIT = 1;
     private static final int WIRETYPE_LENGTH_DELIMITED = 2;
 
+    public static class TranslationHelp {
+        public final String target;
+        public final String targetUrl;
+
+        public TranslationHelp(String target, String targetUrl) {
+            this.target = target;
+            this.targetUrl = targetUrl;
+        }
+    }
+
     // ==================== ENCODER ====================
 
     /**
-     * Encode a VideoTranslationRequest.
-     * Field numbers from yandex.proto:
+     * Encode a VideoTranslationRequest matching VOT userscript v1.11.17.
+     * Field numbers from reference protobuf:
      *   url = 3 (string)
+     *   deviceId = 4 (string)
      *   firstRequest = 5 (bool)
      *   duration = 6 (double)
-     *   unknown0 = 7 (int32)
+     *   unknown0 = 7 (bool: true)
      *   language = 8 (string)
-     *   forceSourceLang = 9 (bool)
-     *   unknown1 = 10 (int32)
+     *   forceSourceLang = 9 (bool: false)
+     *   unknown1 = 10 (bool: false)
+     *   translationHelp = 11 (repeated message: 1=target, 2=targetUrl)
+     *   wasStream = 13 (bool: false)
      *   responseLanguage = 14 (string)
-     *   unknown2 = 15 (int32)
-     *   unknown3 = 16 (int32)
-     *   useLivelyVoice = 18 (bool) — live voices from Yandex (more natural TTS)
+     *   unknown2 = 15 (bool: true)
+     *   configVersion = 16 (int32: 2)
+     *   bypassCache = 17 (bool: false)
+     *   useLivelyVoice = 18 (bool)
      *   videoTitle = 19 (string)
      */
     public static byte[] encodeTranslationRequest(
-            String url, boolean firstRequest, double duration,
-            String language, String responseLanguage, String videoTitle,
-            boolean useLiveVoices
+            String url,
+            String deviceId,
+            boolean firstRequest,
+            double duration,
+            String language,
+            boolean forceSourceLang,
+            java.util.List<TranslationHelp> translationHelp,
+            boolean wasStream,
+            String responseLanguage,
+            int configVersion,
+            boolean bypassCache,
+            boolean useLiveVoices,
+            String videoTitle
     ) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            writeString(out, 3, url);
-            writeBool(out, 5, firstRequest);
-            writeDouble(out, duration);
-            writeInt32(out, 7, 1);          // unknown0
-            writeString(out, 8, language);
-            writeBool(out, 9, false);       // forceSourceLang
-            writeInt32(out, 10, 0);         // unknown1
-            writeString(out, 14, responseLanguage);
-            writeInt32(out, 15, 1);         // unknown2
-            writeInt32(out, 16, 2);         // unknown3
-            writeBool(out, 18, useLiveVoices);  // useLivelyVoice — live voices
+            if (url != null && !url.isEmpty()) {
+                writeString(out, 3, url);
+            }
+            if (deviceId != null && !deviceId.isEmpty()) {
+                writeString(out, 4, deviceId);
+            }
+            if (firstRequest) {
+                writeBool(out, 5, true);
+            }
+            if (duration != 0.0) {
+                writeDouble(out, duration);
+            }
+            writeBool(out, 7, true);          // unknown0 = true
+            if (language != null && !language.isEmpty()) {
+                writeString(out, 8, language);
+            }
+            if (forceSourceLang) {
+                writeBool(out, 9, true);       // forceSourceLang
+            }
+            writeInt32(out, 10, 0);         // unknown1 = false (varint 0)
+
+            if (translationHelp != null && !translationHelp.isEmpty()) {
+                for (TranslationHelp help : translationHelp) {
+                    if (help != null) {
+                        ByteArrayOutputStream helpOut = new ByteArrayOutputStream();
+                        if (help.target != null && !help.target.isEmpty()) {
+                            writeString(helpOut, 1, help.target);
+                        }
+                        if (help.targetUrl != null && !help.targetUrl.isEmpty()) {
+                            writeString(helpOut, 2, help.targetUrl);
+                        }
+                        writeMessage(out, 11, helpOut.toByteArray());
+                    }
+                }
+            }
+
+            if (wasStream) {
+                writeBool(out, 13, true);
+            }
+            if (responseLanguage != null && !responseLanguage.isEmpty()) {
+                writeString(out, 14, responseLanguage);
+            }
+            writeBool(out, 15, true);         // unknown2 = true
+            writeInt32(out, 16, configVersion > 0 ? configVersion : 2); // configVersion = 2
+            if (bypassCache) {
+                writeBool(out, 17, true);
+            }
+            if (useLiveVoices) {
+                writeBool(out, 18, true);
+            }
             if (videoTitle != null && !videoTitle.isEmpty()) {
                 writeString(out, 19, videoTitle);
             }
@@ -105,6 +168,17 @@ public class YandexVotProtobuf {
         } catch (IOException e) {
             throw new RuntimeException("Failed to encode translation request", e);
         }
+    }
+
+    public static byte[] encodeTranslationRequest(
+            String url, boolean firstRequest, double duration,
+            String language, String responseLanguage, String videoTitle,
+            boolean useLiveVoices
+    ) {
+        return encodeTranslationRequest(
+                url, null, firstRequest, duration, language, false,
+                null, false, responseLanguage, 2, false, useLiveVoices, videoTitle
+        );
     }
 
     public static byte[] encodeTranslationCacheRequest(String url, double duration, String language, String responseLanguage) {
@@ -189,7 +263,7 @@ public class YandexVotProtobuf {
     // ==================== DECODER ====================
 
     /**
-     * Decoded translation response fields.
+     * Decoded translation response fields matching VOT userscript v1.11.17.
      */
     public static class TranslationResponse {
         public String url;
@@ -199,12 +273,18 @@ public class YandexVotProtobuf {
         public String translationId;
         public String language;
         public String message;
+        public Boolean isLivelyVoice;
+        public Boolean allowToTranslateVideo;
+        public Integer shouldRetry;
+        public Integer unknown3;
     }
 
     public static class TranslationCacheItem {
         public int status;
         public int remainingTime = -1;
         public String message;
+        public Integer unknown0;
+        public java.util.List<Integer> flags = new java.util.ArrayList<>();
     }
 
     public static class TranslationCacheResponse {
@@ -285,6 +365,30 @@ public class YandexVotProtobuf {
                         pos += len;
                     }
                     break;
+                case 4: // unknown0 (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        item.unknown0 = valResult[0];
+                        pos = valResult[1];
+                    }
+                    break;
+                case 5: // flags (int32 / packed varint)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        item.flags.add(valResult[0]);
+                        pos = valResult[1];
+                    } else if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int packedLen = lenResult[0];
+                        pos = lenResult[1];
+                        int packedEnd = pos + packedLen;
+                        while (pos < packedEnd && pos < data.length) {
+                            int[] flagVal = readVarint(data, pos);
+                            item.flags.add(flagVal[0]);
+                            pos = flagVal[1];
+                        }
+                    }
+                    break;
                 default:
                     pos = skipField(data, pos, wireType);
                     break;
@@ -297,7 +401,9 @@ public class YandexVotProtobuf {
      * Decode a VideoTranslationResponse:
      *   url = 1 (string), duration = 2 (double), status = 4 (int32),
      *   remainingTime = 5 (int32), translationId = 7 (string),
-     *   language = 8 (string), message = 9 (string)
+     *   language = 8 (string), message = 9 (string),
+     *   isLivelyVoice = 10 (bool), allowToTranslateVideo = 11 (bool),
+     *   shouldRetry = 12 (int32), unknown3 = 13 (int32)
      */
     public static TranslationResponse decodeTranslationResponse(byte[] data) {
         TranslationResponse response = new TranslationResponse();
@@ -366,6 +472,34 @@ public class YandexVotProtobuf {
                         pos = lenResult[1];
                         response.message = new String(data, pos, len, StandardCharsets.UTF_8);
                         pos += len;
+                    }
+                    break;
+                case 10: // isLivelyVoice (bool)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.isLivelyVoice = valResult[0] != 0;
+                        pos = valResult[1];
+                    }
+                    break;
+                case 11: // allowToTranslateVideo (bool)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.allowToTranslateVideo = valResult[0] != 0;
+                        pos = valResult[1];
+                    }
+                    break;
+                case 12: // shouldRetry (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.shouldRetry = valResult[0];
+                        pos = valResult[1];
+                    }
+                    break;
+                case 13: // unknown3 (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.unknown3 = valResult[0];
+                        pos = valResult[1];
                     }
                     break;
                 default:
