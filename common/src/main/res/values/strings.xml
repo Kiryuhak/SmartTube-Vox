@@ -953,6 +953,12 @@
     <string name="vot_error_rate_limited">Too many translation requests. Please try again later</string>
     <string name="vot_error_unsupported_video">Translation is not available for this video</string>
     <string name="vot_error_auth_rejected">Yandex ID authorization failed. Please sign in again in settings</string>
+    <string name="vot_error_account_required">You need to log in to use this feature</string>
+    <string name="vot_error_token_expired">Session expired. Log in again</string>
+    <string name="vot_voice_standard_title">Standard voices</string>
+    <string name="vot_voice_standard_desc">Fast and high-quality voiceover</string>
+    <string name="vot_voice_live_title">Live voices</string>
+    <string name="vot_voice_live_desc">Maximum similarity. As if everyone knows Russian</string>
     <string name="vot_error_access_denied">The translation service denied this request</string>
     <string name="vot_error_playback">Failed to play translation</string>
     <string name="vot_unknown_lang_manual" translatable="false"></string>

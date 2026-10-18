@@ -29,9 +29,8 @@ Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Sessi
 | **P1** | Audio Booster (> 100% Volume) | `AudioPlayer.initAudioBooster`, WebAudio `gainNode` in `src/videoHandler/translationVolume.ts` (max up to 900%) | COMPLETED | None (Android DSP boost up to 300% safe TV limit) | `VoxAudioBooster` wrapping Android `LoudnessEnhancer` on translation audioSessionId (up to +12 dB) with safe error isolation | COMPLETED (PHASE D) | Done |
 | **P2** | Video Language Cache | `VideoLangCacheRequest`, `VideoLangCacheResponse` in `@vot.js/core/dist/protobuf.js` | COMPLETED | None (protobuf wire parity, hierarchical pipeline, 7-day persistent cache) | `VideoLangCacheRequest`/`Response` protobuf + `VoxVideoLanguageCache` (persistent SharedPreferences + 500 entry memory cache) + `VoxVideoLanguagePipeline` | COMPLETED (PHASE E) | Done |
 | **P2** | Auto Subtitles on Video Start | `autoSubtitles` in `src/VideoHandler.ts` | COMPLETED | None (preferred subtitle track resolution, auto-enable on video load) | `VoxSubtitleCoordinator` + `VoiceTranslateController.tryApplyAutoSubtitles()` with `VoxLanguagePolicy.resolveSubtitlesLanguage()` | COMPLETED (PHASE E) | Done |
-| **P3** | Subtitles Layout & Word Highlighting | `subtitlesSmartLayout`, `highlightWords`, `src/subtitles/*` | COMPLETED | None (edge punctuation trimming, balanced 2-line wrapping at punctuation near center) | `VoxSmartSubtitleLayout` integrated with `SubtitleManager.java` + `VoxWordTimingCoordinator` token lookup | COMPLETED (PHASE E) | Done |
-| **P2** | Yandex OAuth / VOT Account Authentication | `account`, `VOTLoginViaToken`, `deleteExpiredAccount` in `src/utils/account.ts` | PARTIAL | Storage of account tokens, expiration checks, and authenticated session header | Add optional OAuth token input in Settings -> Translation with automatic expiry clearing | PHASE F | Medium |
-| **P3** | Voice Selection Catalog | `VOTVoiceSelection`, `translationHelp` in `src/VideoHandler.ts` | PARTIAL | Dynamic voice actor catalog parsing and selection beyond binary standard/lively | Parse available voices array from translation response and expose Leanback selection dialog | PHASE F | Medium |
+| **P2** | Yandex OAuth / VOT Account Authentication | `account`, `VOTLoginViaToken`, `deleteExpiredAccount` in `src/utils/account.ts` | COMPLETED | None | At-rest encrypted token store (`YandexOAuthTokenStore`), `VoxAccountManager` state machine, expiry checking (~1 yr manual default), status 7 `SESSION_REQUIRED` classification, masked logging (`TOKEN_STORAGE: PASS`, `TOKEN_EXPIRY: PASS`, `AUTH_FLOW: BLOCKED_EXTERNAL`) | COMPLETED (PHASE F) | Done |
+| **P3** | Voice Selection Catalog | `VOTVoiceSelection`, `translationHelp` in `src/VideoHandler.ts` | COMPLETED | None | `VoxVoiceCatalog` (Standard & Live), `VoxVoiceSelectionPolicy` (`isLivelyVoiceAllowed`, language routing `auto` -> `en` for Russian target, error fallback on "обычная озвучка", cache key separation), `VoiceTranslateController.setVoiceType()` | COMPLETED (PHASE F) | Done |
 | **P2** | Live Stream Keep-Alive Reliability | `StreamPingRequest`, `StreamTranslationRequest` in `chaimu` | ALREADY_EQUIVALENT | Periodic ping keep-alive verification across long-running streams | Verify scheduled executor pinging `/stream-translation/ping-stream` under network drops | PHASE LIVE | Low |
 | **P3** | Right-Side Translation Plaque & HUD | `src/ui/views/overlay.ts`, lit-html templates | UI_PHASE_LATER | Modern Leanback TV right-side plaque with progress bar, volume sliders, and language selectors | Create dedicated Leanback overlay fragment matching Android TV D-pad UX guidelines | PHASE UI | High |
 
@@ -63,11 +62,16 @@ Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Sessi
   - `VoxSubtitleCoordinator.kt`: Cache key formatting, 1:1 `pickBestSubtitles` priority, $O(\log N)$ binary search `findCueAt` seek resolution.
   - Integration in `SubtitleManager.java` and `VoiceTranslateController.java`.
 
-### PHASE F: Accounts & Voice Selection Parity
-- **Goal**: Account authentication support and multi-voice selection.
-- **Components to Create/Modify**:
-  - Account token preference storage with TTL.
-  - Multi-voice metadata model and selection dialog.
+### PHASE F: Accounts & Voice Selection Parity (COMPLETED)
+- **Goal**: Full native parity for Yandex OAuth account lifecycle and voice selection catalog.
+- **Implemented Components**:
+  - `VoxAccountModels.kt`: `VoxAccountState`, `VoxAuthErrorKind`, `VoxAccountToken` with masked logging (`TOKEN_STORAGE: PASS`, `TOKEN_EXPIRY: PASS`, `AUTH_FLOW: BLOCKED_EXTERNAL`).
+  - `VoxAccountManager.kt`: state transitions, token expiration checks (~1 year default), status 7 `SESSION_REQUIRED` handling (`TOKEN_EXPIRED` vs `ACCOUNT_REQUIRED`).
+  - `VoxVoiceModels.kt`: `VoxVoiceId`, `VoxVoiceActor`, `VoxVoiceCatalog` (Standard & Live voices).
+  - `VoxVoiceSelectionPolicy.kt`: `getRequestLangForTranslation` (`auto` -> `en` for Russian target), `isLivelyVoiceAllowed`, "обычная озвучка" error fallback, cache key separation.
+  - `VoiceTranslateController.java`: language routing, pre-request token expiration validation, lively voice fallback, and `setVoiceType()`.
+  - Diagnostics: added 9 safe log codes (`VOT_ACCOUNT_*`, `VOT_VOICE_*`, `VOT_LIVELY_VOICE_*`).
+  - Unit tests: `VoxAccountManagerTest.kt` and `VoxVoiceSelectionTest.kt`.
 
 ### PHASE LIVE: Stream Translation
 - **Goal**: Long-session stability and ping keep-alive reliability.

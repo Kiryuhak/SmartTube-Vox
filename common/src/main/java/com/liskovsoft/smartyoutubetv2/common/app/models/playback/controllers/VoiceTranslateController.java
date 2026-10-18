@@ -1454,12 +1454,40 @@ public class VoiceTranslateController extends BasePlayerController {
         Utils.postDelayed(mProgressTickRunnable, PROGRESS_TICK_INTERVAL_MS);
 
         double durationSec = Math.max(1, getPlayer().getDurationMs() / 1000.0);
-        String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
         String videoTitle = getPlayer().getVideo().getTitle();
         TrackInfo audioInfo = resolveAudioInfo();
         String sourceLang = audioInfo != null && audioInfo.langCode != null && !audioInfo.langCode.isEmpty() ? audioInfo.langCode : "";
         String targetLang = votData().getTargetLanguage();
         if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
+
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.account.VoxAccountManager accountManager =
+                    com.liskovsoft.smartyoutubetv2.common.vox.account.VoxAccountManager.instance(getContext());
+            if (accountManager.checkTokenExpiration()) {
+                useLively = false;
+            }
+        }
+
+        boolean livelyAllowed = com.liskovsoft.smartyoutubetv2.common.vox.voice.VoxVoiceSelectionPolicy.isLivelyVoiceAllowed(sourceLang, targetLang, useLively);
+        if (useLively && !livelyAllowed) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_LIVELY_VOICE_UNAVAILABLE,
+                    "Lively voice not supported for language pair " + sourceLang + " -> " + targetLang + ", using standard voice",
+                    null
+            );
+            useLively = false;
+        } else if (useLively) {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_LIVELY_VOICE_ENABLED,
+                    "Lively voice enabled for translation",
+                    null
+            );
+        }
+
+        sourceLang = com.liskovsoft.smartyoutubetv2.common.vox.voice.VoxVoiceSelectionPolicy.getRequestLangForTranslation(sourceLang, targetLang, useLively);
+        String oauthToken = (useLively || votData().hasOAuthToken()) ? votData().getOAuthToken() : null;
 
         VoxTranslationServerFirstPipeline serverFirstPipeline = new VoxTranslationServerFirstPipeline();
         VoxTranslationServerFirstPipeline.TranslationRequest pipelineReq =
@@ -2206,8 +2234,19 @@ public class VoiceTranslateController extends BasePlayerController {
         }
 
         boolean isPrePlayback = !mNewBackendPlaybackStarted;
+        boolean isAuthError = "session_required".equals(errorMsg) || "token_expired".equals(errorMsg) ||
+                "account_required".equals(errorMsg) || "auth_rejected".equals(errorMsg);
+        if (isAuthError && getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.account.VoxAccountManager accountMgr =
+                    com.liskovsoft.smartyoutubetv2.common.vox.account.VoxAccountManager.instance(getContext());
+            if (votData().hasOAuthToken()) {
+                accountMgr.markTokenExpired();
+            } else {
+                accountMgr.markAccountRequired();
+            }
+        }
 
-        if (isPrePlayback && !mFallbackTriggered && mStateMachine.canAttemptFallback()) {
+        if (isPrePlayback && !isAuthError && !mFallbackTriggered && mStateMachine.canAttemptFallback()) {
             YandexVotLog.w(TAG, "VOT NEW backend failed PRE-PLAYBACK (" + errorMsg + "). Falling back to OLD production backend once.");
             mFallbackTriggered = true;
             mStateMachine.recordFallbackAttempt(errorMsg != null ? errorMsg : "new_backend_error");
@@ -2231,7 +2270,12 @@ public class VoiceTranslateController extends BasePlayerController {
             if (wasUserArmed) {
                 showBriefErrorButtonState();
                 if (progressOverlay() != null) {
-                    VotErrorCategory category = VotErrorCategory.fromMarker(errorMsg);
+                    VotErrorCategory category;
+                    if ("session_required".equals(errorMsg)) {
+                        category = votData().hasOAuthToken() ? VotErrorCategory.TOKEN_EXPIRED : VotErrorCategory.ACCOUNT_REQUIRED;
+                    } else {
+                        category = VotErrorCategory.fromMarker(errorMsg);
+                    }
                     if (category == VotErrorCategory.TIMEOUT) {
                         progressOverlay().showTimeout(getActivity());
                     } else {
@@ -2240,6 +2284,24 @@ public class VoiceTranslateController extends BasePlayerController {
                     }
                 }
             }
+        }
+    }
+
+    public void setVoiceType(String voiceId) {
+        String effectiveId = "live".equalsIgnoreCase(voiceId) ? "live" : "standard";
+        votData().setSelectedVoiceId(effectiveId);
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_VOICE_SELECTED,
+                "User selected translation voice: " + effectiveId,
+                java.util.Collections.singletonMap("voiceId", effectiveId)
+        );
+        boolean wasArmed = mArmed || mUserArmed || mState == STATE_ACTIVE;
+        stopNewYandexBackend();
+        cancelTranslationJob();
+        releaseTranslationPlayer();
+        if (wasArmed) {
+            startYandexTranslation(false, false);
         }
     }
 

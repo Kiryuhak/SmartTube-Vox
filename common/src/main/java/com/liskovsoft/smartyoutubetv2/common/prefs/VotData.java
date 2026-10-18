@@ -204,6 +204,23 @@ public class VotData extends SharedPreferencesBase {
         putBoolean(LIVELY_VOICE, enabled);
     }
 
+    public static final String VOICE_ID_STANDARD = "standard";
+    public static final String VOICE_ID_LIVE = "live";
+    private static final String SELECTED_VOICE_ID = "selected_voice_actor_id";
+
+    public String getSelectedVoiceId() {
+        String id = getString(SELECTED_VOICE_ID, null);
+        if (id != null) {
+            return id;
+        }
+        return isLivelyVoiceEnabled() ? VOICE_ID_LIVE : VOICE_ID_STANDARD;
+    }
+
+    public void setSelectedVoiceId(String voiceId) {
+        putString(SELECTED_VOICE_ID, voiceId);
+        setLivelyVoiceEnabled(VOICE_ID_LIVE.equals(voiceId));
+    }
+
     public boolean isOnboardingShown() {
         return getBoolean(PREF_ONBOARDING_SHOWN, false);
     }

@@ -13,6 +13,12 @@ public enum VotErrorCategory {
     /** HTTP 401 — Яндекс ID отклонил OAuth-токен (недействителен, отозван, неверный scope). */
     AUTH_REJECTED,
 
+    /** Токен сессии истёк (status 7 с токеном или истечение срока годности). */
+    TOKEN_EXPIRED,
+
+    /** Видео или функция требует авторизованный аккаунт (status 7 без токена). */
+    ACCOUNT_REQUIRED,
+
     /**
      * Протокольный статус 7 (STATUS_SESSION_REQUIRED).
      * Сервер требует анонимную криптосессию VOT через /session/create.
@@ -92,6 +98,11 @@ public enum VotErrorCategory {
             return UNSUPPORTED_VIDEO;
         }
         switch (marker) {
+            case "session_expired":
+            case "token_expired":
+                return TOKEN_EXPIRED;
+            case "account_required":
+                return ACCOUNT_REQUIRED;
             case VotClient.ERROR_MARKER_AUTH_REJECTED:
                 return AUTH_REJECTED;
             case VotClient.ERROR_MARKER_PROTOCOL_SESSION:
@@ -116,7 +127,7 @@ public enum VotErrorCategory {
 
     /** @return true если ошибка указывает на проблему с OAuth-токеном пользователя */
     public boolean isOAuthFailure() {
-        return this == AUTH_REJECTED;
+        return this == AUTH_REJECTED || this == TOKEN_EXPIRED;
     }
 
     /** @return true если ошибка сетевая или серверная (не связана с токеном) */
@@ -131,6 +142,10 @@ public enum VotErrorCategory {
         switch (this) {
             case AUTH_REJECTED:
                 return R.string.vot_error_auth_rejected;
+            case TOKEN_EXPIRED:
+                return R.string.vot_error_token_expired;
+            case ACCOUNT_REQUIRED:
+                return R.string.vot_error_account_required;
             case SERVER_UNAVAILABLE:
                 return R.string.vot_error_server_unavailable;
             case RATE_LIMITED:
