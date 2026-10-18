@@ -599,6 +599,7 @@ public class YandexVotPlaybackAdapterTest {
         );
         bufferAdapter.onStateChanged(readyState);
         fakePlayer.callback.onPrepared();
+        fakePlayer.callback.onSeekProcessed();
         assertTrue(fakePlayer.isPlaying());
 
         // Master enters buffering

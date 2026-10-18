@@ -59,21 +59,30 @@ class VoxVolumeLinkCoordinator(
             return LinkResult(newState = currentState)
         }
 
+        val normalizedVideo = clampPercent(newVideoPercent)
+        val normalizedTranslation = clampTranslation(currentTranslationPercent)
+
         var state = currentState
         if (!state.initialized) {
             state = State(
                 initialized = true,
-                lastVideoPercent = clampPercent(newVideoPercent),
-                lastTranslationPercent = clampTranslation(currentTranslationPercent)
+                lastVideoPercent = normalizedVideo,
+                lastTranslationPercent = normalizedTranslation
+            )
+            currentState = state
+            return LinkResult(
+                nextTranslationPercent = normalizedTranslation,
+                newState = state
             )
         }
 
-        val normalizedVideo = clampPercent(newVideoPercent)
         val delta = normalizedVideo - state.lastVideoPercent
-        state = state.copy(lastVideoPercent = normalizedVideo)
-
-        val nextTranslation = clampTranslation(state.lastTranslationPercent + delta)
-        state = state.copy(lastTranslationPercent = nextTranslation)
+        val baseTranslation = if (delta == 0) normalizedTranslation else state.lastTranslationPercent
+        val nextTranslation = clampTranslation(baseTranslation + delta)
+        state = state.copy(
+            lastVideoPercent = normalizedVideo,
+            lastTranslationPercent = nextTranslation
+        )
         currentState = state
 
         return LinkResult(
@@ -93,21 +102,30 @@ class VoxVolumeLinkCoordinator(
             return LinkResult(newState = currentState)
         }
 
+        val normalizedTranslation = clampTranslation(newTranslationPercent)
+        val normalizedVideo = clampPercent(currentVideoPercent)
+
         var state = currentState
         if (!state.initialized) {
             state = State(
                 initialized = true,
-                lastVideoPercent = clampPercent(currentVideoPercent),
-                lastTranslationPercent = clampTranslation(newTranslationPercent)
+                lastVideoPercent = normalizedVideo,
+                lastTranslationPercent = normalizedTranslation
+            )
+            currentState = state
+            return LinkResult(
+                nextVideoPercent = normalizedVideo,
+                newState = state
             )
         }
 
-        val normalizedTranslation = clampTranslation(newTranslationPercent)
         val delta = normalizedTranslation - state.lastTranslationPercent
-        state = state.copy(lastTranslationPercent = normalizedTranslation)
-
-        val nextVideo = clampPercent(state.lastVideoPercent + delta)
-        state = state.copy(lastVideoPercent = nextVideo)
+        val baseVideo = if (delta == 0) normalizedVideo else state.lastVideoPercent
+        val nextVideo = clampPercent(baseVideo + delta)
+        state = state.copy(
+            lastVideoPercent = nextVideo,
+            lastTranslationPercent = normalizedTranslation
+        )
         currentState = state
 
         return LinkResult(

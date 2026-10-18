@@ -51,9 +51,11 @@ class VoxAdaptiveVolumeIntegrationTest {
     private lateinit var volumeLinkCoordinator: VoxVolumeLinkCoordinator
     private lateinit var levelProcessor: FakeLevelProcessor
     private lateinit var controller: VoxAdaptiveVolumeController
+    private var simulatedTime: Long = 1000L
 
     @Before
     fun setUp() {
+        simulatedTime = 1000L
         bridge = FakeBridge(videoVolume = 0.85f, muted = false)
         scheduler = FakeScheduler()
         policy = VoxSmartDuckingPolicy()
@@ -61,6 +63,11 @@ class VoxAdaptiveVolumeIntegrationTest {
         levelProcessor = FakeLevelProcessor(currentRms = null)
 
         controller = VoxAdaptiveVolumeController(bridge, scheduler, policy, volumeLinkCoordinator)
+        controller.setClock {
+            val t = simulatedTime
+            simulatedTime += 50L
+            t
+        }
         controller.setLevelProcessor(levelProcessor)
         controller.setMode(VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE)
         controller.setFixedTarget(0.15f)
@@ -161,8 +168,8 @@ class VoxAdaptiveVolumeIntegrationTest {
 
         // Extended silence (> 520ms + release time)
         levelProcessor.currentRms = 0.001f
-        // 12 ticks for hold expiration (600ms) + 30 ticks for release ramp (~1500ms)
-        for (i in 1..45) {
+        // 12 ticks for hold expiration (600ms) + 40+ ticks for release ramp
+        for (i in 1..65) {
             controller.performTick()
         }
 
@@ -185,7 +192,7 @@ class VoxAdaptiveVolumeIntegrationTest {
 
         // When speech stops and releases, volume should restore to new baseline (0.60), not old 0.85
         levelProcessor.currentRms = 0.001f
-        for (i in 1..45) {
+        for (i in 1..65) {
             controller.performTick()
         }
 
@@ -200,14 +207,19 @@ class VoxAdaptiveVolumeIntegrationTest {
             controller.performTick()
         }
 
-        // Host video paused
+        // Host video paused -> reference keeps noop and freezes volume while paused
         bridge.mainVideoPlaying = false
         levelProcessor.currentRms = 0.001f
-        for (i in 1..45) {
+        for (i in 1..20) {
             controller.performTick()
         }
+        assertEquals(0.15f, bridge.videoVolume, 0.02f)
 
-        // Must unduck
+        // Once host video resumes, silence triggers release to baseline
+        bridge.mainVideoPlaying = true
+        for (i in 1..65) {
+            controller.performTick()
+        }
         assertEquals(0.85f, bridge.videoVolume, 0.02f)
     }
 

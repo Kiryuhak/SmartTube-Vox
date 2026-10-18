@@ -175,17 +175,30 @@ class VoxSmartDuckingPolicyTest {
         state = decision.newState
         assertTrue(state.speechGateOpen)
 
+        // Settle at ducked volume
+        var currentVol = (decision as? VoxSmartDuckingPolicy.Decision.Apply)?.targetVolume ?: 0.15f
+        for (i in 1..20) {
+            time += 50L
+            val rampInput = speechInput.copy(nowMs = time, currentVideoVolume = currentVol, rms = 0.03f)
+            decision = policy.evaluateStep(rampInput, state)
+            state = decision.newState
+            if (decision is VoxSmartDuckingPolicy.Decision.Apply) {
+                currentVol = decision.targetVolume
+            }
+        }
+        assertEquals(0.15f, currentVol, 0.02f)
+
         // Pause speech (RMS = 0.001) for 400ms (< 520ms hold)
         for (i in 1..8) {
             time += 50L
-            val silenceInput = speechInput.copy(nowMs = time, currentVideoVolume = 0.15f, rms = 0.001f)
+            val silenceInput = speechInput.copy(nowMs = time, currentVideoVolume = currentVol, rms = 0.001f)
             decision = policy.evaluateStep(silenceInput, state)
             state = decision.newState
             assertTrue("Gate must remain open at time delta " + (i * 50) + "ms", state.speechGateOpen)
         }
 
-        // Advance past 520ms hold (e.g. 600ms total silence)
-        time += 200L
+        // Advance past 520ms hold after envelope release
+        time += 600L
         val expiredInput = speechInput.copy(nowMs = time, currentVideoVolume = 0.15f, rms = 0.001f)
         decision = policy.evaluateStep(expiredInput, state)
         state = decision.newState

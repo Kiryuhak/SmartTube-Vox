@@ -22,19 +22,25 @@ run_ota_integration() {
 }
 
 run_vot_fast() {
-  echo "--- [SUITE: vot-fast] Running VOT translation, language & subtitle unit tests ---"
+  echo "--- [SUITE: vot-fast] Running VOT translation, audio, language, subtitle, account & voice unit tests ---"
   ./gradlew :common:testStvotDebugUnitTest \
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.translation.*" \
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.audio.*" \
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.language.*" \
-    --tests "com.liskovsoft.smartyoutubetv2.common.vox.subtitles.*"
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.subtitles.*" \
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.account.*" \
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.voice.*"
 }
 
 run_vot_full() {
-  echo "--- [SUITE: vot-full] Running VOT translation, language, subtitle + muxing suites ---"
+  echo "--- [SUITE: vot-full] Running VOT translation, audio, language, subtitle, account, voice + muxing suites ---"
   ./gradlew :common:testStvotDebugUnitTest \
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.translation.*" \
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.audio.*" \
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.language.*" \
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.subtitles.*" \
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.account.*" \
+    --tests "com.liskovsoft.smartyoutubetv2.common.vox.voice.*" \
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.mux.*"
 }
 

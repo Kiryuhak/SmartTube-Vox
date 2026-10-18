@@ -154,7 +154,7 @@ class VoxSmartDuckingPolicy(
         val dtMs = if (state.lastTickAt > 0L) {
             min(maxDtMs, max(0L, now - state.lastTickAt))
         } else {
-            0L
+            tickMs
         }
         val dtSec = dtMs / 1000.0f
 

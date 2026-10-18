@@ -122,6 +122,16 @@ public class VoxAdaptiveVolumeController {
         this(bridge, DEFAULT_SCHEDULER, new VoxSmartDuckingPolicy(), new VoxVolumeLinkCoordinator(0, 100));
     }
 
+    public interface Clock {
+        long currentTimeMillis();
+    }
+    public static final Clock DEFAULT_CLOCK = System::currentTimeMillis;
+    private Clock mClock = DEFAULT_CLOCK;
+
+    public synchronized void setClock(@NonNull Clock clock) {
+        mClock = clock != null ? clock : DEFAULT_CLOCK;
+    }
+
     public synchronized void setLevelProcessor(@Nullable VoxAudioLevelProcessor processor) {
         mLevelProcessor = processor;
     }
@@ -257,6 +267,10 @@ public class VoxAdaptiveVolumeController {
     }
 
     public synchronized void performTick() {
+        performTick(mClock.currentTimeMillis());
+    }
+
+    public synchronized void performTick(long nowMs) {
         if (!mIsActive) return;
 
         if (mMode == AutoVolumeMode.OFF) {
@@ -274,7 +288,7 @@ public class VoxAdaptiveVolumeController {
         boolean hasRms = rms != null;
 
         VoxSmartDuckingPolicy.Input input = new VoxSmartDuckingPolicy.Input(
-                System.currentTimeMillis(),
+                nowMs,
                 true,
                 mMode != AutoVolumeMode.OFF,
                 effectiveSmartDucking,
