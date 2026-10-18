@@ -12,6 +12,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.liskovsoft.smartyoutubetv2.common.vot.TranslationAudioPlayer;
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxAudioProxyFallback;
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxAudioSyncDecision;
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxAudioSyncPolicy;
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxSyncActionType;
 
 import java.util.Objects;
 
@@ -54,6 +58,10 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         float getTranslationVolume();
         long getCurrentVideoPositionMs();
         boolean isMainVideoPlaying();
+        default boolean isMainVideoBuffering() { return false; }
+        default long getVideoDurationMs() { return Long.MAX_VALUE; }
+        default float getMainPlaybackSpeed() { return 1.0f; }
+        default String getProxyWorkerHost() { return VoxAudioProxyFallback.DEFAULT_PROXY_WORKER_HOST; }
         default long determineInitialPlaybackPosition() {
             return getCurrentVideoPositionMs();
         }
@@ -73,6 +81,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
     private final AudioPlayerFactory playerFactory;
     private final AudioDuckingBridge duckingBridge;
+    private final VoxAudioSyncPolicy syncPolicy;
     @Nullable private PlaybackStateListener stateListener;
 
     private final Object lock = new Object();
@@ -81,14 +90,31 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     private boolean isPrepared = false;
     private boolean isPlaying = false;
     private boolean isDucked = false;
+    private boolean isMainBuffering = false;
+    private float currentPlaybackSpeed = 1.0f;
     private long lastSyncSeekTimestamp = 0;
+    @Nullable private VoxAudioProxyFallback.BoundedRouteTracker routeTracker;
+    @Nullable private String currentSourceUrl;
 
     public YandexVotPlaybackAdapter(
             @NonNull AudioPlayerFactory playerFactory,
             @NonNull AudioDuckingBridge duckingBridge
     ) {
+        this(playerFactory, duckingBridge, new VoxAudioSyncPolicy(
+                VoxAudioSyncPolicy.DEFAULT_TOLERANCE_MS,
+                SYNC_THRESHOLD_MS,
+                SYNC_SEEK_COOLDOWN_MS
+        ));
+    }
+
+    public YandexVotPlaybackAdapter(
+            @NonNull AudioPlayerFactory playerFactory,
+            @NonNull AudioDuckingBridge duckingBridge,
+            @NonNull VoxAudioSyncPolicy syncPolicy
+    ) {
         this.playerFactory = Objects.requireNonNull(playerFactory, "playerFactory cannot be null");
         this.duckingBridge = Objects.requireNonNull(duckingBridge, "duckingBridge cannot be null");
+        this.syncPolicy = Objects.requireNonNull(syncPolicy, "syncPolicy cannot be null");
     }
 
     public static AudioPlayerFactory createDefaultPlayerFactory(@NonNull final Context context) {
@@ -224,67 +250,87 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
             stopAndReleasePlayerLocked();
 
+            currentPlaybackSpeed = speed > 0 ? speed : 1.0f;
+            currentSourceUrl = audioUrl;
+            routeTracker = new VoxAudioProxyFallback.BoundedRouteTracker(audioUrl, duckingBridge.getProxyWorkerHost());
+
             final AudioPlayer player = playerFactory.createPlayer();
             activePlayer = player;
             isPrepared = false;
             isPlaying = false;
+            isMainBuffering = duckingBridge.isMainVideoBuffering();
 
-            YandexVotLog.i(TAG, "generation=" + generationId + " prepare_start");
-
-            final int sessionId = (int) (generationId & 0x7FFFFFFF);
-            player.prepare(sessionId, audioUrl, speed > 0 ? speed : 1.0f, new AudioPlayer.Callback() {
-                @Override
-                public void onPrepared() {
-                    synchronized (lock) {
-                        if (generationId != currentGeneration || activePlayer != player) {
-                            YandexVotLog.w(TAG, "generation=" + generationId + " prepared but generation changed (current=" + currentGeneration + ")");
-                            return;
-                        }
-                        isPrepared = true;
-                        YandexVotLog.i(TAG, "generation=" + generationId + " prepared");
-
-                        long targetPosMs = duckingBridge.determineInitialPlaybackPosition();
-                        if (targetPosMs <= INITIAL_SYNC_TOLERANCE_MS) {
-                            onInitialSyncCompleteLocked(generationId, player);
-                        } else {
-                            YandexVotLog.i(TAG, "generation=" + generationId + " initial_seek target_ms=" + targetPosMs);
-                            player.seekTo(targetPosMs);
-                        }
-                    }
-                }
-
-                @Override
-                public void onSeekProcessed() {
-                    synchronized (lock) {
-                        if (generationId != currentGeneration || activePlayer != player) {
-                            return;
-                        }
-                        if (!isPlaying) {
-                            onInitialSyncCompleteLocked(generationId, player);
-                        }
-                    }
-                }
-
-                @Override
-                public void onError(@NonNull Exception error) {
-                    synchronized (lock) {
-                        if (generationId != currentGeneration || activePlayer != player) {
-                            return;
-                        }
-                        YandexVotLog.e(TAG, "generation=" + generationId + " error=playback_error");
-                        handleStopLocked(generationId, "playback_error");
-                        notifyErrorLocked(generationId, "playback_error");
-                    }
-                }
-            });
+            prepareWithRouteLocked(generationId, player, routeTracker.getCurrentUrl(), currentPlaybackSpeed);
         }
+    }
+
+    private void prepareWithRouteLocked(long generationId, @NonNull AudioPlayer player, @NonNull String url, float speed) {
+        YandexVotLog.i(TAG, "generation=" + generationId + " prepare_start url=" + url);
+
+        final int sessionId = (int) (generationId & 0x7FFFFFFF);
+        player.prepare(sessionId, url, speed > 0 ? speed : 1.0f, new AudioPlayer.Callback() {
+            @Override
+            public void onPrepared() {
+                synchronized (lock) {
+                    if (generationId != currentGeneration || activePlayer != player) {
+                        YandexVotLog.w(TAG, "generation=" + generationId + " prepared but generation changed (current=" + currentGeneration + ")");
+                        return;
+                    }
+                    isPrepared = true;
+                    YandexVotLog.i(TAG, "generation=" + generationId + " prepared");
+
+                    long targetPosMs = duckingBridge.determineInitialPlaybackPosition();
+                    targetPosMs = syncPolicy.clampPosition(targetPosMs, duckingBridge.getVideoDurationMs());
+                    if (targetPosMs <= INITIAL_SYNC_TOLERANCE_MS) {
+                        onInitialSyncCompleteLocked(generationId, player);
+                    } else {
+                        YandexVotLog.i(TAG, "generation=" + generationId + " initial_seek target_ms=" + targetPosMs);
+                        player.seekTo(targetPosMs);
+                    }
+                }
+            }
+
+            @Override
+            public void onSeekProcessed() {
+                synchronized (lock) {
+                    if (generationId != currentGeneration || activePlayer != player) {
+                        return;
+                    }
+                    if (!isPlaying) {
+                        onInitialSyncCompleteLocked(generationId, player);
+                    }
+                }
+            }
+
+            @Override
+            public void onError(@NonNull Exception error) {
+                synchronized (lock) {
+                    if (generationId != currentGeneration || activePlayer != player) {
+                        return;
+                    }
+                    // Bounded 1-step route fallback check (Proxy <-> Direct)
+                    if (routeTracker != null && routeTracker.canAttemptFallback()) {
+                        String fallbackUrl = routeTracker.trySwitchToFallback();
+                        if (fallbackUrl != null) {
+                            YandexVotLog.w(TAG, "generation=" + generationId + " primary route failed (" + error.getMessage() + "), retrying route fallback: " + fallbackUrl);
+                            currentSourceUrl = fallbackUrl;
+                            prepareWithRouteLocked(generationId, player, fallbackUrl, currentPlaybackSpeed);
+                            return;
+                        }
+                    }
+                    YandexVotLog.e(TAG, "generation=" + generationId + " error=playback_error (route fallback exhausted or unavailable)");
+                    handleStopLocked(generationId, "playback_error");
+                    notifyErrorLocked(generationId, "playback_error");
+                }
+            }
+        });
     }
 
     private void handleReadyStateLocked(@NonNull YandexVotState state) {
         long gen = state.getGenerationId();
         currentGeneration = gen;
         String audioUrl = state.getAudioUrl();
-        startPlayback(gen, audioUrl, 1.0f);
+        startPlayback(gen, audioUrl, currentPlaybackSpeed);
     }
 
     private void onInitialSyncCompleteLocked(long generationId, @NonNull AudioPlayer player) {
@@ -300,14 +346,15 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
         float volume = duckingBridge.getTranslationVolume();
         boolean mainPlaying = duckingBridge.isMainVideoPlaying();
+        boolean mainBuffering = isMainBuffering || duckingBridge.isMainVideoBuffering();
 
         player.startPlayback(volume);
         isPlaying = true;
         YandexVotLog.i(TAG, "generation=" + generationId + " audible_start");
 
-        if (!mainPlaying) {
+        if (!mainPlaying || mainBuffering) {
             player.pause();
-            YandexVotLog.i(TAG, "generation=" + generationId + " pause");
+            YandexVotLog.i(TAG, "generation=" + generationId + " pause (mainPlaying=" + mainPlaying + ", buffering=" + mainBuffering + ")");
             notifyPausedLocked(generationId);
         } else {
             notifyActiveLocked(generationId);
@@ -316,8 +363,20 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         lastSyncSeekTimestamp = System.currentTimeMillis();
     }
 
+    public void onBuffering() {
+        synchronized (lock) {
+            isMainBuffering = true;
+            if (activePlayer != null && isPlaying) {
+                activePlayer.pause();
+                YandexVotLog.i(TAG, "generation=" + currentGeneration + " buffering_hold");
+                notifyPausedLocked(currentGeneration);
+            }
+        }
+    }
+
     public void onPlay() {
         synchronized (lock) {
+            isMainBuffering = false;
             if (activePlayer != null && isPlaying) {
                 activePlayer.resume();
                 duckOriginalAudioLocked();
@@ -329,6 +388,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
     public void onPause() {
         synchronized (lock) {
+            isMainBuffering = false;
             if (activePlayer != null) {
                 activePlayer.pause();
                 YandexVotLog.i(TAG, "generation=" + currentGeneration + " pause");
@@ -340,17 +400,19 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     public void onSeek(long targetPositionMs) {
         synchronized (lock) {
             if (activePlayer != null) {
+                long clampedPos = syncPolicy.clampPosition(targetPositionMs, duckingBridge.getVideoDurationMs());
                 lastSyncSeekTimestamp = System.currentTimeMillis();
-                activePlayer.seekTo(targetPositionMs);
-                YandexVotLog.i(TAG, "generation=" + currentGeneration + " seek target_ms=" + targetPositionMs);
+                activePlayer.seekTo(clampedPos);
+                YandexVotLog.i(TAG, "generation=" + currentGeneration + " seek target_ms=" + clampedPos);
             }
         }
     }
 
     public void setPlaybackSpeed(float speed) {
         synchronized (lock) {
+            currentPlaybackSpeed = speed > 0 ? speed : 1.0f;
             if (activePlayer != null) {
-                activePlayer.setPlaybackSpeed(speed);
+                activePlayer.setPlaybackSpeed(currentPlaybackSpeed);
             }
         }
     }
@@ -370,20 +432,117 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
             }
 
             long now = System.currentTimeMillis();
-            if (now - lastSyncSeekTimestamp < SYNC_SEEK_COOLDOWN_MS) {
+            long transPosMs = activePlayer.getPositionMs();
+            boolean mainPlaying = duckingBridge.isMainVideoPlaying();
+            boolean mainBuffering = isMainBuffering || duckingBridge.isMainVideoBuffering();
+            long durationMs = duckingBridge.getVideoDurationMs();
+            float mainSpeed = duckingBridge.getMainPlaybackSpeed();
+
+            VoxAudioSyncDecision decision = syncPolicy.evaluate(
+                    mainPosMs,
+                    transPosMs,
+                    mainPlaying,
+                    mainBuffering,
+                    activePlayer.isPlaying(),
+                    durationMs,
+                    mainSpeed > 0 ? mainSpeed : currentPlaybackSpeed,
+                    currentPlaybackSpeed,
+                    lastSyncSeekTimestamp,
+                    now
+            );
+
+            YandexVotLog.i(TAG, "generation=" + currentGeneration + " sync action=" + decision.getAction() + " delta_ms=" + decision.getDriftMs());
+
+            switch (decision.getAction()) {
+                case HOLD_BUFFERING:
+                case PAUSE:
+                    activePlayer.pause();
+                    notifyPausedLocked(currentGeneration);
+                    break;
+                case RESUME:
+                    activePlayer.resume();
+                    duckOriginalAudioLocked();
+                    notifyActiveLocked(currentGeneration);
+                    break;
+                case SPEED_UPDATE:
+                    setPlaybackSpeed(decision.getTargetSpeed());
+                    break;
+                case HARD_SEEK:
+                case SOFT_SEEK:
+                    lastSyncSeekTimestamp = now;
+                    activePlayer.seekTo(decision.getTargetPositionMs());
+                    YandexVotLog.i(TAG, "generation=" + currentGeneration + " drift_seek target_ms=" + decision.getTargetPositionMs() + " reason=" + decision.getReason());
+                    break;
+                case NOOP:
+                default:
+                    break;
+            }
+        }
+    }
+
+    public void refreshSource(long generationId, @NonNull String newAudioUrl, long resumePositionMs, float speed) {
+        synchronized (lock) {
+            if (generationId < currentGeneration && currentGeneration != 0) {
+                YandexVotLog.w(TAG, "Dropping stale refreshSource: gen=" + generationId + " currentGen=" + currentGeneration);
                 return;
             }
+            YandexVotLog.i(TAG, "generation=" + generationId + " refreshSource url=" + newAudioUrl + " resumePos=" + resumePositionMs);
+            stopAndReleasePlayerLocked();
 
-            long transPosMs = activePlayer.getPositionMs();
-            long delta = Math.abs(mainPosMs - transPosMs);
+            currentGeneration = generationId;
+            currentPlaybackSpeed = speed > 0 ? speed : currentPlaybackSpeed;
+            currentSourceUrl = newAudioUrl;
+            routeTracker = new VoxAudioProxyFallback.BoundedRouteTracker(newAudioUrl, duckingBridge.getProxyWorkerHost());
 
-            YandexVotLog.i(TAG, "generation=" + currentGeneration + " sync delta_ms=" + delta);
+            final AudioPlayer player = playerFactory.createPlayer();
+            activePlayer = player;
+            isPrepared = false;
+            isPlaying = false;
+            isMainBuffering = duckingBridge.isMainVideoBuffering();
 
-            if (delta > SYNC_THRESHOLD_MS) {
-                YandexVotLog.i(TAG, "generation=" + currentGeneration + " drift_seek target_ms=" + mainPosMs);
-                lastSyncSeekTimestamp = now;
-                activePlayer.seekTo(mainPosMs);
-            }
+            final int sessionId = (int) (generationId & 0x7FFFFFFF);
+            player.prepare(sessionId, routeTracker.getCurrentUrl(), currentPlaybackSpeed, new AudioPlayer.Callback() {
+                @Override
+                public void onPrepared() {
+                    synchronized (lock) {
+                        if (generationId != currentGeneration || activePlayer != player) return;
+                        isPrepared = true;
+                        long targetPosMs = syncPolicy.clampPosition(resumePositionMs, duckingBridge.getVideoDurationMs());
+                        if (targetPosMs <= INITIAL_SYNC_TOLERANCE_MS) {
+                            onInitialSyncCompleteLocked(generationId, player);
+                        } else {
+                            player.seekTo(targetPosMs);
+                        }
+                    }
+                }
+
+                @Override
+                public void onSeekProcessed() {
+                    synchronized (lock) {
+                        if (generationId != currentGeneration || activePlayer != player) return;
+                        if (!isPlaying) {
+                            onInitialSyncCompleteLocked(generationId, player);
+                        }
+                    }
+                }
+
+                @Override
+                public void onError(@NonNull Exception error) {
+                    synchronized (lock) {
+                        if (generationId != currentGeneration || activePlayer != player) return;
+                        if (routeTracker != null && routeTracker.canAttemptFallback()) {
+                            String fallbackUrl = routeTracker.trySwitchToFallback();
+                            if (fallbackUrl != null) {
+                                currentSourceUrl = fallbackUrl;
+                                prepareWithRouteLocked(generationId, player, fallbackUrl, currentPlaybackSpeed);
+                                return;
+                            }
+                        }
+                        handleStopLocked(generationId, "refresh_playback_error");
+                        notifyErrorLocked(generationId, "refresh_playback_error");
+                    }
+                }
+            });
         }
     }
 
@@ -422,6 +581,8 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         }
         isPrepared = false;
         isPlaying = false;
+        isMainBuffering = false;
+        routeTracker = null;
     }
 
     private void duckOriginalAudioLocked() {
@@ -501,6 +662,37 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     public long getCurrentGeneration() {
         synchronized (lock) {
             return currentGeneration;
+        }
+    }
+
+    public float getCurrentPlaybackSpeed() {
+        synchronized (lock) {
+            return currentPlaybackSpeed;
+        }
+    }
+
+    public boolean isMainBuffering() {
+        synchronized (lock) {
+            return isMainBuffering;
+        }
+    }
+
+    @Nullable
+    public String getCurrentSourceUrl() {
+        synchronized (lock) {
+            return currentSourceUrl;
+        }
+    }
+
+    @NonNull
+    public VoxAudioSyncPolicy getSyncPolicy() {
+        return syncPolicy;
+    }
+
+    @Nullable
+    public VoxAudioProxyFallback.BoundedRouteTracker getRouteTracker() {
+        synchronized (lock) {
+            return routeTracker;
         }
     }
 }

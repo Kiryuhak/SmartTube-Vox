@@ -10,6 +10,7 @@ object VoxTranslationReusePolicy {
     const val SLOW_STARTUP_THRESHOLD_STANDARD_MS = 5_000L
     const val SLOW_STARTUP_THRESHOLD_LIVE_VOICE_MS = 8_000L
 
+    @JvmStatic
     fun extractVideoId(rawUrlOrId: String?): String? {
         if (rawUrlOrId.isNullOrBlank()) return null
         val trimmed = rawUrlOrId.trim()
@@ -45,6 +46,7 @@ object VoxTranslationReusePolicy {
         return null
     }
 
+    @JvmStatic
     fun normalizeVideoUrl(rawUrlOrId: String?): String {
         val videoId = extractVideoId(rawUrlOrId)
         return if (!videoId.isNullOrBlank()) {

@@ -439,4 +439,221 @@ public class YandexVotPlaybackAdapterTest {
         fakePlayer.callback.onSeekProcessed();
         assertTrue(customAdapter.isPlaying());
     }
+
+    @Test
+    public void test14_BufferingPausesFollowerAudio() {
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        assertTrue(fakePlayer.isPlaying());
+        assertFalse(adapter.isMainBuffering());
+
+        // Main video starts buffering -> follower audio holds
+        adapter.onBuffering();
+        assertTrue(adapter.isMainBuffering());
+        assertFalse(fakePlayer.isPlaying());
+
+        // Main video resumes playing -> follower audio unpauses
+        adapter.onPlay();
+        assertFalse(adapter.isMainBuffering());
+        assertTrue(fakePlayer.isPlaying());
+    }
+
+    @Test
+    public void test15_PlaybackSpeedSynchronizedOnPrepareAndLive() {
+        adapter.setPlaybackSpeed(1.5f);
+        assertEquals(1.5f, adapter.getCurrentPlaybackSpeed(), 0.001f);
+
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        assertEquals(1.5f, fakePlayer.speed, 0.001f);
+
+        // Change speed dynamically during playback
+        fakePlayer.callback.onPrepared();
+        adapter.setPlaybackSpeed(2.0f);
+        assertEquals(2.0f, fakePlayer.speed, 0.001f);
+    }
+
+    @Test
+    public void test16_SeekForwardAndBackwardClamped() {
+        final long DURATION_MS = 60000L;
+        YandexVotPlaybackAdapter clampedAdapter = new YandexVotPlaybackAdapter(
+                () -> {
+                    fakePlayer = new FakeAudioPlayer();
+                    return fakePlayer;
+                },
+                new YandexVotPlaybackAdapter.AudioDuckingBridge() {
+                    @Override public void duckOriginalAudio() {}
+                    @Override public void restoreOriginalAudio() {}
+                    @Override public float getTranslationVolume() { return 1f; }
+                    @Override public long getCurrentVideoPositionMs() { return 0L; }
+                    @Override public boolean isMainVideoPlaying() { return true; }
+                    @Override public long getVideoDurationMs() { return DURATION_MS; }
+                }
+        );
+
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        clampedAdapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+
+        // Normal seek forward
+        clampedAdapter.onSeek(30000L);
+        assertEquals(30000L, fakePlayer.positionMs);
+
+        // Seek backward
+        clampedAdapter.onSeek(10000L);
+        assertEquals(10000L, fakePlayer.positionMs);
+
+        // Seek past end of video -> clamped to duration
+        clampedAdapter.onSeek(75000L);
+        assertEquals(DURATION_MS, fakePlayer.positionMs);
+
+        // Seek before start -> clamped to 0
+        clampedAdapter.onSeek(-5000L);
+        assertEquals(0L, fakePlayer.positionMs);
+    }
+
+    @Test
+    public void test17_PeriodicSyncToleratesSmallDrift() {
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        fakePlayer.positionMs = 20000L;
+
+        // Small drift: 100ms <= 150ms tolerance -> no seek
+        adapter.checkPeriodicSync(20100L);
+        assertEquals(20000L, fakePlayer.positionMs);
+    }
+
+    @Test
+    public void test18_PeriodicSyncCorrectsLargeDriftImmediately() {
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        fakePlayer.positionMs = 20000L;
+
+        // Large drift: 5000ms > 1500ms hard threshold -> hard seek to main position
+        adapter.checkPeriodicSync(25000L);
+        assertEquals(25000L, fakePlayer.positionMs);
+    }
+
+    @Test
+    public void test19_PeriodicSyncHoldsAudioWhenMasterBuffering() {
+        final AtomicBoolean bufferingFlag = new AtomicBoolean(false);
+        YandexVotPlaybackAdapter bufferAdapter = new YandexVotPlaybackAdapter(
+                () -> {
+                    fakePlayer = new FakeAudioPlayer();
+                    return fakePlayer;
+                },
+                new YandexVotPlaybackAdapter.AudioDuckingBridge() {
+                    @Override public void duckOriginalAudio() {}
+                    @Override public void restoreOriginalAudio() {}
+                    @Override public float getTranslationVolume() { return 1f; }
+                    @Override public long getCurrentVideoPositionMs() { return 10000L; }
+                    @Override public boolean isMainVideoPlaying() { return true; }
+                    @Override public boolean isMainVideoBuffering() { return bufferingFlag.get(); }
+                }
+        );
+
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/1.mp3", false, false
+        );
+        bufferAdapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        assertTrue(fakePlayer.isPlaying());
+
+        // Master enters buffering
+        bufferingFlag.set(true);
+        bufferAdapter.checkPeriodicSync(10000L);
+        assertFalse(fakePlayer.isPlaying());
+    }
+
+    @Test
+    public void test20_BoundedRouteFallbackDirectToProxyOnFailure() {
+        final String directUrl = "https://vtrans.s3-private.mds.yandex.net/tts/prod/test.mp3";
+        final String proxiedUrl = "https://vot-worker.eu.cc/video-translation/audio-proxy/test.mp3";
+
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                directUrl, false, false
+        );
+        adapter.onStateChanged(readyState);
+        assertEquals(directUrl, fakePlayer.url);
+
+        // First attempt fails -> triggers bounded 1-step route fallback
+        fakePlayer.callback.onError(new RuntimeException("Direct S3 403 Forbidden"));
+        assertEquals(proxiedUrl, fakePlayer.url);
+        assertEquals(proxiedUrl, adapter.getCurrentSourceUrl());
+
+        // Second attempt with fallback succeeds
+        fakePlayer.callback.onPrepared();
+        assertTrue(adapter.isPlaying());
+    }
+
+    @Test
+    public void test21_BoundedRouteFallbackExhaustedReportsError() {
+        final AtomicReference<String> errorReported = new AtomicReference<>();
+        adapter.setStateListener(new YandexVotPlaybackAdapter.PlaybackStateListener() {
+            @Override public void onPlaybackActive(long generationId) {}
+            @Override public void onPlaybackPaused(long generationId) {}
+            @Override public void onPlaybackStopped(long generationId) {}
+            @Override public void onPlaybackError(long generationId, @NonNull String category) {
+                errorReported.set(category);
+            }
+        });
+
+        final String directUrl = "https://vtrans.s3-private.mds.yandex.net/tts/prod/test.mp3";
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                directUrl, false, false
+        );
+        adapter.onStateChanged(readyState);
+
+        // 1st failure -> switches to fallback
+        fakePlayer.callback.onError(new RuntimeException("Direct S3 failure"));
+        assertNull(errorReported.get());
+
+        // 2nd failure on fallback -> route fallback exhausted -> reports terminal error
+        fakePlayer.callback.onError(new RuntimeException("Proxy failure"));
+        assertEquals("playback_error", errorReported.get());
+        assertFalse(adapter.isPlaying());
+    }
+
+    @Test
+    public void test22_SourceRefreshUpdatesAudioWithoutGenerationLeak() {
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/old.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        assertTrue(adapter.isPlaying());
+
+        // Audio URL expired; refresh signed URL and resume at 25000ms with speed 1.5x
+        final String refreshedUrl = "https://vtrans.s3-private.mds.yandex.net/tts/prod/fresh.mp3";
+        adapter.refreshSource(1L, refreshedUrl, 25000L, 1.5f);
+        assertEquals(refreshedUrl, fakePlayer.url);
+        assertEquals(1.5f, fakePlayer.speed, 0.001f);
+
+        fakePlayer.callback.onPrepared();
+        assertEquals(25000L, fakePlayer.positionMs);
+        fakePlayer.callback.onSeekProcessed();
+        assertTrue(adapter.isPlaying());
+    }
 }

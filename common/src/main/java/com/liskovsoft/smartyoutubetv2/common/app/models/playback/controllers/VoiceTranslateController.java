@@ -600,6 +600,9 @@ public class VoiceTranslateController extends BasePlayerController {
         Log.d(TAG, "VOT reset reason: new video (%s)", item != null ? item.videoId : "null");
         mOverlayProgress.reset();
         mTranslationSessionId++;
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.onVideoChanged();
+        }
         stopNewYandexBackend();
         mIsNewBackendActive = false;
         mFallbackTriggered = false;
@@ -751,6 +754,35 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     @Override
+    public void onBuffering() {
+        if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.onBuffering();
+        } else if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
+            mTranslationPlayer.pause();
+        }
+    }
+
+    @Override
+    public void onPlayEnd() {
+        if (mIsNewBackendActive && mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.onPause();
+        } else if (mState == STATE_ACTIVE && mTranslationPlayer != null) {
+            mTranslationPlayer.pause();
+        }
+    }
+
+    @Override
+    public void onSourceChanged(Video item) {
+        if (item != null && mCurrentVideoId != null && !item.videoId.equals(mCurrentVideoId)) {
+            Log.d(TAG, "VOT reset reason: source changed to %s", item.videoId);
+            if (mYandexPlaybackAdapter != null) {
+                mYandexPlaybackAdapter.onVideoChanged();
+            }
+            onNewVideo(item);
+        }
+    }
+
+    @Override
     public void onSeekEnd() {
         if (mState == STATE_PENDING) {
             mUserSeekedDuringPreparation = true;
@@ -787,12 +819,18 @@ public class VoiceTranslateController extends BasePlayerController {
             mProgressOverlay.destroy();
             mProgressOverlay = null;
         }
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.release();
+        }
         disarm();
     }
 
     @Override
     public void onFinish() {
         Log.d(TAG, "VOT reset reason: player finished");
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.release();
+        }
         disarmQuiet();
         resetTrackSwitch();
         if (mProgressOverlay != null) {
@@ -804,6 +842,9 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onViewDestroyed() {
         Log.d(TAG, "VOT reset reason: view destroyed");
+        if (mYandexPlaybackAdapter != null) {
+            mYandexPlaybackAdapter.release();
+        }
         disarmQuiet();
         resetTrackSwitch();
         if (mProgressOverlay != null) {
@@ -1714,6 +1755,21 @@ public class VoiceTranslateController extends BasePlayerController {
             }
 
             @Override
+            public boolean isMainVideoBuffering() {
+                return getPlayer() != null && getPlayer().isLoading();
+            }
+
+            @Override
+            public long getVideoDurationMs() {
+                return getPlayer() != null ? getPlayer().getDurationMs() : Long.MAX_VALUE;
+            }
+
+            @Override
+            public float getMainPlaybackSpeed() {
+                return getPlayer() != null ? getPlayer().getSpeed() : 1.0f;
+            }
+
+            @Override
             public long determineInitialPlaybackPosition() {
                 return VoiceTranslateController.this.determineInitialPlaybackPosition();
             }
@@ -1927,25 +1983,47 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
-        // Self-heal: if playback failed on a CACHED translation (URL expired or invalidated on server),
-        // purge the stale cache and fetch freshly from server once.
-        if (isPlaybackError && mStateMachine.getReuseSource() != com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ReuseSource.NONE
-                && !mCachedUrlRefreshAttempted) {
+        // Self-heal: if playback failed on a CACHED or expired translation URL (403/410/invalidated on server),
+        // refresh signed URL from server without restarting translation from scratch.
+        if (isPlaybackError && !mCachedUrlRefreshAttempted && mCurrentVideoId != null) {
             mCachedUrlRefreshAttempted = true;
-            YandexVotLog.w(TAG, "Playback error on cached translation (" + errorMsg + "). Invalidating cache and refreshing from server.");
+            YandexVotLog.w(TAG, "Playback error on translation audio (" + errorMsg + "). Attempting signed URL refresh from server.");
             Map<String, String> expCtx = new HashMap<>();
-            expCtx.put("videoId", mCurrentVideoId != null ? mCurrentVideoId : "unknown");
+            expCtx.put("videoId", mCurrentVideoId);
             expCtx.put("reuseSource", mStateMachine.getReuseSource().name());
             expCtx.put("error", errorMsg != null ? errorMsg : "unknown");
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_CACHED_URL_EXPIRED,
-                    "Cached translation audio URL failed playback, refreshing from server",
+                    "Translation audio URL failed playback, refreshing signed URL from server",
                     expCtx
             );
+            long resumePos = getPlayer() != null ? getPlayer().getPositionMs() : 0L;
+            float resumeSpeed = getPlayer() != null ? getPlayer().getSpeed() : 1.0f;
             com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationSessionCache.invalidate(mCurrentVideoId, mPendingVideoUrl);
             com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.invalidateCachedResult(mPendingVideoUrl);
-            startYandexTranslation(false, false);
+
+            io.reactivex.Single.fromCallable(() -> {
+                String videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.normalizeVideoUrl(mCurrentVideoId);
+                return com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient.requestTranslation(
+                        videoUrl, 0.0, "", "ru", "", false, null, true
+                );
+            })
+            .subscribeOn(io.reactivex.schedulers.Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(res -> {
+                if (res != null && res.isReady() && res.getAudioUrl() != null && mYandexPlaybackAdapter != null && mIsNewBackendActive) {
+                    YandexVotLog.i(TAG, "Signed URL refreshed, updating adapter source to " + res.getAudioUrl() + " at pos " + resumePos);
+                    mPendingReadyAudioUrl = res.getAudioUrl();
+                    mYandexPlaybackAdapter.refreshSource(generationId, res.getAudioUrl(), resumePos, resumeSpeed);
+                } else {
+                    YandexVotLog.w(TAG, "Signed URL refresh did not produce ready audio URL, restarting normal translation");
+                    startYandexTranslation(false, false);
+                }
+            }, err -> {
+                YandexVotLog.w(TAG, "Signed URL refresh failed: " + err.getMessage() + ", restarting normal translation");
+                startYandexTranslation(false, false);
+            });
             return;
         }
 

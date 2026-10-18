@@ -12,8 +12,8 @@
 - **REFERENCE_SHA256**: `4922bf1098224f545fb96a8de1202ba7a35166c144df5d39a05f69b4499ede6c`
 - **REFERENCE_LINES**: 44,525
 - **FEATURE_GROUPS_TOTAL**: 38
-- **ALREADY_EQUIVALENT**: 21
-- **IMPLEMENTED_THIS_RUN**: 11
+- **ALREADY_EQUIVALENT**: 20
+- **IMPLEMENTED_THIS_RUN**: 12
 - **PARTIAL**: 3
 - **NOT_APPLICABLE_ANDROID**: 1 (Browser DOM scraping/adapters for 100+ web players)
 - **UI_PHASE_LATER**: 2 (Right translation plaque redesign, Telegram admin notifications)
@@ -21,7 +21,7 @@
 
 ### Functional Parity Calculation
 Applicable native features: $38 - 1\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHASE\_LATER)} = 35$ features.
-- Fully equivalent or implemented this run: $21 + 11 = 32$ ($91.4\%$)
+- Fully equivalent or implemented this run: $20 + 12 = 32$ ($91.4\%$)
 - Partial (Audio Booster gain clamping, Video language cache, Subtitle full styling): $3$ ($8.6\%$)
 - Missing: $0$ ($0\%$)
 - **Functional Parity on Core Translation & Audio Engine**: **100%** of applicable logic classified and addressed.
@@ -59,3 +59,10 @@ Applicable native features: $38 - 1\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHAS
    - Re-queries existing server artifact on 403/410/resume without initiating a redundant translation task.
 7. **Volume Sync & Delta Linking**:
    - `applyVolumeLinkDelta` preserving relative offset between video and translation sliders.
+8. **Phase C — Audio Follower Lifecycle & AV Sync Parity**:
+   - Pure, deterministic `VoxAudioSyncPolicy`: 150ms drift tolerance window, 1500ms hard seek, 3000ms hysteresis cooldown, duration clamping.
+   - Master clock buffering hold: immediately pauses follower playback on master buffering and resumes in lockstep.
+   - Live playback speed synchronization (`abs(diffSpeed) > 0.01f`).
+   - Generation isolation (`onVideoChanged` with monotonic token) discarding stale callbacks on video switch.
+   - Bounded 1-step Proxy <-> Direct fallback (`VoxAudioProxyFallback` + `BoundedRouteTracker`) avoiding infinite loops.
+   - In-place source refresh (`refreshSource`) preserving user position and speed on signed URL updates.
