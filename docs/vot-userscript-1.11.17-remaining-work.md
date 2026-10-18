@@ -27,9 +27,9 @@ Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Sessi
 | **P1** | Mute State Preservation | `restoreAutoVolumeMute` in `ducking.ts` | COMPLETED | None (preserves mute state across duck/stop/switch) | Store `autoVolumeMutedOnStart`; restore player mute state on finish/un-duck in `VoxAdaptiveVolumeController` | COMPLETED (PHASE D) | Done |
 | **P1** | Volume Sync (Delta Linking) | `syncVolume`, `applyVolumeLinkDelta` in `src/videoHandler/volumeLink.ts` | COMPLETED | None (bi-directional delta linking with programmatic guard) | `VoxVolumeLinkCoordinator` with reference arithmetic; auto-switches smart ducking to classic mode when active | COMPLETED (PHASE D) | Done |
 | **P1** | Audio Booster (> 100% Volume) | `AudioPlayer.initAudioBooster`, WebAudio `gainNode` in `src/videoHandler/translationVolume.ts` (max up to 900%) | COMPLETED | None (Android DSP boost up to 300% safe TV limit) | `VoxAudioBooster` wrapping Android `LoudnessEnhancer` on translation audioSessionId (up to +12 dB) with safe error isolation | COMPLETED (PHASE D) | Done |
-| **P2** | Video Language Cache | `VideoLangCacheRequest`, `VideoLangCacheResponse` in `@vot.js/core/dist/protobuf.js` | PARTIAL | Dedicated protobuf request/response to `/video-translation/lang-cache` and persistent store | Add `VideoLangCacheRequest` to `YandexVotProtobuf` and persist detected video language in Room DB / SharedPreferences | PHASE E | Low |
-| **P2** | Auto Subtitles on Video Start | `autoSubtitles` in `src/VideoHandler.ts` | PARTIAL | Automatic background fetch of AI subtitles on eligible foreign videos | Add autoSubtitles trigger in `VoiceTranslateController.onNewVideo()` obeying language skip policies | PHASE E | Low |
-| **P3** | Subtitles Layout & Word Highlighting | `subtitlesSmartLayout`, `highlightWords`, `src/subtitles/*` | PARTIAL | Word-level highlighting synchronized with speech audio and smart text wrapping | Parse word timing cues from `SubtitlesObject` into ExoPlayer `SpannableString` with dynamic background spans | PHASE E | Medium |
+| **P2** | Video Language Cache | `VideoLangCacheRequest`, `VideoLangCacheResponse` in `@vot.js/core/dist/protobuf.js` | COMPLETED | None (protobuf wire parity, hierarchical pipeline, 7-day persistent cache) | `VideoLangCacheRequest`/`Response` protobuf + `VoxVideoLanguageCache` (persistent SharedPreferences + 500 entry memory cache) + `VoxVideoLanguagePipeline` | COMPLETED (PHASE E) | Done |
+| **P2** | Auto Subtitles on Video Start | `autoSubtitles` in `src/VideoHandler.ts` | COMPLETED | None (preferred subtitle track resolution, auto-enable on video load) | `VoxSubtitleCoordinator` + `VoiceTranslateController.tryApplyAutoSubtitles()` with `VoxLanguagePolicy.resolveSubtitlesLanguage()` | COMPLETED (PHASE E) | Done |
+| **P3** | Subtitles Layout & Word Highlighting | `subtitlesSmartLayout`, `highlightWords`, `src/subtitles/*` | COMPLETED | None (edge punctuation trimming, balanced 2-line wrapping at punctuation near center) | `VoxSmartSubtitleLayout` integrated with `SubtitleManager.java` + `VoxWordTimingCoordinator` token lookup | COMPLETED (PHASE E) | Done |
 | **P2** | Yandex OAuth / VOT Account Authentication | `account`, `VOTLoginViaToken`, `deleteExpiredAccount` in `src/utils/account.ts` | PARTIAL | Storage of account tokens, expiration checks, and authenticated session header | Add optional OAuth token input in Settings -> Translation with automatic expiry clearing | PHASE F | Medium |
 | **P3** | Voice Selection Catalog | `VOTVoiceSelection`, `translationHelp` in `src/VideoHandler.ts` | PARTIAL | Dynamic voice actor catalog parsing and selection beyond binary standard/lively | Parse available voices array from translation response and expose Leanback selection dialog | PHASE F | Medium |
 | **P2** | Live Stream Keep-Alive Reliability | `StreamPingRequest`, `StreamTranslationRequest` in `chaimu` | ALREADY_EQUIVALENT | Periodic ping keep-alive verification across long-running streams | Verify scheduled executor pinging `/stream-translation/ping-stream` under network drops | PHASE LIVE | Low |
@@ -49,12 +49,19 @@ Following the completion of **Phase B** (Protobuf / Server-First / Dedup / Sessi
   - `VoxAdaptiveVolumeController.java` (orchestration, baseline tracking, mute preservation, tick scheduling).
   - Integration into `YandexVotPlaybackAdapter.java` and `VoiceTranslateController.java`.
 
-### PHASE E: Language & Subtitle Parity
-- **Goal**: Persistent language caching and subtitle formatting parity.
-- **Components to Create/Modify**:
-  - `VideoLangCache` protobuf encoder/decoder in `YandexVotProtobuf.java`.
-  - Auto-subtitles coordination in `VoiceTranslateController.java`.
-  - Cue word-timing parser in SmartTube subtitle manager.
+### PHASE E: Language & Subtitle Parity (COMPLETED)
+- **Goal**: Persistent language caching, auto-subtitles, and subtitle formatting parity.
+- **Implemented Components**:
+  - `VideoLangCache` & `Subtitles` protobuf encoder/decoder in `YandexVotProtobuf.java`.
+  - `YandexVotApiClient.java`: `Vsubs` header authentication signing and `/video-subtitles/get-subtitles`, `/video-translation/lang-cache` endpoints.
+  - `VoxLanguagePolicy.kt`: `normalizeToRequestLang`, `baseLang`, `langMatches`, `shouldSkipAutoTranslate`, `resolveSubtitlesLanguage`.
+  - `VoxVideoLanguageCache.kt`: Thread-safe memory cache + SharedPreferences persistence (7-day TTL, 500 entry limit).
+  - `VoxVideoLanguagePipeline.kt`: Hierarchical language resolution (Local -> Server -> Fallback).
+  - `VoxSubtitleModels.kt` & `VoxSubtitleParser.kt`: Yandex JSON, YouTube event segs, and SRT parsers.
+  - `VoxSmartSubtitleLayout.kt`: 1:1 `subtitlesSmartLayout` edge punctuation trimming and balanced 2-line midpoint wrapping.
+  - `VoxWordTimingCoordinator.kt`: Active word token timing search and Spannable highlighting.
+  - `VoxSubtitleCoordinator.kt`: Cache key formatting, 1:1 `pickBestSubtitles` priority, $O(\log N)$ binary search `findCueAt` seek resolution.
+  - Integration in `SubtitleManager.java` and `VoiceTranslateController.java`.
 
 ### PHASE F: Accounts & Voice Selection Parity
 - **Goal**: Account authentication support and multi-voice selection.

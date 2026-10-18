@@ -114,18 +114,32 @@ public class SubtitleManager implements TextOutput, OnDataChange {
                     text = textStr;
                 }
 
-                result.add(new Cue(text)); // sub centered by default
+                result.add(new Cue(applySmartLayout(text))); // sub centered by default
 
                 String[] split = textStr.split("\n");
                 subsBuffer = split.length == 2 ? split[1] : textStr;
             } else {
                 CharSequence text = subsBuffer != null ? textStr.replace(subsBuffer, "") : textStr;
-                result.add(new Cue(text)); // sub centered by default
+                result.add(new Cue(applySmartLayout(text))); // sub centered by default
                 subsBuffer = text;
             }
         }
 
         return result;
+    }
+
+    private CharSequence applySmartLayout(CharSequence text) {
+        if (text == null || text.length() == 0) {
+            return text;
+        }
+        try {
+            boolean smartLayout = com.liskovsoft.smartyoutubetv2.common.prefs.VotData.instance(mContext).isSubtitleSmartLayoutEnabled();
+            if (smartLayout) {
+                return com.liskovsoft.smartyoutubetv2.common.vox.subtitles.VoxSmartSubtitleLayout.formatSubtitleText(text.toString(), true, 45);
+            }
+        } catch (Throwable ignored) {
+        }
+        return text;
     }
 
     private void configureSubtitleView() {

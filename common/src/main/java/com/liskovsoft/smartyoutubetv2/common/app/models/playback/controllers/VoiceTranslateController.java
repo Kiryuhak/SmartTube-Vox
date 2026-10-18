@@ -41,6 +41,7 @@ import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotShadowControlle
 import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotState;
 import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAdaptiveVolumeController;
 import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.manager.PlayerUI;
 
 import androidx.annotation.NonNull;
 import android.os.Looper;
@@ -111,6 +112,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private boolean mUserManuallyChangedTrack;
 
     private VotData mVotData;
+    private com.liskovsoft.smartyoutubetv2.common.vox.language.VoxVideoLanguagePipeline mLanguagePipeline;
     private VotClient mVotClient;
     private TranslationAudioPlayer mTranslationPlayer;
     private Disposable mTranslationDisposable;
@@ -596,6 +598,15 @@ public class VoiceTranslateController extends BasePlayerController {
         return mVotClient;
     }
 
+    private com.liskovsoft.smartyoutubetv2.common.vox.language.VoxVideoLanguagePipeline getLanguagePipeline() {
+        if (mLanguagePipeline == null) {
+            mLanguagePipeline = new com.liskovsoft.smartyoutubetv2.common.vox.language.VoxVideoLanguagePipeline(
+                    com.liskovsoft.smartyoutubetv2.common.vox.language.VoxVideoLanguageCache.getInstance(getContext())
+            );
+        }
+        return mLanguagePipeline;
+    }
+
     @Override
     public void onNewVideo(Video item) {
         Log.d(TAG, "VOT reset reason: new video (%s)", item != null ? item.videoId : "null");
@@ -655,6 +666,7 @@ public class VoiceTranslateController extends BasePlayerController {
     @Override
     public void onVideoLoaded(Video item) {
         tryApplyAutoTranslate(false);
+        tryApplyAutoSubtitles(item);
         checkShowPlayerHint();
     }
 
@@ -1127,6 +1139,14 @@ public class VoiceTranslateController extends BasePlayerController {
         TrackInfo info = resolveAudioInfo();
         String langCode = info != null ? info.langCode : null;
 
+        String canonicalUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(videoId);
+        String title = getPlayer().getVideo() != null ? getPlayer().getVideo().getTitle() : null;
+        com.liskovsoft.smartyoutubetv2.common.vox.language.VoxVideoLanguagePipeline.LanguageResult langResult =
+                getLanguagePipeline().resolveLanguage(videoId, canonicalUrl, title, langCode, null, false);
+        if (langResult.isResolved()) {
+            langCode = langResult.getLanguage();
+        }
+
         if (!VotAudioTrackHelper.isKnownLanguage(langCode)) {
             if ((autoEnabled || mUserArmed) && mAutoTranslateRetryCount < AUTO_TRANSLATE_MAX_RETRIES) {
                 mAutoTranslateRetryCount++;
@@ -1144,6 +1164,38 @@ public class VoiceTranslateController extends BasePlayerController {
         Utils.removeCallbacks(mAutoTranslateRetryRunnable);
         mAutoTranslateRetryCount = 0;
 
+        java.util.Set<String> excludedLanguages = parseExcludedLanguages(votData().getDontTranslateLanguagesRaw());
+        String targetLang = votData().getTargetLanguage();
+        if (targetLang == null || targetLang.isEmpty()) {
+            targetLang = "ru";
+        }
+
+        if (com.liskovsoft.smartyoutubetv2.common.vox.language.VoxLanguagePolicy.shouldSkipAutoTranslate(langCode, targetLang, excludedLanguages)) {
+            if (mUserArmed) {
+                if (com.liskovsoft.smartyoutubetv2.common.vox.language.VoxLanguagePolicy.langMatches(langCode, targetLang)) {
+                    disarmWithMessage(R.string.vot_skip_russian);
+                    mUserArmed = false;
+                    return;
+                }
+                // Manual override: user explicitly asked to translate non-target language, even if in excludedLanguages list
+            } else if (autoEnabled) {
+                Map<String, String> skipCtx = new HashMap<>();
+                skipCtx.put("videoId", videoId != null ? videoId : "");
+                skipCtx.put("language", langCode != null ? langCode : "");
+                skipCtx.put("targetLanguage", targetLang);
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.i(
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_AUTO_TRANSLATE_SKIPPED_LANGUAGE_POLICY,
+                        "VOT auto: skip by language policy, lang=" + langCode + " (video=" + videoId + ")",
+                        skipCtx
+                );
+                if (mArmed || mState != STATE_OFF) {
+                    disarmQuiet();
+                }
+                return;
+            }
+        }
+
         if (VotAudioTrackHelper.isRussianLang(langCode)) {
             if (mUserArmed) {
                 disarmWithMessage(R.string.vot_skip_russian);
@@ -1157,7 +1209,7 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
-        if (VotAudioTrackHelper.isExplicitNonRussian(info)) {
+        if (VotAudioTrackHelper.isExplicitNonRussian(info) || (langResult.isResolved() && !com.liskovsoft.smartyoutubetv2.common.vox.language.VoxLanguagePolicy.langMatches(langCode, targetLang))) {
             if (autoEnabled) {
                 Log.i(TAG, "VOT auto: start, current audio language=" + langCode + " (video=" + videoId + ")");
             }
@@ -1171,6 +1223,74 @@ public class VoiceTranslateController extends BasePlayerController {
         if (autoEnabled) {
             Log.i(TAG, "VOT auto: skip, audio language=" + langCode + " (video=" + videoId + ")");
         }
+    }
+
+    private void tryApplyAutoSubtitles(Video item) {
+        if (item == null || item.isLocal || item.isDownloadedTranslated()) {
+            return;
+        }
+        if (!votData().isAutoSubtitlesEnabled()) {
+            return;
+        }
+        if (getPlayer() == null) {
+            return;
+        }
+        List<FormatItem> formats = getPlayer().getSubtitleFormats();
+        if (formats == null || formats.isEmpty()) {
+            return;
+        }
+
+        String preferredLang = votData().getPreferredSubtitleLanguage();
+        TrackInfo audioInfo = resolveAudioInfo();
+        String detectedLang = audioInfo != null ? audioInfo.langCode : null;
+        String resolvedSubLang = com.liskovsoft.smartyoutubetv2.common.vox.language.VoxLanguagePolicy.resolveSubtitlesLanguage(
+                preferredLang,
+                detectedLang,
+                "ru"
+        );
+
+        if (resolvedSubLang == null || resolvedSubLang.isEmpty()) {
+            return;
+        }
+
+        FormatItem selected = null;
+        for (FormatItem format : formats) {
+            if (format == null) continue;
+            String fLang = format.getLanguage();
+            if (com.liskovsoft.smartyoutubetv2.common.vox.language.VoxLanguagePolicy.langMatches(fLang, resolvedSubLang)) {
+                selected = format;
+                break;
+            }
+        }
+
+        if (selected != null) {
+            getPlayer().setFormat(selected);
+            getPlayer().showSubtitles(true);
+            getPlayer().setButtonState(R.id.lb_control_closed_captioning, PlayerUI.BUTTON_ON);
+            Map<String, String> ctx = new HashMap<>();
+            ctx.put("videoId", item.videoId != null ? item.videoId : "");
+            ctx.put("language", resolvedSubLang);
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.d(
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.VOT_SUBTITLES_AUTO_ENABLED,
+                    "VOT: Auto subtitles enabled for track " + resolvedSubLang,
+                    ctx
+            );
+        }
+    }
+
+    private java.util.Set<String> parseExcludedLanguages(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return java.util.Collections.emptySet();
+        }
+        java.util.Set<String> set = new java.util.HashSet<>();
+        for (String item : raw.split("[,;\\s]+")) {
+            String trimmed = item.trim().toLowerCase(java.util.Locale.US);
+            if (!trimmed.isEmpty()) {
+                set.add(trimmed);
+            }
+        }
+        return set;
     }
 
     /** @return true if YouTube dub was applied and Yandex should not run */
@@ -1962,6 +2082,9 @@ public class VoiceTranslateController extends BasePlayerController {
                 if (state.getAudioUrl() != null && !state.getAudioUrl().isEmpty()) {
                     TrackInfo audioInfo = resolveAudioInfo();
                     String srcLang = audioInfo != null && audioInfo.langCode != null ? audioInfo.langCode : "";
+                    if (srcLang != null && !srcLang.isEmpty() && !"auto".equals(srcLang)) {
+                        getLanguagePipeline().rememberResolvedLanguage(mCurrentVideoId, srcLang);
+                    }
                     String tgtLang = votData().getTargetLanguage();
                     if (tgtLang == null || tgtLang.isEmpty()) tgtLang = "ru";
                     if (VotAudioTrackHelper.isRussianLang(srcLang) || VotAudioTrackHelper.isSameLanguage(srcLang, tgtLang)) {
@@ -2330,6 +2453,9 @@ public class VoiceTranslateController extends BasePlayerController {
                 if (progress.audioUrl != null && !progress.audioUrl.isEmpty()) {
                     TrackInfo audioInfo = resolveAudioInfo();
                     String srcLang = audioInfo != null && audioInfo.langCode != null ? audioInfo.langCode : "";
+                    if (srcLang != null && !srcLang.isEmpty() && !"auto".equals(srcLang)) {
+                        getLanguagePipeline().rememberResolvedLanguage(mCurrentVideoId, srcLang);
+                    }
                     String tgtLang = votData().getTargetLanguage();
                     if (tgtLang == null || tgtLang.isEmpty()) tgtLang = "ru";
                     double durSec = (getPlayer() != null && getPlayer().getDurationMs() > 0) ? (getPlayer().getDurationMs() / 1000.0) : 1.0;

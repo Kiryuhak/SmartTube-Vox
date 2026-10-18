@@ -1,0 +1,272 @@
+package com.liskovsoft.smartyoutubetv2.common.vox.subtitles
+
+import com.liskovsoft.smartyoutubetv2.common.vot.yandex.YandexVotApiClient
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger
+import com.liskovsoft.smartyoutubetv2.common.vox.language.VoxLanguagePolicy
+import com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Координатор субтитров: выбор дорожки, кэширование, дедупликация и бинарный поиск активного cue.
+ * Соответствует reference userscript 1.11.17 (getSubtitlesCacheKey, pickBestSubtitlesIndex, loadSubtitles).
+ */
+class VoxSubtitleCoordinator(
+    private val client: SubtitleNetworkClient = DefaultSubtitleNetworkClient
+) {
+
+    interface SubtitleNetworkClient {
+        fun fetchSubtitles(videoUrl: String, requestLang: String): List<VoxSubtitleDescriptor>
+        fun fetchSubtitleContent(url: String, format: String): List<VoxSubtitleItem>
+    }
+
+    object DefaultSubtitleNetworkClient : SubtitleNetworkClient {
+        override fun fetchSubtitles(videoUrl: String, requestLang: String): List<VoxSubtitleDescriptor> {
+            val response = YandexVotApiClient.requestSubtitles(videoUrl, requestLang) ?: return emptyList()
+            val list = mutableListOf<VoxSubtitleDescriptor>()
+            for (sub in response.subtitles) {
+                if (sub.language.isNotEmpty()) {
+                    list.add(
+                        VoxSubtitleDescriptor(
+                            source = "yandex",
+                            format = "json",
+                            language = sub.language,
+                            url = sub.url
+                        )
+                    )
+                }
+                if (sub.translatedLanguage.isNotEmpty()) {
+                    list.add(
+                        VoxSubtitleDescriptor(
+                            source = "yandex",
+                            format = "json",
+                            language = sub.translatedLanguage,
+                            translatedFromLanguage = sub.language,
+                            url = if (sub.translatedUrl.isNotEmpty()) sub.translatedUrl else sub.url
+                        )
+                    )
+                }
+            }
+            return list
+        }
+
+        override fun fetchSubtitleContent(url: String, format: String): List<VoxSubtitleItem> {
+            if (url.isBlank()) return emptyList()
+            return try {
+                val conn = com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(url)
+                conn.connectTimeout = 10000
+                conn.readTimeout = 15000
+                val stream = conn.inputStream
+                val content = stream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                if (format == "srt") {
+                    VoxSubtitleParser.parseSrtSubtitles(content)
+                } else {
+                    VoxSubtitleParser.parseJsonSubtitles(content)
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    private val subtitlesCache = ConcurrentHashMap<String, List<VoxSubtitleItem>>()
+    private var currentGenerationId: Long = 0
+
+    @Synchronized
+    fun nextGeneration(): Long {
+        return ++currentGenerationId
+    }
+
+    fun isGenerationCurrent(generationId: Long): Boolean {
+        return generationId == currentGenerationId
+    }
+
+    /**
+     * Формирование стабильного ключа кэша субтитров (соответствует getSubtitlesCacheKey в userscript).
+     */
+    fun getSubtitlesCacheKey(
+        videoId: String,
+        detectedLanguage: String?,
+        subtitleLanguage: String?,
+        useLivelyVoice: Boolean = true
+    ): String {
+        val dLang = if (!detectedLanguage.isNullOrBlank()) detectedLanguage else VoxLanguagePolicy.LANG_AUTO
+        val sLang = if (!subtitleLanguage.isNullOrBlank()) subtitleLanguage else VoxLanguagePolicy.LANG_RU
+        return "${videoId}_${dLang}_${sLang}_$useLivelyVoice"
+    }
+
+    /**
+     * Поиск наилучшей дорожки субтитров (1:1 port of pickBestSubtitlesIndex).
+     */
+    fun pickBestSubtitles(
+        descriptors: List<VoxSubtitleDescriptor>,
+        fromLang: String?,
+        toLang: String?
+    ): VoxSubtitleDescriptor? {
+        if (descriptors.isEmpty()) return null
+
+        val from = VoxLanguagePolicy.normalizeLang(fromLang)
+        val to = VoxLanguagePolicy.normalizeLang(toLang)
+        val fromIsAuto = from == VoxLanguagePolicy.LANG_AUTO || from.isEmpty()
+        val fromBase = VoxLanguagePolicy.baseLang(from)
+        val toBase = VoxLanguagePolicy.baseLang(to)
+
+        val isYandex = { d: VoxSubtitleDescriptor -> d.source == "yandex" }
+        val isAuto = { d: VoxSubtitleDescriptor -> d.isAutoGenerated }
+
+        val matchesPair = { d: VoxSubtitleDescriptor, wantFrom: String, wantTo: String ->
+            if (!VoxLanguagePolicy.langMatches(d.language, wantTo)) false
+            else if (fromIsAuto) true
+            else VoxLanguagePolicy.langMatches(d.translatedFromLanguage, wantFrom)
+        }
+
+        val isSameLangOriginal = { d: VoxSubtitleDescriptor, lang: String ->
+            if (!VoxLanguagePolicy.langMatches(d.language, lang)) false
+            else if (d.translatedFromLanguage.isNullOrEmpty()) true
+            else VoxLanguagePolicy.langMatches(d.translatedFromLanguage, lang)
+        }
+
+        val findOtherTarget = {
+            val otherManual = descriptors.firstOrNull { !isYandex(it) && VoxLanguagePolicy.langMatches(it.language, to) && !isAuto(it) }
+            otherManual ?: descriptors.firstOrNull { !isYandex(it) && VoxLanguagePolicy.langMatches(it.language, to) && isAuto(it) }
+        }
+
+        // Если исходный язык совпадает с языком субтитров (например, просмотр на языке оригинала)
+        if (!fromIsAuto && fromBase.isNotEmpty() && toBase.isNotEmpty() && fromBase == toBase) {
+            val nativeManual = descriptors.firstOrNull { !isYandex(it) && isSameLangOriginal(it, to) && !isAuto(it) }
+            if (nativeManual != null) return nativeManual
+
+            val nativeAuto = descriptors.firstOrNull { !isYandex(it) && isSameLangOriginal(it, to) && isAuto(it) }
+            if (nativeAuto != null) return nativeAuto
+
+            val otherTarget = findOtherTarget()
+            if (otherTarget != null) return otherTarget
+
+            val yandexSame = descriptors.firstOrNull { isYandex(it) && VoxLanguagePolicy.langMatches(it.language, to) }
+            if (yandexSame != null) return yandexSame
+        }
+
+        // 1. Yandex точная пара (from -> to)
+        val yandexPair = descriptors.firstOrNull { isYandex(it) && matchesPair(it, from, to) }
+        if (yandexPair != null) return yandexPair
+
+        // 2. Yandex целевой язык
+        val yandexTarget = descriptors.firstOrNull { isYandex(it) && VoxLanguagePolicy.langMatches(it.language, to) }
+        if (yandexTarget != null) return yandexTarget
+
+        // 3. Другой источник (например YouTube) точная пара
+        val otherPair = descriptors.firstOrNull { !isYandex(it) && matchesPair(it, from, to) }
+        if (otherPair != null) return otherPair
+
+        // 4. Другой источник целевой язык
+        val otherTarget = findOtherTarget()
+        if (otherTarget != null) return otherTarget
+
+        return null
+    }
+
+    /**
+     * Быстрый бинарный поиск активного cue для текущей позиции воспроизведения.
+     * Сложность: O(log N). Исключает зависание устаревших субтитров при перемотке.
+     */
+    fun findCueAt(cues: List<VoxSubtitleItem>, timeMs: Long): VoxSubtitleItem? {
+        if (cues.isEmpty()) return null
+
+        var low = 0
+        var high = cues.size - 1
+
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val cue = cues[mid]
+
+            if (timeMs < cue.startMs) {
+                high = mid - 1
+            } else if (timeMs >= cue.endMs) {
+                low = mid + 1
+            } else {
+                return cue
+            }
+        }
+
+        return null
+    }
+
+    fun getCachedSubtitles(cacheKey: String): List<VoxSubtitleItem>? {
+        return subtitlesCache[cacheKey]
+    }
+
+    fun putCachedSubtitles(cacheKey: String, items: List<VoxSubtitleItem>) {
+        if (items.isNotEmpty()) {
+            subtitlesCache[cacheKey] = items
+        }
+    }
+
+    fun clearCache() {
+        subtitlesCache.clear()
+    }
+
+    /**
+     * Загрузка субтитров с проверкой кэша, обработкой ошибок сети и защитой от устаревания (stale).
+     */
+    fun loadSubtitlesForVideo(
+        videoId: String,
+        rawUrl: String,
+        detectedLang: String?,
+        targetSubLang: String?,
+        useLivelyVoice: Boolean = true,
+        generationId: Long
+    ): List<VoxSubtitleItem> {
+        val cacheKey = getSubtitlesCacheKey(videoId, detectedLang, targetSubLang, useLivelyVoice)
+
+        // 1. Cache hit
+        val cached = getCachedSubtitles(cacheKey)
+        if (cached != null) {
+            val ctx = mapOf("videoId" to videoId, "cacheKey" to cacheKey, "cuesCount" to cached.size.toString())
+            VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.VOT_SUBTITLES_CACHE_HIT, "VOT: Subtitles cache hit", ctx)
+            return cached
+        }
+
+        // 2. Fetch descriptors
+        val canonicalUrl = VoxTranslationReusePolicy.normalizeVideoUrl(rawUrl.ifEmpty { videoId })
+        val descriptors = try {
+            client.fetchSubtitles(canonicalUrl, detectedLang ?: "")
+        } catch (e: Exception) {
+            VoxSafeLogger.w(VoxLogCategory.TRANSLATION, VoxLogCode.VOT_SUBTITLES_FAILED, "Failed to fetch subtitles: ${e.message}")
+            return emptyList()
+        }
+
+        if (!isGenerationCurrent(generationId)) {
+            return emptyList()
+        }
+
+        val best = pickBestSubtitles(descriptors, detectedLang, targetSubLang)
+        if (best == null || best.url.isEmpty()) {
+            return emptyList()
+        }
+
+        val ctx = mapOf("videoId" to videoId, "language" to best.language, "source" to best.source)
+        VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.VOT_SUBTITLES_LANGUAGE_SELECTED, "VOT: Selected subtitle track: ${best.language}", ctx)
+
+        // 3. Fetch content
+        val items = try {
+            client.fetchSubtitleContent(best.url, best.format)
+        } catch (e: Exception) {
+            VoxSafeLogger.w(VoxLogCategory.TRANSLATION, VoxLogCode.VOT_SUBTITLES_FAILED, "Failed to fetch subtitle content: ${e.message}")
+            return emptyList()
+        }
+
+        if (!isGenerationCurrent(generationId)) {
+            return emptyList()
+        }
+
+        if (items.isNotEmpty()) {
+            putCachedSubtitles(cacheKey, items)
+            val fetchCtx = mapOf("videoId" to videoId, "count" to items.size.toString())
+            VoxSafeLogger.d(VoxLogCategory.TRANSLATION, VoxLogCode.VOT_SUBTITLES_FETCHED, "VOT: Subtitles fetched successfully", fetchCtx)
+        }
+
+        return items
+    }
+}

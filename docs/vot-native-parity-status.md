@@ -24,10 +24,10 @@
 
 ### Functional Parity Calculation
 Applicable native features: $49 - 3\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHASE\_LATER)} = 44$ features.
-- Fully equivalent or implemented (Phases B, C & D): $23 + 9 + 2 + 5 = 39$ ($88.6\%$)
-- Partial (Video language cache, Auto subtitles, Subtitle styling, Account auth, Voice catalog): $5$ ($11.4\%$)
+- Fully equivalent or implemented (Phases B, C, D & E): $23 + 9 + 2 + 5 + 3 = 42$ ($95.5\%$)
+- Partial (Account auth, Voice catalog): $2$ ($4.5\%$)
 - Missing: $0$ ($0.0\%$)
-- **Core Protocol, Audio Lifecycle & Audio Mixing/Ducking Parity**: **100%** of network, caching, dedup, playback synchronization, smart ducking, baseline tracking, and volume linking logic is fully verified.
+- **Core Protocol, Audio Lifecycle, Ducking, Language & Subtitle Parity**: **100%** of network, caching, dedup, playback synchronization, smart ducking, baseline tracking, volume linking, video language cache, and subtitle coordination logic is fully verified.
 
 ---
 
@@ -103,18 +103,35 @@ Applicable native features: $49 - 3\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHAS
    - Native Android `LoudnessEnhancer` wrapper on the translation `audioSessionId`.
    - Maps 100%–300% to 0–1200 mB (+12 dB max gain) with fail-safe error isolation preventing player crashes.
 
+### Phase E — Language Cache, Auto Subtitles & Smart Layout Parity (Commit Phase E)
+1. **Protobuf Wire Parity for VideoLangCache & Subtitles**:
+   - `VideoLangCacheRequest` & `VideoLangCacheResponse` on `/video-translation/lang-cache`.
+   - `SubtitlesRequest`, `SubtitlesResponse`, and `SubtitlesObject` on `/video-subtitles/get-subtitles`.
+   - `Vsubs` header signing (`Vsubs-Signature`, `Sec-Vsubs-Token`, `Sec-Vsubs-Sk`) separated from `Vtrans`.
+2. **Hierarchical Video Language Pipeline & Persistent Cache**:
+   - L1 Persistent Local Cache (`VoxVideoLanguageCache`) keyed by canonical URL with 7-day TTL and 500 entry limit.
+   - Strict hierarchy: `Local Cache -> Server Cache (/video-translation/lang-cache) -> Fallback Detection (Audio track / Subtitles)`.
+   - Transport/network errors are strictly isolated and never poisoned as "unknown".
+3. **Language Normalization & Don't-Translate Policy**:
+   - `VoxLanguagePolicy` with ISO-639-2 to ISO-639-1 mappings (`rus` -> `ru`, `eng` -> `en`).
+   - `shouldSkipAutoTranslate`: skips auto-translation when source language matches target or user excluded languages (`dontTranslateLanguages`). Manual override preserves ability to translate.
+4. **Auto Subtitles & 1:1 Selection Priority**:
+   - Automatically resolves and enables preferred subtitle track on video load.
+   - 1:1 `pickBestSubtitles` priority: same-language original native > yandex exact pair > yandex target > other pair > other target.
+   - Monotonic generation cancellation discarding stale network responses.
+5. **Smart Subtitle Layout & Word Timing**:
+   - 1:1 mathematical port of `subtitlesSmartLayout` from userscript: edge punctuation trimming and balanced 2-line midpoint wrapping.
+   - $O(\log N)$ binary search cue resolution (`findCueAt`) on seek without waiting for cue timeouts.
+   - `VoxWordTimingCoordinator` token lookup with headless-safe Spannable highlighting.
+
 ---
 
 ## 4. Remaining Scope Breakdown
 
-1. **PHASE E: Language Policy & Subtitle Layout**:
-   - Persistent `VideoLangCache` store.
-   - Auto-subtitles fetching and presentation.
-   - Subtitle text line wrapping and layout constraints.
-2. **PHASE F: Account Auth & Voice Catalog**:
+1. **PHASE F: Account Auth & Voice Catalog**:
    - Yandex OAuth account token storage and expiration checks.
    - Full voice actor selection catalog.
-3. **PHASE LIVE: Stream Translation Hardening**:
+2. **PHASE LIVE: Stream Translation Hardening**:
    - Long-session stream stability and ping keep-alive reliability.
-4. **PHASE UI: Visual Overlays**:
+3. **PHASE UI: Visual Overlays**:
    - Redesign of right-side translation plaque and TV HUD overlay.

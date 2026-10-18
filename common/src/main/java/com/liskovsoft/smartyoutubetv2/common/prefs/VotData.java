@@ -33,6 +33,11 @@ public class VotData extends SharedPreferencesBase {
     private static final String SYNC_VOLUME_ENABLED = "sync_volume_enabled";
     private static final String AUDIO_BOOSTER_ENABLED = "audio_booster_enabled";
     private static final String AUDIO_BOOSTER_PERCENT = "audio_booster_percent";
+    private static final String AUTO_SUBTITLES_ENABLED = "auto_subtitles_enabled";
+    private static final String SUBTITLE_SMART_LAYOUT_ENABLED = "subtitle_smart_layout_enabled";
+    private static final String SUBTITLE_HIGHLIGHT_WORDS_ENABLED = "subtitle_highlight_words_enabled";
+    private static final String PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language";
+    private static final String DONT_TRANSLATE_LANGUAGES = "dont_translate_languages";
     private static final int DEFAULT_ORIGINAL_VOLUME_PERCENT = 5;
     private static final int DEFAULT_TRANSLATION_VOLUME_PERCENT = 100;
 
@@ -280,6 +285,46 @@ public class VotData extends SharedPreferencesBase {
 
     public void setAutoTranslateEnabled(boolean enabled) {
         putBoolean(AUTO_TRANSLATE, enabled);
+    }
+
+    public boolean isAutoSubtitlesEnabled() {
+        return getBoolean(AUTO_SUBTITLES_ENABLED, false);
+    }
+
+    public void setAutoSubtitlesEnabled(boolean enabled) {
+        putBoolean(AUTO_SUBTITLES_ENABLED, enabled);
+    }
+
+    public boolean isSubtitleSmartLayoutEnabled() {
+        return getBoolean(SUBTITLE_SMART_LAYOUT_ENABLED, true);
+    }
+
+    public void setSubtitleSmartLayoutEnabled(boolean enabled) {
+        putBoolean(SUBTITLE_SMART_LAYOUT_ENABLED, enabled);
+    }
+
+    public boolean isSubtitleHighlightWordsEnabled() {
+        return getBoolean(SUBTITLE_HIGHLIGHT_WORDS_ENABLED, false);
+    }
+
+    public void setSubtitleHighlightWordsEnabled(boolean enabled) {
+        putBoolean(SUBTITLE_HIGHLIGHT_WORDS_ENABLED, enabled);
+    }
+
+    public String getPreferredSubtitleLanguage() {
+        return getString(PREFERRED_SUBTITLE_LANGUAGE, "auto");
+    }
+
+    public void setPreferredSubtitleLanguage(String language) {
+        putString(PREFERRED_SUBTITLE_LANGUAGE, language != null ? language : "auto");
+    }
+
+    public String getDontTranslateLanguagesRaw() {
+        return getString(DONT_TRANSLATE_LANGUAGES, "ru");
+    }
+
+    public void setDontTranslateLanguagesRaw(String languages) {
+        putString(DONT_TRANSLATE_LANGUAGES, languages != null ? languages : "ru");
     }
 
     /**

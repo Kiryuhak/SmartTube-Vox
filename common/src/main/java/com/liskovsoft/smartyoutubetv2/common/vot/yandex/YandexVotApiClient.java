@@ -448,6 +448,47 @@ public class YandexVotApiClient {
         return TranslationResult.networkError("Exhausted cache retries", "retry_exhausted");
     }
 
+    public static YandexVotProtobuf.VideoLangCacheResponse requestVideoLangCache(String videoUrl, String title) {
+        videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.normalizeVideoUrl(videoUrl);
+        if (!ensureSession()) {
+            YandexVotLog.d(TAG, "VOT langCache: unable to establish session");
+            return null;
+        }
+        try {
+            byte[] body = YandexVotProtobuf.encodeVideoLangCacheRequest(videoUrl, title != null ? title : "");
+            String path = "/video-translation/lang-cache";
+            byte[] responseBytes = sendApiRequest(path, body, "POST", null, "Vtrans");
+            if (responseBytes == null || responseBytes.length == 0) {
+                return null;
+            }
+            return YandexVotProtobuf.decodeVideoLangCacheResponse(responseBytes);
+        } catch (Exception e) {
+            YandexVotLog.d(TAG, "VOT requestVideoLangCache failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public static YandexVotProtobuf.SubtitlesResponse requestSubtitles(String videoUrl, String requestLang) {
+        videoUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.normalizeVideoUrl(videoUrl);
+        if (!ensureSession()) {
+            YandexVotLog.d(TAG, "VOT subtitles: unable to establish session");
+            return null;
+        }
+        try {
+            String lang = (requestLang != null && !requestLang.isEmpty() && !"auto".equalsIgnoreCase(requestLang)) ? requestLang : "";
+            byte[] body = YandexVotProtobuf.encodeSubtitlesRequest(videoUrl, lang);
+            String path = "/video-subtitles/get-subtitles";
+            byte[] responseBytes = sendApiRequest(path, body, "POST", null, "Vsubs");
+            if (responseBytes == null || responseBytes.length == 0) {
+                return null;
+            }
+            return YandexVotProtobuf.decodeSubtitlesResponse(responseBytes);
+        } catch (Exception e) {
+            YandexVotLog.d(TAG, "VOT requestSubtitles failed: " + e.getMessage());
+            return null;
+        }
+    }
+
     public static String getCacheKey(String videoUrl, String sourceLang, String targetLang, boolean useLiveVoices) {
         return (videoUrl != null ? videoUrl : "") + "|" +
                 (sourceLang != null ? sourceLang : "") + "|" +
@@ -506,15 +547,19 @@ public class YandexVotApiClient {
     }
 
     private static byte[] sendApiRequest(String path, byte[] body, String method, String oauthToken) throws IOException {
+        return sendApiRequest(path, body, method, oauthToken, "Vtrans");
+    }
+
+    private static byte[] sendApiRequest(String path, byte[] body, String method, String oauthToken, String secType) throws IOException {
         String currentSessionUuid;
         String currentSecretKey;
         synchronized (SESSION_LOCK) {
             currentSessionUuid = sessionUuid;
             currentSecretKey = sessionSecretKey;
         }
-        String vtransSignature = computeHmacHex(body);
+        String signature = computeHmacHex(body);
         String uuid = currentSessionUuid != null ? currentSessionUuid : generateUuid();
-        String vtransToken = generateToken(uuid, path);
+        String token = generateToken(uuid, path);
 
         Map<String, String> yandexHeaders = new LinkedHashMap<>();
         yandexHeaders.put("Accept", "application/x-protobuf");
@@ -523,10 +568,10 @@ public class YandexVotApiClient {
         yandexHeaders.put("User-Agent", USER_AGENT);
         yandexHeaders.put("Pragma", "no-cache");
         yandexHeaders.put("Cache-Control", "no-cache");
-        yandexHeaders.put("Vtrans-Signature", vtransSignature);
-        yandexHeaders.put("Sec-Vtrans-Token", vtransToken);
+        yandexHeaders.put(secType + "-Signature", signature);
+        yandexHeaders.put("Sec-" + secType + "-Token", token);
         if (currentSecretKey != null && !currentSecretKey.isEmpty()) {
-            yandexHeaders.put("Sec-Vtrans-Sk", currentSecretKey);
+            yandexHeaders.put("Sec-" + secType + "-Sk", currentSecretKey);
         }
         if (oauthToken != null && !oauthToken.isEmpty()) {
             yandexHeaders.put("Authorization", "OAuth " + oauthToken);

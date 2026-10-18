@@ -260,6 +260,36 @@ public class YandexVotProtobuf {
         }
     }
 
+    public static byte[] encodeVideoLangCacheRequest(String url, String title) {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            if (url != null && !url.isEmpty()) {
+                writeString(out, 1, url);
+            }
+            if (title != null && !title.isEmpty()) {
+                writeString(out, 2, title);
+            }
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to encode video lang cache request", e);
+        }
+    }
+
+    public static byte[] encodeSubtitlesRequest(String url, String requestLang) {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            if (url != null && !url.isEmpty()) {
+                writeString(out, 1, url);
+            }
+            if (requestLang != null && !requestLang.isEmpty()) {
+                writeString(out, 2, requestLang);
+            }
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to encode subtitles request", e);
+        }
+    }
+
     // ==================== DECODER ====================
 
     /**
@@ -395,6 +425,183 @@ public class YandexVotProtobuf {
             }
         }
         return item;
+    }
+
+    public static class VideoLangCacheResponse {
+        public String url;
+        public int status;
+        public int unknown1;
+    }
+
+    public static VideoLangCacheResponse decodeVideoLangCacheResponse(byte[] data) {
+        VideoLangCacheResponse response = new VideoLangCacheResponse();
+        if (data == null || data.length == 0) return response;
+        int pos = 0;
+        while (pos < data.length) {
+            int[] tagResult = readVarint(data, pos);
+            int tag = tagResult[0];
+            pos = tagResult[1];
+            int fieldNumber = tag >>> 3;
+            int wireType = tag & 0x7;
+
+            switch (fieldNumber) {
+                case 1: // url (string)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        response.url = new String(data, pos, len, StandardCharsets.UTF_8);
+                        pos += len;
+                    }
+                    break;
+                case 3: // status (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.status = valResult[0];
+                        pos = valResult[1];
+                    }
+                    break;
+                case 5: // unknown1 (int32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.unknown1 = valResult[0];
+                        pos = valResult[1];
+                    }
+                    break;
+                default:
+                    pos = skipField(data, pos, wireType);
+                    break;
+            }
+        }
+        return response;
+    }
+
+    public static class SubtitlesObject {
+        public String language = "";
+        public String url = "";
+        public boolean hasTranslation = false;
+        public String translatedLanguage = "";
+        public String translatedUrl = "";
+        public boolean unknown1 = false;
+        public long subtitleId = 0;
+    }
+
+    public static class SubtitlesResponse {
+        public boolean waiting = false;
+        public java.util.List<SubtitlesObject> subtitles = new java.util.ArrayList<>();
+    }
+
+    public static SubtitlesResponse decodeSubtitlesResponse(byte[] data) {
+        SubtitlesResponse response = new SubtitlesResponse();
+        if (data == null || data.length == 0) return response;
+        int pos = 0;
+        while (pos < data.length) {
+            int[] tagResult = readVarint(data, pos);
+            int tag = tagResult[0];
+            pos = tagResult[1];
+            int fieldNumber = tag >>> 3;
+            int wireType = tag & 0x7;
+
+            switch (fieldNumber) {
+                case 1: // waiting (bool)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        response.waiting = valResult[0] != 0;
+                        pos = valResult[1];
+                    }
+                    break;
+                case 2: // subtitles (repeated SubtitlesObject)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        response.subtitles.add(decodeSubtitlesObject(data, pos, len));
+                        pos += len;
+                    }
+                    break;
+                default:
+                    pos = skipField(data, pos, wireType);
+                    break;
+            }
+        }
+        return response;
+    }
+
+    private static SubtitlesObject decodeSubtitlesObject(byte[] data, int startPos, int length) {
+        SubtitlesObject obj = new SubtitlesObject();
+        int pos = startPos;
+        int end = startPos + length;
+        while (pos < end && pos < data.length) {
+            int[] tagResult = readVarint(data, pos);
+            int tag = tagResult[0];
+            pos = tagResult[1];
+            int fieldNumber = tag >>> 3;
+            int wireType = tag & 0x7;
+
+            switch (fieldNumber) {
+                case 1: // language (string)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        obj.language = new String(data, pos, len, StandardCharsets.UTF_8);
+                        pos += len;
+                    }
+                    break;
+                case 2: // url (string)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        obj.url = new String(data, pos, len, StandardCharsets.UTF_8);
+                        pos += len;
+                    }
+                    break;
+                case 3: // hasTranslation (bool)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        obj.hasTranslation = valResult[0] != 0;
+                        pos = valResult[1];
+                    }
+                    break;
+                case 4: // translatedLanguage (string)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        obj.translatedLanguage = new String(data, pos, len, StandardCharsets.UTF_8);
+                        pos += len;
+                    }
+                    break;
+                case 5: // translatedUrl (string)
+                    if (wireType == WIRETYPE_LENGTH_DELIMITED) {
+                        int[] lenResult = readVarint(data, pos);
+                        int len = lenResult[0];
+                        pos = lenResult[1];
+                        obj.translatedUrl = new String(data, pos, len, StandardCharsets.UTF_8);
+                        pos += len;
+                    }
+                    break;
+                case 6: // unknown1 (bool)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        obj.unknown1 = valResult[0] != 0;
+                        pos = valResult[1];
+                    }
+                    break;
+                case 7: // subtitleId (uint32)
+                    if (wireType == WIRETYPE_VARINT) {
+                        int[] valResult = readVarint(data, pos);
+                        obj.subtitleId = valResult[0] & 0xFFFFFFFFL;
+                        pos = valResult[1];
+                    }
+                    break;
+                default:
+                    pos = skipField(data, pos, wireType);
+                    break;
+            }
+        }
+        return obj;
     }
 
     /**
