@@ -27,17 +27,18 @@ public final class VotProgressRingView extends View {
     public VotProgressRingView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         float density = getResources().getDisplayMetrics().density;
+        float strokeWidth = 4.5f * density;
         mTrackPaint.setStyle(Paint.Style.STROKE);
-        mTrackPaint.setStrokeWidth(4f * density);
+        mTrackPaint.setStrokeWidth(strokeWidth);
         mTrackPaint.setStrokeCap(Paint.Cap.ROUND);
-        mTrackPaint.setColor(0x334AA3DF);
+        mTrackPaint.setColor(ContextCompat.getColor(context, R.color.vot_hud_ring_track));
         mProgressPaint.setStyle(Paint.Style.STROKE);
-        mProgressPaint.setStrokeWidth(4f * density);
+        mProgressPaint.setStrokeWidth(strokeWidth);
         mProgressPaint.setStrokeCap(Paint.Cap.ROUND);
-        mProgressPaint.setColor(ContextCompat.getColor(context, R.color.vox_accent));
-        mTextPaint.setColor(ContextCompat.getColor(context, R.color.vox_text_primary));
+        mProgressPaint.setColor(ContextCompat.getColor(context, R.color.vot_hud_primary_accent));
+        mTextPaint.setColor(ContextCompat.getColor(context, R.color.vot_hud_primary_text));
         mTextPaint.setTextAlign(Paint.Align.CENTER);
-        mTextPaint.setTextSize(14f * getResources().getDisplayMetrics().scaledDensity);
+        mTextPaint.setTextSize(15f * getResources().getDisplayMetrics().scaledDensity);
         mTextPaint.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD));
         setFocusable(false);
         setClickable(false);
@@ -57,7 +58,8 @@ public final class VotProgressRingView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        float inset = mProgressPaint.getStrokeWidth() / 2f + 1f;
+        float density = getResources().getDisplayMetrics().density;
+        float inset = mProgressPaint.getStrokeWidth() / 2f + 2.5f * density;
         mArcBounds.set(inset, inset, getWidth() - inset, getHeight() - inset);
         canvas.drawArc(mArcBounds, 0f, 360f, false, mTrackPaint);
         if (mProgress > 0) {

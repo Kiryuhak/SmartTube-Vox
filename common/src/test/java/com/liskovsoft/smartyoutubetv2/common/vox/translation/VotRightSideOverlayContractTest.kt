@@ -9,7 +9,7 @@ import org.junit.Test
 class VotRightSideOverlayContractTest {
     @Test
     fun preparingShownOnRightSide() {
-        assertEquals(48, VoxTranslationOverlayLayoutPolicy.fixedVotEndMarginDp())
+        assertEquals(24, VoxTranslationOverlayLayoutPolicy.fixedVotEndMarginDp())
     }
 
     @Test

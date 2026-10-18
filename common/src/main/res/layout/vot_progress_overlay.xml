@@ -18,21 +18,22 @@
         android:layout_height="match_parent"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="18dp">
+        android:paddingStart="@dimen/vot_overlay_inner_padding"
+        android:paddingEnd="@dimen/vot_overlay_inner_padding">
 
         <ProgressBar
             android:id="@+id/vot_progress_spinner"
             style="?android:attr/progressBarStyleSmall"
-            android:layout_width="22dp"
-            android:layout_height="22dp"
+            android:layout_width="@dimen/vot_overlay_icon_size"
+            android:layout_height="@dimen/vot_overlay_icon_size"
             android:indeterminate="true"
-            android:indeterminateTint="@color/vox_accent" />
+            android:indeterminateTint="@color/vot_hud_primary_accent"
+            android:visibility="gone" />
 
         <ImageView
             android:id="@+id/vot_progress_icon"
-            android:layout_width="22dp"
-            android:layout_height="22dp"
+            android:layout_width="@dimen/vot_overlay_icon_size"
+            android:layout_height="@dimen/vot_overlay_icon_size"
             android:contentDescription="@null"
             android:visibility="gone" />
 
@@ -40,7 +41,7 @@
             android:id="@+id/vot_progress_text_container"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="@dimen/vot_overlay_gap"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -50,9 +51,10 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
-                android:maxLines="1"
-                android:textColor="@color/vox_text_primary"
-                android:textSize="14sp" />
+                android:lineSpacingExtra="2dp"
+                android:maxLines="2"
+                android:textColor="@color/vot_hud_primary_text"
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/vot_progress_subtitle"
@@ -60,7 +62,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif"
                 android:maxLines="1"
-                android:textColor="@color/vox_text_secondary"
+                android:textColor="@color/vot_hud_secondary_text"
                 android:textSize="11sp"
                 android:visibility="gone" />
         </LinearLayout>
@@ -70,7 +72,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
-            android:textColor="@color/vox_accent"
+            android:textColor="@color/vot_hud_primary_accent"
             android:textSize="14sp"
             android:visibility="gone" />
     </LinearLayout>

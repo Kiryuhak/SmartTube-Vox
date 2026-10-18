@@ -967,6 +967,7 @@
     <string name="vot_progress_waiting_eta" translatable="false"></string>
     <string name="vot_progress_still_waiting" translatable="false"></string>
     <string name="vot_progress_ready" translatable="false"></string>
+    <string name="vot_progress_switching" translatable="false"></string>
     <string name="vot_progress_error" translatable="false"></string>
     <string name="vot_progress_timeout" translatable="false"></string>
     <string name="vot_progress_waiting_title" translatable="false"></string>

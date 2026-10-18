@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Blue circle matching mockup screen 5 -->
+    <path
+        android:fillColor="@color/vot_hud_primary_accent"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" />
+    <!-- White dual sync arrows -->
+    <path
+        android:fillColor="@color/vot_hud_primary_text"
+        android:pathData="M12,6v2.5l2.5,-2.5L12,3.5V6c-3.31,0 -6,2.69 -6,6c0,1.3 0.42,2.5 1.13,3.48l1.1,-1.1C7.79,13.72 7.5,12.89 7.5,12c0,-2.48 2.02,-4.5 4.5,-4.5zm4.87,1.52l-1.1,1.1c0.44,0.66 0.73,1.49 0.73,2.38c0,2.48 -2.02,4.5 -4.5,4.5V13l-2.5,2.5L12,18v-2.5c3.31,0 6,-2.69 6,-6c0,-1.3 -0.42,-2.5 -1.13,-3.48z" />
+</vector>

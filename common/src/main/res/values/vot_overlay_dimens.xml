@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="vot_overlay_wide_width">280dp</dimen>
+    <dimen name="vot_overlay_min_width">240dp</dimen>
+    <dimen name="vot_overlay_max_width">320dp</dimen>
     <dimen name="vot_overlay_height">56dp</dimen>
-    <dimen name="vot_overlay_circle_size">48dp</dimen>
+    <dimen name="vot_overlay_circle_size">56dp</dimen>
+    <dimen name="vot_overlay_inner_padding">16dp</dimen>
+    <dimen name="vot_overlay_icon_size">24dp</dimen>
+    <dimen name="vot_overlay_gap">16dp</dimen>
+    <dimen name="vot_overlay_corner_radius">28dp</dimen>
 </resources>

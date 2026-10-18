@@ -11,15 +11,53 @@ object VoxTranslationOverlayLayoutPolicy {
     /** Standard TV overscan margin (safe area 5% on 960x540dp TV layout = 48dp). */
     const val DEFAULT_OVERSCAN_MARGIN_DP = 48
 
-    /** Canonical VOT bubble anchor; invariant across HUD/settings state changes. */
-    const val VOT_FIXED_END_MARGIN_DP = 48
+    /** Canonical VOT bubble anchor; invariant across HUD/settings state changes (24dp from right edge). */
+    const val VOT_FIXED_END_MARGIN_DP = 24
     const val VOT_FIXED_BOTTOM_MARGIN_DP = 256
+
+    /** Mockup exact geometry specification. */
+    const val VOT_OVERLAY_HEIGHT_DP = 56
+    const val VOT_OVERLAY_CIRCLE_DP = 56
+    const val VOT_OVERLAY_DEFAULT_WIDTH_DP = 280
+    const val VOT_OVERLAY_MIN_WIDTH_DP = 240
+    const val VOT_OVERLAY_MAX_WIDTH_DP = 320
+    const val VOT_OVERLAY_INNER_PADDING_DP = 16
+    const val VOT_OVERLAY_ICON_SIZE_DP = 24
+    const val VOT_OVERLAY_GAP_DP = 16
+    const val VOT_OVERLAY_CORNER_RADIUS_DP = 28
 
     @JvmStatic
     fun fixedVotEndMarginDp(): Int = VOT_FIXED_END_MARGIN_DP
 
     @JvmStatic
     fun fixedVotBottomMarginDp(): Int = VOT_FIXED_BOTTOM_MARGIN_DP
+
+    @JvmStatic
+    fun overlayHeightDp(): Int = VOT_OVERLAY_HEIGHT_DP
+
+    @JvmStatic
+    fun overlayCircleDp(): Int = VOT_OVERLAY_CIRCLE_DP
+
+    @JvmStatic
+    fun overlayDefaultWidthDp(): Int = VOT_OVERLAY_DEFAULT_WIDTH_DP
+
+    @JvmStatic
+    fun overlayMinWidthDp(): Int = VOT_OVERLAY_MIN_WIDTH_DP
+
+    @JvmStatic
+    fun overlayMaxWidthDp(): Int = VOT_OVERLAY_MAX_WIDTH_DP
+
+    @JvmStatic
+    fun overlayInnerPaddingDp(): Int = VOT_OVERLAY_INNER_PADDING_DP
+
+    @JvmStatic
+    fun overlayIconSizeDp(): Int = VOT_OVERLAY_ICON_SIZE_DP
+
+    @JvmStatic
+    fun overlayGapDp(): Int = VOT_OVERLAY_GAP_DP
+
+    @JvmStatic
+    fun overlayCornerRadiusDp(): Int = VOT_OVERLAY_CORNER_RADIUS_DP
 
     /**
      * Vertical offset when HUD is hidden.

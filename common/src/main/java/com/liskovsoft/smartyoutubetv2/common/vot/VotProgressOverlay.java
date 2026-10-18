@@ -51,14 +51,14 @@ public class VotProgressOverlay {
     public static final long COLLAPSE_DELAY_MS = 3500L;
     public static final long BUBBLE_AUTO_HIDE_DELAY_MS = 3500L;
     public static final long BUBBLE_READY_AUTO_HIDE_DELAY_MS = 2000L;
-    public static final long SHOW_100_DURATION_MS = 320L;
-    private static final long SHAPE_ANIMATION_MS = 250L;
+    public static final long SHOW_100_DURATION_MS = 300L;
+    public static final long SHAPE_ANIMATION_MS = 260L;
     private static final long DISMISS_ERROR_MS = 3500L;
     private static final long WATCHDOG_MS = 90000L;
 
-    private enum MotionState {
+    public enum MotionState {
         HIDDEN, PREPARING, COLLAPSING, PROGRESS, FINALIZING_99,
-        SHOWING_100, EXPANDING_READY, READY, ERROR, DISMISSING
+        SHOWING_100, EXPANDING_READY, READY, SWITCHING, ERROR, DISMISSING
     }
 
     private final Context mContext;
@@ -92,6 +92,7 @@ public class VotProgressOverlay {
     }
 
     public int getState() { return mCurrentState; }
+    public MotionState getMotionState() { return mMotionState; }
     public boolean isShown() { return mOverlayView != null && mOverlayView.getVisibility() == View.VISIBLE && mCurrentState != STATE_IDLE; }
     public boolean isCollapsed() { return mIsCollapsed; }
     public int getRealProgressPercent() { return mRealProgressPercent; }
@@ -250,6 +251,25 @@ public class VotProgressOverlay {
         showActivated(activity);
     }
 
+    /** Mockup state 5: show auto-switching to Russian audio track. */
+    public void showSwitching(@Nullable Activity activity) {
+        if (!ensureAttached(activity)) return;
+        cancelPendingCallbacks();
+        mCurrentState = STATE_READY;
+        mMotionState = MotionState.SWITCHING;
+        showExpandedContent(getStringSafe(R.string.vot_progress_switching), R.drawable.ic_vot_sync, false);
+        animateWidth(wideWidthPx(), () -> {
+            Utils.postDelayed(mAutoDismissRunnable, BUBBLE_READY_AUTO_HIDE_DELAY_MS);
+        });
+        reveal();
+        VoxSafeLogger.d(
+                VoxLogCategory.UI,
+                VoxLogCode.VOT_UI_READY,
+                "VOT UI switched to Russian audio track",
+                null
+        );
+    }
+
     public void showError(@Nullable Activity activity) { showError(activity, null); }
 
     public void showError(@Nullable Activity activity, @Nullable String errorMessage) {
@@ -357,10 +377,21 @@ public class VotProgressOverlay {
     private void setWidthImmediately(int width) {
         if (mOverlayView == null) return;
         ViewGroup.LayoutParams lp = mOverlayView.getLayoutParams();
-        if (lp != null && lp.width != width) {
+        if (lp != null) {
+            boolean changed = lp.width != width || lp.height != overlayHeightPx();
             lp.width = width;
             lp.height = overlayHeightPx();
-            mOverlayView.setLayoutParams(lp);
+            if (lp instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+                mlp.setMarginEnd(dpToPx(VoxTranslationOverlayLayoutPolicy.fixedVotEndMarginDp()));
+                mlp.bottomMargin = dpToPx(VoxTranslationOverlayLayoutPolicy.fixedVotBottomMarginDp());
+            }
+            if (lp instanceof FrameLayout.LayoutParams) {
+                ((FrameLayout.LayoutParams) lp).gravity = Gravity.BOTTOM | Gravity.END;
+            }
+            if (changed) {
+                mOverlayView.setLayoutParams(lp);
+            }
         }
     }
 
@@ -531,7 +562,7 @@ public class VotProgressOverlay {
     }
 
     private int wideWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_wide_width); }
-    private int circleWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_height); }
+    private int circleWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_circle_size); }
     private int overlayHeightPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_height); }
     private int dpToPx(int dp) { return Math.round(dp * mContext.getResources().getDisplayMetrics().density); }
 

@@ -45,4 +45,15 @@
     <color name="vox_error">#EF4444</color>
     <color name="vox_capsule_bg">#E61A2230</color>
     <color name="vox_capsule_stroke">#2A3548</color>
+
+    <!-- VOT HUD Mockup Specification Palette -->
+    <color name="vot_hud_bg">#CC0F1622</color>
+    <color name="vot_hud_circle_bg">#CC0F1622</color>
+    <color name="vot_hud_primary_accent">#1E90FF</color>
+    <color name="vot_hud_success">#00C853</color>
+    <color name="vot_hud_info_accent">#4FC3F7</color>
+    <color name="vot_hud_primary_text">#FFFFFF</color>
+    <color name="vot_hud_secondary_text">#B0BEC5</color>
+    <color name="vot_hud_ring_track">#22334A</color>
+    <color name="vot_hud_stroke">#331E90FF</color>
 </resources>
