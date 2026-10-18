@@ -44,6 +44,11 @@ run_vot_full() {
     --tests "com.liskovsoft.smartyoutubetv2.common.vox.mux.*"
 }
 
+run_vot_upstream_fast() {
+  echo "--- [SUITE: vot-upstream-fast] Running VOT upstream sync & structural drift unit tests ---"
+  python3 -m unittest "$REPO_ROOT/scripts/test_vot_upstream_sync.py"
+}
+
 run_player_fast() {
   echo "--- [SUITE: player-fast] Running core player & double-back tests ---"
   ./gradlew :common:testStvotDebugUnitTest \
@@ -153,6 +158,9 @@ case "$SUITE" in
   vot-full)
     run_vot_full
     ;;
+  vot-upstream-fast)
+    run_vot_upstream_fast
+    ;;
   player-fast)
     run_player_fast
     ;;
@@ -230,7 +238,7 @@ case "$SUITE" in
     ;;
   *)
     echo "Unknown suite: $SUITE"
-    echo "Available suites: ota-fast, ota-integration, ota-e2e, vot-fast, vot-full, player-fast, player-full, channel-groups-fast, downloads-fast, downloads-full, downloads-e2e, live-fast, live-full, diagnostics-fast, dashboard-fast, telegram-fast, golden-smoke, full-regression"
+    echo "Available suites: ota-fast, ota-integration, ota-e2e, vot-fast, vot-full, vot-upstream-fast, player-fast, player-full, channel-groups-fast, downloads-fast, downloads-full, downloads-e2e, live-fast, live-full, diagnostics-fast, dashboard-fast, telegram-fast, golden-smoke, full-regression"
     exit 1
     ;;
 esac

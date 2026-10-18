@@ -22,7 +22,7 @@
 - **MISSING**: 0
 - **NOT_APPLICABLE_ANDROID**: 3 (Browser DOM scrapers/site adapters, Dynamic GitHub i18n localization, Keyboard hotkeys)
 - **UI_PHASE_LATER**: 2 (Right translation plaque redesign, Telegram admin notifications)
-- **BLOCKED_BY_EXTERNAL_SERVICE**: 0
+- **BLOCKED_BY_EXTERNAL_SERVICE**: 0 (Interactive browser-popup OAuth acquisition is classified as `NOT_APPLICABLE_ANDROID` / `BLOCKED_EXTERNAL` as Android TV lacks a web browser; native AES-GCM token storage, manual entry, expiration tracking, and API injection are 100% native in Row 42)
 
 ### Functional Parity Calculation
 Applicable native features: $49 - 3\text{ (NOT\_APPLICABLE)} - 2\text{ (UI\_PHASE\_LATER)} = 44$ features.

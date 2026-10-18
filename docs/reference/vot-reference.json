@@ -1,0 +1,2170 @@
+{
+  "version": "1.11.17",
+  "sha256": "4922bf1098224f545fb96a8de1202ba7a35166c144df5d39a05f69b4499ede6c",
+  "fileSize": 1574006,
+  "lineCount": 44525,
+  "sourceUrl": "https://raw.githubusercontent.com/ilyhalight/voice-over-translation/master/dist/vot.user.js",
+  "repositoryUrl": "https://github.com/ilyhalight/voice-over-translation.git",
+  "metadata": {
+    "name": "[VOT] - Voice Over Translation",
+    "name:de": "[VOT] - Voice-over-Übersetzung",
+    "name:es": "[VOT] - Traducción por voz superpuesta",
+    "name:fr": "[VOT] - Traduction en voix off",
+    "name:it": "[VOT] - Traduzione fuori campo",
+    "name:ru": "[VOT] - Закадровый перевод видео",
+    "name:zh": "[VOT] - 配音翻译",
+    "namespace": "vot",
+    "version": "1.11.17",
+    "author": "Toil, SashaXser, MrSoczekXD, mynovelhost, sodapng",
+    "description": "Watch videos in other languages with voice-over translation and subtitles in any browser",
+    "description:de": "Sieh dir Videos in anderen Sprachen mit Voice-over-Übersetzung und Untertiteln in jedem Browser an",
+    "description:es": "Ve videos en otros idiomas con voice-over y subtítulos en cualquier navegador",
+    "description:fr": "Regardez des vidéos dans d'autres langues avec une traduction en voix off et des sous-titres dans n'importe quel navigateur",
+    "description:it": "Guarda video in altre lingue con doppiaggio fuori campo e sottotitoli in qualsiasi browser",
+    "description:ru": "Смотрите видео на другом языке с закадровым переводом и субтитрами в любом браузере",
+    "description:zh": "在任何浏览器中观看其他语言的视频，享受配音翻译和字幕",
+    "license": "MIT",
+    "icon": "https://translate.yandex.ru/icons/favicon.ico",
+    "homepageURL": "https://github.com/ilyhalight/voice-over-translation",
+    "source": "https://github.com/ilyhalight/voice-over-translation.git",
+    "supportURL": "https://github.com/ilyhalight/voice-over-translation/issues",
+    "downloadURL": "https://raw.githubusercontent.com/ilyhalight/voice-over-translation/master/dist/vot.user.js",
+    "updateURL": "https://raw.githubusercontent.com/ilyhalight/voice-over-translation/master/dist/vot.user.js",
+    "match": [
+      "*://*.youtube.com/*",
+      "*://*.youtube-nocookie.com/*",
+      "*://*.youtubekids.com/*",
+      "*://*.twitch.tv/*",
+      "*://*.xvideos.com/*",
+      "*://*.xvideos-ar.com/*",
+      "*://*.xvideos005.com/*",
+      "*://*.xv-ru.com/*",
+      "*://*.xhamster.com/*",
+      "*://*.xhamster.desi/*",
+      "*://*.xhvid.com/*",
+      "*://*.spankbang.com/*",
+      "*://*.rule34video.com/*",
+      "*://*.picarto.tv/*",
+      "*://*.olympics.com/*",
+      "*://*.pornhub.com/*",
+      "*://*.pornhub.org/*",
+      "*://*.vk.com/*",
+      "*://*.vkvideo.ru/*",
+      "*://*.vk.ru/*",
+      "*://*.vimeo.com/*",
+      "*://*.imdb.com/*",
+      "*://*.9gag.com/*",
+      "*://*.twitter.com/*",
+      "*://*.x.com/*",
+      "*://*.facebook.com/*",
+      "*://*.rutube.ru/*",
+      "*://*.bilibili.com/*",
+      "*://*.bilibili.tv/*",
+      "*://my.mail.ru/*",
+      "*://*.bitchute.com/*",
+      "*://*.coursera.org/*",
+      "*://*.udemy.com/course/*",
+      "*://*.tiktok.com/*",
+      "*://*.douyin.com/*",
+      "*://rumble.com/*",
+      "*://*.eporner.com/*",
+      "*://*.dailymotion.com/*",
+      "*://*.ok.ru/*",
+      "*://drive.google.com/file/d/*/view*",
+      "*://drive.google.com/drive/folders/*",
+      "*://trovo.live/*",
+      "*://disk.yandex.ru/*",
+      "*://disk.yandex.kz/*",
+      "*://disk.yandex.com/*",
+      "*://disk.yandex.com.am/*",
+      "*://disk.yandex.com.ge/*",
+      "*://disk.yandex.com.tr/*",
+      "*://disk.yandex.by/*",
+      "*://disk.yandex.az/*",
+      "*://disk.yandex.co.il/*",
+      "*://disk.yandex.ee/*",
+      "*://disk.yandex.lt/*",
+      "*://disk.yandex.lv/*",
+      "*://disk.yandex.md/*",
+      "*://disk.yandex.net/*",
+      "*://disk.yandex.tj/*",
+      "*://disk.yandex.tm/*",
+      "*://disk.yandex.uz/*",
+      "*://disk.360.yandex.ru/*",
+      "*://youtube.googleapis.com/embed/*",
+      "*://*.banned.video/*",
+      "*://*.madmaxworld.tv/*",
+      "*://*.weverse.io/*",
+      "*://*.newgrounds.com/*",
+      "*://*.egghead.io/*",
+      "*://*.youku.com/*",
+      "*://*.archive.org/*",
+      "*://*.patreon.com/*",
+      "*://*.reddit.com/*",
+      "*://*.kodikplayer.com/*",
+      "*://*.kick.com/*",
+      "*://developer.apple.com/*",
+      "*://dev.epicgames.com/*",
+      "*://*.rapid-cloud.co/*",
+      "*://odysee.com/*",
+      "*://learning.sap.com/*",
+      "*://*.watchporn.to/*",
+      "*://*.linkedin.com/*",
+      "*://*.porntn.com/*",
+      "*://*.dzen.ru/*",
+      "*://*.cloudflarestream.com/*",
+      "*://*.loom.com/*",
+      "*://*.artstation.com/learning/*",
+      "*://*.rt.com/*",
+      "*://*.bitview.net/*",
+      "*://*.kickstarter.com/*",
+      "*://*.thisvid.com/*",
+      "*://*.ign.com/*",
+      "*://*.bunkr.site/*",
+      "*://*.bunkr.black/*",
+      "*://*.bunkr.cat/*",
+      "*://*.bunkr.media/*",
+      "*://*.bunkr.red/*",
+      "*://*.bunkr.ws/*",
+      "*://*.bunkr.org/*",
+      "*://*.bunkr.sk/*",
+      "*://*.bunkr.si/*",
+      "*://*.bunkr.su/*",
+      "*://*.bunkr.ci/*",
+      "*://*.bunkr.cr/*",
+      "*://*.bunkr.fi/*",
+      "*://*.bunkr.ph/*",
+      "*://*.bunkr.pk/*",
+      "*://*.bunkr.ps/*",
+      "*://*.bunkr.ru/*",
+      "*://*.bunkr.la/*",
+      "*://*.bunkr.is/*",
+      "*://*.bunkr.to/*",
+      "*://*.bunkr.ac/*",
+      "*://*.bunkr.ax/*",
+      "*://web.telegram.org/k/*",
+      "*://rust-server-531j.onrender.com/*",
+      "*://mylearn.oracle.com/*",
+      "*://learn.deeplearning.ai/*",
+      "*://learn-staging.deeplearning.ai/*",
+      "*://learn-dev.deeplearning.ai/*",
+      "*://*.netacad.com/content/i2cs/*",
+      "*://*.netacad.com/authoring-resources/*",
+      "*://*.nicovideo.jp/*",
+      "*://*.zdf.de/*",
+      "*://iframe.mediadelivery.net/*",
+      "*://video.bunnycdn.com/*",
+      "*://*.weibo.com/*",
+      "*://*.jove.com/*",
+      "*://*.preservetube.com/*",
+      "*://*.mediafile.cc/*",
+      "*://*.skilljar.com/*",
+      "*://projector.datacamp.com/*",
+      "*://hot.noodlemagazine.com/*",
+      "*://fast.wistia.net/*",
+      "*://*.the-joi-database.com/*",
+      "*://*.vhx.tv/*",
+      "*://*/*.mp4*",
+      "*://*/*.webm*",
+      "*://*.yewtu.be/*",
+      "*://inv.nadeko.net/*",
+      "*://invidious.nerdvpn.de/*",
+      "*://invidious.protokolla.fi/*",
+      "*://invidious.materialio.us/*",
+      "*://iv.melmac.space/*",
+      "*://*.piped.video/*",
+      "*://piped.kavin.rocks/*",
+      "*://piped.private.coffee/*",
+      "*://proxitok.pabloferreiro.es/*",
+      "*://proxitok.pussthecat.org/*",
+      "*://tok.habedieeh.re/*",
+      "*://proxitok.esmailelbob.xyz/*",
+      "*://proxitok.privacydev.net/*",
+      "*://tok.artemislena.eu/*",
+      "*://tok.adminforge.de/*",
+      "*://tt.vern.cc/*",
+      "*://cringe.whatever.social/*",
+      "*://proxitok.lunar.icu/*",
+      "*://proxitok.privacy.com.de/*",
+      "*://peertube.tmp.rcp.tf/*",
+      "*://*.dalek.zone/*",
+      "*://video.sadmin.io/*",
+      "*://videos.viorsan.com/*",
+      "*://peertube.1312.media/*",
+      "*://tube.shanti.cafe/*",
+      "*://*.bee-tube.fr/*",
+      "*://video.blender.org/*",
+      "*://*.beetoons.tv/*",
+      "*://*.makertube.net/*",
+      "*://*.peertube.tv/*",
+      "*://*.framatube.org/*",
+      "*://*.tilvids.com/*",
+      "*://*.diode.zone/*",
+      "*://*.fedimovie.com/*",
+      "*://video.hardlimit.com/*",
+      "*://*.share.tube/*",
+      "*://*.peervideo.club/*",
+      "*://*.coursehunter.net/*",
+      "*://*.coursetrain.net/*"
+    ],
+    "exclude": [
+      "file://*/*.mp4*",
+      "file://*/*.webm*",
+      "*://accounts.youtube.com/*"
+    ],
+    "require": "https://gist.githubusercontent.com/ilyhalight/6eb5bb4dffc7ca9e3c57d6933e2452f3/raw/7ab38af2228d0bed13912e503bc8a9ee4b11828d/gm-addstyle-polyfill.js",
+    "connect": [
+      "yandex.ru",
+      "disk.yandex.kz",
+      "disk.yandex.com",
+      "disk.yandex.com.am",
+      "disk.yandex.com.ge",
+      "disk.yandex.com.tr",
+      "disk.yandex.by",
+      "disk.yandex.az",
+      "disk.yandex.co.il",
+      "disk.yandex.ee",
+      "disk.yandex.lt",
+      "disk.yandex.lv",
+      "disk.yandex.md",
+      "disk.yandex.net",
+      "disk.yandex.tj",
+      "disk.yandex.tm",
+      "disk.yandex.uz",
+      "disk.360.yandex.ru",
+      "yandex.net",
+      "timeweb.cloud",
+      "raw.githubusercontent.com",
+      "vimeo.com",
+      "vhx.tv",
+      "toil.cc",
+      "onrender.com",
+      "workers.dev",
+      "eu.cc",
+      "cloudflare-dns.com",
+      "porntn.com",
+      "youtube.com",
+      "googlevideo.com",
+      "vtrans.eu.cc",
+      "vot-worker.vtrans.eu.cc"
+    ],
+    "grant": [
+      "GM_addStyle",
+      "GM_deleteValue",
+      "GM_getValue",
+      "GM_info",
+      "GM_listValues",
+      "GM_notification",
+      "GM_setValue",
+      "GM_xmlhttpRequest",
+      "GM.deleteValue",
+      "GM.getValue",
+      "GM.getValues",
+      "GM.listValues",
+      "GM.notification",
+      "GM.setValue",
+      "GM.xmlHttpRequest",
+      "window.focus"
+    ]
+  },
+  "endpoints": [
+    "/session/create",
+    "/stream-translation/ping-stream",
+    "/stream-translation/translate-stream",
+    "/video-subtitles/get-subtitles",
+    "/video-subtitles/subtitles-proxy",
+    "/video-translation/audio",
+    "/video-translation/audio-proxy",
+    "/video-translation/cache",
+    "/video-translation/fail-audio-js",
+    "/video-translation/translate"
+  ],
+  "protobufMessages": {
+    "sharedSelectors": [
+      {
+        "number": 1,
+        "name": "target",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "targetUrl",
+        "type": "string"
+      }
+    ],
+    "VideoTranslationRequest": [
+      {
+        "number": 3,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 4,
+        "name": "deviceId",
+        "type": "string"
+      },
+      {
+        "number": 5,
+        "name": "firstRequest",
+        "type": "bool"
+      },
+      {
+        "number": 6,
+        "name": "duration",
+        "type": "double"
+      },
+      {
+        "number": 7,
+        "name": "unknown0",
+        "type": "bool"
+      },
+      {
+        "number": 8,
+        "name": "language",
+        "type": "string"
+      },
+      {
+        "number": 9,
+        "name": "forceSourceLang",
+        "type": "bool"
+      },
+      {
+        "number": 10,
+        "name": "unknown1",
+        "type": "bool"
+      },
+      {
+        "number": 11,
+        "name": "translationHelp",
+        "type": "VideoTranslationHelpObject (nested/repeated)"
+      },
+      {
+        "number": 13,
+        "name": "wasStream",
+        "type": "bool"
+      },
+      {
+        "number": 14,
+        "name": "responseLanguage",
+        "type": "string"
+      },
+      {
+        "number": 15,
+        "name": "unknown2",
+        "type": "bool"
+      },
+      {
+        "number": 16,
+        "name": "configVersion",
+        "type": "int32"
+      },
+      {
+        "number": 17,
+        "name": "bypassCache",
+        "type": "bool"
+      },
+      {
+        "number": 18,
+        "name": "useLivelyVoice",
+        "type": "bool"
+      },
+      {
+        "number": 19,
+        "name": "videoTitle",
+        "type": "string"
+      }
+    ],
+    "VideoTranslationResponse": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "duration",
+        "type": "double"
+      },
+      {
+        "number": 4,
+        "name": "status",
+        "type": "int32"
+      },
+      {
+        "number": 5,
+        "name": "remainingTime",
+        "type": "int32"
+      },
+      {
+        "number": 6,
+        "name": "unknown0",
+        "type": "int32"
+      },
+      {
+        "number": 7,
+        "name": "translationId",
+        "type": "string"
+      },
+      {
+        "number": 8,
+        "name": "language",
+        "type": "string"
+      },
+      {
+        "number": 9,
+        "name": "message",
+        "type": "string"
+      },
+      {
+        "number": 10,
+        "name": "isLivelyVoice",
+        "type": "bool"
+      },
+      {
+        "number": 11,
+        "name": "allowToTranslateVideo",
+        "type": "bool"
+      },
+      {
+        "number": 12,
+        "name": "shouldRetry",
+        "type": "int32"
+      },
+      {
+        "number": 13,
+        "name": "unknown3",
+        "type": "int32"
+      }
+    ],
+    "VideoTranslationCacheItem": [
+      {
+        "number": 1,
+        "name": "status",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "remainingTime",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "message",
+        "type": "string"
+      },
+      {
+        "number": 4,
+        "name": "unknown0",
+        "type": "int32"
+      }
+    ],
+    "VideoTranslationCacheRequest": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "duration",
+        "type": "double"
+      },
+      {
+        "number": 3,
+        "name": "language",
+        "type": "string"
+      },
+      {
+        "number": 4,
+        "name": "responseLanguage",
+        "type": "string"
+      }
+    ],
+    "VideoTranslationCacheResponse": [
+      {
+        "number": 1,
+        "name": "default",
+        "type": "VideoTranslationCacheItem (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "cloning",
+        "type": "VideoTranslationCacheItem (nested/repeated)"
+      }
+    ],
+    "VideoLangCacheRequest": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "title",
+        "type": "string"
+      }
+    ],
+    "VideoLangCacheResponse": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 3,
+        "name": "status",
+        "type": "int32"
+      },
+      {
+        "number": 5,
+        "name": "unknown1",
+        "type": "int32"
+      }
+    ],
+    "AudioBufferObject": [
+      {
+        "number": 1,
+        "name": "fileId",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "audioFile",
+        "type": "bytes"
+      }
+    ],
+    "PartialAudioBufferObject": [
+      {
+        "number": 1,
+        "name": "chunkId",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "audioFile",
+        "type": "bytes"
+      }
+    ],
+    "ChunkAudioObject": [
+      {
+        "number": 1,
+        "name": "audioBuffer",
+        "type": "PartialAudioBufferObject (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "audioPartsLength",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "fileId",
+        "type": "string"
+      },
+      {
+        "number": 4,
+        "name": "version",
+        "type": "int32"
+      }
+    ],
+    "VideoTranslationAudioRequest": [
+      {
+        "number": 1,
+        "name": "translationId",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 4,
+        "name": "partialAudioInfo",
+        "type": "ChunkAudioObject (nested/repeated)"
+      },
+      {
+        "number": 6,
+        "name": "audioInfo",
+        "type": "AudioBufferObject (nested/repeated)"
+      }
+    ],
+    "VideoTranslationAudioResponse": [
+      {
+        "number": 1,
+        "name": "status",
+        "type": "int32"
+      }
+    ],
+    "SubtitlesObject": [
+      {
+        "number": 1,
+        "name": "language",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 3,
+        "name": "hasTranslation",
+        "type": "bool"
+      },
+      {
+        "number": 4,
+        "name": "translatedLanguage",
+        "type": "string"
+      },
+      {
+        "number": 5,
+        "name": "translatedUrl",
+        "type": "string"
+      },
+      {
+        "number": 6,
+        "name": "unknown1",
+        "type": "bool"
+      },
+      {
+        "number": 7,
+        "name": "subtitleId",
+        "type": "uint32"
+      }
+    ],
+    "SubtitlesRequest": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "language",
+        "type": "string"
+      }
+    ],
+    "SubtitlesResponse": [
+      {
+        "number": 1,
+        "name": "waiting",
+        "type": "bool"
+      },
+      {
+        "number": 2,
+        "name": "subtitles",
+        "type": "SubtitlesObject (nested/repeated)"
+      }
+    ],
+    "StreamTranslationObject": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "timestamp",
+        "type": "string"
+      }
+    ],
+    "StreamTranslationRequest": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "language",
+        "type": "string"
+      },
+      {
+        "number": 3,
+        "name": "responseLanguage",
+        "type": "string"
+      },
+      {
+        "number": 5,
+        "name": "unknown0",
+        "type": "int32"
+      },
+      {
+        "number": 6,
+        "name": "unknown1",
+        "type": "int32"
+      }
+    ],
+    "StreamTranslationResponse": [
+      {
+        "number": 1,
+        "name": "interval",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "translatedInfo",
+        "type": "StreamTranslationObject (nested/repeated)"
+      },
+      {
+        "number": 3,
+        "name": "pingId",
+        "type": "int32"
+      }
+    ],
+    "StreamPingRequest": [
+      {
+        "number": 1,
+        "name": "pingId",
+        "type": "int32"
+      }
+    ],
+    "YandexSessionRequest": [
+      {
+        "number": 1,
+        "name": "uuid",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "module",
+        "type": "string"
+      }
+    ],
+    "YandexSessionResponse": [
+      {
+        "number": 1,
+        "name": "secretKey",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "expires",
+        "type": "int32"
+      }
+    ],
+    "browserSecHeaders": [
+      {
+        "number": 1,
+        "name": "itag",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "lastModified",
+        "type": "uint64"
+      },
+      {
+        "number": 3,
+        "name": "xtags",
+        "type": "string"
+      }
+    ],
+    "Range": [
+      {
+        "number": 1,
+        "name": "legacyStart",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "legacyEnd",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "start",
+        "type": "int32"
+      },
+      {
+        "number": 4,
+        "name": "end",
+        "type": "int32"
+      }
+    ],
+    "AuthorizedFormat": [
+      {
+        "number": 1,
+        "name": "trackType",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "isHdr",
+        "type": "bool"
+      }
+    ],
+    "PlaybackAuthorization": [
+      {
+        "number": 1,
+        "name": "authorizedFormats",
+        "type": "AuthorizedFormat (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "sabrLicenseConstraint",
+        "type": "bytes"
+      }
+    ],
+    "FormatInitializationMetadata": [
+      {
+        "number": 1,
+        "name": "videoId",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "formatId",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 3,
+        "name": "endTimeMs",
+        "type": "int64"
+      },
+      {
+        "number": 4,
+        "name": "endSegmentNumber",
+        "type": "int64"
+      },
+      {
+        "number": 5,
+        "name": "mimeType",
+        "type": "string"
+      },
+      {
+        "number": 6,
+        "name": "initRange",
+        "type": "Range (nested/repeated)"
+      },
+      {
+        "number": 7,
+        "name": "indexRange",
+        "type": "Range (nested/repeated)"
+      },
+      {
+        "number": 8,
+        "name": "field8",
+        "type": "int64"
+      },
+      {
+        "number": 9,
+        "name": "durationUnits",
+        "type": "int64"
+      },
+      {
+        "number": 10,
+        "name": "durationTimescale",
+        "type": "int64"
+      }
+    ],
+    "TimeRange": [
+      {
+        "number": 1,
+        "name": "startTicks",
+        "type": "int64"
+      },
+      {
+        "number": 2,
+        "name": "durationTicks",
+        "type": "int64"
+      },
+      {
+        "number": 3,
+        "name": "timescale",
+        "type": "int32"
+      }
+    ],
+    "MediaHeader": [
+      {
+        "number": 1,
+        "name": "headerId",
+        "type": "uint32"
+      },
+      {
+        "number": 2,
+        "name": "videoId",
+        "type": "string"
+      },
+      {
+        "number": 3,
+        "name": "itag",
+        "type": "int32"
+      },
+      {
+        "number": 4,
+        "name": "lmt",
+        "type": "uint64"
+      },
+      {
+        "number": 5,
+        "name": "xtags",
+        "type": "string"
+      },
+      {
+        "number": 6,
+        "name": "startRange",
+        "type": "int64"
+      },
+      {
+        "number": 7,
+        "name": "compressionAlgorithm",
+        "type": "int32"
+      },
+      {
+        "number": 8,
+        "name": "isInitSeg",
+        "type": "bool"
+      },
+      {
+        "number": 9,
+        "name": "sequenceNumber",
+        "type": "int32"
+      },
+      {
+        "number": 10,
+        "name": "bitrateBps",
+        "type": "int64"
+      },
+      {
+        "number": 11,
+        "name": "startMs",
+        "type": "int64"
+      },
+      {
+        "number": 12,
+        "name": "durationMs",
+        "type": "int64"
+      },
+      {
+        "number": 13,
+        "name": "formatId",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 14,
+        "name": "contentLength",
+        "type": "int64"
+      },
+      {
+        "number": 15,
+        "name": "timeRange",
+        "type": "TimeRange (nested/repeated)"
+      },
+      {
+        "number": 16,
+        "name": "sequenceLmt",
+        "type": "uint64"
+      }
+    ],
+    "BufferedRange": [
+      {
+        "number": 1,
+        "name": "formatId",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "startTimeMs",
+        "type": "int64"
+      },
+      {
+        "number": 3,
+        "name": "durationMs",
+        "type": "int64"
+      },
+      {
+        "number": 4,
+        "name": "startSegmentIndex",
+        "type": "int32"
+      },
+      {
+        "number": 5,
+        "name": "endSegmentIndex",
+        "type": "int32"
+      },
+      {
+        "number": 6,
+        "name": "timeRange",
+        "type": "TimeRange (nested/repeated)"
+      },
+      {
+        "number": 9,
+        "name": "field9",
+        "type": "BufferedRange_UnknownMessage1 (nested/repeated)"
+      },
+      {
+        "number": 11,
+        "name": "field11",
+        "type": "BufferedRange_UnknownMessage2 (nested/repeated)"
+      },
+      {
+        "number": 12,
+        "name": "field12",
+        "type": "BufferedRange_UnknownMessage2 (nested/repeated)"
+      }
+    ],
+    "BufferedRange_UnknownMessage1": [
+      {
+        "number": 1,
+        "name": "field1",
+        "type": "BufferedRange_UnknownMessage1_UnknownInnerMessage (nested/repeated)"
+      }
+    ],
+    "BufferedRange_UnknownMessage1_UnknownInnerMessage": [
+      {
+        "number": 1,
+        "name": "videoId",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "lmt",
+        "type": "uint64"
+      }
+    ],
+    "BufferedRange_UnknownMessage2": [
+      {
+        "number": 1,
+        "name": "field1",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "field2",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "field3",
+        "type": "int32"
+      }
+    ],
+    "MediaCapabilities": [
+      {
+        "number": 1,
+        "name": "videoFormatCapabilities",
+        "type": "MediaCapabilities_VideoFormatCapability (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "audioFormatCapabilities",
+        "type": "MediaCapabilities_AudioFormatCapability (nested/repeated)"
+      },
+      {
+        "number": 5,
+        "name": "hdrModeBitmask",
+        "type": "int32"
+      }
+    ],
+    "MediaCapabilities_VideoFormatCapability": [
+      {
+        "number": 1,
+        "name": "videoCodec",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "maxHeight",
+        "type": "int32"
+      },
+      {
+        "number": 4,
+        "name": "maxWidth",
+        "type": "int32"
+      },
+      {
+        "number": 11,
+        "name": "maxFramerate",
+        "type": "int32"
+      },
+      {
+        "number": 12,
+        "name": "maxBitrateBps",
+        "type": "int32"
+      },
+      {
+        "number": 15,
+        "name": "is10BitSupported",
+        "type": "bool"
+      }
+    ],
+    "MediaCapabilities_AudioFormatCapability": [
+      {
+        "number": 1,
+        "name": "audioCodec",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "numChannels",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "maxBitrateBps",
+        "type": "int32"
+      },
+      {
+        "number": 6,
+        "name": "spatialCapabilityBitmask",
+        "type": "int32"
+      }
+    ],
+    "PlaybackCookie": [
+      {
+        "number": 1,
+        "name": "resolution",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "field2",
+        "type": "int32"
+      },
+      {
+        "number": 7,
+        "name": "videoFmt",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 8,
+        "name": "audioFmt",
+        "type": "FormatId (nested/repeated)"
+      }
+    ],
+    "ClientAbrState": [
+      {
+        "number": 13,
+        "name": "timeSinceLastManualFormatSelectionMs",
+        "type": "int64"
+      },
+      {
+        "number": 14,
+        "name": "lastManualDirection",
+        "type": "sint32"
+      },
+      {
+        "number": 16,
+        "name": "lastManualSelectedResolution",
+        "type": "int32"
+      },
+      {
+        "number": 17,
+        "name": "detailedNetworkType",
+        "type": "int32"
+      },
+      {
+        "number": 18,
+        "name": "clientViewportWidth",
+        "type": "int32"
+      },
+      {
+        "number": 19,
+        "name": "clientViewportHeight",
+        "type": "int32"
+      },
+      {
+        "number": 20,
+        "name": "clientBitrateCapBytesPerSec",
+        "type": "int64"
+      },
+      {
+        "number": 21,
+        "name": "stickyResolution",
+        "type": "int32"
+      },
+      {
+        "number": 22,
+        "name": "clientViewportIsFlexible",
+        "type": "bool"
+      },
+      {
+        "number": 23,
+        "name": "bandwidthEstimate",
+        "type": "int64"
+      },
+      {
+        "number": 24,
+        "name": "minAudioQuality",
+        "type": "int32"
+      },
+      {
+        "number": 25,
+        "name": "maxAudioQuality",
+        "type": "int32"
+      },
+      {
+        "number": 26,
+        "name": "videoQualitySetting",
+        "type": "int32"
+      },
+      {
+        "number": 27,
+        "name": "audioRoute",
+        "type": "int32"
+      },
+      {
+        "number": 28,
+        "name": "playerTimeMs",
+        "type": "int64"
+      },
+      {
+        "number": 29,
+        "name": "timeSinceLastSeek",
+        "type": "int64"
+      },
+      {
+        "number": 30,
+        "name": "dataSaverMode",
+        "type": "bool"
+      },
+      {
+        "number": 32,
+        "name": "networkMeteredState",
+        "type": "int32"
+      },
+      {
+        "number": 34,
+        "name": "visibility",
+        "type": "int32"
+      },
+      {
+        "number": 35,
+        "name": "playbackRate",
+        "type": "float"
+      },
+      {
+        "number": 36,
+        "name": "elapsedWallTimeMs",
+        "type": "int64"
+      },
+      {
+        "number": 38,
+        "name": "mediaCapabilities",
+        "type": "MediaCapabilities (nested/repeated)"
+      },
+      {
+        "number": 39,
+        "name": "timeSinceLastActionMs",
+        "type": "int64"
+      },
+      {
+        "number": 40,
+        "name": "enabledTrackTypesBitfield",
+        "type": "int32"
+      },
+      {
+        "number": 43,
+        "name": "maxPacingRate",
+        "type": "int32"
+      },
+      {
+        "number": 44,
+        "name": "playerState",
+        "type": "int64"
+      },
+      {
+        "number": 46,
+        "name": "drcEnabled",
+        "type": "bool"
+      },
+      {
+        "number": 48,
+        "name": "field48",
+        "type": "int32"
+      },
+      {
+        "number": 50,
+        "name": "field50",
+        "type": "int32"
+      },
+      {
+        "number": 51,
+        "name": "field51",
+        "type": "int32"
+      },
+      {
+        "number": 54,
+        "name": "sabrReportRequestCancellationInfo",
+        "type": "int32"
+      },
+      {
+        "number": 56,
+        "name": "disableStreamingXhr",
+        "type": "bool"
+      },
+      {
+        "number": 57,
+        "name": "field57",
+        "type": "int64"
+      },
+      {
+        "number": 58,
+        "name": "preferVp9",
+        "type": "bool"
+      },
+      {
+        "number": 59,
+        "name": "av1QualityThreshold",
+        "type": "int32"
+      },
+      {
+        "number": 60,
+        "name": "field60",
+        "type": "int32"
+      },
+      {
+        "number": 61,
+        "name": "isPrefetch",
+        "type": "bool"
+      },
+      {
+        "number": 62,
+        "name": "sabrSupportQualityConstraints",
+        "type": "bool"
+      },
+      {
+        "number": 63,
+        "name": "sabrLicenseConstraint",
+        "type": "bytes"
+      },
+      {
+        "number": 64,
+        "name": "allowProximaLiveLatency",
+        "type": "int32"
+      },
+      {
+        "number": 66,
+        "name": "sabrForceProxima",
+        "type": "int32"
+      },
+      {
+        "number": 67,
+        "name": "field67",
+        "type": "int32"
+      },
+      {
+        "number": 68,
+        "name": "sabrForceMaxNetworkInterruptionDurationMs",
+        "type": "int64"
+      },
+      {
+        "number": 69,
+        "name": "audioTrackId",
+        "type": "string"
+      },
+      {
+        "number": 76,
+        "name": "enableVoiceBoost",
+        "type": "bool"
+      },
+      {
+        "number": 79,
+        "name": "playbackAuthorization",
+        "type": "PlaybackAuthorization (nested/repeated)"
+      }
+    ],
+    "StreamerContext": [
+      {
+        "number": 1,
+        "name": "clientInfo",
+        "type": "StreamerContext_ClientInfo (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "poToken",
+        "type": "bytes"
+      },
+      {
+        "number": 3,
+        "name": "playbackCookie",
+        "type": "bytes"
+      },
+      {
+        "number": 4,
+        "name": "field4",
+        "type": "bytes"
+      },
+      {
+        "number": 5,
+        "name": "sabrContexts",
+        "type": "StreamerContext_SabrContext (nested/repeated)"
+      },
+      {
+        "number": 7,
+        "name": "field7",
+        "type": "string"
+      },
+      {
+        "number": 8,
+        "name": "field8",
+        "type": "StreamerContext_UnknownMessage1 (nested/repeated)"
+      }
+    ],
+    "StreamerContext_ClientInfo": [
+      {
+        "number": 12,
+        "name": "deviceMake",
+        "type": "string"
+      },
+      {
+        "number": 13,
+        "name": "deviceModel",
+        "type": "string"
+      },
+      {
+        "number": 16,
+        "name": "clientName",
+        "type": "int32"
+      },
+      {
+        "number": 17,
+        "name": "clientVersion",
+        "type": "string"
+      },
+      {
+        "number": 18,
+        "name": "osName",
+        "type": "string"
+      },
+      {
+        "number": 19,
+        "name": "osVersion",
+        "type": "string"
+      },
+      {
+        "number": 21,
+        "name": "acceptLanguage",
+        "type": "string"
+      },
+      {
+        "number": 22,
+        "name": "acceptRegion",
+        "type": "string"
+      },
+      {
+        "number": 37,
+        "name": "screenWidthPoints",
+        "type": "int32"
+      },
+      {
+        "number": 38,
+        "name": "screenHeightPoints",
+        "type": "int32"
+      },
+      {
+        "number": 39,
+        "name": "screenWidthInches",
+        "type": "float"
+      },
+      {
+        "number": 40,
+        "name": "screenHeightInches",
+        "type": "float"
+      },
+      {
+        "number": 41,
+        "name": "screenPixelDensity",
+        "type": "int32"
+      },
+      {
+        "number": 46,
+        "name": "clientFormFactor",
+        "type": "int32"
+      },
+      {
+        "number": 50,
+        "name": "gmscoreVersionCode",
+        "type": "int32"
+      },
+      {
+        "number": 55,
+        "name": "windowWidthPoints",
+        "type": "int32"
+      },
+      {
+        "number": 56,
+        "name": "windowHeightPoints",
+        "type": "int32"
+      },
+      {
+        "number": 64,
+        "name": "androidSdkVersion",
+        "type": "int32"
+      },
+      {
+        "number": 65,
+        "name": "screenDensityFloat",
+        "type": "float"
+      },
+      {
+        "number": 67,
+        "name": "utcOffsetMinutes",
+        "type": "int64"
+      },
+      {
+        "number": 80,
+        "name": "timeZone",
+        "type": "string"
+      },
+      {
+        "number": 92,
+        "name": "chipset",
+        "type": "string"
+      },
+      {
+        "number": 102,
+        "name": "glDeviceInfo",
+        "type": "StreamerContext_GLDeviceInfo (nested/repeated)"
+      }
+    ],
+    "StreamerContext_GLDeviceInfo": [
+      {
+        "number": 1,
+        "name": "glRenderer",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "glEsVersionMajor",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "glEsVersionMinor",
+        "type": "int32"
+      }
+    ],
+    "StreamerContext_SabrContext": [
+      {
+        "number": 1,
+        "name": "type",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "value",
+        "type": "bytes"
+      }
+    ],
+    "StreamerContext_UnknownMessage1": [
+      {
+        "number": 1,
+        "name": "field1",
+        "type": "bytes"
+      },
+      {
+        "number": 2,
+        "name": "field2",
+        "type": "StreamerContext_UnknownMessage1_UnknownInnerMessage1 (nested/repeated)"
+      }
+    ],
+    "StreamerContext_UnknownMessage1_UnknownInnerMessage1": [
+      {
+        "number": 1,
+        "name": "code",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "message",
+        "type": "string"
+      }
+    ],
+    "VideoPlaybackAbrRequest": [
+      {
+        "number": 1,
+        "name": "clientAbrState",
+        "type": "ClientAbrState (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "selectedFormatIds",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 3,
+        "name": "bufferedRanges",
+        "type": "BufferedRange (nested/repeated)"
+      },
+      {
+        "number": 4,
+        "name": "playerTimeMs",
+        "type": "int64"
+      },
+      {
+        "number": 5,
+        "name": "videoPlaybackUstreamerConfig",
+        "type": "bytes"
+      },
+      {
+        "number": 6,
+        "name": "field6",
+        "type": "UnknownMessage1 (nested/repeated)"
+      },
+      {
+        "number": 16,
+        "name": "preferredAudioFormatIds",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 17,
+        "name": "preferredVideoFormatIds",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 18,
+        "name": "preferredSubtitleFormatIds",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 19,
+        "name": "streamerContext",
+        "type": "StreamerContext (nested/repeated)"
+      },
+      {
+        "number": 21,
+        "name": "field21",
+        "type": "UnknownMessage2 (nested/repeated)"
+      },
+      {
+        "number": 22,
+        "name": "field22",
+        "type": "int32"
+      },
+      {
+        "number": 23,
+        "name": "field23",
+        "type": "int32"
+      }
+    ],
+    "UnknownMessage1": [
+      {
+        "number": 1,
+        "name": "formatId",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "lmt",
+        "type": "sint64"
+      },
+      {
+        "number": 3,
+        "name": "sequenceNumber",
+        "type": "int32"
+      },
+      {
+        "number": 4,
+        "name": "timeRange",
+        "type": "TimeRange (nested/repeated)"
+      },
+      {
+        "number": 5,
+        "name": "field5",
+        "type": "int32"
+      }
+    ],
+    "UnknownMessage2": [
+      {
+        "number": 2,
+        "name": "field2",
+        "type": "bytes"
+      },
+      {
+        "number": 3,
+        "name": "field3",
+        "type": "string"
+      },
+      {
+        "number": 4,
+        "name": "field4",
+        "type": "int32"
+      },
+      {
+        "number": 5,
+        "name": "field5",
+        "type": "int32"
+      },
+      {
+        "number": 6,
+        "name": "field6",
+        "type": "string"
+      }
+    ],
+    "UnknownMessage3": [
+      {
+        "number": 1,
+        "name": "formatIds",
+        "type": "FormatId (nested/repeated)"
+      },
+      {
+        "number": 2,
+        "name": "ud",
+        "type": "BufferedRange (nested/repeated)"
+      },
+      {
+        "number": 3,
+        "name": "clipId",
+        "type": "string"
+      }
+    ],
+    "NextRequestPolicy": [
+      {
+        "number": 1,
+        "name": "targetAudioReadaheadMs",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "targetVideoReadaheadMs",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "maxTimeSinceLastRequestMs",
+        "type": "int32"
+      },
+      {
+        "number": 4,
+        "name": "backoffTimeMs",
+        "type": "int32"
+      },
+      {
+        "number": 5,
+        "name": "minAudioReadaheadMs",
+        "type": "int32"
+      },
+      {
+        "number": 6,
+        "name": "minVideoReadaheadMs",
+        "type": "int32"
+      },
+      {
+        "number": 7,
+        "name": "playbackCookie",
+        "type": "PlaybackCookie (nested/repeated)"
+      },
+      {
+        "number": 8,
+        "name": "videoId",
+        "type": "string"
+      }
+    ],
+    "SabrError": [
+      {
+        "number": 1,
+        "name": "type",
+        "type": "string"
+      },
+      {
+        "number": 2,
+        "name": "code",
+        "type": "int32"
+      }
+    ],
+    "SabrRedirect": [
+      {
+        "number": 1,
+        "name": "url",
+        "type": "string"
+      }
+    ],
+    "ReloadPlaybackParams": [
+      {
+        "number": 1,
+        "name": "token",
+        "type": "string"
+      }
+    ],
+    "ReloadPlaybackContext": [
+      {
+        "number": 1,
+        "name": "reloadPlaybackParams",
+        "type": "ReloadPlaybackParams (nested/repeated)"
+      }
+    ],
+    "SabrContextUpdate_SabrContextWritePolicy": [
+      {
+        "number": 1,
+        "name": "type",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "scope",
+        "type": "int32"
+      },
+      {
+        "number": 3,
+        "name": "value",
+        "type": "bytes"
+      },
+      {
+        "number": 4,
+        "name": "sendByDefault",
+        "type": "bool"
+      },
+      {
+        "number": 5,
+        "name": "writePolicy",
+        "type": "int32"
+      }
+    ],
+    "StreamProtectionStatus": [
+      {
+        "number": 1,
+        "name": "status",
+        "type": "int32"
+      },
+      {
+        "number": 2,
+        "name": "maxRetries",
+        "type": "int32"
+      }
+    ]
+  },
+  "storageKeys": [
+    "account",
+    "audioBooster",
+    "autoHideButtonDelay",
+    "autoSubtitles",
+    "autoTranslate",
+    "autoVolume",
+    "buttonPos",
+    "compatVersion",
+    "defaultVolume",
+    "detectService",
+    "dontTranslateLanguages",
+    "downloadWithName",
+    "enabledAutoVolume",
+    "enabledDontTranslateLanguages",
+    "enabledSmartDucking",
+    "highlightWords",
+    "localeHash",
+    "localeLang",
+    "localeLangOverride",
+    "localePhrases",
+    "localeUpdatedAt",
+    "localeVersion",
+    "newAudioPlayer",
+    "onlyBypassMediaCSP",
+    "proxyWorkerHost",
+    "responseLanguage",
+    "responseLanguageSubtitles",
+    "sendNotifyOnComplete",
+    "showPiPButton",
+    "showVideoSlider",
+    "subtitlesDownloadFormat",
+    "subtitlesFontFamily",
+    "subtitlesFontSize",
+    "subtitlesHotkey",
+    "subtitlesMaxLength",
+    "subtitlesOpacity",
+    "subtitlesSmartLayout",
+    "syncVolume",
+    "translateAPIErrors",
+    "translateProxyEnabled",
+    "translateProxyEnabledDefault",
+    "translationHotkey",
+    "translationService",
+    "useAudioDownload",
+    "useLivelyVoice"
+  ],
+  "constants": {
+    "smartDucking": {
+      "tickMs": "50",
+      "thresholdOnRms": ".012",
+      "thresholdOffRms": ".009",
+      "rmsAttackTauMs": "60",
+      "rmsReleaseTauMs": "240",
+      "holdMs": "520",
+      "attackTauMs": "110",
+      "releaseTauMs": "600",
+      "maxDownPerSec": "3.5",
+      "maxUpPerSec": ".9",
+      "rmsMissingGraceMs": "200",
+      "maxDtMs": "250",
+      "externalBaselineDelta01": ".02",
+      "unduckTolerance01": ".01",
+      "volumeStep01": "VIDEO_VOLUME_STEP_01",
+      "applyDeltaThreshold01": "VIDEO_VOLUME_STEP_01 / 2"
+    },
+    "defaultDuration": 310,
+    "chaimuVersion": "1.1.0"
+  },
+  "regions": {
+    "\\0rolldown/runtime.js": "936dfff530fc6cf045fa47a362468ac00d27c8fb2342dff51dac92012a487965",
+    "node_modules/@vot.js/core/dist/types/service.js": "a1682480fef46b9a95a3531cd57095d0f1f7b585d2b84b716fc9a1b669230b20",
+    "node_modules/@vot.js/core/dist/utils/videoData.js": "ea61e012b2574844f4a32e22bab46cdb4861a48dabbc35afde742b495c546b75",
+    "node_modules/@vot.js/shared/dist/data/alternativeUrls.js": "8ccb721cf94b6f8f64724e802208ff2210b65d6aba5e86fa95cb183b2f9b92e7",
+    "node_modules/@vot.js/ext/dist/types/service.js": "4f061d1829db89ccd8f105b0a31d78ffe42862f4a1dfe549f779ad5198dd87b6",
+    "node_modules/@vot.js/ext/dist/data/sites.js": "57f96c1abe4cf11a3440992abe27a6fe2adb9493a9608f97172b6cb36769df3b",
+    "node_modules/@vot.js/shared/dist/data/config.js": "1f13bde4eb5b3c375c091b9dfa9028711bb6ad738a08b9bc2dca6992eec03d3b",
+    "node_modules/@vot.js/shared/dist/types/logger.js": "2f4eb494cc4a13d85a6e556e1c14a8a2e6c48b525e8782c06f308b3aa541cae0",
+    "node_modules/@vot.js/shared/dist/utils/logger.js": "e13b0c7b303f93792e15a32a3b0c8b01fc64c0191a04f41852ca5aefc7961b6e",
+    "node_modules/@vot.js/shared/dist/utils/utils.js": "a448b394a18dd13abfa832804cb99fb187806488ae71b849e187cae9e87eac97",
+    "node_modules/@vot.js/ext/dist/helpers/base.js": "404e712ab8bbe56e3fe69ab829913ff5f0ef9a7ab06169a56c49c6547a2e700f",
+    "node_modules/@vot.js/ext/dist/helpers/appledeveloper.js": "01d9cf2049d32a236c0e6e5036d180a2777c933a7b7fc67bcb9f0ecbce756dd7",
+    "node_modules/@vot.js/ext/dist/helpers/archive.js": "c6410ec9409355325fb3f8451072b958a7ee4480d1c31430d8d267e900e35981",
+    "node_modules/@vot.js/ext/dist/helpers/artstation.js": "fb0444aafff1d98a96cf7f1519bffd070f484e0e6f6661906fe91d35ef274635",
+    "node_modules/@vot.js/ext/dist/helpers/bannedvideo.js": "cb90a87723397b550f204a5a1479ceaae9feea52194798022add72da01fd50c5",
+    "node_modules/@vot.js/ext/dist/helpers/bilibili.js": "11e3746c3e698b830331684927f87ee87fa186d76bd070d68649019849f112be",
+    "node_modules/@vot.js/ext/dist/helpers/bitchute.js": "4a324df5c9704fe958565108b93c93ed4021726e9f33a754629dbaaa76c0e862",
+    "node_modules/@vot.js/ext/dist/helpers/bitview.js": "c85ec6bbc1c0668121c22d4b6b04d30b600c656b1d238a83298d3f8234d02569",
+    "node_modules/@vot.js/ext/dist/players/plyr.js": "80e72dc1cd1f894b5dde2dc8a4b1a3c57e04edc9b11ca7200dccd736b7a701fe",
+    "node_modules/@vot.js/ext/dist/helpers/bunkr.js": "375d1ff184b12f2e620e890d8b017a5979f633e5df259a66ad771e06954045b5",
+    "node_modules/@vot.js/ext/dist/helpers/bunnystream.js": "1b9968598a71d883432cc49e11ba4fca85e2339f82836afb5500b3c62690b02b",
+    "node_modules/@vot.js/ext/dist/helpers/cloudflarestream.js": "689d4883b89459b5456d40f854e2764a1bcc8e80414afd0fd6d3ef38058f9830",
+    "node_modules/@vot.js/ext/dist/helpers/coursehunterLike.js": "eee2ab9a08497bc50339159302ddca39b180d79c52d7e106e2071b1c707760e6",
+    "node_modules/@vot.js/shared/dist/data/consts.js": "c779643d6f613534b20600ad176c959b62f0cc53a5c9642efe12eb7e40aa93fd",
+    "node_modules/@vot.js/ext/dist/utils/dom.js": "5ce917796a641cfb1f899b72434fdfefd776699f2b7809fb7fa338ea9f4f7661",
+    "node_modules/@vot.js/ext/dist/players/videojs.js": "0b696f13f10648d555fad2fc9fe00b48da841ac8722070efa33a953310c33369",
+    "node_modules/@vot.js/ext/dist/helpers/coursera.js": "c82000ac0eadb82c071764113a9bc95f59ed7f8b4a10092efcf784d6ac4ae21b",
+    "node_modules/@vot.js/ext/dist/helpers/dailymotion.js": "2898d1aba82b40158850d577116cbc26775c731657e0888932e4621369c579ee",
+    "node_modules/@vot.js/ext/dist/helpers/datacamp.js": "27db15772268c4350517cf7e860806099eb54705f0aaeac0a2c8e94f1b25e145",
+    "node_modules/@vot.js/ext/dist/helpers/deeplearningai.js": "fba3a604de7dfa7fa36f7294b8a831e0128da6ba6c6e0e76dc8b74ef146bae36",
+    "node_modules/@vot.js/ext/dist/helpers/douyin.js": "7c50fe84a19f05a18d45c9d7b18d13b509555afd97316f5952917baa25a4cb18",
+    "node_modules/@vot.js/ext/dist/helpers/vimeo.js": "d30ecec4875f41ec5ebe04b874ea264d4e1697336386e16b2ee1cb73f42829bc",
+    "node_modules/@vot.js/ext/dist/helpers/dropout.js": "5c67204ccfce6f189a8532de7892fe48bc77499259ff77a6cb473349f096da0a",
+    "node_modules/@vot.js/ext/dist/helpers/dzen.js": "90baa5874f5328887b65ea51391d08bc66b53ce524d1f853544a5065fbdf36b3",
+    "node_modules/@vot.js/ext/dist/helpers/egghead.js": "e10d236ee170fd6fc8e29d61e66a8d8ce1fa0b5eab245297a2b8a5165b581ef7",
+    "node_modules/@vot.js/ext/dist/helpers/epicgames.js": "c142fb5277dc074e21e9471531b3f881b6c5051b5b94248adc2a9b05f3878e93",
+    "node_modules/@vot.js/ext/dist/helpers/eporner.js": "8b82722e4725ac68856542016f6b827aa57c2b7a8780efa9104680ea603dcd75",
+    "node_modules/@vot.js/ext/dist/helpers/facebook.js": "a91d0e8a616507b6793df93be88806a072c69178a530742ea4f745d20bd4e23a",
+    "node_modules/@vot.js/ext/dist/helpers/googledrive.js": "4766011b25d063ed06b959e51548042f3113a00b22b51d434e7291645029198a",
+    "node_modules/@vot.js/ext/dist/helpers/ign.js": "105403561a4c9d3df36e7a3821d8dd8b6799f6adba9cc548612e729911b2aff7",
+    "node_modules/@vot.js/ext/dist/helpers/imdb.js": "71d0ca144c410436b0ccff6cf740dc01f46e806502dec8850e13b4881850a7a8",
+    "node_modules/@vot.js/ext/dist/helpers/joidatabase.js": "6a4974a6afb6788bf0db5750ab92f92e1200fdb259f73a3f2a84819170624b5a",
+    "node_modules/@vot.js/ext/dist/helpers/jove.js": "387b00648e26629019b2172cd53e3cb9821e501f920c7ccb17958ee8d73dd985",
+    "node_modules/@vot.js/ext/dist/helpers/kick.js": "13e2447ddd8fb5b081d3acda60e3685cbd9ba7a7f0471f54485b1a378ef00df7",
+    "node_modules/@vot.js/ext/dist/helpers/kickstarter.js": "bd3acf5bf0fb08072bd2373ca619a1acf4c834801c5301ea827b261d7e4ea550",
+    "node_modules/@vot.js/ext/dist/helpers/kodik.js": "0a62da7373d2a97d209258d390d250be955a28c513f50eaa00f5d87441ec1374",
+    "node_modules/@vot.js/ext/dist/helpers/linkedin.js": "c176289324d5935c40aca262f12aa863039d692dab67160d27acc3d30843622d",
+    "node_modules/@bufbuild/protobuf/dist/esm/wire/varint.js": "bfe5accfc1c77a35e7f81c61d297e0c0f86e24b3917063620a77fc38cf5e77bc",
+    "node_modules/@bufbuild/protobuf/dist/esm/proto-int64.js": "7240400ebde9506208ccdba7e54271b006a0e211aa72a6ee52e33bb445a69e73",
+    "node_modules/@bufbuild/protobuf/dist/esm/wire/text-encoding.js": "e4bb8c38aee5f2374f046e50ac8626a57355ffe62deb7c6c61b935e74a05af2e",
+    "node_modules/@bufbuild/protobuf/dist/esm/wire/binary-encoding.js": "e25afb48b078576dbfd977542bbc25f1b26f77d5b9d0717753659e66ff3dd302",
+    "node_modules/@vot.js/shared/dist/protos/yandex.js": "3bd384b89a088546c0c6e84e4c5bbf7a2f2bfe26c0c61198a3b6764ed79652fa",
+    "node_modules/@vot.js/shared/dist/types/helpers/bannedvideo.js": "c57e6fcab09ff964d9a6b112308b32201cf426aba81038030ebde3602f4dbd04",
+    "node_modules/@vot.js/ext/dist/helpers/loom.js": "3b346da842a2992e1fff82c810c8a22fe72ab00e48d8bc3dedc9f67cd2bd78ef",
+    "node_modules/@vot.js/ext/dist/helpers/mailru.js": "d9caa25ea8d10384c3a07d71813bfb97d45b24b992bc7f4582cd4174ddadeea0",
+    "node_modules/@vot.js/ext/dist/helpers/mediafile.js": "02307b3e27e3bd9821565854dd6c70b3c27068ad495b5c0bb097e078944c4a7a",
+    "node_modules/@vot.js/ext/dist/helpers/netacad.js": "622a07e9884ce447a788030a7a0b494975a8281d4459eb6429ceea80f66fd446",
+    "node_modules/@vot.js/ext/dist/helpers/newgrounds.js": "4e1c37fa7659e221063819ddbdcc0323954b0e0804dbcad5554a4c15c9c20d5e",
+    "node_modules/@vot.js/ext/dist/helpers/niconico.js": "948eed65b49f41bf5e6123ad7b9ae3dca7ffd29ba446d3e6a51a4aef368b3532",
+    "node_modules/@vot.js/ext/dist/helpers/nine_gag.js": "594a9cf21ea4d5d31622adc6652c25bb4ee3aa17cdbf98cd06c3f94f437c23ef",
+    "node_modules/@vot.js/ext/dist/players/jwplayer.js": "895c8ff590d61abc2e478ad589d2e707dbeb7c851504af97b6a994e12a4230f4",
+    "node_modules/@vot.js/ext/dist/helpers/noodlemagazine.js": "bc3f2e48fe14c1511b529af8d153f7d65d25b997679b277baafadb4c15b24a51",
+    "node_modules/@vot.js/ext/dist/helpers/odysee.js": "a8fd63ee52f1d20e7a9d0a1035baab292c8498fac05cead52a48e5f2dd5e34e9",
+    "node_modules/@vot.js/ext/dist/helpers/okru.js": "7085d26224579ea89795931a70a614404358f0e6168fe9603e7d7114c627c128",
+    "node_modules/@vot.js/ext/dist/helpers/olympicsreplay.js": "bd1da728db270cf21464190fdf53e06d6848d7f71f545cbfdd2000a8777cb95f",
+    "node_modules/@vot.js/ext/dist/helpers/oraclelearn.js": "e93e5474ecf8df57c83373392aca2dab4f5280cc43d812272381b4648158c2c3",
+    "node_modules/@vot.js/ext/dist/helpers/patreon.js": "afb56b2c6dc4ff363c285ea18171d5eeed60ab7b04475b6a2b51511e9d4e6f2d",
+    "node_modules/@vot.js/ext/dist/helpers/peertube.js": "fe9faa0910a1fe93ae4e27f7ac9bd0b597d1f76e4e08ba8e8e5e760d6f4f8237",
+    "node_modules/@vot.js/ext/dist/helpers/picarto.js": "379996eb83eacc61bffca5dd1d4fa1bab1fbfce3d07a7485752c608f29785605",
+    "node_modules/@vot.js/ext/dist/helpers/pornhub.js": "9cbf20a7c8930ec8d04b44088477c1acb4f9a7ff1f0a18bc5b91cee1306f9047",
+    "node_modules/@vot.js/ext/dist/helpers/porntn.js": "b9a0dcf99f625eb149378c17e7813e78486fadaea32f3c3407a572bf801e3974",
+    "node_modules/@vot.js/ext/dist/helpers/preservetube.js": "1d37c5c8eeacf6d07d89d8698141f0490d7ddc6aeec95ae4c6cb5733d31f2b38",
+    "node_modules/@vot.js/ext/dist/helpers/reddit.js": "1b2e382fabc6c20a4ebfaddc44f1b2fbd97a676a662a2f8d653b2c9520786137",
+    "node_modules/@vot.js/ext/dist/helpers/rtnews.js": "d8d51a7bbfe47ae041b5506c3a4fb12ef2f1ff780f82ad3ba325d5bc4d9090dc",
+    "node_modules/@vot.js/ext/dist/helpers/rule34video.js": "3e81a05745a79e0ada605d566181991045ad65fc46bb93c10f47467561dc26a5",
+    "node_modules/@vot.js/ext/dist/helpers/rumble.js": "25d583da36f73055250d542b31e959a9cb39301eff03f402d43ad71000dd5f19",
+    "node_modules/@vot.js/ext/dist/helpers/rutube.js": "82b35db0e2cf2a4e7e73ebae33c4959c164d775bfc947b6788325b58414aad2d",
+    "node_modules/@vot.js/ext/dist/helpers/sap.js": "648e45e40d73243c4af91833987651152b1ae90e2d5686c0f3b59add3505e7bb",
+    "node_modules/@vot.js/ext/dist/helpers/skilljar.js": "1873c901b2afe17420dfc7758d695a70ac97c491c43b85ac21307a3ae7d9ecd6",
+    "node_modules/@vot.js/ext/dist/helpers/spankbang.js": "2c150b9ecbab54c69c8106654a6b39994c0bfab936d152e6dd638a18ef48af41",
+    "node_modules/@vot.js/ext/dist/helpers/telegram.js": "5ca92556320680fe29fbe8eb72da70d10115c563699b7c0d366cc95945d1ec17",
+    "node_modules/@vot.js/ext/dist/helpers/thisvid.js": "3e92857cbef3f86d13d3ec3250ce7cac534356ea76164ecd71f7f6b85326bb1f",
+    "node_modules/@vot.js/ext/dist/helpers/tiktok.js": "ca005536822cbcd43fdd0988fe2dd4c0ad7d26d0e37c185a56f2267462245e00",
+    "node_modules/@vot.js/ext/dist/helpers/trovo.js": "4d17d6d109e7dfae928665ca6358418c61b90cefb4e5aa6cba75eea9cc46de8d",
+    "node_modules/@vot.js/ext/dist/helpers/twitch.js": "6a07e6ebdc0c80d4638a3e1a36ef0d6229c35d6c4c6bef8aaefa88657bb0bf09",
+    "node_modules/@vot.js/ext/dist/helpers/twitter.js": "0c16f411c4900d2db39412bfddb014453b49ab7422786b46d81b385b65bb7fe8",
+    "node_modules/@vot.js/ext/dist/helpers/udemy.js": "b81fa62984e5ace2c64c5f742152b0a423928d452810cbc994d54270765e3b4b",
+    "node_modules/@vot.js/ext/dist/helpers/vk.js": "3cde556f61ce04d8dbdd3973316b166d6de8634995d4297f074bbda9cc06b2f0",
+    "node_modules/@vot.js/ext/dist/helpers/watchpornto.js": "2d056735e2e77493698d50336eee82310a82d202318c40b4d096b097973b81f5",
+    "node_modules/@vot.js/ext/dist/helpers/weibo.js": "124a2f106d3ee52c27941cbd83ca60a8999aac2d7b602ded004aac205bb71f26",
+    "src/shims/nodeCrypto.ts": "bc88c57617b2fb2f98140f8cbd27fc3b87a2710d6d6f93f561b612b943f7090f",
+    "node_modules/@vot.js/shared/dist/secure.js": "82fe3b3f9beef3a44bbd154e72102aaf43c00324eecc78683ca4bedfd3535484",
+    "node_modules/@vot.js/ext/dist/helpers/weverse.js": "bc2c6edf3c67590b530182c45959f9ce06dffd135dd4d5384ca58be1daa868e3",
+    "node_modules/@vot.js/ext/dist/helpers/xhamster.js": "3f8834a71a96ae3bb6228e2ed9944423955f1f25f16fa7d6e078a209cf73685c",
+    "node_modules/@vot.js/ext/dist/helpers/xvideos.js": "532a7489464281cc3811cd5c209824d70b83433298f0e8531b3f0d1f31831ef4",
+    "node_modules/@vot.js/ext/dist/helpers/yandexdisk.js": "0f0e5a15cd8e54a711b53737b0d5b055b2268008218dbad3bc2ac5b916ab4e41",
+    "node_modules/@vot.js/ext/dist/helpers/youku.js": "5f2aa9bf7e390e8393538c287840ab0ccd522711076bcd8af4cae8fa849bd2ae",
+    "node_modules/@vot.js/ext/dist/helpers/youtube.js": "37229060d402c2377f9ec3003d877a6659a48b4067da0e0e2152561ef978d16a",
+    "node_modules/@vot.js/ext/dist/helpers/zdf.js": "3fd9f317248e9bc38ffd0581bd112e1171908290e36d84ef60af952c81f2b499",
+    "node_modules/@vot.js/ext/dist/helpers/wistia.js": "bd7ffcc0184ba2121cefbe540523cf728dc3d4c5c31cbc7ab3be797f22b3be5e",
+    "node_modules/@vot.js/ext/dist/helpers/index.js": "c9d3be981f5e665cdac224824f9e5a7bec81c3d0049315e28b2ef4b628efea5e",
+    "node_modules/@vot.js/ext/dist/utils/videoData.js": "8953f1d8e52fb295e6deaa8395a0ed81894839bdcbd6c58e2aeb040098c14b1c",
+    "src/bootstrap/bootState.ts": "d80336d4eb27f4b9b74590e75a0478837a5b1516bc6ae37cc2a792dbbabecde3",
+    "src/bootstrap/iframeInteractor.ts": "9af88f060e1176137f387172aee3bb2376d7f6783aaab81aa3e5731d5ee650be",
+    "src/config/config.ts": "61594cf5d160e4c1c8ec1843a308559a6752fc59d07d210da25ce523062a9d16",
+    "src/types/storage.ts": "562f7a5b7deb5e9c225f92a025621abe8ec78d7b9ed77fdbaf6cdf516ba787d3",
+    "src/utils/debug.ts": "2650374851991d72f2e8766b02938a8542112a28f332fcb4ffad4d268f9a3467",
+    "src/utils/errors.ts": "f008eb5f74cd6c89343ebb280da3dfbcd2a3251f7da4113f3c011b53ae254aed",
+    "src/utils/abort.ts": "badda08251abdc0940544e816e327d339d7d973fdcc6a837fed6e4960b9710c0",
+    "src/utils/number.ts": "a4b033fa386d1f9870e08974a78b64ef1860d407629410ec76501386bf8fa6c0",
+    "src/utils/localization.ts": "853e3c506e00cdd128b3c896ccc9213a41aaeb649d124e3242b447022a3e4838",
+    "src/utils/utils.ts": "c23a943c52208a32b31c446340c8698170ca48448b771888c581772969ecb151",
+    "src/utils/responseCache.ts": "528c22bab9c381240246594785dd5c50d5473de51cdec559c47b0250e19734cf",
+    "src/utils/gm.ts": "93051c4669dc1cd0559b1992f9548f6d8ed41d26bc5eb1870dca7189ab75bfec",
+    "src/utils/storage.ts": "6026427bad7242cb9fbfe7b13ada38941c93e767f6480d073f1f3dd5b45fa654",
+    "src/core/authRefreshMessage.ts": "67335c2de5c9c3147a1e0c71950b4bd301b1bc7a8e1a80f4d9586a02429d35d7",
+    "src/core/auth.ts": "8292e69102b29a4a6369f2fc450e01034078f7db61d6ee296d14517ca0923190",
+    "src/localization/localizationProvider.ts": "34986da82e58dad3f42ca88b7e46ee8493bc2497a2357e9665465f3ab85782d6",
+    "src/utils/iframeConnector.ts": "08b779d6c7caed0953b1af6583e4b4fc7b16f6967120a6db4664888eda29a6d5",
+    "src/bootstrap/runtimeActivation.ts": "94b240a6a402016009087467229598e59802bb4226ac6c1a75638257f7bab688",
+    "src/bootstrap/videoObserverBinding.ts": "d60d28298e48c388771f5b987adbe0bb97d5ecbf2536cad5d6604fd65f79d59c",
+    "src/core/bootstrapPolicy.ts": "1ced4c45da326b4c899a89daabcc752824c83242b7ea82507e3480e99f6b09f8",
+    "src/utils/dom.ts": "90daf46d0d4867561cc9c345807e742a1ceb8a52909271b76f46d31cc86abf10",
+    "src/core/containerResolution.ts": "f545d3efe7aabf8cc56e65be370a7c5310ff1be4118274f5e2f87dbd3bbb0ef3",
+    "src/utils/environment.ts": "fa60d497de39cf5d92b964079c6c0c1ccac15d59fa061204cf715746f88db1e0",
+    "src/utils/intervalIdleChecker.ts": "d9cd50a6a94c4df148d7467b3c5923f22498090dc782f1a61586f512dc8a7f5b",
+    "src/utils/domTraversal.ts": "98104b7ee8d65c6a13dba09c981c093d9e470369f07fea34e21535a59cd3787e",
+    "src/utils/eventImpl.ts": "720c698d6802d30ca09641cf6f65bd3d05488533782f08ade56ee3d4efd2cb7d",
+    "src/utils/VideoObserver.ts": "ca47dbf4d7a3c3c756be108170d34aa55df02c6f5b895123dbfad4d031e91749",
+    "node_modules/@vot.js/core/dist/providers/base.js": "759a1fc03579690abe79a41d08c59900c0f4137ada6fe47f5878841efb2c8078",
+    "node_modules/@vot.js/core/dist/client.js": "f2516d7b9c8eb291b3c68427b0af49b6741a4fb881d82d1095d730ed43f498bc",
+    "node_modules/@vot.js/core/dist/protobuf.js": "44d9bf1274897ee2a1418f99a6c585281df5a0e9a00a20947e8e0e87450e44c3",
+    "node_modules/@vot.js/core/dist/types/providers/yandex.js": "fd02b309ee1bcfdbf3af3da7de2de6eda6fe7d2f485b9d8fc2fc65683d5edeb6",
+    "node_modules/@vot.js/core/dist/providers/yandex.js": "d193ffafd761112f62e95f176fe4ef27f0954e241003448644da3ddda1966048",
+    "node_modules/@vot.js/core/dist/providers/votworker.js": "24c0c9b9d7f5f70cf9caf4172ddf8e77f9c6f47f2c5b5f971c66af9ac9dbaa68",
+    "node_modules/@vot.js/ext/dist/client.js": "4812e4d177e82a87a6d579f19a0473810d57a02cb6e1e7112df8a82ca4474c9d",
+    "node_modules/chaimu/dist/config.js": "e9239303e7f3001e916a3b2ef2c7f6f1c1dcd680a2cd0af1a2250733f5d9ee09",
+    "node_modules/chaimu/dist/debug.js": "478e111f645cbfc610e2ff516f952e74b1d81d3045341ebef6b079bf11f67e11",
+    "node_modules/chaimu/dist/player.js": "b33095ef506c76327389cd3e50452d25f8e62e42bcd89c3410d5639a302c87d4",
+    "node_modules/chaimu/dist/client.js": "fe52d818c517a20d2c70a63e23e2172fed34ef85eb3fd1d4bb7cd98d40982ac6",
+    "src/core/cacheManager.ts": "eafb57717389ea5a0ad88123172995a003a24e9f50206704b1a7a3e208eaff6b",
+    "src/core/fullscreenHelper.ts": "2cf55b9518bb8f960e205c39406332da0de719b5ca73abca059d4a4129a80af0",
+    "src/core/overlayMountTargets.ts": "5c972068027952ef516263147e6b02cb0a466fcf3fe35b492ef919ef6bec9e5d",
+    "src/core/translateApis.ts": "b367df6321acff8bace20790044808b6549e00427f3c11c27dc332252da42f4d",
+    "src/audioDownloader/strategies/audioStrategy.ts": "91934eff700b06747391964218b071ce1bd078afe161d57b4ad420142568e822",
+    "src/audioDownloader/strategies/webAudioBridge.ts": "5cace855f90119dc56b739e9bbe5cc1d63683271342ef8188cb47af5a60bd2f6",
+    "src/audioDownloader/strategies/audioChunks.ts": "9f006a3ba84fd34a49bd3ec85a2ec0ec12c2ec968c905423c40a22c0090d9b79",
+    "node_modules/googlevideo/dist/protos/generated/misc/common.js": "43a88201b771e91766cc8d6cd80e0035bf961237267e4bd69df86a1d2d1f83a4",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/format_initialization_metadata.js": "bd9587337275f3d1c4dbbd3d02cdd7aaf7e3a82eab55dd0b57e9b5c64ac8e226",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/time_range.js": "54d25efc001a12fbef28695b35c2d765a3494a255b099bcfa36a57f55d9e68aa",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/media_header.js": "294569eddc81cc37b870027987790e8318a4a1a25a2d931f1f977f1d9906ddf6",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/buffered_range.js": "cd6a245235f1a5653b58ee825272bc50b9864586b382a9f699effad2fe8b679c",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/media_capabilities.js": "3d62a144493f3c3e893b0e2f5beddf0f2f36e6e65f6c6373e68356dbacefef2d",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/playback_cookie.js": "6e851b46c1f0fcf03d1a7582fd4977336dbc62e288ff0b40d1ff16425b9927b8",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/client_abr_state.js": "b2dbd41259a467cc80ae6977ff13b6cab782ba60c787369811830382157219a9",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/streamer_context.js": "1cfa40bd0f41a21cf01d949681721cfce94e1fdea599f83b9c7cd0979cd38c57",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/video_playback_abr_request.js": "4f721611909b7cb65ec288f73bf70563aefdad295c8b1d033bec59e995d996d6",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/next_request_policy.js": "1ace14ecaf6d4ccd01ace5355f975d62c57c6c25697c2a6dd0352e0e427fdd48",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/sabr_error.js": "44fa0f6952e067fbdee981b326e3f2a4411cdb504f81921dbf7c8ac54abf103c",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/sabr_redirect.js": "39d2cb1c6dac7a4864e38288676b94a865d7056aeb9dba0e1dddf60e7bb1a28c",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/reload_player_response.js": "b3c08752ff1436b843576f5c202a81cbeeb77fa2ebaec7c26dc6b5d4556cafc6",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/sabr_context_update.js": "ae422c8f4e1e7d1b4e58420c1f3e002e748b8ab6b713f4049202dd2d48e231aa",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/sabr_context_sending_policy.js": "5ca3b7d5e8170b5df064b3ed759faab97452937396e9af8cb8c7322da8a6eead",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/stream_protection_status.js": "6a022b4e8fd5e403a4f08f098077b2eb6c7ea61eb91cb91946e67324560d9ac5",
+    "node_modules/googlevideo/dist/protos/generated/video_streaming/ump_part_id.js": "ed5dc850b3189824ee37687f66a2a8459bc30d6a3d8b5d6c92dd304d69c6308b",
+    "node_modules/googlevideo/dist/src/utils/Logger.js": "4d96106ecdf5fbf203edf8cb42f713a22c1ee2a23ec9b0eb2850c8f0b9ebaf51",
+    "node_modules/googlevideo/dist/src/utils/shared.js": "9e407c89f577e1e5dbccf41ab62f803f90f383e33b908b2c440e86798c3dfeac",
+    "node_modules/googlevideo/dist/src/utils/EventEmitterLike.js": "3948b348bb0e1cb96ed6f30685e8008f7dd0c19dcea42c3ae8560d7920a471aa",
+    "node_modules/googlevideo/dist/src/utils/formatKeyUtils.js": "5d211a22bd65992ff8a36dacd9e051860ffc9445af6b88cc37c3f2020fe22fb1",
+    "node_modules/googlevideo/dist/src/utils/sabrStreamUtils.js": "4534f534c29224b4ba2610aec75bf2aa2021d8edb52cbd61a6dbce186925d829",
+    "node_modules/googlevideo/dist/src/core/CompositeBuffer.js": "ef04eec39daaf533da5c8811b654cb3292af732132ad598d88c698b4bb2c57f7",
+    "node_modules/googlevideo/dist/src/core/UmpReader.js": "5e3507d1bc885919d4f6ea7ecb8f4dfd2cace6aae866fcaba33cd2871f1f43c9",
+    "node_modules/googlevideo/dist/src/core/SabrStream.js": "7016718043891a13001aeb2ac47b2e6b2b029f3c1ee19f745ede532317527936",
+    "src/audioDownloader/utils.ts": "3cc43f6b92f69303fc815ccabec6f0e701f67e76373dc9815502b278a7a0716b",
+    "src/audioDownloader/strategies/ytPlayerSolver.js": "29ed7a8629cf067aeff92b63a15cdaa31c2dbd6c1be98dbf1417de31ae8c0394",
+    "src/audioDownloader/strategies/safariPageBridge.ts": "3e26da30b72087540cbbe392a69cb178b3ebab2f02865bf11e2a0d15010a138f",
+    "src/audioDownloader/strategies/youtubePage.ts": "55fde638fc1dfebb58b48273b9468a619bc664d1f66aa58528179c2d8b91f936",
+    "src/audioDownloader/strategies/youtubePoToken.ts": "ac823c23da218d4ecba3ae3821888b3f000c885a6267f2a62ef5d8c83de8b4d9",
+    "src/audioDownloader/strategies/webAbr.ts": "6fa7375bdba70c17b7aceef36a3df62dc312b9f73458f6599e00a5b49e599583",
+    "src/audioDownloader/strategies/youtubeSabrPlayer.ts": "3581ae46c72f14430434230c87d686117a7c26093a5f6d05cd6602b6ac016580",
+    "src/audioDownloader/strategies/youtubeSabrSupport.ts": "1370c04d6561263372187a1cf9a06ce25292e9c87023e91ce8e2a26027ed2390",
+    "src/audioDownloader/strategies/youtubeSabr.ts": "9683893aa3275cc9202657775c654437fae4020037d53be6005f7f3345a44cd3",
+    "src/audioDownloader/strategies/youtubeSabrStrategy.ts": "d1fa7c631dd398c2cab522a723cc260e98a0eb9227c9065e40a2cc0e92ed96a4",
+    "src/audioDownloader/strategies/youtubeWebAbr.ts": "6f911f612ebc1ad39879a653a121c6f7d4bc5b18df9ee76e3440522171a22cea",
+    "src/audioDownloader/strategies/mseProxyHandler.ts": "d3568ccc59bba2806b0c2c1a70fec33921c03632850f89d9aece9a8264d985db",
+    "src/audioDownloader/strategies/index.ts": "72a97715479b3470fe4eb9cbbdba6035dc2b27401bb74cb363c8309a913f8b89",
+    "src/audioDownloader/index.ts": "8b1e36fed037bcbb6a21e44d0f001307e392bbed4c3996877d1015c5ae72bae1",
+    "src/utils/account.ts": "707ef88ab366925c5fec5b18cebed6854daf2fa5d07aaa31a1dbc11deed679b2",
+    "src/VOTLocalizedError.ts": "5eb673ffa6da9bff73f597ff9a3bff8aea711c137f61301e09dcbb9f86aaa282",
+    "src/core/authWindow.ts": "bcd904ac254ffabc548d1bda0e43543d4a6ea0f8b038e0faaddf1c5449c21801",
+    "src/core/translationAuthError.ts": "e98436faa79033007ad5ac5e1fb145f156e7def15bbbfae678005692dd3b8482",
+    "src/core/translationErrors.ts": "c824b4021af9e7ce3c3c1a08daa4d1fd085cb8644bdf5ede631d975f13cd7b0e",
+    "src/utils/timeFormatting.ts": "73e4a62313fb98c09d335b53ee6ea8304e8e2491beb4308591976b943c0785cd",
+    "src/core/translationEtaCountdown.ts": "605052f1b8890cb2fc50835f1251a7aca2ce530cdb674d88c1036106f34fbbbf",
+    "src/core/translationHandler.ts": "03ea5b51e35fb0f21bdc8d4a99df923465b7aca824327db819e22415804cd5a9",
+    "src/core/translationOrchestrator.ts": "0ff345e0fb6dad1df040d714c5b72773f6af9242b3e458502718256724c2103e",
+    "src/core/lifecycleShared.ts": "8c021c0759df01f7bf3a10112cf608e7b463ad7227e4c43ab0afb1fea648f4ba",
+    "src/core/videoLifecycleController.ts": "910baac3750ec0ffa770013c1a660c0d31a89f0c5e456488fd4267001f0d347c",
+    "src/core/videoLifecycleHost.ts": "fcd6ac09d88e675be192134abb9263edf62833924f7e3f5111b5f739ba459b1f",
+    "src/utils/text.ts": "14b6ace2a54504db07b2e186b1576306638cd5f3fd167b637170c6a1601e0799",
+    "src/utils/volume.ts": "46d27b41883b2adadeb97f83e1c954a088f8d341625f31367bf5d656f1e2f9aa",
+    "src/core/hostPolicies.ts": "3a00294e417b91ed3284bfb68a5e63e9c46abc421704e28d2e184b1042fa6e69",
+    "src/core/videoManager.ts": "9837b2d5a68a3d02767a67825f2268127b25eb2dc836342a94d1e1cfc9d3290d",
+    "src/notify.ts": "ad0eca27c48947970d4aba09014f3023d635d02c4d52df211cc438c80065e171",
+    "node_modules/lit-html/lit-html.js": "51029ec9963a1666f00f0ab839f4243ff71d84f6d852181ceaedc06aed212e6c",
+    "src/ui/components/componentShared.ts": "5849396e9beb08b0975322f1a8e1817c06ab5aedb0e377a848251a4831cfba20",
+    "src/ui.ts": "b4dd5340d3fc580d522688d257cb10d839d4829f98b6a357fe8d2f31f4700157",
+    "src/types/components/tooltip.ts": "abc156d4e04262138e7823b3b46564a903ade25cf32def93079b0f9dd59a94d8",
+    "src/ui/components/tooltip.ts": "1b6df6ddb9a29f52515ec482345456643dafa689e1b76d023aac522736551d64",
+    "src/ui/shadowMount.ts": "43de465d304bddda73b3cf73a4c67a5a672823d65d0eca23ca6d66d2d5e47ebd",
+    "src/subtitles/layoutController.ts": "b556fe4c5b6bc7fc71b9c3a462ad4b2f86f6b8f6f6567899036269c7fec4c10e",
+    "src/subtitles/activeCues.ts": "8d8bbd9f9356dccecc85a4dfbf8b44be843910dbb1a95d3036efb3e282d17bc8",
+    "src/types/subtitles.ts": "4306fa3e764d74bb394e5c745d4f62b0351035adce2359c488d2fad6c1475370",
+    "src/subtitles/types.ts": "cedb84eb72265ed74a2311ae4076139e19bb821f8d644956174f26c79c28c765",
+    "src/subtitles/fonts.ts": "feb40c67049a57f168b837be879f6048c3141c32637cae468a53685f88a6f504",
+    "src/subtitles/fullscreenLayerController.ts": "8d427605dcf9d1af011d051fda357b853c43eb43929492aedaebbd93d98b387e",
+    "src/subtitles/inlineStyle.ts": "4fdeaa879cced159cf0dde2fb947ecd769c2ad12bf1a8e03221ec46047e2557d",
+    "src/subtitles/positionController.ts": "3c4bceaee6abd120eaf8308687dab9386822f2261dfeb6b0fa592a8eaec98f82",
+    "src/subtitles/renderPlan.ts": "22258b524f13718e6dc46e0c282ca26415825a850dcfa2d3b9d18b99850cb8a0",
+    "src/subtitles/smartLayout.ts": "3bee1a128eada83c2f92d278906e6aeb9303de46445617f64088c1c2cd4e4d81",
+    "src/subtitles/smartWrap.ts": "e18509ae29e499157b8fe3a55945aedbe6921d12e797cfbf9e1b1f5d6f66cf0d",
+    "src/shims/rvfc-polyfill.ts": "ac9fa364c95a43f0eab1fb74e3ef05ef16af50f6ea70683e3f19c6da4ea28282",
+    "src/subtitles/widget.ts": "b290d290e5bd430150f0e2f22e13fb4a94d5c4f3a0aebe38d5977c95e7b6330e",
+    "src/utils/download.ts": "69f62f2f9cccef7b7e56400faac54096dd0b2bd8d76b3c9b124ee0728c5e3182",
+    "src/subtitles/displayModel.ts": "5a7ca204c878f120a76a66cf8115efe5bedabd8f508df83879c2726d320c10c9",
+    "src/subtitles/standards.ts": "6d60e80de1676d6f13b5b4360a7c9ef6cd55e84d12dfb3d4c0f809143365de92",
+    "src/videoHandler/translationVolume.ts": "012acad9a926c1015ada1613caaf301940863fc9d541304983108e72655b0bb9",
+    "src/ui/buttonPlacement.ts": "bc8e931147cff37db8f3c6ef05af2f6900a93e7ed1825efe7918ccfb862c54b1",
+    "src/ui/mount.ts": "9aa061418bb0e1db0b0b488ec2980c6a343fa793bfd140c0cabaade199053f57",
+    "src/ui/translationCommands.ts": "b58411ea74d1cc5584210c903a24b90f98fe7b36ce80ca6c5a78b190e50de55e",
+    "src/utils/inputDevice.ts": "4a330710a4a3b5f2c2de4d2e4a90980efc44d21942190b9baef05c93377476b1",
+    "src/ui/icons.ts": "71154bd18252e6b5cd9c3e614210051744ecaebad6126c6fdf15a25ef024f4f3",
+    "src/ui/components/downloadButton.ts": "37057955f8650d42c82c8f190be29a778c82353b9d2fc659e8bbf131dd6a7edf",
+    "src/ui/components/label.ts": "07b8607cccd3973b1f7c14a2f93fcb57d69fbd83f20fe37ee6581cb7c5b81a39",
+    "src/ui/components/dialog.ts": "2ce2c0cc9acfd279dface422000deec95d7cbd760b7188bad5fce98c1e00dfaf",
+    "src/ui/components/textfield.ts": "2aa874ad72e3b2670031efc79fb00c8b7a58c7467a0bc1f56e203195595b2be7",
+    "src/ui/components/select.ts": "008e185ad1e87de576f2bad7cfc7231e35c31d7b7df78b3c754c6551b50432d4",
+    "src/ui/components/languagePairSelect.ts": "db697adbc64e66bf7fb1814aeed8600b35916446c490564368c20a3649a47463",
+    "src/ui/components/slider.ts": "acc0298e5db6c4b1cabda35625c785454018122d17f7527b9878177e83e59d52",
+    "src/ui/components/sliderLabel.ts": "0f7de5be75a2a04d38f66600b0c97da73b32fc24b0141a6007eec5077f9f6c66",
+    "src/ui/components/voicePopover.ts": "599388ce74917c17c7d2ae6e1a9d0b7409450cee3c4b1aa46dd63e7a24acb791",
+    "src/ui/components/votButton.ts": "87f4e1ac30ee51071a07725160d1ede6236cbb622c12587f9c471dd17d37069e",
+    "src/ui/components/votMenu.ts": "ef15a169c826d635de8f9f25ac8b87a12e419894990fc28f9311ce6d649f3eab",
+    "src/ui/views/overlay.ts": "32fc97e6b2c5944d47c31d8409cb37df182df05c56206d414055675f8771bfc3",
+    "src/types/components/votButton.ts": "95f6e048d9f7309f60e3aad90324930fbd43230bdf25b4ed749ad63051540a11",
+    "src/videoHandler/shared.ts": "9795f30b79e456219238803f3b527ad241b1e31e16db5396d14beb6ead5f947f",
+    "src/ui/components/accountButton.ts": "65d756087bdbd975e6bcef1e0d26fb1d9e5230248ab0cf51db9595fea658b958",
+    "src/ui/components/checkbox.ts": "9a9dff312c6996759b4785ac51a47cfed5f71d0017ebc4785a782773371b13ed",
+    "src/ui/components/details.ts": "56a77e2949d86996536646427bd60509511674fd967abb2559af7776d1ddc813",
+    "src/ui/components/hotkeyButton.ts": "0d812a9fc0221947cc2cec68f20ab5fcf911803e995b39770de98c4062ef83f4",
+    "src/ui/views/settings.ts": "a5b79d754a8ad591c7e485e7f603f813cde547d54d2a0f5dc96b57ac2282fb26",
+    "src/ui/manager.ts": "d283f8e82368f78cd386341c6512123bbf85f89e7becbb358aff5898696baa94",
+    "src/ui/overlayVisibilityController.ts": "9b95df9282051be00c8853cd375c082459ca0d0ebb0ac55a70352321395763b6",
+    "src/core/platformEvents.ts": "b2f68727c0e3fce2c1089bed06538dba2fde6f7cbe17b6414a73cd673c135bcf",
+    "src/videoHandler/modules/ducking.ts": "414209cf2fe291c1cffdf57afe9d7dc0375ee1a08a6617bac8fb1dc29ef0a190",
+    "src/videoHandler/modules/smartDuckingRuntime.ts": "7af22d95b288700fc62a5745ffb22fa450b6e03c4763319592a1e0c8ad0abba7",
+    "src/videoHandler/modules/proxyShared.ts": "174cf3e215086cdc52ea7c6227c06a71913bde17ed44c3700b882b0a2cea38fc",
+    "src/videoHandler/modules/subtitlesShared.ts": "30923c58da084ba1518a9558a06408f77f3b3566876b2a40ad0c5cf0945a2c3f",
+    "src/videoHandler/modules/translationShared.ts": "a984c1636204569aa5790e0037e32d9309ce01a383065e3eef8667cf5df97ea7",
+    "src/videoHandler/modules/translationPlayback.ts": "e08e8928dc55ed8439ae0a68fa3566744a2b4d66d04799f0918e66b484271809",
+    "src/videoHandler/modules/events.ts": "f75c7a43b7b4e26995e86d1ce47c9dca1ff005c8b95450f26d5c644216efc18a",
+    "src/videoHandler/modules/init.ts": "f43478deb196695e3caa4d4d21ef2bd962122a0b5640acfedcb5f587a01d6896",
+    "src/subtitles/segmenter.ts": "a28b9374d78bf10048b0d6824bbc0b5225319e1b13f4254d0865551a137218e8",
+    "src/subtitles/textSpacing.ts": "11fbd6ecc3c25419428b4b686ec134674bb0f270d14c2deb925d24dcf8e595e5",
+    "src/subtitles/autoMerge.ts": "c0468598bbb91adc6511643ddc54f988462d3daf337cc27877f60d8d23acadee",
+    "src/subtitles/processor.ts": "2a2cef24dd41a4fd729268df393a2b56e8ef122af65f72357416e3afe351c8a4",
+    "src/videoHandler/modules/subtitles.ts": "b8abbac150a511520c5625e967182a78b7277dd9e77b24afa48bcb31ab5ddfcf",
+    "src/videoHandler/volumeLink.ts": "e78636af6e7c27e3962da21d5498388b4e55fd938b1478000bf64aa53702056c",
+    "src/VideoHandler.ts": "7588f4532bc0a3e4801e944a9385fd7c98c1fb30b1abf0fb67e918e9276ff453"
+  },
+  "savedAt": "2026-10-18T18:41:35.910227+00:00"
+}

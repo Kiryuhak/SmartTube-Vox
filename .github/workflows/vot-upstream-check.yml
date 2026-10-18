@@ -1,0 +1,62 @@
+name: VOT Upstream Check
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-vot-upstream:
+    name: Check VOT Upstream Updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@0a5c61591373683505ea898e09a6ea1c87746258 # v5.4.0
+        with:
+          python-version: '3.11'
+
+      - name: Run Upstream Sync Unit Tests
+        run: |
+          python3 -m unittest scripts/test_vot_upstream_sync.py
+
+      - name: Check Live Upstream for Changes
+        id: sync_check
+        run: |
+          mkdir -p build/reports
+          set +e
+          python3 scripts/vot_upstream_sync.py --check --strict
+          EXIT_CODE=$?
+          echo "EXIT_CODE=$EXIT_CODE" >> $GITHUB_ENV
+          set -e
+
+      - name: Upload Diff Reports
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: vot-upstream-diff
+          path: |
+            docs/vot-upstream-diff.md
+            build/reports/vot-upstream-diff.json
+          if-no-files-found: ignore
+
+      - name: Evaluate Upstream Status
+        run: |
+          if [ "${{ env.EXIT_CODE }}" = "0" ]; then
+            echo "✅ Upstream userscript is identical to local reference (NO_CHANGE)."
+          elif [ "${{ env.EXIT_CODE }}" = "1" ]; then
+            echo "::warning title=VOT Upstream Review Required::Upstream changes detected in ilyhalight/voice-over-translation. Review docs/vot-upstream-diff.md artifact before manual adaptation."
+            echo "STATUS: REVIEW_REQUIRED"
+          else
+            echo "::error title=VOT Upstream Check Failed::Check failed with error code ${{ env.EXIT_CODE }}."
+            exit 1
+          fi

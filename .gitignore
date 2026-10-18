@@ -96,3 +96,8 @@ node_modules/
 .dev.vars
 .dev.vars.*
 /release_staging/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

@@ -222,6 +222,7 @@ SmartTube VOX придерживается строгой политики за�
 - [Политика автоматической телеметрии в предварительных версиях](docs/BETA_DIAGNOSTICS_POLICY.md)
 - [Матрица совместимости кодеков и сетевых транспортов ТВ](docs/VOX_COMPATIBILITY_AUDIT.md)
 - [Правило предотвращения дублирования данных](docs/ANTI_DUPLICATION_RULE.md)
+- [Синхронизация с upstream VOT userscript](docs/vot-upstream-sync.md)
 
 ---
 
