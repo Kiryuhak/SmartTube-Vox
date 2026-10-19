@@ -75,18 +75,26 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
         if (channelId != null) {
             return VoxUpdateChannel.fromId(channelId)
         }
-        return if (getBuildChannel().isPreRelease) VoxUpdateChannel.TEST else VoxUpdateChannel.STABLE
+        val pkg = context.packageName ?: ""
+        if (pkg.contains("otaqa") || pkg.contains("qa")) {
+            return VoxUpdateChannel.QA
+        }
+        val buildChannel = getBuildChannel()
+        if (buildChannel == VoxBuildChannel.QA) {
+            return VoxUpdateChannel.QA
+        }
+        return if (buildChannel.isPreRelease) VoxUpdateChannel.BETA else VoxUpdateChannel.STABLE
     }
 
     /**
      * Устанавливает канал обновлений.
-     * При переходе с TEST на STABLE согласие на бета-диагностику автоматически аннулируется.
+     * При переходе с BETA на STABLE согласие на бета-диагностику автоматически аннулируется.
      */
     fun setUpdateChannel(channel: VoxUpdateChannel) {
         val previous = getUpdateChannel()
         prefs.edit().apply {
             putString(KEY_UPDATE_CHANNEL, channel.id)
-            if (previous == VoxUpdateChannel.TEST && channel == VoxUpdateChannel.STABLE) {
+            if ((previous == VoxUpdateChannel.BETA || previous == VoxUpdateChannel.TEST) && channel == VoxUpdateChannel.STABLE) {
                 putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
             }
             apply()
@@ -104,7 +112,15 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
      * Проверяет, активен ли тестовый/бета канал.
      */
     fun isBetaChannel(): Boolean {
-        return getUpdateChannel() == VoxUpdateChannel.TEST
+        val ch = getUpdateChannel()
+        return ch == VoxUpdateChannel.BETA || ch == VoxUpdateChannel.TEST
+    }
+
+    /**
+     * Проверяет, активен ли изолированный канал стенда QA.
+     */
+    fun isQaChannel(): Boolean {
+        return getUpdateChannel() == VoxUpdateChannel.QA
     }
 
     /**

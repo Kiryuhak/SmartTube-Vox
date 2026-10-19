@@ -39,4 +39,44 @@ class NoDowngradeTest {
         assertFalse(VoxVersionComparator.isUpdateAvailable("32.56-vox.8.2-rc1", "32.56-vox.8.2-beta.1"))
         assertFalse(VoxVersionComparator.isUpdateAvailable("32.56-vox.8.2-rc2", "32.56-vox.8.2-rc1"))
     }
+
+    @Test
+    fun testMonotonicVersionCodeBlocksDowngrade() {
+        // installed versionCode = 2446092, candidate = 2446091 -> false
+        assertFalse(VoxVersionComparator.isUpdateAvailable(
+            "32.56-vox.9.2-otaqa.2",
+            "32.56-vox.9.1-otaqa.1",
+            VoxUpdateChannel.QA,
+            installedVersionCode = 2446092L,
+            targetVersionCode = 2446091L
+        ))
+
+        // same versionCode = 2446092 -> false
+        assertFalse(VoxVersionComparator.isUpdateAvailable(
+            "32.56-vox.9.2-otaqa.2",
+            "32.56-vox.9.2-otaqa.2",
+            VoxUpdateChannel.QA,
+            installedVersionCode = 2446092L,
+            targetVersionCode = 2446092L
+        ))
+
+        // newer versionCode = 2446093 -> true
+        assertTrue(VoxVersionComparator.isUpdateAvailable(
+            "32.56-vox.9.2-otaqa.2",
+            "32.56-vox.9.3-otaqa.3",
+            VoxUpdateChannel.QA,
+            installedVersionCode = 2446092L,
+            targetVersionCode = 2446093L
+        ))
+    }
+
+    @Test
+    fun testDevBuildCannotBeDowngradedToOlderStable() {
+        // Section 51
+        assertFalse(VoxVersionComparator.isUpdateAvailable(
+            "32.56-vox.9.1-dev",
+            "32.56-vox.9",
+            VoxUpdateChannel.STABLE
+        ))
+    }
 }

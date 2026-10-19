@@ -1035,17 +1035,22 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
             String marker = context.getSharedPreferences("ota_test_prefs", Context.MODE_PRIVATE)
                     .getString("safe_marker", "NONE");
             Log.i("VOX_OTA_TEST", "getSafeMarker: " + marker);
+        } else if ("getQaGeneration".equalsIgnoreCase(action)) {
+            int gen = com.liskovsoft.smartyoutubetv2.tv.BuildConfig.OTA_QA_GENERATION;
+            Log.i("VOX_OTA_TEST", "getQaGeneration: " + gen);
         } else if ("setChannel".equalsIgnoreCase(action)) {
             String ch = intent.getStringExtra("channel");
-            boolean isBeta = "beta".equalsIgnoreCase(ch);
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel channel =
+                    com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel.fromId(ch);
             com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context)
-                    .setUpdateChannel(isBeta ? com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel.TEST : com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel.STABLE);
-            Log.i("VOX_OTA_TEST", "setChannel: " + ch + " (isBeta=" + isBeta + ")");
+                    .setUpdateChannel(channel);
+            Log.i("VOX_OTA_TEST", "setChannel: " + ch + " (channel=" + channel.getId() + ")");
         } else if ("checkUpdate".equalsIgnoreCase(action)) {
             String currentVersion = com.liskovsoft.sharedutils.helpers.AppInfoHelpers.getAppVersionName(context);
-            boolean isBeta = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).isBetaChannel();
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel channel =
+                    com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getUpdateChannel();
             com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context)
-                    .checkForUpdates(currentVersion, null, isBeta, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+                    .checkForUpdates(currentVersion, null, channel, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
                         @Override
                         public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo release, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset asset) {
                             Log.i("VOX_OTA_TEST", "checkUpdate onUpdateAvailable: version=" + release.getVersionName() + " asset=" + asset.getName());
@@ -1071,9 +1076,10 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                     });
         } else if ("downloadAndVerify".equalsIgnoreCase(action)) {
             String currentVersion = com.liskovsoft.sharedutils.helpers.AppInfoHelpers.getAppVersionName(context);
-            boolean isBeta = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).isBetaChannel();
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel channel =
+                    com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getUpdateChannel();
             com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.instance(context)
-                    .checkForUpdates(currentVersion, null, isBeta, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
+                    .checkForUpdates(currentVersion, null, channel, true, new com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager.Callback() {
                         @Override
                         public void onUpdateAvailable(com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseInfo release, com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxReleaseAsset asset) {
                             Log.i("VOX_OTA_TEST", "downloadAndVerify starting download for asset: " + asset.getName());

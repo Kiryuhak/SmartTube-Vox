@@ -5,12 +5,20 @@ package com.liskovsoft.smartyoutubetv2.common.vox.ota
  */
 enum class VoxUpdateChannel(val id: String, val titleRu: String, val descriptionRu: String) {
     STABLE("stable", "Стабильный", "Только проверенные стабильные релизы"),
-    TEST("test", "Тестовый (Beta)", "Ранний доступ к новым функциям и исправлениям (возможна нестабильная работа)");
+    BETA("beta", "Бета (Beta)", "Ранний доступ к новым функциям и исправлениям (возможна нестабильная работа)"),
+    QA("qa", "Тестовый стенд (QA)", "Внутренний изолированный канал OTA LAB");
 
     companion object {
+        @JvmField
+        val TEST = BETA
+
         @JvmStatic
         fun fromId(id: String?): VoxUpdateChannel {
-            return if (id.equals("test", ignoreCase = true) || id.equals("beta", ignoreCase = true)) TEST else STABLE
+            return when {
+                id.equals("qa", ignoreCase = true) || id.equals("otaqa", ignoreCase = true) -> QA
+                id.equals("beta", ignoreCase = true) || id.equals("test", ignoreCase = true) -> BETA
+                else -> STABLE
+            }
         }
     }
 }
@@ -23,7 +31,8 @@ enum class VoxBuildChannel(val id: String, val titleRu: String, val isPreRelease
     ALPHA("alpha", "Альфа (Alpha)", true),
     BETA("beta", "Бета (Beta)", true),
     RC("rc", "Кандидат в релиз (RC)", true),
-    STABLE("stable", "Стабильный (Stable)", false);
+    STABLE("stable", "Стабильный (Stable)", false),
+    QA("qa", "Тестовый стенд (QA)", true);
 
     companion object {
         @JvmStatic
@@ -36,11 +45,13 @@ enum class VoxBuildChannel(val id: String, val titleRu: String, val isPreRelease
                     VoxReleaseStage.DEV -> DEV
                     VoxReleaseStage.ALPHA -> ALPHA
                     VoxReleaseStage.BETA -> BETA
+                    VoxReleaseStage.QA -> QA
                     VoxReleaseStage.RC -> RC
                     VoxReleaseStage.STABLE -> BETA // Minor versions (9.1, 9.2, 10.1...) are canonical Betas
                 }
             }
             return when {
+                lower.contains("otaqa") || lower.contains("-qa") -> QA
                 lower.contains("-dev") -> DEV
                 lower.contains("-alpha") -> ALPHA
                 lower.contains("-beta") || lower.contains("beta") -> BETA
@@ -77,14 +88,17 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     TLS_ERROR("Ошибка защищенного соединения (TLS/SSL)"),
     HTTP_ERROR("Ошибка HTTP-сервера обновлений"),
     RATE_LIMIT("Сервер временно ограничил частоту проверок. Попробуйте позже."),
+    RATE_LIMITED("Сервер временно ограничил частоту проверок. Попробуйте позже."),
     RELEASE_NOT_FOUND("Данные обновления не найдены на сервере"),
     INVALID_RELEASE("Некорректный формат данных обновления"),
+    INVALID_METADATA("Некорректный формат данных обновления"),
     VERSION_NOT_NEWER("У вас установлена последняя версия"),
     CHANNEL_MISMATCH("Обновление не соответствует выбранному каналу"),
     PARSE_ERROR("Ошибка обработки данных обновления"),
     NO_COMPATIBLE_ASSET("Не найден подходящий файл обновления для вашего устройства"),
     UNIVERSAL_ASSET_NOT_FOUND("Не найден универсальный пакет обновления."),
     ASSET_DOWNLOAD_FAILED("Не удалось скачать обновление"),
+    DOWNLOAD_ERROR("Не удалось скачать обновление"),
     HASH_MISMATCH("Ошибка проверки целостности обновления (не совпадает SHA-256)"),
     SIGNATURE_MISMATCH("Цифровая подпись обновления не совпадает с установленным приложением"),
     SIGNATURE_UNKNOWN("Не удалось проверить цифровую подпись обновления"),
@@ -93,9 +107,11 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     DOWNLOAD_INCOMPLETE("Файл обновления загружен не полностью"),
     INVALID_CONTENT("Сервер вернул некорректный ответ вместо файла обновления"),
     APK_INVALID("Пакет обновления повреждён или не является APK"),
+    VERIFY_ERROR("Не удалось проверить файл обновления"),
     INSTALL_PERMISSION("Для установки обновления требуется разрешение в настройках системы"),
     INSTALL_CANCELLED("Установка обновления была отменена"),
     INSTALL_FAILED("Не удалось запустить установку обновления"),
+    INSTALL_ERROR("Не удалось запустить установку обновления"),
     STORAGE_LOW("Недостаточно свободного места на устройстве для обновления"),
     INSTALL_INTENT_FAILED("Не удалось открыть программу установки обновления"),
     PERMISSION_REQUIRED("Для установки обновления требуется разрешение"),
@@ -107,7 +123,15 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     companion object {
         val OTA_NO_UPDATE get() = NO_UPDATE
         val OTA_RATE_LIMIT get() = RATE_LIMIT
+        val OTA_RATE_LIMITED get() = RATE_LIMITED
         val OTA_NETWORK_ERROR get() = NETWORK_ERROR
+        val OTA_DNS_ERROR get() = DNS_ERROR
+        val OTA_TLS_ERROR get() = TLS_ERROR
+        val OTA_TIMEOUT get() = TIMEOUT
+        val OTA_INVALID_METADATA get() = INVALID_METADATA
+        val OTA_DOWNLOAD_ERROR get() = DOWNLOAD_ERROR
+        val OTA_VERIFY_ERROR get() = VERIFY_ERROR
+        val OTA_INSTALL_ERROR get() = INSTALL_ERROR
         val OTA_HTTP_ERROR get() = HTTP_ERROR
         val OTA_DOWNLOAD_INCOMPLETE get() = DOWNLOAD_INCOMPLETE
         val OTA_INVALID_CONTENT get() = INVALID_CONTENT

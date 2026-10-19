@@ -8,8 +8,9 @@ enum class VoxReleaseStage(val level: Int) {
     DEV(0),
     ALPHA(1),
     BETA(2),
-    RC(3),
-    STABLE(4);
+    QA(3),
+    RC(4),
+    STABLE(5);
 }
 
 /**
@@ -37,6 +38,9 @@ object VoxVersionComparator {
 
         val isDev: Boolean
             get() = stage == VoxReleaseStage.DEV
+
+        val isQa: Boolean
+            get() = stage == VoxReleaseStage.QA
 
         val rcNumber: Int?
             get() = if (stage == VoxReleaseStage.RC) stageNumber else null
@@ -71,6 +75,10 @@ object VoxVersionComparator {
         if (tagStr.isNullOrBlank()) return Pair(VoxReleaseStage.STABLE, 0)
         val clean = tagStr.lowercase().trim().removePrefix("-").removePrefix(".")
         return when {
+            clean.startsWith("otaqa") || clean.startsWith("qa") -> {
+                val num = Regex("\\d+").find(clean)?.value?.toIntOrNull() ?: 1
+                Pair(VoxReleaseStage.QA, num)
+            }
             clean == "dev" -> Pair(VoxReleaseStage.DEV, 0)
             clean.startsWith("alpha") -> {
                 val num = Regex("\\d+").find(clean)?.value?.toIntOrNull() ?: 1
@@ -150,28 +158,64 @@ object VoxVersionComparator {
 
     /**
      * Проверяет, доступно ли обновление targetVersion для currentVersion.
-     * Учитывает политику каналов:
-     * - На стабильном канале pre-release сборки (dev/beta/rc) игнорируются для пользователей стабильной ветки.
-     * - На тестовом канале доступны любые более новые версии (pre-release и stable).
-     * - Защита от даунгрейда: более старая версия никогда не предлагается как обновление.
+     * Учитывает политику каналов и защиту от даунгрейда.
      */
     @JvmStatic
     @JvmOverloads
-    fun isUpdateAvailable(currentVersion: String?, targetVersion: String?, isBetaChannel: Boolean = false): Boolean {
+    fun isUpdateAvailable(
+        currentVersion: String?,
+        targetVersion: String?,
+        channel: VoxUpdateChannel = VoxUpdateChannel.STABLE,
+        installedVersionCode: Long = 0L,
+        targetVersionCode: Long? = null
+    ): Boolean {
         val curr = parseVersion(currentVersion) ?: return false
         val target = parseVersion(targetVersion) ?: return false
+
+        // Инвариант монотонности versionCode: candidate.versionCode > installedVersionCode
+        if (installedVersionCode > 0L && targetVersionCode != null && targetVersionCode <= installedVersionCode) {
+            return false
+        }
 
         // Правило защиты от даунгрейда
         if (curr >= target) {
             return false
         }
 
-        // Правило канала: на стабильном канале pre-release сборки (beta, dev, rc, minor versions 9.x) никогда не предлагаются
-        // если текущая версия пользователя стабильная
-        if (!isBetaChannel && !curr.isPreRelease && target.isPreRelease) {
+        // Dev build policy (Section 51):
+        // e.g. installed: 32.56-vox.9.1-dev, target: 32.56-vox.9 stable -> downgrade blocked
+        if (curr.isDev && !target.isDev && curr.voxMajor == target.voxMajor && curr.voxMinor > target.voxMinor) {
             return false
         }
 
+        // Изоляция каналов
+        when (channel) {
+            VoxUpdateChannel.QA -> {
+                // QA клиент видит только QA обновления
+                if (!target.isQa) return false
+            }
+            VoxUpdateChannel.STABLE -> {
+                // Стабильный клиент никогда не видит QA обновления
+                if (target.isQa) return false
+                // Стабильный клиент на стабильной версии никогда не видит pre-release сборки
+                if (!curr.isPreRelease && target.isPreRelease) return false
+            }
+            VoxUpdateChannel.BETA -> {
+                // Бета клиент никогда не видит QA обновления
+                if (target.isQa) return false
+                // Бета клиент принимает более новые beta или stable
+            }
+        }
+
         return true
+    }
+
+    @JvmStatic
+    fun isUpdateAvailable(currentVersion: String?, targetVersion: String?, isBetaChannel: Boolean): Boolean {
+        return isUpdateAvailable(
+            currentVersion,
+            targetVersion,
+            if (isBetaChannel) VoxUpdateChannel.BETA else VoxUpdateChannel.STABLE
+        )
     }
 }

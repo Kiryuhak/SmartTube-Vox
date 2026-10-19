@@ -23,7 +23,7 @@ object VoxOtaReleaseParser {
     @JvmOverloads
     fun parseRelease(
         jsonString: String?,
-        isBetaChannel: Boolean = false,
+        channel: VoxUpdateChannel = VoxUpdateChannel.STABLE,
         currentVersion: String? = null,
         installedVersionCode: Long = 0L
     ): VoxReleaseInfo {
@@ -47,13 +47,13 @@ object VoxOtaReleaseParser {
                     throw VoxOtaException(VoxOtaErrorCode.RELEASE_NOT_FOUND, "Release list is empty")
                 }
 
-                val best = selectBestRelease(allReleases, currentVersion, isBetaChannel, installedVersionCode)
+                val best = selectBestRelease(allReleases, currentVersion, channel, installedVersionCode)
                 if (best != null) {
                     return best
                 }
 
                 // Если не найден подходящий релиз в списке
-                val channelName = if (isBetaChannel) "beta" else "stable"
+                val channelName = channel.id
                 throw VoxOtaException(
                     VoxOtaErrorCode.NO_UPDATE,
                     "No compatible update found in release list for version: $currentVersion, channel: $channelName"
@@ -66,13 +66,29 @@ object VoxOtaReleaseParser {
             if (root.has("tag_name") && root.has("assets")) {
                 val release = parseGitHubRelease(root)
                 val parsed = VoxVersionComparator.parseVersion(release.versionName)
+                val isQa = (parsed != null && parsed.isQa) || release.tagName.contains("qa", ignoreCase = true) || release.versionName.contains("qa", ignoreCase = true)
                 val isPre = release.isPrerelease || (parsed != null && parsed.isPreRelease)
 
-                if (!isBetaChannel && isPre) {
-                    throw VoxOtaException(
-                        VoxOtaErrorCode.CHANNEL_MISMATCH,
-                        "Release is pre-release but requested stable channel"
-                    )
+                if (channel == VoxUpdateChannel.QA) {
+                    if (!isQa) {
+                        throw VoxOtaException(
+                            VoxOtaErrorCode.CHANNEL_MISMATCH,
+                            "Release is not a QA release but requested QA channel"
+                        )
+                    }
+                } else {
+                    if (isQa) {
+                        throw VoxOtaException(
+                            VoxOtaErrorCode.CHANNEL_MISMATCH,
+                            "Release is QA release but requested production channel"
+                        )
+                    }
+                    if (channel == VoxUpdateChannel.STABLE && isPre) {
+                        throw VoxOtaException(
+                            VoxOtaErrorCode.CHANNEL_MISMATCH,
+                            "Release is pre-release but requested stable channel"
+                        )
+                    }
                 }
                 return release
             }
@@ -83,7 +99,7 @@ object VoxOtaReleaseParser {
             }
 
             // Вариант 3: Classic SmartTube manifest (версии как ключи верхнего уровня)
-            return parseClassicManifest(root, isBetaChannel, currentVersion, installedVersionCode)
+            return parseClassicManifest(root, channel, currentVersion, installedVersionCode)
 
         } catch (e: Exception) {
             if (e is VoxOtaException) throw e
@@ -96,6 +112,22 @@ object VoxOtaReleaseParser {
                 e
             )
         }
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun parseRelease(
+        jsonString: String?,
+        isBetaChannel: Boolean,
+        currentVersion: String? = null,
+        installedVersionCode: Long = 0L
+    ): VoxReleaseInfo {
+        return parseRelease(
+            jsonString,
+            if (isBetaChannel) VoxUpdateChannel.BETA else VoxUpdateChannel.STABLE,
+            currentVersion,
+            installedVersionCode
+        )
     }
 
     /**
@@ -138,20 +170,33 @@ object VoxOtaReleaseParser {
     fun selectBestRelease(
         releases: List<VoxReleaseInfo>,
         currentVersion: String?,
-        isBetaChannel: Boolean = false,
+        channel: VoxUpdateChannel = VoxUpdateChannel.STABLE,
         installedVersionCode: Long = 0L
     ): VoxReleaseInfo? {
         val candidates = releases.filter { release ->
             val parsed = VoxVersionComparator.parseVersion(release.versionName) ?: return@filter false
 
-            // Правило стабильного канала: стабильный канал принимает только стабильные релизы (без pre-release флага и voxMinor == 0)
-            if (!isBetaChannel && (release.isPrerelease || parsed.isPreRelease)) {
-                return@filter false
+            // Изоляция каналов:
+            if (channel == VoxUpdateChannel.QA) {
+                // QA канал принимает только QA обновления
+                if (!parsed.isQa && !release.tagName.contains("qa", ignoreCase = true) && !release.versionName.contains("qa", ignoreCase = true)) {
+                    return@filter false
+                }
+            } else {
+                // Публичный клиент (stable / beta) НИКОГДА не видит релизы стенда QA
+                if (parsed.isQa || release.tagName.contains("qa", ignoreCase = true) || release.versionName.contains("qa", ignoreCase = true)) {
+                    return@filter false
+                }
+
+                // Правило стабильного канала: стабильный канал принимает только проверенные стабильные релизы
+                if (channel == VoxUpdateChannel.STABLE && (release.isPrerelease || parsed.isPreRelease)) {
+                    return@filter false
+                }
             }
 
             // Проверка, что релиз новее установленного (если текущая версия известна)
             if (currentVersion != null) {
-                if (!VoxVersionComparator.isUpdateAvailable(currentVersion, release.versionName, isBetaChannel)) {
+                if (!VoxVersionComparator.isUpdateAvailable(currentVersion, release.versionName, channel, installedVersionCode, release.versionCode)) {
                     return@filter false
                 }
             }
@@ -177,6 +222,22 @@ object VoxOtaReleaseParser {
             }
             r1.versionName.compareTo(r2.versionName)
         })
+    }
+
+    @JvmStatic
+    @JvmOverloads
+    fun selectBestRelease(
+        releases: List<VoxReleaseInfo>,
+        currentVersion: String?,
+        isBetaChannel: Boolean,
+        installedVersionCode: Long = 0L
+    ): VoxReleaseInfo? {
+        return selectBestRelease(
+            releases,
+            currentVersion,
+            if (isBetaChannel) VoxUpdateChannel.BETA else VoxUpdateChannel.STABLE,
+            installedVersionCode
+        )
     }
 
     private fun parseGitHubRelease(obj: JSONObject): VoxReleaseInfo {
@@ -275,7 +336,7 @@ object VoxOtaReleaseParser {
 
     private fun parseClassicManifest(
         root: JSONObject,
-        isBetaChannel: Boolean = false,
+        channel: VoxUpdateChannel = VoxUpdateChannel.STABLE,
         currentVersion: String? = null,
         installedVersionCode: Long = 0L
     ): VoxReleaseInfo {
@@ -322,11 +383,12 @@ object VoxOtaReleaseParser {
             throw VoxOtaException(VoxOtaErrorCode.RELEASE_PARSE_FAILED, "No valid release version found in manifest")
         }
 
-        val best = selectBestRelease(releases, currentVersion, isBetaChannel, installedVersionCode)
+        val best = selectBestRelease(releases, currentVersion, channel, installedVersionCode)
         if (best != null) {
             return best
         }
 
+        val isBetaChannel = channel == VoxUpdateChannel.BETA
         // Если currentVersion не задан, возвращаем максимальный по каналу
         val fallback = releases.filter { !isBetaChannel && !it.isPrerelease || isBetaChannel }
             .maxWithOrNull(Comparator { r1, r2 ->

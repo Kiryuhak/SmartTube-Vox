@@ -74,13 +74,13 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         }
 
         String currentVersion = AppInfoHelpers.getAppVersionName(getContext());
-        boolean isBeta = (getContext() != null && getContext().getPackageName() != null && getContext().getPackageName().contains("beta"))
-                || (getContext() != null && VoxUpdateChannelManager.instance(getContext()).isBetaChannel());
+        com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel channel =
+                com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(getContext()).getUpdateChannel();
 
         VoxOtaUpdateManager.instance(getContext()).checkForUpdates(
                 currentVersion,
                 mUpdateManifestUrls,
-                isBeta,
+                channel,
                 mIsForceCheck,
                 new VoxOtaUpdateManager.Callback() {
                     @Override

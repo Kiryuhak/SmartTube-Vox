@@ -48,10 +48,21 @@ class UpdateChannelPolicyTest {
     }
 
     @Test
+    fun testSwitchToQaChannel() {
+        channelManager.setUpdateChannel(VoxUpdateChannel.QA)
+        assertEquals(VoxUpdateChannel.QA, channelManager.getUpdateChannel())
+        assertTrue(channelManager.isQaChannel())
+        assertFalse(channelManager.isBetaChannel())
+    }
+
+    @Test
     fun testFromIdParsing() {
-        assertEquals(VoxUpdateChannel.TEST, VoxUpdateChannel.fromId("test"))
-        assertEquals(VoxUpdateChannel.TEST, VoxUpdateChannel.fromId("beta"))
-        assertEquals(VoxUpdateChannel.TEST, VoxUpdateChannel.fromId("BETA"))
+        assertEquals(VoxUpdateChannel.BETA, VoxUpdateChannel.fromId("test"))
+        assertEquals(VoxUpdateChannel.BETA, VoxUpdateChannel.fromId("beta"))
+        assertEquals(VoxUpdateChannel.BETA, VoxUpdateChannel.fromId("BETA"))
+        assertEquals(VoxUpdateChannel.QA, VoxUpdateChannel.fromId("qa"))
+        assertEquals(VoxUpdateChannel.QA, VoxUpdateChannel.fromId("otaqa"))
+        assertEquals(VoxUpdateChannel.QA, VoxUpdateChannel.fromId("QA"))
         assertEquals(VoxUpdateChannel.STABLE, VoxUpdateChannel.fromId("stable"))
         assertEquals(VoxUpdateChannel.STABLE, VoxUpdateChannel.fromId("unknown"))
         assertEquals(VoxUpdateChannel.STABLE, VoxUpdateChannel.fromId(null))
