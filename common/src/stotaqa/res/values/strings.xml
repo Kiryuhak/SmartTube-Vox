@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="title_audio_formats">Audio tracks</string>
+    <string translatable="false" name="app_name"><![CDATA[SmartTube VOX]]></string>
+    <string name="about_vot_title">About SmartTube VOX</string>
+    <string name="about_vot_desc">SmartTube VOX is an unofficial SmartTube build for Android TV with integrated VOT translation, Yandex ID and Lively Voice support. Based on SmartTube.</string>
+    <string name="about_vot_url" translatable="false">https://github.com/Kiryuhak/SmartTube-Vox</string>
+    <string name="vot_onboarding_title">SmartTube VOX — Voice Translation</string>
+    <string name="vot_onboarding_message">Press OK on your remote during video playback to open controls — \"Translation\" button is readily available on the control bar.</string>
+    <string name="vot_onboarding_login">Sign in with Yandex</string>
+    <string name="vot_onboarding_later">Later</string>
+    <string name="vot_onboarding_ok">Got it</string>
+    <string name="vot_onboarding_never">Don\'t show again</string>
+    <string name="action_voice_translate">Translation</string>
+    <string name="vot_auto_translate">Voice translation (Yandex)</string>
+    <string name="vot_player_button_switch">\"Translation\" button on player bar</string>
+    <string name="vot_player_button_switch_desc">Display translation button in primary player controls</string>
+    <string name="vot_player_hud_hint">Press OK on remote during video to open controls and translation</string>
+    <string name="settings_download_button">Download video button</string>
+    <string name="settings_download_button_desc">Show download button in player panel</string>
+    <string name="vot_target_language">Target translation language</string>
+    <string name="vot_error_unsupported_language">Translation from this language is not yet available</string>
+
+    <!-- Pulse: Yandex ID UX -->
+    <string name="vot_yandex_status_authorized">Yandex ID: Authorized</string>
+    <string name="vot_yandex_status_not_authorized">Yandex ID: Not authorized</string>
+    <string name="vot_yandex_status_unverified">Yandex ID: Authorization saved</string>
+    <string name="vot_yandex_status_rejected">Yandex ID: Auth error — please sign in again</string>
+    <string name="vot_yandex_login">Sign in with Yandex</string>
+    <string name="vot_yandex_relogin">Sign in again to Yandex</string>
+    <string name="vot_yandex_logout">Sign out of Yandex</string>
+    <string name="vot_yandex_logout_done">Signed out of Yandex ID</string>
+    <string name="vot_manual_token_entry">Enter token manually…</string>
+
+    <!-- Device Code Flow: TV login UX -->
+    <string name="vot_device_auth_title">Sign in to Yandex ID</string>
+    <string name="vot_device_auth_step1">Open on your phone or computer:</string>
+    <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_mock_url">LOCAL MOCK · no Yandex sign-in</string>
+    <string name="vot_device_auth_step2">Then enter this code:</string>
+    <string name="vot_device_auth_timer">Code valid: %s</string>
+    <string name="vot_device_auth_expired">Code expired. Request a new one.</string>
+    <string name="vot_device_auth_refresh">Refresh code</string>
+    <string name="vot_device_auth_cancel">Cancel</string>
+    <string name="vot_device_auth_success">Signed in!</string>
+    <string name="vot_device_auth_denied">Authorization denied by user</string>
+    <string name="vot_device_auth_network_error">Network error. Check your connection.</string>
+    <string name="vot_device_auth_pending">Waiting for confirmation…</string>
+    <string name="vot_device_auth_invalid_client">Yandex ID client configuration error. Please enter token manually.</string>
+    <string name="vot_device_auth_broker_unavailable">Automatic Yandex sign-in is not available yet. Use manual token entry.</string>
+
+
+    <!-- Pulse: Translation UX statuses -->
+    <string name="vot_preparing">Preparing translation…</string>
+    <string name="vot_pending_waiting">Waiting for translation… (~%d min)</string>
+    <string name="vot_ready">Translation ready</string>
+    <string name="vot_disabled">Translation disabled</string>
+    <string name="vot_error_timeout">Translation timed out</string>
+    <string name="vot_error_network">Network error while fetching translation</string>
+    <string name="vot_error_server_unavailable">Yandex translation server is temporarily unavailable</string>
+    <string name="vot_error_rate_limited">Too many translation requests. Please try again later</string>
+    <string name="vot_error_unsupported_video">Translation is not available for this video</string>
+    <string name="vot_error_auth_rejected">Yandex ID authorization failed. Please sign in again in settings</string>
+    <string name="vot_error_access_denied">The translation service denied this request</string>
+    <string name="vot_error_playback">Failed to play translation</string>
+    <string name="vot_unknown_lang_manual">Audio track language unknown. Start translation manually.</string>
+    <string name="vot_lively_fallback_standard">Lively voice unavailable, using standard voice</string>
+
+    <!-- VOT Progress Indicator -->
+    <string name="vot_progress_looking_up">Looking for ready translation…</string>
+    <string name="vot_progress_lookup_ready">Ready translation found</string>
+    <string name="vot_progress_preparing">Preparing translation</string>
+    <string name="vot_progress_starting">Starting translation…</string>
+    <string name="vot_progress_waiting_title">Preparing translation</string>
+    <string name="vot_progress_waiting_eta">~ %s</string>
+    <string name="vot_progress_waiting_eta_format">Translation ready in ~%s</string>
+    <string name="vot_progress_delayed">Translation delayed…</string>
+    <string name="vot_progress_attaching">Connecting translation…</string>
+    <string name="vot_progress_still_waiting">Translation delayed…</string>
+    <string name="vot_progress_ready">Translation ready</string>
+    <string name="vot_progress_switching">Switching to Russian</string>
+    <string name="vot_progress_error">Failed to translate</string>
+    <string name="vot_progress_timeout">Failed to translate</string>
+    <string name="vot_auto_activate_ready">Auto-activate ready translation</string>
+    <string name="vot_auto_activate_ready_desc">Automatically start translation audio once preparation is complete</string>
+    <string name="vot_translation_activated">Translation activated</string>
+    <string name="vot_progress_subtitle_default">Status remains until completion</string>
+    <string name="vot_progress_subtitle_ready">Press translation button to enable</string>
+    <string name="vot_progress_subtitle_press_to_enable">Press translation button to enable</string>
+    <string name="vot_progress_retry_title">Retry attempt %1$d/%2$d</string>
+    <string name="vot_progress_retry_countdown">in %d s</string>
+
+    <!-- Replace YouTube Dub with Yandex VOT -->
+    <string name="vot_replace_dub_title">Replace dubbing with Yandex?</string>
+    <string name="vot_replace_dub_desc">A Russian YouTube audio track is currently selected.\nThe original audio track will be used for Yandex voice-over translation.</string>
+    <string name="vot_replace_dub_confirm">Use Yandex</string>
+    <string name="vot_replace_dub_cancel">Cancel</string>
+    <string name="vot_unable_to_switch_original">Unable to switch to the original audio track</string>
+    <string name="vot_unable_to_determine_original">Unable to determine the original audio track</string>
+
+    <!-- Factory Reset -->
+    <string name="settings_reset">Reset settings</string>
+    <string name="reset_dialog_title">Reset SmartTube VOX?</string>
+    <string name="reset_dialog_message">All YouTube and Yandex ID accounts will be disconnected.\n\nLocal settings, watch history, and voice-over translation data will be deleted.\n\nThe app will return to its initial state.\n\nThis action cannot be undone.</string>
+    <string name="reset_dialog_cancel">Cancel</string>
+    <string name="reset_dialog_confirm">Reset all</string>
+    <string name="reset_dialog_failed">Failed to reset application data</string>
+
+    <!-- VOX 5: Download video with translation -->
+    <string name="action_download_with_translation">Download with translation</string>
+    <string name="vox_download_action">Download with translation</string>
+    <string name="vox_download_retry">Retry</string>
+    <string name="vox_download_title">Download with translation</string>
+    <string name="vox_download_quality_category">Video quality</string>
+    <string name="vox_download_translation_category">Translation mode</string>
+    <string name="vox_download_translation_standard">Standard translation</string>
+    <string name="vox_download_translation_lively">Lively voice</string>
+    <string name="vox_download_auth_required">Yandex sign-in required</string>
+    <string name="vox_download_tracks_info">Audio tracks: Original, Translation</string>
+    <string name="vox_download_start_button">Start download</string>
+    <string name="vox_download_already_downloaded">Video already downloaded</string>
+    <string name="vox_download_already_active">Video already downloading</string>
+    <string name="vox_download_open_local">Open</string>
+    <string name="vox_download_redownload">Download again</string>
+    <string name="vox_download_delete">Delete</string>
+    <string name="vox_download_cancel_job">Cancel download</string>
+    <string name="vox_download_cancel_confirm">Cancel download?</string>
+    <string name="vox_download_close">Close</string>
+    <string name="vox_download_completed_toast">Video saved</string>
+    <string name="vox_download_live_unsupported">Downloading live streams is not supported yet</string>
+    <string name="vox_download_stage_prep_trans">Preparing translation</string>
+    <string name="vox_download_stage_resolving">Preparing download</string>
+    <string name="vox_download_stage_video">Downloading video</string>
+    <string name="vox_download_stage_orig_audio">Downloading original audio</string>
+    <string name="vox_download_stage_trans_audio">Downloading translation</string>
+    <string name="vox_download_stage_muxing">Packaging file</string>
+    <string name="vox_download_stage_publishing">Saving file</string>
+    <string name="vox_download_stage_completed">Completed</string>
+    <string name="vox_download_stage_failed">Failed</string>
+    <string name="vox_download_stage_cancelled">Cancelled</string>
+    <string name="vox_download_error_auth">Sign-in with Yandex required</string>
+    <string name="vox_download_error_storage">Insufficient disk space</string>
+    <string name="vox_download_error_stream">Failed to resolve video stream</string>
+    <string name="vox_download_error_trans">Translation unavailable for this video</string>
+    <string name="vox_download_error_codec">Unsupported format</string>
+    <string name="vox_download_error_parse">Failed to prepare video file</string>
+    <string name="vox_download_error_network">Network error</string>
+    <string name="vox_download_error_unknown">Failed to download video</string>
+    <string name="vox_download_channel_name">SmartTube VOX — Downloads</string>
+    <string name="vox_download_channel_desc">Notifications for voice translation video downloads</string>
+    <string name="vox_download_notification_title">Downloading video</string>
+    <string name="vox_download_notification_cancel">Cancel</string>
+    <string name="vox_download_notification_open">Open</string>
+    <string name="vox_download_notification_failed">Failed to download video</string>
+    <string name="vox_download_notification_completed">Video saved</string>
+</resources>

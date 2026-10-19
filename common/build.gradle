@@ -63,6 +63,9 @@ android {
         stvot {
             matchingFallbacks = ['ststable']
         }
+        stotaqa {
+            matchingFallbacks = ['stvot', 'ststable']
+        }
         ststable {}
         stfdroid {}
     }

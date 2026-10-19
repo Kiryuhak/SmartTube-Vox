@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="update_urls">
+        <item>http://10.0.2.2:8899/qa_manifest.json</item>
+    </string-array>
+</resources>

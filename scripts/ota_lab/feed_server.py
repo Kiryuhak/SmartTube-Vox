@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import http.server
 import json
 import os
@@ -10,13 +11,15 @@ HOST = "0.0.0.0"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FIXTURES_DIR = os.path.join(BASE_DIR, "fixtures")
 
-# Active scenario: skip_9_5, downgrade_9_0, corrupt_truncated, corrupt_invalid_zip, wrong_signature, wrong_package
-ACTIVE_SCENARIO = os.environ.get("OTA_SCENARIO", "skip_9_5")
+ACTIVE_SCENARIO = os.environ.get("OTA_SCENARIO", "qa_9_2")
 
 def get_asset_info(filename):
     path = os.path.join(FIXTURES_DIR, filename)
-    size = os.path.getsize(path) if os.path.exists(path) else 0
-    return filename, size
+    if os.path.exists(path):
+        size = os.path.getsize(path)
+        sha256 = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        return filename, size, sha256
+    return filename, 0, ""
 
 class OtaFeedHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -26,7 +29,6 @@ class OtaFeedHandler(http.server.SimpleHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed.query)
 
         scenario = query.get("scenario", [ACTIVE_SCENARIO])[0]
-        # Resolve host address visible to requester
         host_header = self.headers.get("Host", f"127.0.0.1:{PORT}")
         base_url = f"http://{host_header}"
 
@@ -39,6 +41,35 @@ class OtaFeedHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": True, "scenario": ACTIVE_SCENARIO}).encode())
                 return
+
+        if scenario == "status_404":
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"message": "Not Found"}).encode())
+            return
+
+        if scenario == "rate_limit":
+            self.send_response(403)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("X-RateLimit-Remaining", "0")
+            self.send_header("X-RateLimit-Limit", "60")
+            self.send_header("X-RateLimit-Reset", "1799999999")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "message": "API rate limit exceeded for test client",
+                "documentation_url": "https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"
+            }).encode())
+            return
+
+        if path == "/qa_manifest.json":
+            payload = self.build_manifest_payload(scenario, base_url)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
 
         if path in ("/releases", "/releases/latest"):
             is_latest = (path == "/releases/latest")
@@ -86,128 +117,211 @@ class OtaFeedHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
 
-    def build_release_payload(self, scenario, is_latest, base_url):
-        if scenario == "skip_9_5":
-            if is_latest:
-                # 9.5 is a beta prerelease; /releases/latest returns current stable 9.1
-                fn, size = get_asset_info("baseline_9.1.apk")
-                release = {
-                    "tag_name": "v32.56-vox.9.1",
-                    "name": "SmartTube VOX 9.1 Stable",
-                    "prerelease": False,
-                    "assets": [
-                        {
-                            "name": "SmartTube_vot_32.56-vox.9.1_universal.apk",
-                            "browser_download_url": f"{base_url}/assets/{fn}",
-                            "size": size
-                        }
-                    ]
-                }
-                return json.dumps(release).encode("utf-8")
-            fn, size = get_asset_info("probe_skip_9.5.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.5",
-                "name": "SmartTube VOX 9.5 Probe",
-                "prerelease": True,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.5_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}",
-                        "size": size
-                    }
-                ]
+    def build_manifest_payload(self, scenario, base_url):
+        release_obj = self.get_release_object(scenario, base_url)
+        if scenario == "empty_release":
+            return json.dumps({}).encode("utf-8")
+        manifest = {
+            "package": {
+                "downloadUrl": release_obj["assets"][0]["browser_download_url"] if release_obj.get("assets") else ""
+            },
+            release_obj["tag_name"].lstrip("v"): {
+                "versionCode": release_obj.get("versionCode", 2446092),
+                "changelog": [release_obj["name"]],
+                "changelog_ru": [release_obj["name"]]
             }
-        elif scenario == "downgrade_9_0":
-            fn, size = get_asset_info("downgrade_9.0.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.0",
-                "name": "SmartTube VOX 9.0 Release",
-                "prerelease": False,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.0_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}",
-                        "size": size
-                    }
-                ]
-            }
-        elif scenario == "corrupt_truncated":
-            fn, size = get_asset_info("corrupt_truncated.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.5",
-                "name": "SmartTube VOX 9.5 Corrupt Truncated",
-                "prerelease": not is_latest,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.5_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}",
-                        "size": size
-                    }
-                ]
-            }
-        elif scenario == "corrupt_invalid_zip":
-            fn, size = get_asset_info("corrupt_invalid_zip.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.5",
-                "name": "SmartTube VOX 9.5 Corrupt Zip",
-                "prerelease": not is_latest,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.5_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}",
-                        "size": size
-                    }
-                ]
-            }
-        elif scenario == "wrong_signature":
-            fn, size = get_asset_info("wrong_signature.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.5",
-                "name": "SmartTube VOX 9.5 Wrong Sig",
-                "prerelease": not is_latest,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.5_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}",
-                        "size": size
-                    }
-                ]
-            }
-        elif scenario == "wrong_package":
-            fn, size = get_asset_info("wrong_package.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.5",
-                "name": "SmartTube VOX 9.5 Wrong Package",
-                "prerelease": not is_latest,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.5_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}",
-                        "size": size
-                    }
-                ]
-            }
-        elif scenario == "partial":
-            fn, size = get_asset_info("probe_skip_9.5.apk")
-            release = {
-                "tag_name": "v32.56-vox.9.5",
-                "name": "SmartTube VOX 9.5 Partial",
-                "prerelease": not is_latest,
-                "assets": [
-                    {
-                        "name": f"SmartTube_vot_32.56-vox.9.5_universal.apk",
-                        "browser_download_url": f"{base_url}/assets/{fn}?partial=1",
-                        "size": size + 1024000
-                    }
-                ]
-            }
-        else:
-            release = {"tag_name": "v32.56-vox.9.1", "name": "SmartTube VOX 9.1", "prerelease": False, "assets": []}
+        }
+        return json.dumps(manifest, indent=2).encode("utf-8")
 
+    def build_release_payload(self, scenario, is_latest, base_url):
+        if scenario == "empty_release":
+            return json.dumps([] if not is_latest else {}).encode("utf-8")
+
+        release = self.get_release_object(scenario, base_url)
         if is_latest:
             return json.dumps(release).encode("utf-8")
         else:
             return json.dumps([release]).encode("utf-8")
+
+    def get_release_object(self, scenario, base_url):
+        if scenario in ("qa_9_2", "default"):
+            fn, size, sha = get_asset_info("qa_9.2.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Generation 2",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "VOX QA Generation 2 update.\nversionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "qa_9_3":
+            fn, size, sha = get_asset_info("qa_9.3.apk")
+            return {
+                "tag_name": "v32.56-vox.9.3-otaqa.3",
+                "name": "SmartTube VOX 9.3 QA Generation 3",
+                "prerelease": True,
+                "versionCode": 2446093,
+                "body": "VOX QA Generation 3 update.\nversionCode: 2446093",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.3-otaqa.3_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario in ("downgrade_9_2", "downgrade_9_1"):
+            fn, size, sha = get_asset_info("qa_9.1.apk")
+            return {
+                "tag_name": "v32.56-vox.9.1-otaqa.1",
+                "name": "SmartTube VOX 9.1 QA Generation 1",
+                "prerelease": True,
+                "versionCode": 2446091,
+                "body": "VOX QA Generation 1 update.\nversionCode: 2446091",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.1-otaqa.1_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "no_update_9_3":
+            fn, size, sha = get_asset_info("qa_9.3.apk")
+            return {
+                "tag_name": "v32.56-vox.9.3-otaqa.3",
+                "name": "SmartTube VOX 9.3 QA Generation 3",
+                "prerelease": True,
+                "versionCode": 2446093,
+                "body": "VOX QA Generation 3 update.\nversionCode: 2446093",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.3-otaqa.3_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "wrong_checksum":
+            fn, size, _ = get_asset_info("qa_9.2.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Wrong Checksum",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "versionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size + 99999,
+                        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                    }
+                ]
+            }
+        elif scenario == "wrong_package":
+            fn, size, sha = get_asset_info("wrong_package.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Wrong Package",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "versionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "wrong_signature":
+            fn, size, sha = get_asset_info("wrong_signature.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Wrong Signature",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "versionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "corrupt_truncated":
+            fn, size, sha = get_asset_info("corrupt_truncated.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Corrupt Truncated",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "versionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "corrupt_invalid_zip":
+            fn, size, sha = get_asset_info("corrupt_invalid_zip.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Corrupt Invalid Zip",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "versionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}",
+                        "size": size,
+                        "sha256": sha
+                    }
+                ]
+            }
+        elif scenario == "partial":
+            fn, size, sha = get_asset_info("qa_9.2.apk")
+            return {
+                "tag_name": "v32.56-vox.9.2-otaqa.2",
+                "name": "SmartTube VOX 9.2 QA Partial Stream",
+                "prerelease": True,
+                "versionCode": 2446092,
+                "body": "versionCode: 2446092",
+                "assets": [
+                    {
+                        "name": "SmartTube_otaqa_32.56-vox.9.2-otaqa.2_universal.apk",
+                        "browser_download_url": f"{base_url}/assets/{fn}?partial=1",
+                        "size": size + 1024000,
+                        "sha256": sha
+                    }
+                ]
+            }
+        else:
+            return {
+                "tag_name": "v32.56-vox.9.1-otaqa.1",
+                "name": "SmartTube VOX 9.1",
+                "prerelease": False,
+                "versionCode": 2446091,
+                "assets": []
+            }
 
 def run():
     server = http.server.ThreadingHTTPServer((HOST, PORT), OtaFeedHandler)

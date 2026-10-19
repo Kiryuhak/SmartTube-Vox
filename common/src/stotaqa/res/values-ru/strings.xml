@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="title_audio_formats">Аудиодорожки</string>
+    <string translatable="false" name="app_name"><![CDATA[SmartTube VOX]]></string>
+    <string name="about_vot_title">О проекте SmartTube VOX</string>
+    <string name="about_vot_desc">SmartTube VOX — неофициальная сборка SmartTube для Android TV с интегрированным VOT-переводом, Яндекс ID и поддержкой «Живого голоса». Основано на SmartTube.</string>
+    <string name="about_vot_url" translatable="false">https://github.com/Kiryuhak/SmartTube-Vox</string>
+    <string name="vot_onboarding_title">SmartTube VOX — Голосовой перевод</string>
+    <string name="vot_onboarding_message">Для озвучивания зарубежных видео нейросетью Яндекса нажмите OK на пульте во время просмотра — кнопка «Перевод» доступна на панели управления.</string>
+    <string name="vot_onboarding_login">Войти в Яндекс</string>
+    <string name="vot_onboarding_later">Позже</string>
+    <string name="vot_onboarding_ok">Понятно</string>
+    <string name="vot_onboarding_never">Больше не показывать</string>
+    <string name="action_voice_translate">Перевод</string>
+    <string name="vot_auto_translate">Закадровый перевод (Яндекс)</string>
+    <string name="vot_player_button_switch">Кнопка «Перевод» на панели</string>
+    <string name="vot_player_button_switch_desc">Отображать кнопку перевода в основном ряду управления плеера</string>
+    <string name="vot_player_hud_hint">Нажмите OK на пульте во время видео для управления и перевода</string>
+    <string name="settings_download_button">Кнопка скачивания видео</string>
+    <string name="settings_download_button_desc">Показывать кнопку скачивания в панели плеера</string>
+    <string name="vot_target_language">Целевой язык перевода</string>
+    <string name="vot_error_unsupported_language">Перевод с этого языка пока недоступен</string>
+
+    <!-- Pulse: Яндекс ID UX -->
+    <string name="vot_yandex_status_authorized">Яндекс ID: Авторизован</string>
+    <string name="vot_yandex_status_not_authorized">Яндекс ID: Не авторизован</string>
+    <string name="vot_yandex_status_unverified">Яндекс ID: Авторизация сохранена</string>
+    <string name="vot_yandex_status_rejected">Яндекс ID: Ошибка авторизации — требуется повторный вход</string>
+    <string name="vot_yandex_login">Войти в Яндекс</string>
+    <string name="vot_yandex_relogin">Войти заново в Яндекс</string>
+    <string name="vot_yandex_logout">Выйти из Яндекса</string>
+    <string name="vot_yandex_logout_done">Вы вышли из Яндекс ID</string>
+    <string name="vot_manual_token_entry">Ввести токен вручную…</string>
+
+    <!-- Device Code Flow: вход на телевизоре -->
+    <string name="vot_device_auth_title">Вход в Яндекс ID</string>
+    <string name="vot_device_auth_step1">Откройте на телефоне или компьютере:</string>
+    <string name="vot_device_auth_url">ya.ru/device</string>
+    <string name="vot_device_auth_mock_url">ЛОКАЛЬНЫЙ MOCK · без входа в Яндекс</string>
+    <string name="vot_device_auth_step2">Затем введите этот код:</string>
+    <string name="vot_device_auth_timer">Код действителен: %s</string>
+    <string name="vot_device_auth_expired">Код истёк. Запросите новый.</string>
+    <string name="vot_device_auth_refresh">Обновить код</string>
+    <string name="vot_device_auth_cancel">Отмена</string>
+    <string name="vot_device_auth_success">Вход выполнен!</string>
+    <string name="vot_device_auth_denied">Авторизация отклонена пользователем</string>
+    <string name="vot_device_auth_network_error">Ошибка сети. Проверьте соединение.</string>
+    <string name="vot_device_auth_pending">Ожидание подтверждения…</string>
+    <string name="vot_device_auth_invalid_client">Ошибка конфигурации клиента Яндекс ID. Используйте ручной ввод токена.</string>
+    <string name="vot_device_auth_broker_unavailable">Автоматический вход в Яндекс пока недоступен. Используйте ручной ввод токена.</string>
+
+    <!-- Pulse: Пользовательские статусы перевода -->
+    <string name="vot_preparing">Подготовка перевода…</string>
+    <string name="vot_pending_waiting">Ожидание перевода… (~%d мин)</string>
+    <string name="vot_ready">Перевод готов</string>
+    <string name="vot_disabled">Перевод отключён</string>
+    <string name="vot_error_timeout">Время ожидания перевода истекло</string>
+    <string name="vot_error_network">Ошибка сети при получении перевода</string>
+    <string name="vot_error_server_unavailable">Сервер перевода Яндекса временно недоступен</string>
+    <string name="vot_error_rate_limited">Слишком много запросов на перевод. Попробуйте позже</string>
+    <string name="vot_error_unsupported_video">Перевод недоступен для этого видео</string>
+    <string name="vot_error_auth_rejected">Ошибка авторизации Яндекс ID. Войдите заново в настройках</string>
+    <string name="vot_error_access_denied">Сервис перевода отклонил запрос</string>
+    <string name="vot_error_playback">Не удалось воспроизвести перевод</string>
+    <string name="vot_unknown_lang_manual">Язык аудиодорожки не определён. Запустите перевод вручную.</string>
+    <string name="vot_skip_russian">Русская аудиодорожка — перевод не требуется</string>
+    <string name="vot_lively_voice_desc">Высокое качество и естественная интонация перевода (требуется Яндекс ID).</string>
+    <string name="vot_lively_fallback_standard">Живой голос недоступен, используется обычная озвучка</string>
+
+    <!-- VOT Progress Indicator -->
+    <string name="vot_progress_looking_up">Ищем готовый перевод…</string>
+    <string name="vot_progress_lookup_ready">Найден готовый перевод</string>
+    <string name="vot_progress_preparing">Подготовка перевода</string>
+    <string name="vot_progress_starting">Запуск перевода…</string>
+    <string name="vot_progress_waiting_title">Подготовка перевода</string>
+    <string name="vot_progress_waiting_eta">~ %s</string>
+    <string name="vot_progress_waiting_eta_format">Перевод будет готов примерно через %s</string>
+    <string name="vot_progress_delayed">Перевод задерживается…</string>
+    <string name="vot_progress_attaching">Подключаем перевод…</string>
+    <string name="vot_progress_still_waiting">Перевод задерживается…</string>
+    <string name="vot_progress_ready">Перевод готов</string>
+    <string name="vot_progress_switching">Переключаем на русский</string>
+    <string name="vot_progress_error">Не удалось перевести</string>
+    <string name="vot_progress_timeout">Не удалось перевести</string>
+    <string name="vot_auto_activate_ready">Автоматически включать готовый перевод</string>
+    <string name="vot_auto_activate_ready_desc">Включать перевод сразу после завершения подготовки</string>
+    <string name="vot_translation_activated">Перевод включён</string>
+    <string name="vot_progress_subtitle_default">Индикатор остаётся до завершения</string>
+    <string name="vot_progress_subtitle_ready">Нажмите кнопку перевода для включения</string>
+    <string name="vot_progress_subtitle_press_to_enable">Нажмите кнопку перевода для включения</string>
+    <string name="vot_progress_retry_title">Повторная попытка %1$d/%2$d</string>
+    <string name="vot_progress_retry_countdown">через %d с</string>
+
+    <!-- Replace YouTube Dub with Yandex VOT -->
+    <string name="vot_replace_dub_title">Заменить озвучку на Яндекс?</string>
+    <string name="vot_replace_dub_desc">Сейчас используется русская озвучка YouTube.\nДля перевода Яндекса будет включена оригинальная аудиодорожка видео.</string>
+    <string name="vot_replace_dub_confirm">Использовать Яндекс</string>
+    <string name="vot_replace_dub_cancel">Отмена</string>
+    <string name="vot_unable_to_switch_original">Не удалось переключиться на оригинальную аудиодорожку</string>
+    <string name="vot_unable_to_determine_original">Не удалось определить оригинальную аудиодорожку</string>
+
+    <!-- Factory Reset -->
+    <string name="settings_reset">Сброс настроек</string>
+    <string name="reset_dialog_title">Сбросить SmartTube VOX?</string>
+    <string name="reset_dialog_message">Все аккаунты YouTube и Яндекс ID будут отключены.\n\nЛокальные настройки, история просмотра и данные закадрового перевода будут удалены.\n\nПриложение вернётся к первоначальному состоянию.\n\nЭто действие нельзя отменить.</string>
+    <string name="reset_dialog_cancel">Отмена</string>
+    <string name="reset_dialog_confirm">Сбросить всё</string>
+    <string name="reset_dialog_failed">Не удалось сбросить данные приложения</string>
+
+    <!-- VOX 5: Скачивание видео с переводом -->
+    <string name="action_download_with_translation">Скачать с переводом</string>
+    <string name="vox_download_action">Скачать с переводом</string>
+    <string name="vox_download_retry">Повторить</string>
+    <string name="vox_download_title">Скачать с переводом</string>
+    <string name="vox_download_quality_category">Качество видео</string>
+    <string name="vox_download_translation_category">Режим перевода</string>
+    <string name="vox_download_translation_standard">Обычный перевод</string>
+    <string name="vox_download_translation_lively">Живой голос (Lively)</string>
+    <string name="vox_download_auth_required">Требуется вход в Яндекс</string>
+    <string name="vox_download_tracks_info">Аудиодорожки: Оригинал, Перевод</string>
+    <string name="vox_download_start_button">Начать скачивание</string>
+    <string name="vox_download_already_downloaded">Видео уже скачано</string>
+    <string name="vox_download_already_active">Видео уже загружается</string>
+    <string name="vox_download_open_local">Открыть</string>
+    <string name="vox_download_redownload">Скачать ещё раз</string>
+    <string name="vox_download_delete">Удалить</string>
+    <string name="vox_download_cancel_job">Отменить загрузку</string>
+    <string name="vox_download_cancel_confirm">Отменить загрузку?</string>
+    <string name="vox_download_close">Закрыть</string>
+    <string name="vox_download_completed_toast">Видео сохранено</string>
+    <string name="vox_download_live_unsupported">Скачивание прямых трансляций пока не поддерживается</string>
+    <string name="vox_download_stage_prep_trans">Подготовка перевода</string>
+    <string name="vox_download_stage_resolving">Подготовка загрузки</string>
+    <string name="vox_download_stage_video">Загрузка видео</string>
+    <string name="vox_download_stage_orig_audio">Загрузка оригинального звука</string>
+    <string name="vox_download_stage_trans_audio">Загрузка перевода</string>
+    <string name="vox_download_stage_muxing">Упаковка файла</string>
+    <string name="vox_download_stage_publishing">Сохранение файла</string>
+    <string name="vox_download_stage_completed">Готово</string>
+    <string name="vox_download_stage_failed">Ошибка</string>
+    <string name="vox_download_stage_cancelled">Отменено</string>
+    <string name="vox_download_error_auth">Требуется вход в Яндекс</string>
+    <string name="vox_download_error_storage">Недостаточно свободного места</string>
+    <string name="vox_download_error_stream">Не удалось получить видеопоток</string>
+    <string name="vox_download_error_trans">Перевод для этого видео недоступен</string>
+    <string name="vox_download_error_codec">Этот формат пока не поддерживается</string>
+    <string name="vox_download_error_parse">Не удалось подготовить видеофайл</string>
+    <string name="vox_download_error_network">Ошибка сети</string>
+    <string name="vox_download_error_unknown">Не удалось скачать видео</string>
+    <string name="vox_download_channel_name">SmartTube VOX — Загрузки</string>
+    <string name="vox_download_channel_desc">Уведомления о процессе скачивания видео с переводом</string>
+    <string name="vox_download_notification_title">Скачивание видео</string>
+    <string name="vox_download_notification_cancel">Отменить</string>
+    <string name="vox_download_notification_open">Открыть</string>
+    <string name="vox_download_notification_failed">Не удалось скачать видео</string>
+    <string name="vox_download_notification_completed">Видео сохранено</string>
+</resources>
