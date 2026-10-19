@@ -22,10 +22,25 @@ import {
   buildDashboardKeyboard
 } from './telegram_formatter.mjs';
 import { isSyntheticTestReport } from '../triage.mjs';
+import { normalizeStatus } from '../storage.mjs';
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const MAX_RETRIES = 3;
 const DEFAULT_AGGREGATION_WINDOW_MS = 15 * 60 * 1000; // 15 минут
+
+export function maskChatId(chatId) {
+  if (!chatId) return '<none>';
+  const s = String(chatId);
+  if (s.length <= 4) return '***';
+  return s.slice(0, 3) + '...' + s.slice(-4);
+}
+
+export function logTelegramEvent(eventName, details = {}) {
+  const parts = Object.entries(details)
+    .filter(([_, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${typeof v === 'string' && v.includes(' ') ? `"${v}"` : v}`);
+  console.log(`[${eventName}] ${parts.join(' ')}`);
+}
 
 // In-memory состояние для агрегации и дедупликации (сигнатура -> метаданные)
 const notificationState = new Map();
@@ -71,7 +86,7 @@ export class TelegramClient {
 
         if (response.ok) {
           const resJson = await response.json().catch(() => ({ ok: true }));
-          return { ok: true, result: resJson.result };
+          return { ok: true, result: resJson.result, attempts: attempt };
         }
 
         const status = response.status;
@@ -79,14 +94,31 @@ export class TelegramClient {
 
         // 400, 401, 403, 404 — фатальные ошибки авторизации или параметров: не ретраим
         if (status >= 400 && status < 500 && status !== 429) {
-          return { ok: false, status, error: errBody.description || `HTTP_${status}` };
+          logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+            status,
+            error: errBody.description || `HTTP_${status}`,
+            attempts: attempt,
+          });
+          return { ok: false, status, error: errBody.description || `HTTP_${status}`, attempts: attempt };
         }
 
         // 429 Rate Limit — ждём указанное в параметрах время или 1.5 сек
         if (status === 429) {
           const retryAfterSec = Number(errBody.parameters?.retry_after) || 1.5;
+          logTelegramEvent('TELEGRAM_NOTIFY_RETRY', {
+            attempt,
+            maxRetries: MAX_RETRIES,
+            status: 429,
+            retryAfterSec,
+            reason: 'RATE_LIMIT',
+          });
           if (attempt >= MAX_RETRIES) {
-            return { ok: false, status: 429, error: 'RATE_LIMIT_EXCEEDED' };
+            logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+              status: 429,
+              error: 'RATE_LIMIT_EXCEEDED',
+              attempts: attempt,
+            });
+            return { ok: false, status: 429, error: 'RATE_LIMIT_EXCEEDED', attempts: attempt };
           }
           await new Promise(r => setTimeout(r, Math.min(retryAfterSec * 1000, 5000)));
           continue;
@@ -94,24 +126,46 @@ export class TelegramClient {
 
         // 5xx Server Error — экспоненциальный бэкофф
         if (status >= 500) {
+          logTelegramEvent('TELEGRAM_NOTIFY_RETRY', {
+            attempt,
+            maxRetries: MAX_RETRIES,
+            status,
+            backoffMs: attempt * 500,
+            reason: 'SERVER_ERROR',
+          });
           if (attempt >= MAX_RETRIES) {
-            return { ok: false, status, error: `SERVER_ERROR_${status}` };
+            logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+              status,
+              error: `SERVER_ERROR_${status}`,
+              attempts: attempt,
+            });
+            return { ok: false, status, error: `SERVER_ERROR_${status}`, attempts: attempt };
           }
           await new Promise(r => setTimeout(r, attempt * 500));
           continue;
         }
 
-        return { ok: false, status, error: `HTTP_${status}` };
+        return { ok: false, status, error: `HTTP_${status}`, attempts: attempt };
       } catch (err) {
         clearTimeout(timer);
+        logTelegramEvent('TELEGRAM_NOTIFY_RETRY', {
+          attempt,
+          maxRetries: MAX_RETRIES,
+          error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR',
+          backoffMs: attempt * 500,
+        });
         if (attempt >= MAX_RETRIES) {
-          return { ok: false, error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR' };
+          logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+            error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR',
+            attempts: attempt,
+          });
+          return { ok: false, error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR', attempts: attempt };
         }
         await new Promise(r => setTimeout(r, attempt * 500));
       }
     }
 
-    return { ok: false, error: 'MAX_RETRIES_REACHED' };
+    return { ok: false, error: 'MAX_RETRIES_REACHED', attempts: MAX_RETRIES };
   }
 
   /**
@@ -230,6 +284,7 @@ export async function dispatchTelegramNotification({
 
   const signature = classification.signature || report.errorSignature || 'GENERAL|UNKNOWN';
   const now = Date.now();
+  const startTime = now;
 
   // Проверяем состояние агрегации
   const state = notificationState.get(signature) || {
@@ -239,14 +294,34 @@ export async function dispatchTelegramNotification({
     lastReportId: null,
   };
 
-  const isRegression = Boolean(issue.reopened || (issue.status === 'RESOLVED' && hasActive));
+  const curIssueStatus = normalizeStatus(issue.status || issue.issue_status);
+  const isPendingVerify = curIssueStatus === 'FIXED_PENDING_VERIFY' || curIssueStatus === 'FIXED_PENDING_VERIFICATION';
+  const isResolved = curIssueStatus === 'RESOLVED' || curIssueStatus === 'CLOSED';
+  const isRegression = Boolean(
+    issue.reopened ||
+    (issue.reopened_at && issue.reopened_at > 0) ||
+    ((isResolved || isPendingVerify) && hasActive)
+  );
   const timeSinceLast = now - state.lastNotifiedAt;
+
+  logTelegramEvent('TELEGRAM_NOTIFY_START', {
+    reportId: report.reportId || 'UNKNOWN',
+    signature,
+    isRegression,
+    chat: maskChatId(prodChatId),
+  });
 
   // 3. Дедупликация и троттлинг внутри окна агрегации
   if (state.lastNotifiedAt > 0 && timeSinceLast < windowMs && !isRegression) {
     state.repeatCount++;
     state.lastReportId = report.reportId;
     notificationState.set(signature, state);
+    logTelegramEvent('TELEGRAM_NOTIFY_SKIPPED_DEDUP', {
+      reportId: report.reportId,
+      signature,
+      repeatCount: state.repeatCount,
+      windowRemainingMs: windowMs - timeSinceLast,
+    });
     return {
       decision: 'SUPPRESSED_DUPLICATE',
       signature,
@@ -300,22 +375,41 @@ export async function dispatchTelegramNotification({
       state.lastMessageId = res.result?.message_id;
       notificationState.set(signature, state);
 
+      logTelegramEvent('TELEGRAM_NOTIFY_SUCCESS', {
+        reportId: report.reportId,
+        decision,
+        messageId: res.result?.message_id,
+        durationMs: Date.now() - startTime,
+      });
+
       return {
         decision,
         messageId: res.result?.message_id,
         notifiedAt: now,
+        attemptCount: res.attempts || 1,
       };
     } else {
+      logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+        reportId: report.reportId,
+        error: res.error,
+        status: res.status,
+      });
       return {
         decision: 'FAILED',
         error: res.error,
         status: res.status,
+        attemptCount: res.attempts || 3,
       };
     }
   } catch (err) {
+    logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+      reportId: report.reportId,
+      error: err.message,
+    });
     return {
       decision: 'FAILED',
       error: err.message,
+      attemptCount: 1,
     };
   }
 }
