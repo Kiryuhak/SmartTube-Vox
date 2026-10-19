@@ -887,6 +887,14 @@ public class VotClient {
                 Thread.currentThread().interrupt();
                 throw new VotException("Interrupted");
             }
+            if (s > 0 && s % 10 == 0 && emitter != null && !emitter.isDisposed()) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    ObservableEmitter<VotProgress> progEmitter = (ObservableEmitter<VotProgress>) emitter;
+                    progEmitter.onNext(VotProgress.waiting(-1, VotTranslationResponse.STATUS_WAITING));
+                } catch (Throwable ignored) {
+                }
+            }
         }
     }
 

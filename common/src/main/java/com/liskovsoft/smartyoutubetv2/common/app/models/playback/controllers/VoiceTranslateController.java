@@ -333,6 +333,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private long mRequestStartTimestamp;
     private long mLastBackendPendingTimestamp;
     private long mLastRealStageProgressTimestamp;
+    private int mWatchdogSessionId;
 
     public static final long TRANSLATION_WATCHDOG_TIMEOUT_MS = 45000L;
     public static final long TRANSLATION_STAGE_STALL_TIMEOUT_MS = 90000L;
@@ -340,7 +341,7 @@ public class VoiceTranslateController extends BasePlayerController {
     public static final long TRANSLATION_AUDIO_NO_PROGRESS_TIMEOUT_MS = 12000L;
 
     private void onWatchdogTick() {
-        if (mState == STATE_PENDING) {
+        if (mState == STATE_PENDING && mWatchdogSessionId == mTranslationSessionId) {
             long now = android.os.SystemClock.elapsedRealtime();
             long timeSinceLastHeartbeat = mLastBackendPendingTimestamp > 0 ? (now - mLastBackendPendingTimestamp) : TRANSLATION_WATCHDOG_TIMEOUT_MS;
             long timeSinceLastRealProgress = mLastRealStageProgressTimestamp > 0 ? (now - mLastRealStageProgressTimestamp) : timeSinceLastHeartbeat;
@@ -1838,6 +1839,7 @@ public class VoiceTranslateController extends BasePlayerController {
         mNewBackendGenerationId = 0;
         Utils.removeCallbacks(mProgressTickRunnable);
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
+        Utils.removeCallbacks(mTranslationWatchdogRunnable);
         mProgressTimer.clear();
         if (mYandexOrchestrator != null) {
             mYandexOrchestrator.cancel();
@@ -2250,6 +2252,11 @@ public class VoiceTranslateController extends BasePlayerController {
             YandexVotLog.w(TAG, "VOT NEW backend failed PRE-PLAYBACK (" + errorMsg + "). Falling back to OLD production backend once.");
             mFallbackTriggered = true;
             mStateMachine.recordFallbackAttempt(errorMsg != null ? errorMsg : "new_backend_error");
+            long nowMs = System.currentTimeMillis();
+            long nowElapsed = android.os.SystemClock.elapsedRealtime();
+            mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER, nowMs);
+            mLastBackendPendingTimestamp = nowElapsed;
+            mLastRealStageProgressTimestamp = nowElapsed;
             Map<String, String> fbCtx = new HashMap<>();
             fbCtx.put("primaryFailure", errorMsg != null ? errorMsg : "unknown");
             fbCtx.put("fallbackCount", mStateMachine.getFallbackAttempted() ? "1" : "0");
@@ -2469,17 +2476,21 @@ public class VoiceTranslateController extends BasePlayerController {
                 MessageHelpers.showMessage(getContext(), R.string.vot_lively_fallback_standard);
                 break;
             case VotProgress.TYPE_WAITING:
-                mPendingEtaSec = progress.remainingTimeSec;
+                if (progress.remainingTimeSec > 0) {
+                    mPendingEtaSec = progress.remainingTimeSec;
+                }
                 if (mStateMachine.getCurrentState() != com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER) {
                     mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER, System.currentTimeMillis());
                     mLastRealStageProgressTimestamp = nowElapsed;
                     mPendingToastShown = false;
                 }
-                if (mStateMachine.onProgressPoll(-1, progress.remainingTimeSec, System.currentTimeMillis()) ==
-                        com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ProgressUpdateType.REAL_PROGRESS) {
-                    mLastRealStageProgressTimestamp = nowElapsed;
+                if (progress.remainingTimeSec > 0) {
+                    if (mStateMachine.onProgressPoll(-1, progress.remainingTimeSec, System.currentTimeMillis()) ==
+                            com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.ProgressUpdateType.REAL_PROGRESS) {
+                        mLastRealStageProgressTimestamp = nowElapsed;
+                    }
+                    mProgressTimer.reconcileEta(progress.remainingTimeSec, mLastBackendPendingTimestamp);
                 }
-                mProgressTimer.reconcileEta(progress.remainingTimeSec, mLastBackendPendingTimestamp);
                 if (mUserArmed && progressOverlay() != null) {
                     progressOverlay().showProcessing(getActivity(),
                             mOverlayProgress.onProcessingHeartbeat(progress.remainingTimeSec));
@@ -3091,6 +3102,7 @@ public class VoiceTranslateController extends BasePlayerController {
         }
         mState = state;
         if (state == STATE_PENDING) {
+            mWatchdogSessionId = mTranslationSessionId;
             Utils.removeCallbacks(mTranslationWatchdogRunnable);
             Utils.postDelayed(mTranslationWatchdogRunnable, TRANSLATION_WATCHDOG_TIMEOUT_MS);
         } else {

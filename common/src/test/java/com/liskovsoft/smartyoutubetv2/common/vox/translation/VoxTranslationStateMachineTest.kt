@@ -100,4 +100,26 @@ class VoxTranslationStateMachineTest {
         assertTrue(summary.containsKey("translationAttachMs"))
         assertTrue(summary.containsKey("translationTotalMs"))
     }
+
+    @Test
+    fun testFallbackStageResetAndTimeoutGuard() {
+        val t0 = 1000L
+        stateMachine.transitionTo(VoxTranslationStateMachine.State.PROCESSING, t0)
+        assertEquals(VoxTranslationStateMachine.State.PROCESSING, stateMachine.currentState)
+
+        // Fallback recorded
+        assertTrue(stateMachine.canAttemptFallback())
+        assertTrue(stateMachine.recordFallbackAttempt("NEW_BACKEND_HTTP_400"))
+        assertFalse(stateMachine.canAttemptFallback())
+
+        // Fallback transitions stage to WAITING_PROVIDER and resets stage transition timer
+        val t1 = t0 + 20_000L
+        stateMachine.transitionTo(VoxTranslationStateMachine.State.WAITING_PROVIDER, t1)
+        assertEquals(VoxTranslationStateMachine.State.WAITING_PROVIDER, stateMachine.currentState)
+
+        // Verify stage is not stalled at t1 + 30s (total 50s from t0, but only 30s from t1)
+        assertFalse(stateMachine.isStageStalled(t1 + 30_000L, 45_000L))
+        // Verify stage stalls only after full timeout from t1
+        assertTrue(stateMachine.isStageStalled(t1 + 46_000L, 45_000L))
+    }
 }
