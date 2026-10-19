@@ -32,7 +32,8 @@ object VoxOtaPreInstallValidator {
         "com.liskovsoft.smarttubetv.beta",
         "com.liskovsoft.smarttubetv",
         "io.github.kiryuhak.smarttubevot.stable",
-        "io.github.kiryuhak.smarttubevot.beta"
+        "io.github.kiryuhak.smarttubevot.beta",
+        "io.github.kiryuhak.smarttubevot.otaqa"
     )
 
     data class ValidationResult(
@@ -174,12 +175,15 @@ object VoxOtaPreInstallValidator {
             val currentPkg = context.packageName
             val validPackages = ALLOWED_PACKAGE_NAMES + currentPkg
 
-            if (apkPackageName != null && apkPackageName !in validPackages) {
-                return fail(
-                    VoxOtaErrorCode.PACKAGE_MISMATCH,
-                    "Имя пакета в обновлении ($apkPackageName) не соответствует ожидаемому ($currentPkg)",
-                    mapOf("apkPackage" to apkPackageName, "expectedPackage" to currentPkg)
-                )
+            val isKnownVariant = currentPkg in ALLOWED_PACKAGE_NAMES
+            if (apkPackageName != null) {
+                if (apkPackageName !in validPackages || (isKnownVariant && apkPackageName != currentPkg)) {
+                    return fail(
+                        VoxOtaErrorCode.PACKAGE_MISMATCH,
+                        "Имя пакета в обновлении ($apkPackageName) не соответствует установленному ($currentPkg)",
+                        mapOf("apkPackage" to apkPackageName, "expectedPackage" to currentPkg)
+                    )
+                }
             }
 
             val installedVersionCode = try {

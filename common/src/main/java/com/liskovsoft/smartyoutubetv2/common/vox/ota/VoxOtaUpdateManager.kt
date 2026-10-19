@@ -81,7 +81,7 @@ class VoxOtaUpdateManager(private val context: Context) {
             val msg = customMessage ?: throwable.message ?: throwable.javaClass.simpleName
             val (code, resolvedStage, isRetryable) = when (throwable) {
                 is UnknownHostException -> Triple(VoxOtaErrorCode.DNS_ERROR, VoxOtaStage.DNS, true)
-                is SocketTimeoutException -> Triple(VoxOtaErrorCode.TIMEOUT, VoxOtaStage.CONNECT, true)
+                is SocketTimeoutException, is java.util.concurrent.TimeoutException -> Triple(VoxOtaErrorCode.TIMEOUT, VoxOtaStage.CONNECT, true)
                 is ConnectException -> Triple(VoxOtaErrorCode.NETWORK_ERROR, VoxOtaStage.CONNECT, true)
                 is SSLException -> Triple(VoxOtaErrorCode.TLS_ERROR, VoxOtaStage.TLS, false)
                 is org.json.JSONException -> Triple(VoxOtaErrorCode.PARSE_ERROR, VoxOtaStage.PARSE, false)

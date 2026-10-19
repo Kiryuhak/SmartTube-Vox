@@ -37,18 +37,36 @@ class UpdateErrorMappingTest {
 
     @Test
     fun testExceptionMappingLogic() {
-        val dnsException = UnknownHostException("api.github.com")
-        val timeoutException = SocketTimeoutException("Read timed out")
-        val sslException = SSLException("Handshake failed")
-        val connException = ConnectException("Connection refused")
-        val rateLimitException = IOException("HTTP 429 Too Many Requests")
-        val notFoundException = IOException("HTTP 404 Not Found")
+        val dnsEx = VoxOtaUpdateManager.classifyException(UnknownHostException("api.github.com"))
+        assertEquals(VoxOtaErrorCode.DNS_ERROR, dnsEx.code)
+        assertEquals(VoxOtaStage.DNS, dnsEx.stage)
+        assertTrue(dnsEx.isRetryable)
 
-        assertTrue(dnsException is UnknownHostException)
-        assertTrue(timeoutException is SocketTimeoutException)
-        assertTrue(sslException is SSLException)
-        assertTrue(connException is ConnectException)
-        assertTrue(rateLimitException.message?.contains("429") == true)
-        assertTrue(notFoundException.message?.contains("404") == true)
+        val timeoutEx1 = VoxOtaUpdateManager.classifyException(SocketTimeoutException("Read timed out"))
+        assertEquals(VoxOtaErrorCode.TIMEOUT, timeoutEx1.code)
+        assertEquals(VoxOtaStage.CONNECT, timeoutEx1.stage)
+        assertTrue(timeoutEx1.isRetryable)
+
+        val timeoutEx2 = VoxOtaUpdateManager.classifyException(java.util.concurrent.TimeoutException("Future timed out"))
+        assertEquals(VoxOtaErrorCode.TIMEOUT, timeoutEx2.code)
+        assertTrue(timeoutEx2.isRetryable)
+
+        val sslEx = VoxOtaUpdateManager.classifyException(SSLException("Handshake failed"))
+        assertEquals(VoxOtaErrorCode.TLS_ERROR, sslEx.code)
+        assertEquals(VoxOtaStage.TLS, sslEx.stage)
+        assertFalse(sslEx.isRetryable)
+
+        val connEx = VoxOtaUpdateManager.classifyException(ConnectException("Connection refused"))
+        assertEquals(VoxOtaErrorCode.NETWORK_ERROR, connEx.code)
+        assertEquals(VoxOtaStage.CONNECT, connEx.stage)
+        assertTrue(connEx.isRetryable)
+
+        val rateLimitEx = VoxOtaUpdateManager.classifyException(IOException("HTTP 429 Too Many Requests"))
+        assertEquals(VoxOtaErrorCode.RATE_LIMIT, rateLimitEx.code)
+        assertTrue(rateLimitEx.isRetryable)
+
+        val notFoundEx = VoxOtaUpdateManager.classifyException(IOException("HTTP 404 Not Found"))
+        assertEquals(VoxOtaErrorCode.RELEASE_NOT_FOUND, notFoundEx.code)
+        assertFalse(notFoundEx.isRetryable)
     }
 }
