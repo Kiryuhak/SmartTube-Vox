@@ -50,6 +50,7 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         fun onRecreateSourceRequested()
         fun onNetworkFallbackRequested(nextEngine: Int)
         fun onReturnToLiveRequested()
+        fun onPositionClamped(clampedPositionMs: Long) {}
         fun showMessage(message: String)
     }
 
@@ -59,6 +60,8 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         const val SAFE_LIVE_OFFSET_MS = 15_000L
         const val MIN_LIVE_WINDOW_CLAMP_BUFFER_MS = 2_000L
         const val MAX_RECOVERY_ATTEMPTS = 3
+        const val STALE_POSITION_MESSAGE = "Эта часть эфира уже недоступна"
+        const val REFRESHING_MESSAGE = "Обновляем прямой эфир…"
     }
 
     private val handler = Handler(looper)
@@ -70,22 +73,17 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
     private var bufferingStartMs: Long = 0L
     private var lastObservedLiveOffsetMs: Long = 0L
     private var lastObservedDurationMs: Long = 0L
-
-    private val classificationRunnable = Runnable {
-        onStallClassified()
-    }
-
-    private val recoveryTriggerRunnable = Runnable {
-        onStallRecoveryTriggered()
-    }
+    private var currentGeneration: Long = 0L
 
     fun getState(): VoxLiveStallState = currentState
     fun getRecoveryAttempts(): Int = recoveryAttemptsCount
+    fun getCurrentGeneration(): Long = currentGeneration
 
     private var lastObservedOffsetWasInvalid: Boolean = false
 
     @Synchronized
     fun onPlaybackStart(isLive: Boolean) {
+        currentGeneration++
         reset()
         isLiveSession = isLive
         currentState = VoxLiveStallState.IDLE
@@ -115,10 +113,22 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
 
         if (currentState != VoxLiveStallState.BUFFERING_OBSERVED) {
             currentState = VoxLiveStallState.BUFFERING_OBSERVED
-            handler.removeCallbacks(classificationRunnable)
-            handler.removeCallbacks(recoveryTriggerRunnable)
-            handler.postDelayed(classificationRunnable, STALL_CLASSIFICATION_DELAY_MS)
-            handler.postDelayed(recoveryTriggerRunnable, STALL_RECOVERY_TRIGGER_DELAY_MS)
+            handler.removeCallbacksAndMessages(null)
+            val gen = currentGeneration
+            handler.postDelayed({
+                synchronized(this@VoxLiveStallRecoveryController) {
+                    if (gen == currentGeneration) {
+                        onStallClassified()
+                    }
+                }
+            }, STALL_CLASSIFICATION_DELAY_MS)
+            handler.postDelayed({
+                synchronized(this@VoxLiveStallRecoveryController) {
+                    if (gen == currentGeneration) {
+                        onStallRecoveryTriggered(gen)
+                    }
+                }
+            }, STALL_RECOVERY_TRIGGER_DELAY_MS)
         }
     }
 
@@ -126,8 +136,7 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
     fun onBufferingEnded() {
         if (!isLiveSession) return
 
-        handler.removeCallbacks(classificationRunnable)
-        handler.removeCallbacks(recoveryTriggerRunnable)
+        handler.removeCallbacksAndMessages(null)
 
         if (currentState != VoxLiveStallState.IDLE) {
             val wasStalled = currentState != VoxLiveStallState.BUFFERING_OBSERVED
@@ -156,6 +165,9 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
             return requestedPosMs
         }
 
+        currentGeneration++
+        handler.removeCallbacksAndMessages(null)
+
         currentState = VoxLiveStallState.CLAMPING_LIVE_WINDOW
         val minSafePos = if (windowStartMs > 0L) windowStartMs + 1_000L else 0L
         val maxSafePos = Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
@@ -167,6 +179,10 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
                     VoxLogCode.LIVE_DVR_SEEK_CLAMP,
                     "DVR seek clamped to window start: requested=$requestedPosMs, minSafe=$minSafePos"
                 )
+                try {
+                    actionHandler.showMessage(STALE_POSITION_MESSAGE)
+                } catch (ignored: Exception) {}
+                actionHandler.onPositionClamped(minSafePos)
                 minSafePos
             }
             requestedPosMs > maxSafePos -> {
@@ -175,6 +191,7 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
                     VoxLogCode.LIVE_DVR_SEEK_CLAMP,
                     "DVR seek clamped to window end: requested=$requestedPosMs, maxSafe=$maxSafePos"
                 )
+                actionHandler.onPositionClamped(maxSafePos)
                 maxSafePos
             }
             else -> requestedPosMs
@@ -186,6 +203,8 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
 
     @Synchronized
     fun handleBehindLiveWindow(context: Context?, onReturnToLive: Runnable) {
+        currentGeneration++
+        handler.removeCallbacksAndMessages(null)
         VoxSafeLogger.w(
             VoxLogCategory.PLAYER,
             VoxLogCode.LIVE_BEHIND_WINDOW_RECOVERED,
@@ -239,7 +258,10 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         )
     }
 
-    private fun onStallRecoveryTriggered() {
+    private fun onStallRecoveryTriggered(scheduledGen: Long = currentGeneration) {
+        if (scheduledGen != currentGeneration) {
+            return
+        }
         if (currentState != VoxLiveStallState.STALL_DETECTED && currentState != VoxLiveStallState.BUFFERING_OBSERVED) {
             return
         }
@@ -267,6 +289,9 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         when (recoveryAttemptsCount) {
             1 -> {
                 currentState = VoxLiveStallState.REFRESHING_MANIFEST
+                try {
+                    actionHandler.showMessage(REFRESHING_MESSAGE)
+                } catch (ignored: Exception) {}
                 actionHandler.onRefreshManifestRequested()
             }
             2 -> {
@@ -306,8 +331,8 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
 
     @Synchronized
     fun reset() {
-        handler.removeCallbacks(classificationRunnable)
-        handler.removeCallbacks(recoveryTriggerRunnable)
+        currentGeneration++
+        handler.removeCallbacksAndMessages(null)
         currentState = VoxLiveStallState.IDLE
         recoveryAttemptsCount = 0
         bufferingStartMs = 0L

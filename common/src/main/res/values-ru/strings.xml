@@ -795,6 +795,8 @@
     <string name="vox_live_recovering">Восстанавливаем эфир…</string>
     <string name="vox_live_position_unavailable">Позиция больше недоступна, возвращаем к ближайшему моменту</string>
     <string name="vox_live_recovery_failed">Не удалось восстановить эфир</string>
+    <string name="vox_live_stale_position">Эта часть эфира уже недоступна</string>
+    <string name="vox_live_refreshing">Обновляем прямой эфир…</string>
     <string name="vox_fixing_connection">Восстанавливаем соединение…</string>
     <string name="vox_fixing_dns">Восстанавливаем соединение…</string>
     <string name="vox_fixing_playback">Восстанавливаем воспроизведение…</string>

@@ -97,6 +97,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 if (mPlayer != null) {
                     mPlayer.seekTo(targetPositionMs);
                 }
+                mEventListener.onSeekPositionChanged(targetPositionMs);
             }
 
             @Override
@@ -115,6 +116,13 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 if (mPlayer != null) {
                     mPlayer.seekToDefaultPosition();
                 }
+                long defaultPos = mPlayer != null ? mPlayer.getCurrentPosition() : 0L;
+                mEventListener.onSeekPositionChanged(defaultPos);
+            }
+
+            @Override
+            public void onPositionClamped(long clampedPositionMs) {
+                mEventListener.onSeekPositionChanged(clampedPositionMs);
             }
 
             @Override
@@ -235,7 +243,20 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             duration = getVideo().getDurationMs();
         }
         if (isLive) {
-            positionMs = mStallRecoveryController.onSeekRequested(positionMs, duration, 0L, true);
+            long windowStartMs = 0L;
+            if (mPlayer != null) {
+                Timeline timeline = mPlayer.getCurrentTimeline();
+                if (timeline != null && !timeline.isEmpty()) {
+                    Timeline.Window window = new Timeline.Window();
+                    timeline.getWindow(mPlayer.getCurrentWindowIndex(), window);
+                    if (window.isDynamic) {
+                        if (window.durationUs != C.TIME_UNSET) {
+                            duration = C.usToMs(window.durationUs);
+                        }
+                    }
+                }
+            }
+            positionMs = mStallRecoveryController.onSeekRequested(positionMs, duration, windowStartMs, true);
         }
         if (duration <= 0 || positionMs <= duration) {
             long fromPos = getPositionMs();

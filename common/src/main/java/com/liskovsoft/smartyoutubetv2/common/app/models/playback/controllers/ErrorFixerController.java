@@ -36,11 +36,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private final PlayerCacheRecoveryPolicy mPlayerCacheRecoveryPolicy = new PlayerCacheRecoveryPolicy();
     private VideoLoaderController mVideoLoaderController;
     private int mOomRecoveryAttempts = 0;
+    private int mLiveBufferingRecoveryCount = 0;
 
     @Override
     public void onInit() {
         mVideoLoaderController = getController(VideoLoaderController.class);
         mOomRecoveryAttempts = 0;
+        mLiveBufferingRecoveryCount = 0;
     }
 
     @Override
@@ -60,6 +62,19 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 getVideo() != null && getVideo().isLive,
                 getPlayerTweaksData().getPlayerDataSource(),
                 getPlayer().getPositionMs());
+
+        if (getVideo() != null && getVideo().isLive) {
+            mLiveBufferingRecoveryCount++;
+            if (mLiveBufferingRecoveryCount > 3) {
+                Log.e(TAG, "Live long buffering recovery exceeded limit; returning to live edge");
+                mLiveBufferingRecoveryCount = 0;
+                if (getPlayer() != null) {
+                    getPlayer().setPositionMs(Math.max(0, getPlayer().getDurationMs() - 15_000L));
+                    getPlayer().setPlayWhenReady(true);
+                }
+                return;
+            }
+        }
 
         if (isStreamEnded()) {
             getMainController().onPlayEnd();
@@ -120,6 +135,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     public void onPlay() {
         mNetworkRecoveryPolicy.onPlaybackProgress();
         mPlayerCacheRecoveryPolicy.onPlaybackStarted();
+        mLiveBufferingRecoveryCount = 0;
         mBufferingDetector.onStopBuffering();
     }
 
@@ -133,6 +149,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         mNetworkRecoveryPolicy.reset();
         mPlayerCacheRecoveryPolicy.reset();
         mOomRecoveryAttempts = 0;
+        mLiveBufferingRecoveryCount = 0;
         mBufferingDetector.start();
     }
 

@@ -781,6 +781,8 @@
     <string name="vox_live_recovering">Recovering live stream…</string>
     <string name="vox_live_position_unavailable">Position is no longer available, returning to nearest moment</string>
     <string name="vox_live_recovery_failed">Failed to recover live stream</string>
+    <string name="vox_live_stale_position">This part of the live stream is no longer available</string>
+    <string name="vox_live_refreshing">Refreshing live stream…</string>
     <string name="vox_fixing_connection">Restoring connection…</string>
     <string name="vox_fixing_dns">Restoring connection…</string>
     <string name="vox_fixing_playback">Restoring playback…</string>

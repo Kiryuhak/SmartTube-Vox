@@ -202,6 +202,14 @@ public class VideoStateController extends BasePlayerController {
         // Need a delay while player internal state changed
         Utils.post(mUpdateHistory);
         mIsRestoreActualLive = false;
+        if (getVideo() != null && getVideo().isLive) {
+            Video video = getVideo();
+            long dur = getPlayer() != null ? getPlayer().getDurationMs() : video.getDurationMs();
+            float spd = getPlayer() != null ? getPlayer().getSpeed() : 1.0f;
+            State updatedState = new State(video, positionMs, dur, spd);
+            getStateService().save(updatedState);
+            video.sync(updatedState);
+        }
     }
 
     @Override
@@ -569,6 +577,16 @@ public class VideoStateController extends BasePlayerController {
         if (item.isLive && (state == null || state.durationMs - state.positionMs < Math.max(RESTORE_LIVE_BUFFER_MS, getLiveThreshold()))) {
             // Add buffer. Should I take into account segment offset???
             state = new State(item, getPlayer().getDurationMs() - getLiveBuffer());
+        }
+
+        if (item.isLive && state != null) {
+            long durationMs = getPlayer().getDurationMs();
+            if (durationMs > 0) {
+                long maxSafePos = Math.max(0L, durationMs - getLiveBuffer());
+                if (state.positionMs < 0L || state.positionMs > durationMs) {
+                    state = new State(item, maxSafePos);
+                }
+            }
         }
 
         // Do I need to check that item isn't live? (state != null && !item.isLive)
