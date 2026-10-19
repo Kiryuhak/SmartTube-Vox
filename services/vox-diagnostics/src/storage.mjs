@@ -91,6 +91,26 @@ export function normalizeStatus(rawStatus) {
   return s;
 }
 
+export const CANONICAL_INCIDENT_STATUSES = [
+  'NEW',
+  'INVESTIGATING',
+  'DUPLICATE',
+  'FIXED_PENDING_VERIFY',
+  'RESOLVED',
+  'IGNORED',
+];
+
+export function toCanonicalIncidentStatus(rawStatus) {
+  if (!rawStatus) return 'NEW';
+  const s = String(rawStatus).toUpperCase().trim();
+  if (['INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'REVIEWED', 'NEEDS_INFO'].includes(s)) return 'INVESTIGATING';
+  if (['DUPLICATE', 'DUP'].includes(s)) return 'DUPLICATE';
+  if (['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'PENDING_VERIFICATION', 'FIXED', 'KNOWN_ISSUE', 'KNOWN'].includes(s)) return 'FIXED_PENDING_VERIFY';
+  if (['RESOLVED', 'CLOSED'].includes(s)) return 'RESOLVED';
+  if (['IGNORED', 'IGNORED_TEST', 'TEST', 'WONT_FIX', 'WONTFIX'].includes(s)) return 'IGNORED';
+  return 'NEW';
+}
+
 /**
  * Адаптер хранилища отчётов диагностики VOX.
  * Поддерживает Cloudflare D1 (когда передан env.DB) и in-memory хранилище (для тестов и локального запуска).
@@ -131,7 +151,7 @@ export class ReportStorage {
     const deviceFamily = `${report.manufacturer || ''} ${report.model || ''}`.trim() || 'unknown';
     const classification = classifyReport(report);
     const errorCategory = report.errorCategory || classification.errorCategory || (classification.primaryEvent ? (classification.primaryEvent.category || classification.primaryEvent.errorCategory) : null) || null;
-    const isSynth = isSyntheticTestReport({ ...report, deviceFamily });
+    const isSynth = isSyntheticTestReport({ ...report, reportId, deviceFamily });
     const reportPurpose = isSynth ? 'TEST' : (report.reportPurpose || report.purpose || 'USER');
     const rawStatus = report.status || (isSynth ? 'IGNORED_TEST' : 'NEW');
     const status = normalizeStatus(rawStatus);
@@ -780,7 +800,7 @@ export class ReportStorage {
     }
 
     for (const key of allowed.filter(key => key !== 'status' && key !== 'actor' && key !== 'occurrences')) {
-      if (patch[key] !== undefined && (typeof patch[key] !== 'string' || patch[key].length > 256)) throw new RangeError(`Invalid ${key}`);
+      if (patch[key] !== undefined && patch[key] !== null && (typeof patch[key] !== 'string' || patch[key].length > 256)) throw new RangeError(`Invalid ${key}`);
     }
 
     const before = await this.getIssue(signature);

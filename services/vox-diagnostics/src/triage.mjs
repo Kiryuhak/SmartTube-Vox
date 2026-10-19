@@ -28,6 +28,7 @@ export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   OTA_RATE_LIMIT_RECOVERED: 'Связь с сервером обновлений восстановлена',
   OTA_CHECK_SKIPPED_COOLDOWN: 'Проверка обновлений пропущена (действует период охлаждения)',
   OTA_NO_UPDATE: 'Установлена актуальная версия приложения',
+  OTA_RELEASE_NOT_FOUND: 'Установлена актуальная версия приложения',
   OTA_SIGNATURE_MISMATCH: 'Несовпадение цифровой подписи обновления',
   IMAGE_REQUEST_FAILED_FINAL: 'Не удалось загрузить изображение',
   IMAGE_REQUEST_FAILED: 'Ошибка загрузки обложки / миниатюры',
@@ -231,15 +232,22 @@ export function isSyntheticTestReport(report = {}) {
 export function structuredEvents(report = {}) {
   const raw = Array.isArray(report.safeRecentEvents) ? report.safeRecentEvents : [];
   const mapped = raw.map(event => {
-    const code = enumValue(event.event || event.code, 'EVENT');
-    const category = enumValue(event.category || inferCategoryFromCode(code), 'GENERAL');
+    let code = enumValue(event.event || event.code, 'EVENT');
+    let category = enumValue(event.category || inferCategoryFromCode(code), 'GENERAL');
+    const msg = String(event.message || '').toLowerCase();
+    const httpCode = event.context?.httpCode || event.safeContext?.httpCode || event.context?.code || event.safeContext?.code;
+    const isOta = category === 'OTA' || code.startsWith('OTA_') || String(event.subsystem).toUpperCase() === 'OTA';
+    if (isOta && (code === 'OTA_RELEASE_NOT_FOUND' || code === 'RELEASE_NOT_FOUND' || httpCode === 404 || msg.includes('404') || msg.includes('not found') || msg.includes('релиз не найден'))) {
+      code = 'OTA_NO_UPDATE';
+      category = 'OTA';
+    }
     const inferredSubsystem = category === 'CHANNEL_GROUP' ? 'CHANNEL_GROUPS' :
       ['MEDIA3', 'CODEC', 'PLAYBACK'].includes(category) ? 'PLAYER' :
       category === 'COMPATIBILITY' ? 'AUTO_SETUP' :
       category === 'STORAGE' ? 'OFFLINE' :
       SUBSYSTEMS.find(name => category.includes(name) || code.includes(name)) || 'SYSTEM';
-    const severity = enumValue(event.severity || event.level, 'INFO');
-    const level = enumValue(event.level || event.severity, 'INFO');
+    const severity = code === 'OTA_NO_UPDATE' ? 'INFO' : enumValue(event.severity || event.level, 'INFO');
+    const level = code === 'OTA_NO_UPDATE' ? 'INFO' : enumValue(event.level || event.severity, 'INFO');
     const isSyntheticFixture = code === 'DOWNLOAD_STATE_INCONSISTENT' && (
       /p37-|test-fixture-|test-dl-/i.test(String(event.message || '')) ||
       /p37-|test-fixture-|test-dl-/i.test(String(event.context?.downloadId || event.safeContext?.downloadId || ''))

@@ -24,7 +24,7 @@
     "height": 1080
   },
   "errorCategory": "OTA",
-  "status": "NEW",
+  "status": "IGNORED",
   "reportPurpose": "AUTO_BETA",
   "updateChannel": "AUTO_BETA",
   "autoSubmitted": true,
