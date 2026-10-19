@@ -160,4 +160,54 @@ class VoxTranslationSessionCacheTest {
         )
         assertTrue(after is VoxTranslationSessionCache.LookupResult.Miss)
     }
+
+    @Test
+    fun testExpiredAmzSigV4UrlReturnsMiss() {
+        // Expired URL from earlier date/time
+        val expiredAudioUrl = "https://vtrans.s3-private.mds.yandex.net/tts/prod/test.mp3?X-Amz-Date=20200101T000000Z&X-Amz-Expires=3600"
+        VoxTranslationSessionCache.storeReadyTranslation(
+            videoId = "videoExpiredSigV4",
+            rawUrl = "https://youtube.com/watch?v=videoExpiredSigV4",
+            sourceLang = "en",
+            targetLang = "ru",
+            audioUrl = expiredAudioUrl,
+            durationSec = 100.0,
+            useLively = false
+        )
+
+        val result = VoxTranslationSessionCache.lookup(
+            videoId = "videoExpiredSigV4",
+            rawUrl = "https://youtube.com/watch?v=videoExpiredSigV4",
+            sourceLang = "en",
+            targetLang = "ru",
+            useLively = false
+        )
+        assertTrue(result is VoxTranslationSessionCache.LookupResult.Miss)
+    }
+
+    @Test
+    fun testValidAmzSigV4UrlReturnsHit() {
+        val nowUtc = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(java.util.Date(System.currentTimeMillis()))
+        val validAudioUrl = "https://vtrans.s3-private.mds.yandex.net/tts/prod/test.mp3?X-Amz-Date=$nowUtc&X-Amz-Expires=7200"
+        VoxTranslationSessionCache.storeReadyTranslation(
+            videoId = "videoValidSigV4",
+            rawUrl = "https://youtube.com/watch?v=videoValidSigV4",
+            sourceLang = "en",
+            targetLang = "ru",
+            audioUrl = validAudioUrl,
+            durationSec = 100.0,
+            useLively = false
+        )
+
+        val result = VoxTranslationSessionCache.lookup(
+            videoId = "videoValidSigV4",
+            rawUrl = "https://youtube.com/watch?v=videoValidSigV4",
+            sourceLang = "en",
+            targetLang = "ru",
+            useLively = false
+        )
+        assertTrue(result is VoxTranslationSessionCache.LookupResult.Hit)
+    }
 }

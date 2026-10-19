@@ -33,6 +33,37 @@ def adb_cmd(args):
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     return res.stdout.strip(), res.returncode
 
+def find_qemu_audio_node():
+    try:
+        res = subprocess.run(["pw-cli", "list-objects", "Node"], stdout=subprocess.PIPE, text=True)
+        chunks = res.stdout.split("\tid ")
+        for chunk in chunks[1:]:
+            header = chunk.splitlines()[0]
+            node_id = header.split(",")[0].strip()
+            if 'application.name = "qemu-system-x86_64"' in chunk and 'media.class = "Stream/Output/Audio"' in chunk:
+                return node_id
+    except Exception as e:
+        print(f"Warning finding QEMU node: {e}")
+    return None
+
+def start_audio_recording(out_wav):
+    node_id = find_qemu_audio_node()
+    if node_id:
+        print(f"Recording audio directly from QEMU PipeWire node {node_id} -> {out_wav}")
+        cmd = ["pw-record", "--target", str(node_id), out_wav]
+    else:
+        print(f"Fallback: recording audio from PipeWire monitor sink -> {out_wav}")
+        cmd = ["parecord", "--device=alsa_output.pci-0000_03_00.6.analog-stereo.monitor", out_wav]
+    return subprocess.Popen(cmd)
+
+def stop_audio_recording(proc):
+    if proc:
+        proc.send_signal(subprocess.signal.SIGINT)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
 def take_screenshot(filename):
     out_path = os.path.join(REPORTS_DIR, filename)
     with open(out_path, "wb") as f:
@@ -60,9 +91,9 @@ def measure_right_edge(img_path, base_img_path):
 
 def main():
     parser = argparse.ArgumentParser(description="SmartTube VOX VOT HUD E2E Verification & Video Recording")
-    parser.add_argument("--video-id", default="flnVc2Ke-bw", help="YouTube video ID to test (default: flnVc2Ke-bw)")
-    parser.add_argument("--video-title", default="Welcome to PyCon US 2025", help="Human-readable title")
-    parser.add_argument("--duration", type=int, default=1250, help="Video duration in seconds")
+    parser.add_argument("--video-id", default="UF8uR6Z6KLc", help="YouTube video ID to test (default: UF8uR6Z6KLc)")
+    parser.add_argument("--video-title", default="Steve Jobs Stanford Commencement Address", help="Human-readable title")
+    parser.add_argument("--duration", type=int, default=904, help="Video duration in seconds")
     parser.add_argument("--prefix", default="uncached", help="Prefix for outputs: uncached or fast")
     parser.add_argument("--timeout", type=int, default=120, help="Max wait timeout in seconds")
     args = parser.parse_args()
@@ -71,6 +102,8 @@ def main():
     os.makedirs(os.path.join(REPORTS_DIR, "archive"), exist_ok=True)
 
     video_local = os.path.join(REPORTS_DIR, f"vot_hud_real_translation_{args.prefix}.mp4")
+    audio_local = os.path.join(REPORTS_DIR, f"vot_hud_{args.prefix}_audio.wav")
+    final_video_with_audio = os.path.join(REPORTS_DIR, "vot_hud_real_translation_with_audio.mp4")
     timing_file = os.path.join(REPORTS_DIR, f"vot_hud_{args.prefix}_timing.txt")
     logcat_file = os.path.join(REPORTS_DIR, f"vot_hud_{args.prefix}_logcat.txt")
 
@@ -106,11 +139,14 @@ def main():
     # Clear old recording on device
     adb_cmd(["shell", "rm", "-f", DEVICE_TMP_VIDEO])
 
-    # Start screen recording on device BEFORE translate tap
+    # Start screen recording on device and audio recording on host BEFORE translate tap
     print(f"Starting screen recording on device ({DEVICE_TMP_VIDEO})...")
     rec_proc = subprocess.Popen([ADB, "-s", SERIAL, "shell", "screenrecord",
                                  "--bit-rate", "8000000", "--time-limit", str(args.timeout + 30), DEVICE_TMP_VIDEO])
-    time.sleep(2.0)  # Allow initial playing frames to be captured
+    audio_proc = start_audio_recording(audio_local)
+
+    print("Capturing 5 seconds of original English audio prior to translation...")
+    time.sleep(5.0)  # Allow >= 3s (5s) initial playing frames and English audio to be captured
 
     # Clear logcat
     adb_cmd(["logcat", "-c"])
@@ -230,8 +266,13 @@ def main():
 
     logcat_proc.terminate()
 
-    # Allow 2 seconds for final frames
-    time.sleep(2)
+    # Allow >= 12 seconds for Russian translation to play cleanly after HUD is hidden
+    print("Capturing 14 seconds of real translated Russian audio...")
+    time.sleep(14.0)
+
+    # Stop audio recording first
+    print("Stopping audio recording...")
+    stop_audio_recording(audio_proc)
 
     # Stop screen recording
     print("Stopping screen recording on device...")
@@ -242,6 +283,39 @@ def main():
     # Pull video
     print(f"Pulling video to {video_local}...")
     adb_cmd(["pull", DEVICE_TMP_VIDEO, video_local])
+
+    # Mux video + audio with ffmpeg
+    os.environ["PATH"] = os.path.expanduser("~/.local/bin") + ":" + os.environ.get("PATH", "")
+    mux_cmd = [
+        "ffmpeg", "-y",
+        "-i", video_local,
+        "-i", audio_local,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        final_video_with_audio
+    ]
+    print(f"Muxing synchronized video and audio into {final_video_with_audio}...")
+    subprocess.run(mux_cmd, check=True)
+
+    # Verify audio properties using ffmpeg volumedetect
+    print("=== Running Audio Volumedetect Verification ===")
+    vdetect_cmd = ["ffmpeg", "-i", final_video_with_audio, "-af", "volumedetect", "-f", "null", "-"]
+    vdetect_res = subprocess.run(vdetect_cmd, stderr=subprocess.PIPE, text=True)
+    for vl in vdetect_res.stderr.splitlines():
+        if "mean_volume:" in vl or "max_volume:" in vl:
+            print(f"  {vl.strip()}")
+
+    # Run ffprobe stream check
+    print("=== Checking Stream Info via FFprobe ===")
+    probe_cmd = ["ffprobe", final_video_with_audio]
+    probe_res = subprocess.run(probe_cmd, stderr=subprocess.PIPE, text=True)
+    for pl in probe_res.stderr.splitlines():
+        if "Duration:" in pl or "Stream #" in pl:
+            print(f"  {pl.strip()}")
 
     # Save logcat
     print(f"Saving logcat to {logcat_file}...")

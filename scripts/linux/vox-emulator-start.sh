@@ -71,7 +71,7 @@ if [[ ! -x "${EMULATOR_BIN}" ]]; then
 fi
 
 echo "Launching emulator in background (logging to ${LOG_FILE})..."
-CMD=("${EMULATOR_BIN}" -avd "${AVD_NAME}" -gpu "${GPU_MODE}" -no-snapshot -no-boot-anim -no-audio)
+CMD=("${EMULATOR_BIN}" -avd "${AVD_NAME}" -gpu "${GPU_MODE}" -no-snapshot -no-boot-anim)
 if [[ -n "${WINDOW_FLAG}" ]]; then
     CMD+=("${WINDOW_FLAG}")
 fi

@@ -28,7 +28,7 @@ object VoxTranslationSessionCache {
     private const val CURRENT_SCHEMA_VERSION = 2
     private const val MAX_MEMORY_ENTRIES = 50
     private const val MAX_PERSISTED_ENTRIES = 100
-    private const val DEFAULT_TTL_MS = 12L * 60 * 60 * 1000 // 12 hours bounded for remote signed URLs
+    private const val DEFAULT_TTL_MS = 115L * 60 * 1000 // 115 minutes (under 2 hours) bounded for remote signed URLs
 
     @Volatile private var customTtlMs: Long? = null
 
@@ -323,7 +323,7 @@ object VoxTranslationSessionCache {
         }
 
         val urlExpiryMs = extractUrlExpiryTimestampMs(record.audioUrl)
-        if (urlExpiryMs != null && System.currentTimeMillis() >= urlExpiryMs) {
+        if (urlExpiryMs != null && System.currentTimeMillis() + 60_000L >= urlExpiryMs) {
             return false
         }
         return true
@@ -333,6 +333,8 @@ object VoxTranslationSessionCache {
         return try {
             if (!url.contains("?")) return null
             val query = url.substringAfter("?")
+            var amzDateMs: Long? = null
+            var amzExpiresSec: Long? = null
             for (param in query.split("&")) {
                 val parts = param.split("=")
                 if (parts.size == 2) {
@@ -342,10 +344,27 @@ object VoxTranslationSessionCache {
                         if (epochSec != null && epochSec in 1_000_000_000L..5_000_000_000L) {
                             return epochSec * 1000L
                         }
+                    } else if (key == "x-amz-date") {
+                        amzDateMs = parseAmzDate(parts[1])
+                    } else if (key == "x-amz-expires") {
+                        amzExpiresSec = parts[1].toLongOrNull()
                     }
                 }
             }
+            if (amzDateMs != null && amzExpiresSec != null && amzExpiresSec > 0) {
+                return amzDateMs + (amzExpiresSec * 1000L)
+            }
             null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseAmzDate(dateStr: String): Long? {
+        return try {
+            val format = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", java.util.Locale.US)
+            format.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            format.parse(dateStr)?.time
         } catch (_: Exception) {
             null
         }
