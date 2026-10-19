@@ -139,3 +139,283 @@ class ShortsNoDuplicateControllerTest {
         assertFalse(foundDuplicate)
     }
 }
+
+// =========================================================================
+// SHORTS AUTO-NEXT HARDENING SUITE: SCENARIOS A THROUGH J
+// =========================================================================
+
+class ShortsScenarioASingleEndTest {
+    @Test
+    fun testSingleEndedCallbackTriggersNextExactlyOnce() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_1"; isShorts = true }
+        val gen = controller.onNewShort(shortA)
+
+        var nextCallCount = 0
+        val accepted = controller.onShortEnded(shortA, gen) {
+            nextCallCount++
+        }
+
+        assertTrue("Single ended callback must be accepted", accepted)
+        assertEquals("Next must be requested exactly once", 1, nextCallCount)
+        assertEquals(ShortsTransitionState.TRANSITIONING, controller.state)
+    }
+}
+
+class ShortsScenarioBDuplicateEndTest {
+    @Test
+    fun testDuplicateEndedCallbackIgnoredAndTriggersNextOnce() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_2"; isShorts = true }
+        val gen = controller.onNewShort(shortA)
+
+        var nextCallCount = 0
+        val firstAccepted = controller.onShortEnded(shortA, gen) {
+            nextCallCount++
+        }
+        val secondAccepted = controller.onShortEnded(shortA, gen) {
+            nextCallCount++
+        }
+
+        assertTrue("First ended callback must be accepted", firstAccepted)
+        assertFalse("Duplicate ended callback must be ignored", secondAccepted)
+        assertEquals("Next must be executed exactly once", 1, nextCallCount)
+    }
+}
+
+class ShortsScenarioCStaleGenerationTest {
+    @Test
+    fun testStaleGenerationEndedAndPreparedCallbacksIgnored() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_3"; isShorts = true }
+        val genA = controller.onNewShort(shortA)
+
+        val shortB = Video().apply { videoId = "short_B_3"; isShorts = true }
+        val genB = controller.onNewShort(shortB)
+
+        assertTrue("Generation B must be higher than A", genB > genA)
+
+        // Late callback from short A with old generation
+        var oldNextCalled = false
+        val staleEndedAccepted = controller.onShortEnded(shortA, genA) {
+            oldNextCalled = true
+        }
+        assertFalse("Stale generation ended callback must be rejected", staleEndedAccepted)
+        assertFalse("Old next action must not be called", oldNextCalled)
+
+        val stalePreparedAccepted = controller.onPlayerPrepared(shortA, genA)
+        assertFalse("Stale prepared callback must be rejected", stalePreparedAccepted)
+
+        val staleFirstFrameAccepted = controller.onFirstFrame(shortA, genA)
+        assertFalse("Stale first frame must be rejected", staleFirstFrameAccepted)
+
+        assertEquals("Active video must remain Short B", "short_B_3", controller.getActiveVideoId())
+    }
+}
+
+class ShortsScenarioDManualAutoRaceTest {
+    @Test
+    fun testManualNavigationRacingAutoNextProducesSingleDestination() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_4"; isShorts = true }
+        val shortB = Video().apply { videoId = "short_B_4"; isShorts = true }
+        val gen = controller.onNewShort(shortA)
+
+        var autoNextExecuted = 0
+        var manualNextExecuted = 0
+
+        // Auto-next initiates
+        controller.onShortEnded(shortA, gen) {
+            autoNextExecuted++
+        }
+
+        // Concurrently user presses DPAD next
+        val manualGen = controller.onManualNext(shortA) {
+            manualNextExecuted++
+        }
+
+        assertTrue("Manual navigation must advance generation", manualGen > gen)
+        assertEquals(1, autoNextExecuted)
+        assertEquals(1, manualNextExecuted)
+        // Transition to B completed under manualGen
+        val resolved = controller.onNextResolved(shortB, manualGen)
+        assertTrue(resolved)
+        assertEquals(ShortsTransitionState.TRANSITIONING, controller.state)
+    }
+}
+
+class ShortsScenarioEBoundedSkipTest {
+    @Test
+    fun testNextItemUnavailableTriggersBoundedSkip() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_5"; isShorts = true }
+        val shortBInvalid = Video().apply { videoId = "short_B_invalid"; isShorts = true }
+        val shortCValid = Video().apply { videoId = "short_C_valid"; isShorts = true }
+
+        val gen = controller.onNewShort(shortA)
+        controller.onShortEnded(shortA, gen) {}
+
+        var skipActionCount = 0
+        var feedEndedCalled = false
+
+        // First invalid skip
+        val skipped1 = controller.onNextUnavailable(shortBInvalid, gen, {
+            skipActionCount++
+        }, {
+            feedEndedCalled = true
+        })
+
+        assertTrue("First skip must be accepted within bound", skipped1)
+        assertEquals(1, skipActionCount)
+        assertFalse(feedEndedCalled)
+
+        // Then valid short C is opened
+        val genC = controller.onNewShort(shortCValid)
+        controller.onFirstFrame(shortCValid, genC)
+
+        assertEquals(ShortsTransitionState.PLAYING, controller.state)
+        assertEquals("short_C_valid", controller.getActiveVideoId())
+    }
+}
+
+class ShortsScenarioFEndOfFeedTest {
+    @Test
+    fun testEndOfFeedDoesNotInfiniteRetry() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortLast = Video().apply { videoId = "short_last"; isShorts = true }
+        val gen = controller.onNewShort(shortLast)
+
+        var feedEndNotified = false
+        controller.onFeedEnd(gen) {
+            feedEndNotified = true
+        }
+
+        assertTrue(feedEndNotified)
+        assertEquals(ShortsTransitionState.FEED_ENDED, controller.state)
+
+        // Subsequent ended calls while feed is ended must not trigger next
+        var rogueNextCalled = false
+        val rogueEnded = controller.onShortEnded(shortLast, gen) {
+            rogueNextCalled = true
+        }
+        assertFalse(rogueEnded)
+        assertFalse(rogueNextCalled)
+    }
+}
+
+class ShortsScenarioGFirstFrameCompleteTest {
+    @Test
+    fun testNewItemFirstFrameCompletesTransitionAndRestoresFocus() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        var focusRestored = false
+        controller.onEnsureFocus = {
+            focusRestored = true
+        }
+
+        val shortA = Video().apply { videoId = "short_A_7"; isShorts = true }
+        val shortB = Video().apply { videoId = "short_B_7"; isShorts = true }
+
+        val genA = controller.onNewShort(shortA)
+        controller.onShortEnded(shortA, genA) {}
+
+        val genB = controller.onNewShort(shortB)
+        controller.onNextResolved(shortB, genB)
+        controller.onAudioStart(shortB, genB)
+        val firstFrameAccepted = controller.onFirstFrame(shortB, genB)
+
+        assertTrue(firstFrameAccepted)
+        assertTrue("Focus must be restored on first frame", focusRestored)
+        assertEquals(ShortsTransitionState.PLAYING, controller.state)
+
+        val history = controller.getTransitionHistory()
+        assertEquals(1, history.size)
+        val record = history[0]
+        assertEquals("short_A_7", record.videoAId)
+        assertEquals("short_B_7", record.videoBId)
+        assertTrue(record.focusOk)
+        assertFalse(record.doubleAdvance)
+    }
+}
+
+class ShortsScenarioHVideoSwitchCancelsOldTimeoutTest {
+    @Test
+    fun testVideoSwitchCancelsOldTimeout() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_8"; isShorts = true }
+        val genA = controller.onNewShort(shortA)
+        controller.onShortEnded(shortA, genA) {}
+
+        assertEquals(ShortsTransitionState.TRANSITIONING, controller.state)
+
+        // Switch to Short B cancels any pending timeout for Short A
+        val shortB = Video().apply { videoId = "short_B_8"; isShorts = true }
+        val genB = controller.onNewShort(shortB)
+
+        assertTrue(genB > genA)
+        assertEquals(ShortsTransitionState.PREPARING, controller.state)
+        assertEquals("short_B_8", controller.getActiveVideoId())
+    }
+}
+
+class ShortsScenarioIPauseNearEndTest {
+    @Test
+    fun testPauseNearEndPreventsPrematureAutoNext() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shortA = Video().apply { videoId = "short_A_9"; isShorts = true }
+        val gen = controller.onNewShort(shortA)
+
+        // User pauses playback near end
+        controller.onPauseStateChanged(true)
+
+        var nextCalledWhilePaused = false
+        val endedWhilePausedAccepted = controller.onShortEnded(shortA, gen) {
+            nextCalledWhilePaused = true
+        }
+
+        assertFalse("Ended event while paused must be rejected", endedWhilePausedAccepted)
+        assertFalse("Auto-next must not trigger while paused", nextCalledWhilePaused)
+        assertEquals(ShortsTransitionState.PREPARING, controller.state)
+
+        // Resumed:
+        controller.onPauseStateChanged(false)
+        var nextCalledAfterResume = false
+        val endedAfterResumeAccepted = controller.onShortEnded(shortA, gen) {
+            nextCalledAfterResume = true
+        }
+
+        assertTrue(endedAfterResumeAccepted)
+        assertTrue(nextCalledAfterResume)
+        assertEquals(ShortsTransitionState.TRANSITIONING, controller.state)
+    }
+}
+
+class ShortsScenarioJRapidNavigationTest {
+    @Test
+    fun testRapidNavigationLastGenerationWins() {
+        val controller = VoxShortsAutoNextController.createForTesting()
+        val shorts = (1..5).map { i -> Video().apply { videoId = "short_rapid_$i"; isShorts = true } }
+
+        var lastGen = 0L
+        for (video in shorts) {
+            lastGen = controller.onManualNext(video) {}
+        }
+
+        assertEquals(5L, lastGen)
+        assertEquals(5L, controller.getCurrentGeneration())
+
+        // Out-of-order callbacks from earlier generations 1..4 arrive late
+        for (staleGen in 1..4) {
+            val rejected = controller.onPlayerPrepared(shorts[staleGen.toInt() - 1], staleGen.toLong())
+            assertFalse("Callback for generation $staleGen must be rejected", rejected)
+        }
+
+        // Active generation 5 completes
+        val activeVideo = shorts[4]
+        val activePrepared = controller.onPlayerPrepared(activeVideo, 5L)
+        val activeFirstFrame = controller.onFirstFrame(activeVideo, 5L)
+
+        assertTrue(activePrepared)
+        assertTrue(activeFirstFrame)
+        assertEquals(ShortsTransitionState.PLAYING, controller.state)
+    }
+}

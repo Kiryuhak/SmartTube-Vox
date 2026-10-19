@@ -80,6 +80,9 @@ public class SuggestionsController extends BasePlayerController {
      */
     @Override
     public void onVideoLoaded(Video item) {
+        if (item != null && item.getGroup() != null && com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(item)) {
+            findNextSectionVideoIfNeeded(item);
+        }
         loadSuggestions(item);
     }
 
@@ -287,6 +290,11 @@ public class SuggestionsController extends BasePlayerController {
             result = mNextSectionVideo;
         } else if (getVideo().nextMediaItem != null) {
             result = Video.from(getVideo().nextMediaItem);
+        } else if (getVideo().getGroup() != null) {
+            findNextSectionVideoIfNeeded(getVideo());
+            if (mNextSectionVideo != null) {
+                result = mNextSectionVideo;
+            }
         }
 
         return result;

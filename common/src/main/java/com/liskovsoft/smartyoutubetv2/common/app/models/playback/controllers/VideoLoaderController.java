@@ -34,6 +34,7 @@ import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
 import io.reactivex.disposables.Disposable;
+import com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController;
 
 public class VideoLoaderController extends BasePlayerController {
     private static final String TAG = VideoLoaderController.class.getSimpleName();
@@ -44,6 +45,7 @@ public class VideoLoaderController extends BasePlayerController {
     private ErrorFixerController mErrorFixerController;
     private Disposable mFormatInfoAction;
     private MediaItemFormatInfo mFormatInfo;
+    private int mMetadataSyncRetryCount;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
     };
@@ -77,12 +79,23 @@ public class VideoLoaderController extends BasePlayerController {
     public void onInit() {
         mSuggestionsController = getController(SuggestionsController.class);
         mErrorFixerController = getController(ErrorFixerController.class);
+        VoxShortsAutoNextController.getINSTANCE().setOnEnsureFocus(() -> {
+            if (getPlayer() != null) {
+                getPlayer().ensureFocus();
+            }
+            return kotlin.Unit.INSTANCE;
+        });
     }
 
     @Override
     public void onNewVideo(Video item) {
         if (item == null) {
             return;
+        }
+
+        mMetadataSyncRetryCount = 0;
+        if (VoxShortsAutoNextController.getINSTANCE().isShort(item)) {
+            VoxShortsAutoNextController.getINSTANCE().onNewShort(item);
         }
 
         item.isShuffled = false;
@@ -96,6 +109,7 @@ public class VideoLoaderController extends BasePlayerController {
         if (getPlayer() != null && getPlayer().isEngineInitialized()) { // player is initialized
             // Fix improperly resized video after exit from PIP (Device Formuler Z8 Pro)
             loadVideo(item); // force play immediately even the same video
+            getPlayer().ensureFocus();
         } else {
             mPendingVideo = item;
         }
@@ -130,6 +144,14 @@ public class VideoLoaderController extends BasePlayerController {
 
     @Override
     public boolean onPreviousClicked() {
+        if (VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
+            VoxShortsAutoNextController.getINSTANCE().onManualPrevious(getVideo(), () -> {
+                loadPrevious();
+                return kotlin.Unit.INSTANCE;
+            });
+            return true;
+        }
+
         loadPrevious();
 
         return true;
@@ -139,6 +161,11 @@ public class VideoLoaderController extends BasePlayerController {
     public boolean onNextClicked() {
         if (getGeneralData().isChildModeEnabled()) {
             onPlayEnd();
+        } else if (VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
+            VoxShortsAutoNextController.getINSTANCE().onManualNext(getVideo(), () -> {
+                loadNext();
+                return kotlin.Unit.INSTANCE;
+            });
         } else {
             loadNext();
         }
@@ -166,6 +193,9 @@ public class VideoLoaderController extends BasePlayerController {
         Video next = mSuggestionsController.getNext();
 
         if (next != null) {
+            if (VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
+                VoxShortsAutoNextController.getINSTANCE().onNextResolved(next, VoxShortsAutoNextController.getINSTANCE().getCurrentGeneration());
+            }
             openVideoInt(next);
         } else {
             waitMetadataSync(getVideo(), true);
@@ -184,6 +214,19 @@ public class VideoLoaderController extends BasePlayerController {
 
         if (getVideo() != null && getVideo().isLocal) {
             checkOfferDeleteWatched(getVideo());
+        }
+
+        Video video = getVideo();
+        if (VoxShortsAutoNextController.getINSTANCE().isShort(video) && !getPlayerTweaksData().isLoopShortsEnabled()) {
+            long gen = VoxShortsAutoNextController.getINSTANCE().getCurrentGeneration();
+            boolean accepted = VoxShortsAutoNextController.getINSTANCE().onShortEnded(video, gen, () -> {
+                loadNext();
+                return kotlin.Unit.INSTANCE;
+            });
+            if (!accepted) {
+                return;
+            }
+            return;
         }
 
         // Stop the playback if the user is browsing options or reading comments
@@ -242,17 +285,39 @@ public class VideoLoaderController extends BasePlayerController {
             return;
         }
 
-        if (current.nextMediaItem != null) {
-            openVideoInt(Video.from(current.nextMediaItem));
-        } else if (!current.isSynced) { // Maybe there's nothing left. E.g. when casting from phone
-            // Wait in a loop while suggestions have been loaded...
-            if (showLoadingMsg) {
-                MessageHelpers.showMessage(getContext(), R.string.wait_data_loading);
+        Video next = mSuggestionsController.getNext();
+        if (next != null) {
+            if (VoxShortsAutoNextController.getINSTANCE().isShort(current)) {
+                VoxShortsAutoNextController.getINSTANCE().onNextResolved(next, VoxShortsAutoNextController.getINSTANCE().getCurrentGeneration());
             }
-            // Short videos next fix (suggestions aren't loaded yet)
-            boolean isEnded = getPlayer() != null && Math.abs(getPlayer().getDurationMs() - getPlayer().getPositionMs()) < 100;
-            if (isEnded) {
-                Utils.postDelayed(mMetadataSync, 1_000);
+            mMetadataSyncRetryCount = 0;
+            openVideoInt(next);
+            return;
+        }
+
+        if (current.nextMediaItem != null) {
+            mMetadataSyncRetryCount = 0;
+            openVideoInt(Video.from(current.nextMediaItem));
+        } else if (!current.isSynced || VoxShortsAutoNextController.getINSTANCE().isShort(current)) {
+            if (mMetadataSyncRetryCount < VoxShortsAutoNextController.MAX_RETRY) {
+                mMetadataSyncRetryCount++;
+                if (showLoadingMsg) {
+                    MessageHelpers.showMessage(getContext(), R.string.wait_data_loading);
+                }
+                boolean isEnded = getPlayer() != null && Math.abs(getPlayer().getDurationMs() - getPlayer().getPositionMs()) < 500;
+                if (isEnded) {
+                    Utils.postDelayed(mMetadataSync, 500);
+                }
+            } else {
+                mMetadataSyncRetryCount = 0;
+                if (VoxShortsAutoNextController.getINSTANCE().isShort(current)) {
+                    VoxShortsAutoNextController.getINSTANCE().onFeedEnd(VoxShortsAutoNextController.getINSTANCE().getCurrentGeneration(), () -> {
+                        if (getPlayer() != null) {
+                            getPlayer().showProgressBar(false);
+                        }
+                        return kotlin.Unit.INSTANCE;
+                    });
+                }
             }
         }
     }

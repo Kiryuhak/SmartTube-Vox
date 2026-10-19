@@ -219,6 +219,9 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLivePlaybackMonitor.INSTANCE.onPlaybackStart(marker, isLive);
         mEventListener.onSourceChanged(getVideo());
         mPlayer.prepare(mediaSource);
+        if (com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
+            com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onPlayerPrepared(getVideo(), 0);
+        }
     }
 
     public long getPositionMs() {
@@ -774,6 +777,10 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 );
             }
             mEventListener.onPlay();
+            if (com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
+                com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onFirstFrame(getVideo(), 0);
+                com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onAudioStart(getVideo(), 0);
+            }
         } else if (isPausePressed) {
             mStallRecoveryController.onBufferingEnded();
             mEventListener.onPause();
@@ -918,6 +925,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
      * Without this also you'll have problems with track quality switching(??).
      */
     public void resetPlayerState() {
+        mIsEnded = false;
         if (containsMedia()) {
             mPlayer.stop(true);
         }

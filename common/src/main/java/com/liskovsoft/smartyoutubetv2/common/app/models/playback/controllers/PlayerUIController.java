@@ -901,9 +901,15 @@ public class PlayerUIController extends BasePlayerController {
         return false;
     }
 
+    private boolean isShort(Video video) {
+        return com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(video);
+    }
+
     private boolean handlePlayPauseKey(int keyCode) {
         if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE && getPlayer() != null) {
-            getPlayer().setPlayWhenReady(!getPlayer().getPlayWhenReady());
+            boolean nextPlayWhenReady = !getPlayer().getPlayWhenReady();
+            getPlayer().setPlayWhenReady(nextPlayWhenReady);
+            com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onPauseStateChanged(!nextPlayWhenReady);
             enableUiAutoHideTimeout(); // TODO: move out somehow
             return true;
         }
@@ -913,8 +919,8 @@ public class PlayerUIController extends BasePlayerController {
 
     private boolean handleLeftRightSkip(int keyCode) {
         if (getPlayer() == null || getPlayer().isOverlayShown() || getVideo() == null ||
-                (getVideo().belongsToShortsGroup() && !getPlayerTweaksData().isQuickSkipShortsEnabled() ||
-                (!getVideo().belongsToShortsGroup() && !getPlayerTweaksData().isQuickSkipVideosEnabled()))) {
+                (isShort(getVideo()) && !getPlayerTweaksData().isQuickSkipShortsEnabled() ||
+                (!isShort(getVideo()) && !getPlayerTweaksData().isQuickSkipVideosEnabled()))) {
             return false;
         }
 
@@ -933,8 +939,8 @@ public class PlayerUIController extends BasePlayerController {
 
     private boolean handleUpDownSkip(int keyCode) {
         if (getPlayer() == null || getPlayer().isOverlayShown() || getVideo() == null ||
-                (getVideo().belongsToShortsGroup() && !getPlayerTweaksData().isQuickSkipShortsAltEnabled() ||
-                        (!getVideo().belongsToShortsGroup() && !getPlayerTweaksData().isQuickSkipVideosAltEnabled()))) {
+                (isShort(getVideo()) && !getPlayerTweaksData().isQuickSkipShortsAltEnabled() ||
+                        (!isShort(getVideo()) && !getPlayerTweaksData().isQuickSkipVideosAltEnabled()))) {
             return false;
         }
 
