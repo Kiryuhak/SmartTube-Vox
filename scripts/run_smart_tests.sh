@@ -11,6 +11,22 @@ echo "SMART TEST SELECTION ENGINE (VOX PYRAMID)"
 echo "Target suite: $SUITE"
 echo "=================================================="
 
+case "$SUITE" in
+  ota-e2e|downloads-e2e|local-playback-e2e)
+    # Allowed with emulator
+    ;;
+  *)
+    if command -v adb >/dev/null 2>&1; then
+      if adb devices 2>/dev/null | grep -q "emulator-5554"; then
+        echo "Error: Android TV emulator is running." >&2
+        echo "Stop emulator before heavy Gradle tests: ./scripts/linux/vox-emulator-stop.sh" >&2
+        exit 1
+      fi
+    fi
+    ;;
+esac
+
+
 run_ota_fast() {
   echo "--- [SUITE: ota-fast] Running OTA forward compatibility suite ---"
   bash "$REPO_ROOT/scripts/verify_ota_forward_compatibility.sh"
