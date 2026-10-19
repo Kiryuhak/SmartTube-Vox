@@ -1,8 +1,11 @@
 export const STATUSES = [
   'NEW',
+  'INVESTIGATING',
   'TRIAGED',
   'IN_PROGRESS',
   'NEEDS_INFO',
+  'DUPLICATE',
+  'FIXED_PENDING_VERIFY',
   'FIXED_PENDING_VERIFICATION',
   'FIXED_PENDING_VALIDATION',
   'CLOSED',
@@ -220,8 +223,8 @@ export function isSyntheticTestReport(report = {}) {
 
   if (/robolectric/i.test(model) || /robolectric/i.test(manufacturer) || /robolectric/i.test(family)) return true;
   if (report.reportId && String(report.reportId).includes('TEST')) return true;
-  if (isEmulator && (isAutoBeta || report.autoSubmitted || report.isAutomatedLab)) return true;
   if (report.reportId === 'VOX-ACE7107E') return true;
+  if (isEmulator && (report.isAutomatedLab || (isAutoBeta && report.autoSubmitted && !report.errorCategory && (!report.safeRecentEvents || !report.safeRecentEvents.some(e => e.level === 'ERROR' || e.level === 'CRITICAL'))))) return true;
   return false;
 }
 

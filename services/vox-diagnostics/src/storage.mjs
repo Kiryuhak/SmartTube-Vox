@@ -5,46 +5,87 @@ export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000
 
 export const CANONICAL_STATUSES = [
   'NEW',
+  'INVESTIGATING',
   'TRIAGED',
   'IN_PROGRESS',
   'NEEDS_INFO',
+  'DUPLICATE',
+  'FIXED_PENDING_VERIFY',
   'FIXED_PENDING_VERIFICATION',
+  'FIXED_PENDING_VALIDATION',
   'KNOWN_ISSUE',
   'RESOLVED',
   'CLOSED',
+  'IGNORED',
   'IGNORED_TEST',
   'WONT_FIX',
 ];
 
 export const STATUS_LABELS = {
   NEW: 'Новый',
+  INVESTIGATING: 'Расследование',
   TRIAGED: 'Разобран',
   IN_PROGRESS: 'В работе',
   NEEDS_INFO: 'Нужны данные',
+  DUPLICATE: 'Дубликат',
+  FIXED_PENDING_VERIFY: 'Исправлено — ждёт проверки',
   FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
+  FIXED_PENDING_VALIDATION: 'Исправлено — ждёт проверки',
   KNOWN_ISSUE: 'Известная проблема',
   RESOLVED: 'Решено',
   CLOSED: 'Закрыто',
-  IGNORED: 'Тест / игнор',
+  IGNORED: 'Игнорировать',
   IGNORED_TEST: 'Тест / игнор',
   WONT_FIX: 'Не будет исправлено',
 };
 
+export const ALLOWED_STATUS_TRANSITIONS = {
+  NEW: new Set(['NEW', 'INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'DUPLICATE', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'NEEDS_INFO', 'WONT_FIX']),
+  INVESTIGATING: new Set(['INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_ISSUE', 'WONT_FIX']),
+  IN_PROGRESS: new Set(['INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_ISSUE', 'WONT_FIX']),
+  TRIAGED: new Set(['INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_ISSUE', 'WONT_FIX']),
+  FIXED_PENDING_VERIFY: new Set(['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'DUPLICATE']),
+  FIXED_PENDING_VERIFICATION: new Set(['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'DUPLICATE']),
+  FIXED_PENDING_VALIDATION: new Set(['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'DUPLICATE']),
+  RESOLVED: new Set(['RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
+  CLOSED: new Set(['RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
+  DUPLICATE: new Set(['DUPLICATE', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'NEW', 'RESOLVED']),
+  IGNORED: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX']),
+  IGNORED_TEST: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX']),
+  NEEDS_INFO: new Set(['NEEDS_INFO', 'INVESTIGATING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'NEW']),
+  KNOWN_ISSUE: new Set(['KNOWN_ISSUE', 'INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST']),
+  WONT_FIX: new Set(['WONT_FIX', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'IGNORED', 'IGNORED_TEST']),
+};
+
+export function isValidStatusTransition(fromStatus, toStatus) {
+  const from = normalizeStatus(fromStatus);
+  const to = normalizeStatus(toStatus);
+  if (!from || !to) return false;
+  if (from === to) return true;
+  const allowed = ALLOWED_STATUS_TRANSITIONS[from];
+  return allowed ? allowed.has(to) : false;
+}
+
 /**
  * Нормализует строковый статус к каноническому виду:
- * NEW, TRIAGED, IN_PROGRESS, NEEDS_INFO, FIXED_PENDING_VERIFICATION, KNOWN_ISSUE, RESOLVED, CLOSED, IGNORED_TEST, WONT_FIX
+ * NEW, INVESTIGATING, IN_PROGRESS, TRIAGED, NEEDS_INFO, DUPLICATE, FIXED_PENDING_VERIFY, FIXED_PENDING_VERIFICATION, KNOWN_ISSUE, RESOLVED, CLOSED, IGNORED, IGNORED_TEST, WONT_FIX
  */
 export function normalizeStatus(rawStatus) {
   if (!rawStatus) return 'NEW';
   const s = String(rawStatus).toUpperCase().trim();
+  if (s === 'INVESTIGATING') return 'INVESTIGATING';
+  if (s === 'DUPLICATE' || s === 'DUP') return 'DUPLICATE';
+  if (s === 'FIXED_PENDING_VERIFY') return 'FIXED_PENDING_VERIFY';
+  if (s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION' || s === 'FIXED') return 'FIXED_PENDING_VERIFICATION';
+  if (s === 'FIXED_PENDING_VALIDATION') return 'FIXED_PENDING_VERIFICATION';
   if (s === 'TRIAGED') return 'TRIAGED';
   if (s === 'REVIEWED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
   if (s === 'NEEDS_INFO' || s === 'INFO_NEEDED') return 'NEEDS_INFO';
-  if (s === 'FIXED' || s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION' || s === 'FIXED_PENDING_VALIDATION') return 'FIXED_PENDING_VERIFICATION';
   if (s === 'CLOSED') return 'CLOSED';
   if (s === 'RESOLVED') return 'RESOLVED';
   if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
-  if (s === 'IGNORED_TEST' || s === 'TEST' || s === 'IGNORED') return 'IGNORED_TEST';
+  if (s === 'IGNORED') return 'IGNORED';
+  if (s === 'IGNORED_TEST' || s === 'TEST') return 'IGNORED_TEST';
   if (s === 'WONT_FIX' || s === 'WONTFIX') return 'WONT_FIX';
   if (s === 'NEW') return 'NEW';
   return s;
@@ -225,7 +266,13 @@ export class ReportStorage {
     if (!before) return null;
     if (status !== undefined) {
       status = normalizeStatus(status);
-      if (!STATUSES.includes(status)) throw new RangeError('Invalid status');
+      if (!CANONICAL_STATUSES.includes(status) && !STATUSES.includes(status)) {
+        throw new RangeError(`Invalid status: ${status}`);
+      }
+      const currentNorm = normalizeStatus(before.status);
+      if (currentNorm && currentNorm !== status && !isValidStatusTransition(currentNorm, status)) {
+        throw new RangeError(`Invalid status transition from ${currentNorm} to ${status}`);
+      }
     }
     if (developerNotes !== undefined && (typeof developerNotes !== 'string' || developerNotes.length > 4000)) throw new RangeError('Invalid note');
     if (typeof reason !== 'string' || reason.length > 500) throw new RangeError('Invalid reason');
@@ -270,6 +317,16 @@ export class ReportStorage {
       messageId: deliveryResult.messageId || null,
       repeatCount: deliveryResult.repeatCount || 0,
       error: deliveryResult.error || null,
+      delivery_state: ['SENT_NEW', 'SENT_REGRESSION', 'SENT_AGGREGATE'].includes(deliveryResult.decision)
+        ? 'SENT'
+        : ['SUPPRESSED_DUPLICATE', 'SUPPRESSED_HISTORICAL', 'SUPPRESSED_TEST', 'DISABLED'].includes(deliveryResult.decision)
+          ? 'SKIPPED'
+          : deliveryResult.decision === 'FAILED'
+            ? 'FAILED'
+            : 'PENDING',
+      attempt_count: deliveryResult.attemptCount || (deliveryResult.error ? 3 : 1),
+      last_error_class: deliveryResult.error ? (deliveryResult.error.split(' ')[0] || 'DISPATCH_ERROR') : null,
+      sent_at: ['SENT_NEW', 'SENT_REGRESSION', 'SENT_AGGREGATE'].includes(deliveryResult.decision) ? (deliveryResult.notifiedAt || now) : null,
     };
 
     if (this.db) {
@@ -604,39 +661,173 @@ export class ReportStorage {
   }
 
   async getIssue(signature) {
-    const blank = { issue_status: 'NEW', fixed_in_version: '', fix_patch: '', fix_commit: '', title: '', reopened_at: 0 };
+    const blank = {
+      signature: signature || '',
+      status: 'NEW',
+      issue_status: 'NEW',
+      fixed_in_version: '',
+      fix_patch: '',
+      fix_commit: '',
+      title: '',
+      duplicate_of: null,
+      occurrences: 0,
+      first_seen: 0,
+      last_seen: 0,
+      reopened_at: 0,
+      affected_versions: [],
+    };
     if (!signature) return blank;
+
+    let occurrences = 0;
+    let firstSeen = 0;
+    let lastSeen = 0;
+    let affectedVersions = [];
+
     if (this.db) {
-      const row = await this.db.prepare('SELECT status AS issue_status, fixed_in_version, fix_patch, fix_commit, title, reopened_at FROM issues WHERE signature = ?').bind(signature).first();
-      return row || blank;
+      try {
+        const statsRow = await this.db.prepare('SELECT COUNT(*) AS count, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen FROM reports WHERE error_signature = ?').bind(signature).first();
+        if (statsRow) {
+          occurrences = Number(statsRow.count) || 0;
+          firstSeen = Number(statsRow.first_seen) || 0;
+          lastSeen = Number(statsRow.last_seen) || 0;
+        }
+        affectedVersions = await this.getAffectedVersions(signature);
+      } catch (_) {}
+
+      try {
+        const row = await this.db.prepare('SELECT status AS issue_status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, duplicate_of FROM issues WHERE signature = ?').bind(signature).first();
+        if (row) {
+          const norm = normalizeStatus(row.issue_status);
+          return {
+            signature,
+            status: norm,
+            issue_status: norm,
+            fixed_in_version: row.fixed_in_version || '',
+            fix_patch: row.fix_patch || '',
+            fix_commit: row.fix_commit || '',
+            title: row.title || '',
+            duplicate_of: row.duplicate_of || null,
+            reopened_at: row.reopened_at || 0,
+            occurrences,
+            first_seen: firstSeen,
+            last_seen: lastSeen,
+            affected_versions: affectedVersions,
+          };
+        }
+      } catch (_) {
+        const fallbackRow = await this.db.prepare('SELECT status AS issue_status, fixed_in_version, fix_patch, fix_commit, title, reopened_at FROM issues WHERE signature = ?').bind(signature).first();
+        if (fallbackRow) {
+          const norm = normalizeStatus(fallbackRow.issue_status);
+          return {
+            signature,
+            status: norm,
+            issue_status: norm,
+            fixed_in_version: fallbackRow.fixed_in_version || '',
+            fix_patch: fallbackRow.fix_patch || '',
+            fix_commit: fallbackRow.fix_commit || '',
+            title: fallbackRow.title || '',
+            duplicate_of: null,
+            reopened_at: fallbackRow.reopened_at || 0,
+            occurrences,
+            first_seen: firstSeen,
+            last_seen: lastSeen,
+            affected_versions: affectedVersions,
+          };
+        }
+      }
+      return { ...blank, occurrences, first_seen: firstSeen, last_seen: lastSeen, affected_versions: affectedVersions };
     }
-    return this.issues.get(signature) || blank;
+
+    const reportsForSig = [...this.inMemoryReports.values()].filter(r => r.error_signature === signature);
+    occurrences = reportsForSig.length;
+    if (reportsForSig.length > 0) {
+      firstSeen = Math.min(...reportsForSig.map(r => r.created_at));
+      lastSeen = Math.max(...reportsForSig.map(r => r.created_at));
+      affectedVersions = [...new Set(reportsForSig.map(r => r.app_version))].sort().reverse();
+    }
+
+    const stored = this.issues.get(signature);
+    if (stored) {
+      const norm = normalizeStatus(stored.issue_status || stored.status);
+      return {
+        signature,
+        status: norm,
+        issue_status: norm,
+        fixed_in_version: stored.fixed_in_version || '',
+        fix_patch: stored.fix_patch || '',
+        fix_commit: stored.fix_commit || '',
+        title: stored.title || '',
+        duplicate_of: stored.duplicate_of || null,
+        reopened_at: stored.reopened_at || 0,
+        occurrences: stored.occurrences !== undefined ? stored.occurrences : occurrences,
+        first_seen: stored.first_seen || firstSeen,
+        last_seen: stored.last_seen || lastSeen,
+        affected_versions: stored.affected_versions || affectedVersions,
+      };
+    }
+
+    return { ...blank, occurrences, first_seen: firstSeen, last_seen: lastSeen, affected_versions: affectedVersions };
   }
 
   async updateIssue(signature, patch, actor = 'ADMIN') {
     if (!signature || typeof signature !== 'string' || signature.length > 256) throw new RangeError('Invalid signature');
-    const allowed = ['status', 'fixedInVersion', 'fixPatch', 'fixCommit', 'title', 'actor'];
+    const allowed = ['status', 'fixedInVersion', 'fixPatch', 'fixCommit', 'title', 'actor', 'duplicateOf', 'duplicate_of', 'occurrences'];
     if (!patch || typeof patch !== 'object' || Object.keys(patch).some(key => !allowed.includes(key))) throw new RangeError('Invalid issue patch');
     const effectiveActor = patch.actor || actor;
     const normStatus = patch.status !== undefined ? normalizeStatus(patch.status) : undefined;
-    if (normStatus !== undefined && !STATUSES.includes(normStatus)) throw new RangeError('Invalid issue status');
-    for (const key of allowed.filter(key => key !== 'status' && key !== 'actor')) if (patch[key] !== undefined && (typeof patch[key] !== 'string' || patch[key].length > 256)) throw new RangeError(`Invalid ${key}`);
+    if (normStatus !== undefined && !CANONICAL_STATUSES.includes(normStatus) && !STATUSES.includes(normStatus)) {
+      throw new RangeError(`Invalid issue status: ${patch.status}`);
+    }
+
+    for (const key of allowed.filter(key => key !== 'status' && key !== 'actor' && key !== 'occurrences')) {
+      if (patch[key] !== undefined && (typeof patch[key] !== 'string' || patch[key].length > 256)) throw new RangeError(`Invalid ${key}`);
+    }
+
     const before = await this.getIssue(signature);
+    const currentNorm = normalizeStatus(before.issue_status || before.status);
+    if (normStatus !== undefined && currentNorm && currentNorm !== normStatus && !isValidStatusTransition(currentNorm, normStatus)) {
+      throw new RangeError(`Invalid status transition from ${currentNorm} to ${normStatus}`);
+    }
+
+    const rawDup = patch.duplicateOf ?? patch.duplicate_of;
+    const duplicateOf = rawDup !== undefined ? (rawDup ? String(rawDup).trim() : null) : (before.duplicate_of || null);
+
     const next = {
-      issue_status: normStatus ?? before.issue_status,
-      fixed_in_version: patch.fixedInVersion ?? before.fixed_in_version,
-      fix_patch: patch.fixPatch ?? before.fix_patch,
-      fix_commit: patch.fixCommit ?? before.fix_commit,
-      title: patch.title ?? before.title,
+      signature,
+      status: normStatus ?? currentNorm ?? 'NEW',
+      issue_status: normStatus ?? currentNorm ?? 'NEW',
+      fixed_in_version: patch.fixedInVersion ?? before.fixed_in_version ?? '',
+      fix_patch: patch.fixPatch ?? before.fix_patch ?? '',
+      fix_commit: patch.fixCommit ?? before.fix_commit ?? '',
+      title: patch.title ?? before.title ?? '',
+      duplicate_of: duplicateOf,
       reopened_at: before.reopened_at || 0,
+      occurrences: patch.occurrences !== undefined ? Number(patch.occurrences) : before.occurrences,
+      first_seen: before.first_seen,
+      last_seen: before.last_seen,
+      affected_versions: before.affected_versions,
     };
+
     const now = Date.now();
-    const action = (next.issue_status === 'RESOLVED' || next.issue_status === 'CLOSED') ? 'ISSUE_RESOLVED' : 'ISSUE_LINKED';
+    let action = 'ISSUE_LINKED';
+    if (next.issue_status === 'RESOLVED' || next.issue_status === 'CLOSED') {
+      action = 'ISSUE_RESOLVED';
+    } else if (next.issue_status === 'DUPLICATE' || duplicateOf) {
+      action = 'ISSUE_DUPLICATED';
+    }
+
     if (this.db) {
-      await this.db.batch([
-        this.db.prepare('INSERT INTO issues (signature, status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(signature) DO UPDATE SET status=excluded.status, fixed_in_version=excluded.fixed_in_version, fix_patch=excluded.fix_patch, fix_commit=excluded.fix_commit, title=excluded.title, updated_at=excluded.updated_at').bind(signature, next.issue_status, next.fixed_in_version, next.fix_patch, next.fix_commit, next.title, next.reopened_at, now),
-        this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind(action, 'ISSUE', signature, now, effectiveActor),
-      ]);
+      try {
+        await this.db.batch([
+          this.db.prepare('INSERT INTO issues (signature, status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, duplicate_of, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(signature) DO UPDATE SET status=excluded.status, fixed_in_version=excluded.fixed_in_version, fix_patch=excluded.fix_patch, fix_commit=excluded.fix_commit, title=excluded.title, duplicate_of=excluded.duplicate_of, updated_at=excluded.updated_at').bind(signature, next.issue_status, next.fixed_in_version, next.fix_patch, next.fix_commit, next.title, next.reopened_at, next.duplicate_of, now),
+          this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind(action, 'ISSUE', signature, now, effectiveActor),
+        ]);
+      } catch (_) {
+        await this.db.batch([
+          this.db.prepare('INSERT INTO issues (signature, status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(signature) DO UPDATE SET status=excluded.status, fixed_in_version=excluded.fixed_in_version, fix_patch=excluded.fix_patch, fix_commit=excluded.fix_commit, title=excluded.title, updated_at=excluded.updated_at').bind(signature, next.issue_status, next.fixed_in_version, next.fix_patch, next.fix_commit, next.title, next.reopened_at, now),
+          this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind(action, 'ISSUE', signature, now, effectiveActor),
+        ]);
+      }
     } else {
       this.issues.set(signature, next);
       this.audit.push({ action, target_type: 'ISSUE', target_id: signature, created_at: now, actor: effectiveActor });
@@ -644,17 +835,30 @@ export class ReportStorage {
     return next;
   }
 
-  async reopenRegressedIssue(signature, appVersion) {
+  async reopenRegressedIssue(signature, appVersion, reopenStatus = null) {
     const issue = await this.getIssue(signature);
-    if (issue.issue_status !== 'RESOLVED' || !issue.fixed_in_version || compareVoxVersions(appVersion, issue.fixed_in_version) !== 0 && compareVoxVersions(appVersion, issue.fixed_in_version) !== 1) return false;
+    const curStatus = normalizeStatus(issue.status || issue.issue_status);
+    const isResolved = curStatus === 'RESOLVED' || curStatus === 'CLOSED';
+    const isPendingVerify = curStatus === 'FIXED_PENDING_VERIFY' || curStatus === 'FIXED_PENDING_VERIFICATION' || curStatus === 'FIXED_PENDING_VALIDATION';
+
+    if (!isResolved && !isPendingVerify) return false;
+
+    if (isResolved) {
+      if (!issue.fixed_in_version) return false;
+      const cmp = compareVoxVersions(appVersion, issue.fixed_in_version);
+      if (cmp !== 0 && cmp !== 1) return false;
+    }
+
     const now = Date.now();
+    const targetStatus = reopenStatus || (curStatus === 'INVESTIGATING' ? 'INVESTIGATING' : 'IN_PROGRESS');
+
     if (this.db) {
       await this.db.batch([
-        this.db.prepare("UPDATE issues SET status = 'IN_PROGRESS', reopened_at = ?, updated_at = ? WHERE signature = ?").bind(now, now, signature),
+        this.db.prepare('UPDATE issues SET status = ?, reopened_at = ?, updated_at = ? WHERE signature = ?').bind(targetStatus, now, now, signature),
         this.db.prepare('INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES (?, ?, ?, ?, ?)').bind('ISSUE_REOPENED', 'ISSUE', signature, now, 'SYSTEM'),
       ]);
     } else {
-      this.issues.set(signature, { ...issue, issue_status: 'IN_PROGRESS', reopened_at: now });
+      this.issues.set(signature, { ...issue, status: targetStatus, issue_status: targetStatus, reopened_at: now, updated_at: now });
       this.audit.push({ action: 'ISSUE_REOPENED', target_type: 'ISSUE', target_id: signature, created_at: now, actor: 'SYSTEM' });
     }
     return true;
