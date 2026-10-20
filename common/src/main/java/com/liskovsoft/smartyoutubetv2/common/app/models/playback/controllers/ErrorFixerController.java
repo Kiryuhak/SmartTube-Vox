@@ -27,6 +27,13 @@ import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryController;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryState;
 
 public class ErrorFixerController extends BasePlayerController implements OnLongBuffering {
     private static final String TAG = ErrorFixerController.class.getSimpleName();
@@ -37,12 +44,90 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private VideoLoaderController mVideoLoaderController;
     private int mOomRecoveryAttempts = 0;
     private int mLiveBufferingRecoveryCount = 0;
+    private VoxPlayerRecoveryController mRecoveryController;
+
+    private final VoxPlayerRecoveryController.PlayerRecoveryActionHandler mRecoveryActionHandler = new VoxPlayerRecoveryController.PlayerRecoveryActionHandler() {
+        @Override
+        public void onSourceRefreshRequested(long targetPositionMs, boolean playWhenReady, long gen) {
+            Log.w(TAG, "Recovery: refreshing source at targetPosMs=" + targetPositionMs);
+            YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
+            YouTubeServiceManager.instance().switchNextClientNow();
+            if (getPlayer() != null) {
+                getPlayer().setPositionMs(targetPositionMs);
+                getPlayer().setPlayWhenReady(playWhenReady);
+            }
+            if (mVideoLoaderController != null) {
+                mVideoLoaderController.reloadVideo();
+            }
+        }
+
+        @Override
+        public void onEngineSwitchRequested(int nextEngine, long targetPositionMs, boolean playWhenReady, long gen) {
+            Log.w(TAG, "Recovery: switching engine to " + nextEngine + " at targetPosMs=" + targetPositionMs);
+            getPlayerTweaksData().setRuntimeFallbackEngine(nextEngine);
+            YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
+            if (getPlayer() != null) {
+                getPlayer().setPositionMs(targetPositionMs);
+                getPlayer().setPlayWhenReady(playWhenReady);
+            }
+            if (mVideoLoaderController != null) {
+                mVideoLoaderController.restartEngine();
+            }
+        }
+
+        @Override
+        public void onRecoverySucceeded(long gen) {
+            Log.i(TAG, "Recovery: succeeded for generation " + gen);
+        }
+
+        @Override
+        public void onRecoveryFailed(long gen, Runnable onRetry) {
+            Log.e(TAG, "Recovery: failed for generation " + gen);
+            if (getPlayer() != null) {
+                getPlayer().showProgressBar(false);
+                getPlayer().setTitle(getContext().getString(R.string.vox_player_recovery_failed));
+                getPlayer().setPlayWhenReady(false);
+            }
+            AppDialogPresenter dialog = getAppDialogPresenter();
+            if (dialog != null) {
+                String title = getContext().getString(R.string.vox_player_recovery_failed);
+                List<OptionItem> options = new ArrayList<>();
+                options.add(UiOptionItem.from(getContext().getString(R.string.vox_player_recovery_retry), item -> {
+                    dialog.closeDialog();
+                    onRetry.run();
+                }));
+                dialog.appendStringsCategory(title, options);
+                dialog.showDialog(title);
+            }
+        }
+
+        @Override
+        public void showRecoveryOverlay(int messageResId) {
+            MessageHelpers.showLongMessage(getContext(), messageResId);
+        }
+
+        @Override
+        public void hideRecoveryOverlay() {
+        }
+
+        @Override
+        public void hideBufferingSpinner() {
+            if (getPlayer() != null) {
+                getPlayer().showProgressBar(false);
+            }
+        }
+    };
 
     @Override
     public void onInit() {
         mVideoLoaderController = getController(VideoLoaderController.class);
         mOomRecoveryAttempts = 0;
         mLiveBufferingRecoveryCount = 0;
+        mRecoveryController = new VoxPlayerRecoveryController(mRecoveryActionHandler);
+    }
+
+    public VoxPlayerRecoveryController getRecoveryController() {
+        return mRecoveryController;
     }
 
     @Override
@@ -62,6 +147,11 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 getVideo() != null && getVideo().isLive,
                 getPlayerTweaksData().getPlayerDataSource(),
                 getPlayer().getPositionMs());
+
+        if (mRecoveryController != null && mRecoveryController.getState() == VoxPlayerRecoveryState.FAILED) {
+            Log.w(TAG, "onLongBuffering: Recovery in terminal FAILED state. Skipping engine restart.");
+            return;
+        }
 
         if (getVideo() != null && getVideo().isLive) {
             mLiveBufferingRecoveryCount++;
@@ -121,6 +211,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onBuffering() {
         mBufferingDetector.onStartBuffering();
+        if (mRecoveryController != null && getPlayer() != null) {
+            mRecoveryController.onBufferingStarted(
+                getPlayer().getPositionMs(),
+                getPlayer().getBufferedPositionMs(),
+                getPlayer().getPlayWhenReady()
+            );
+        }
     }
 
     @Override
@@ -137,6 +234,30 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         mPlayerCacheRecoveryPolicy.onPlaybackStarted();
         mLiveBufferingRecoveryCount = 0;
         mBufferingDetector.onStopBuffering();
+        if (mRecoveryController != null && getPlayer() != null) {
+            mRecoveryController.onPlaybackProgress(
+                getPlayer().getPositionMs(),
+                getPlayer().getBufferedPositionMs()
+            );
+        }
+    }
+
+    @Override
+    public void onTickle() {
+        super.onTickle();
+        if (mRecoveryController != null && getPlayer() != null) {
+            if (getPlayer().isPlaying()) {
+                mRecoveryController.onPlaybackProgress(
+                    getPlayer().getPositionMs(),
+                    getPlayer().getBufferedPositionMs()
+                );
+            } else {
+                mRecoveryController.onBufferProgress(
+                    getPlayer().getBufferedPositionMs(),
+                    getPlayer().getPlayWhenReady()
+                );
+            }
+        }
     }
 
     @Override
@@ -151,18 +272,30 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         mOomRecoveryAttempts = 0;
         mLiveBufferingRecoveryCount = 0;
         mBufferingDetector.start();
+        if (mRecoveryController != null) {
+            long sessionId = System.currentTimeMillis();
+            boolean isLive = item != null && item.isLive;
+            int engine = getPlayerTweaksData() != null ? getPlayerTweaksData().getEffectivePlayerDataSource() : PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT;
+            mRecoveryController.onPlaybackStart(sessionId, isLive, engine);
+        }
     }
 
     @Override
     public void onFinish() {
         mBufferingDetector.reset();
         mPlayerCacheRecoveryPolicy.reset();
+        if (mRecoveryController != null) {
+            mRecoveryController.reset();
+        }
     }
 
     @Override
     public void onEngineReleased() {
         mBufferingDetector.reset();
         mPlayerCacheRecoveryPolicy.reset();
+        if (mRecoveryController != null) {
+            mRecoveryController.reset();
+        }
     }
 
     private void runEngineErrorAction(int type, int rendererIndex, Throwable error) {
@@ -175,6 +308,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         if (isStreamEnded()) {
             // Url no longer works (e.g. live stream ended)
             getMainController().onPlayEnd();
+            return;
+        }
+
+        long posMs = getPlayer() != null ? getPlayer().getPositionMs() : 0L;
+        boolean playWhenReady = getPlayer() == null || getPlayer().getPlayWhenReady();
+        if (mRecoveryController != null && mRecoveryController.handlePlayerError(error, posMs, playWhenReady)) {
+            Log.w(TAG, "Player error handled by VoxPlayerRecoveryController: %s", error != null ? error.getMessage() : "unknown");
             return;
         }
 

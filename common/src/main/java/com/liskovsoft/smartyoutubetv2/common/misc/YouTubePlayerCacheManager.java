@@ -62,6 +62,9 @@ public final class YouTubePlayerCacheManager {
      */
     public static void invalidatePlayerCache(Context context) {
         Log.i(TAG, "Purging YouTube player and challenge-solver caches...");
+        try {
+            com.liskovsoft.youtubeapi.service.YouTubeServiceManager.instance().invalidateCache();
+        } catch (Throwable ignored) {}
 
         // 1. Reset MediaServiceData cached player references
         try {

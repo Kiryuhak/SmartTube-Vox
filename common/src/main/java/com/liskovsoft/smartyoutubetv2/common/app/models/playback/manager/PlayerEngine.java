@@ -15,6 +15,7 @@ public interface PlayerEngine extends PlayerConstants {
     void openUrlList(List<String> urlList);
     void openMerged(MediaItemFormatInfo formatInfo, String hlsPlaylistUrl);
     void openMerged(InputStream dashManifest, String hlsPlaylistUrl);
+    default long getBufferedPositionMs() { return 0L; }
     long getPositionMs();
     void setPositionMs(long positionMs);
     long getDurationMs();
