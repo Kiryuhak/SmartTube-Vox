@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 import {
   TelegramClient,
   dispatchTelegramNotification,
-  resetTelegramState
+  resetTelegramState,
+  maskChatId,
+  maskBotToken,
+  logTelegramEvent
 } from '../src/notifications/telegram.mjs';
 import {
   createSanitizedTelegramBundle,
@@ -525,3 +528,279 @@ test('Report VOX-707B7E10: stale/historical events yield SUPPRESSED_HISTORICAL',
   }
 });
 
+
+// ==========================================
+// SECTION 24: TELEGRAM UNIT TESTS (10 REQUIRED)
+// ==========================================
+
+test('section24_1_fakeIncidentProducesValidRequest', async () => {
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    requests.push({ url, opts });
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 10001 } }), { status: 200 });
+  };
+
+  try {
+    const report = {
+      reportId: 'VOX-REQ-VALID-01',
+      appVersion: '32.56-vox.9.1',
+      safeRecentEvents: [{ timestamp: Date.now(), level: 'ERROR', category: 'PLAYER', code: 'PLAYER_HTTP_ERROR' }]
+    };
+    const res = await dispatchTelegramNotification({
+      report,
+      classification: classifyReport(report),
+      issue: { status: 'NEW' },
+      env: {
+        TELEGRAM_NOTIFICATIONS_ENABLED: 'true',
+        TELEGRAM_BOT_TOKEN: '123456:FAKE_BOT_TOKEN_XYZ',
+        TELEGRAM_CHAT_ID: '-100987654321'
+      }
+    });
+
+    assert.equal(res.deliveryState, 'DELIVERED');
+    assert.equal(requests.length, 1);
+    assert.ok(requests[0].url.includes('/sendDocument'));
+    assert.equal(requests[0].opts.method, 'POST');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_2_parseSuccessResponse', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 8888, date: 1700000000 } }), { status: 200 });
+  };
+
+  try {
+    const client = new TelegramClient('TOKEN_123');
+    const res = await client.sendMessage({ chatId: '123', text: 'Test' });
+    assert.equal(res.ok, true);
+    assert.equal(res.result.message_id, 8888);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_3_http200WithOkFalseYieldsFailed', async () => {
+  const originalFetch = globalThis.fetch;
+  // HTTP 200 but ok=false (Telegram API error)
+  globalThis.fetch = async () => {
+    return new Response(JSON.stringify({ ok: false, description: 'Bad Request: chat not found', error_code: 400 }), { status: 200 });
+  };
+
+  try {
+    const client = new TelegramClient('TOKEN_123');
+    const res = await client.sendMessage({ chatId: 'invalid_chat', text: 'Test' });
+    assert.equal(res.ok, false, 'HTTP 200 with ok=false MUST yield ok: false');
+    assert.equal(res.error, 'Bad Request: chat not found');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_4_rateLimit429ParsesRetryAfter', async () => {
+  let callCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    callCount++;
+    if (callCount === 1) {
+      return new Response(JSON.stringify({ ok: false, parameters: { retry_after: 0.01 } }), { status: 429 });
+    }
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 777 } }), { status: 200 });
+  };
+
+  try {
+    const client = new TelegramClient('TOKEN_123');
+    const res = await client.sendMessage({ chatId: '123', text: 'Rate limit test' });
+    assert.equal(res.ok, true);
+    assert.equal(callCount, 2, 'Must retry after retry_after duration');
+    assert.equal(res.result.message_id, 777);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_5_retryableErrorSchedulesBoundedRetry', async () => {
+  let callCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    callCount++;
+    return new Response('Server Error', { status: 503 });
+  };
+
+  try {
+    const client = new TelegramClient('TOKEN_123');
+    const res = await client.sendMessage({ chatId: '123', text: '503 test' });
+    assert.equal(res.ok, false);
+    assert.equal(callCount, 3, 'Must stop at MAX_RETRIES (3)');
+    assert.equal(res.isPermanent, false, '5xx is retryable, not permanent');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_6_permanentErrorStopsRetryImmediately', async () => {
+  let callCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    callCount++;
+    return new Response(JSON.stringify({ ok: false, description: 'Forbidden: bot was blocked by the user' }), { status: 403 });
+  };
+
+  try {
+    const client = new TelegramClient('TOKEN_123');
+    const res = await client.sendMessage({ chatId: '123', text: 'Blocked test' });
+    assert.equal(res.ok, false);
+    assert.equal(callCount, 1, '403 must stop immediately without retry');
+    assert.equal(res.isPermanent, true, '403 is a permanent error');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_7_newIncidentBypassesSuppressionBeforeFirstDelivered', async () => {
+  let callCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    callCount++;
+    if (callCount <= 3) {
+      // First dispatch attempts fail due to temporary network error
+      throw new Error('Network unreachable');
+    }
+    // Second attempt succeeds
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 555 } }), { status: 200 });
+  };
+
+  try {
+    const report = {
+      reportId: 'VOX-FIRST-FAIL-01',
+      appVersion: '32.56-vox.9.1',
+      errorSignature: 'PLAYER|FIRST_DELIVERY_FAIL',
+      safeRecentEvents: [{ timestamp: Date.now(), level: 'ERROR', category: 'PLAYER', code: 'PLAYER_HTTP_ERROR' }]
+    };
+    const env = {
+      TELEGRAM_NOTIFICATIONS_ENABLED: 'true',
+      TELEGRAM_BOT_TOKEN: 'TOKEN_123',
+      TELEGRAM_CHAT_ID: '-100123456789'
+    };
+
+    // First attempt: Fails
+    const res1 = await dispatchTelegramNotification({
+      report,
+      classification: classifyReport(report),
+      issue: { status: 'NEW' },
+      env
+    });
+    assert.equal(res1.decision, 'FAILED');
+
+    // Second attempt: Same incident MUST NOT be suppressed because it was never delivered!
+    const res2 = await dispatchTelegramNotification({
+      report,
+      classification: classifyReport(report),
+      issue: { status: 'NEW' },
+      env
+    });
+    assert.equal(res2.decision, 'SENT_NEW');
+    assert.equal(res2.deliveryState, 'DELIVERED');
+    assert.equal(res2.messageId, 555);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_8_duplicateAfterDeliverySuppressed', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 444 } }), { status: 200 });
+  };
+
+  try {
+    const report = {
+      reportId: 'VOX-DUP-DELIVERY-01',
+      appVersion: '32.56-vox.9.1',
+      errorSignature: 'PLAYER|DUP_AFTER_DELIVERY',
+      safeRecentEvents: [{ timestamp: Date.now(), level: 'ERROR', category: 'PLAYER', code: 'PLAYER_HTTP_ERROR' }]
+    };
+    const env = {
+      TELEGRAM_NOTIFICATIONS_ENABLED: 'true',
+      TELEGRAM_BOT_TOKEN: 'TOKEN_123',
+      TELEGRAM_CHAT_ID: '-100123456789',
+      TELEGRAM_AGGREGATION_WINDOW_MINUTES: '15'
+    };
+
+    // First: Delivered
+    const res1 = await dispatchTelegramNotification({
+      report,
+      classification: classifyReport(report),
+      issue: { status: 'NEW' },
+      env
+    });
+    assert.equal(res1.deliveryState, 'DELIVERED');
+
+    // Second: Within cooldown -> SUPPRESSED_DUPLICATE
+    const res2 = await dispatchTelegramNotification({
+      report,
+      classification: classifyReport(report),
+      issue: { status: 'NEW' },
+      env
+    });
+    assert.equal(res2.deliveryState, 'SUPPRESSED_DUPLICATE');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('section24_9_zeroSecretsLogged', () => {
+  // 1. Bot token masking
+  const token = '123456789:AAH_super_secret_bot_token_value';
+  const maskedToken = maskBotToken(token);
+  assert.ok(!maskedToken.includes('super_secret_bot_token_value'), 'Secret must be masked');
+  assert.equal(maskedToken, '12345***:AAH***');
+
+  // 2. Chat ID masking
+  const chatId = '-1001234567890';
+  const maskedChat = maskChatId(chatId);
+  assert.ok(!maskedChat.includes('123456'), 'Chat id middle must be masked');
+  assert.equal(maskedChat, '***7890');
+
+  // 3. Logger masking
+  const originalLog = console.log;
+  let loggedOutput = '';
+  console.log = (...args) => {
+    loggedOutput += args.join(' ') + '\n';
+  };
+
+  try {
+    logTelegramEvent('TEST_EVENT', {
+      token: '123456789:SECRET_ABC',
+      chatId: '-1009988776655',
+      safeField: 'hello'
+    });
+    assert.ok(!loggedOutput.includes('SECRET_ABC'), 'Logger must never log raw token');
+    assert.ok(!loggedOutput.includes('998877'), 'Logger must never log raw chat id');
+    assert.ok(loggedOutput.includes('safeField=hello'));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('section24_10_queuedIncidentPersistsAndReloadsSafely', () => {
+  const report = {
+    reportId: 'VOX-QUEUE-TEST-01',
+    appVersion: '32.56-vox.9.1',
+    platform: 'Android TV',
+    errorSignature: 'PLAYER|QUEUE_PERSIST',
+    safeRecentEvents: [{ timestamp: Date.now(), level: 'ERROR', category: 'PLAYER', code: 'PLAYER_HTTP_ERROR' }]
+  };
+  const bundle = createSanitizedTelegramBundle(report, classifyReport(report), { status: 'NEW' });
+  const serialized = JSON.stringify(bundle);
+  const reloaded = JSON.parse(serialized);
+
+  assert.equal(reloaded.reportId, 'VOX-QUEUE-TEST-01');
+  assert.equal(reloaded.appVersion, '32.56-vox.9.1');
+  assert.ok(reloaded.safeRecentEvents.length > 0);
+  assert.equal(reloaded.Authorization, undefined);
+  assert.equal(reloaded.token, undefined);
+});

@@ -32,13 +32,35 @@ export function maskChatId(chatId) {
   if (!chatId) return '<none>';
   const s = String(chatId);
   if (s.length <= 4) return '***';
-  return s.slice(0, 3) + '...' + s.slice(-4);
+  return '***' + s.slice(-4);
+}
+
+export function maskBotToken(token) {
+  if (!token) return '<none>';
+  const s = String(token);
+  const colonIdx = s.indexOf(':');
+  if (colonIdx > 0) {
+    const id = s.slice(0, colonIdx);
+    const secret = s.slice(colonIdx + 1);
+    const maskedId = id.length > 5 ? id.slice(0, 5) + '***' : id + '***';
+    const maskedSecret = secret.length > 3 ? secret.slice(0, 3) + '***' : '***';
+    return `${maskedId}:${maskedSecret}`;
+  }
+  return s.length > 4 ? s.slice(0, 4) + '***' : '***';
 }
 
 export function logTelegramEvent(eventName, details = {}) {
   const parts = Object.entries(details)
     .filter(([_, v]) => v !== undefined && v !== null)
-    .map(([k, v]) => `${k}=${typeof v === 'string' && v.includes(' ') ? `"${v}"` : v}`);
+    .map(([k, v]) => {
+      let safeVal = v;
+      if (k === 'token' || k === 'botToken') {
+        safeVal = maskBotToken(v);
+      } else if (k === 'chatId' || k === 'chat') {
+        safeVal = maskChatId(v);
+      }
+      return `${k}=${typeof safeVal === 'string' && safeVal.includes(' ') ? `"${safeVal}"` : safeVal}`;
+    });
   console.log(`[${eventName}] ${parts.join(' ')}`);
 }
 
@@ -85,7 +107,22 @@ export class TelegramClient {
         clearTimeout(timer);
 
         if (response.ok) {
-          const resJson = await response.json().catch(() => ({ ok: true }));
+          const resJson = await response.json().catch(() => null);
+          if (!resJson || resJson.ok !== true || !resJson.result || (typeof resJson.result === 'object' && resJson.result.message_id === undefined && typeof resJson.result !== 'boolean')) {
+            const errDescription = resJson?.description || 'INVALID_TELEGRAM_JSON_RESPONSE';
+            logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
+              status: response.status,
+              error: errDescription,
+              attempts: attempt,
+            });
+            return {
+              ok: false,
+              status: response.status,
+              error: errDescription,
+              attempts: attempt,
+              isPermanent: false,
+            };
+          }
           return { ok: true, result: resJson.result, attempts: attempt };
         }
 
@@ -99,7 +136,7 @@ export class TelegramClient {
             error: errBody.description || `HTTP_${status}`,
             attempts: attempt,
           });
-          return { ok: false, status, error: errBody.description || `HTTP_${status}`, attempts: attempt };
+          return { ok: false, status, error: errBody.description || `HTTP_${status}`, attempts: attempt, isPermanent: true };
         }
 
         // 429 Rate Limit — ждём указанное в параметрах время или 1.5 сек
@@ -139,7 +176,7 @@ export class TelegramClient {
               error: `SERVER_ERROR_${status}`,
               attempts: attempt,
             });
-            return { ok: false, status, error: `SERVER_ERROR_${status}`, attempts: attempt };
+            return { ok: false, status, error: `SERVER_ERROR_${status}`, attempts: attempt, isPermanent: false };
           }
           await new Promise(r => setTimeout(r, attempt * 500));
           continue;
@@ -159,13 +196,13 @@ export class TelegramClient {
             error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR',
             attempts: attempt,
           });
-          return { ok: false, error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR', attempts: attempt };
+          return { ok: false, error: err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK_ERROR', attempts: attempt, isPermanent: false };
         }
         await new Promise(r => setTimeout(r, attempt * 500));
       }
     }
 
-    return { ok: false, error: 'MAX_RETRIES_REACHED', attempts: MAX_RETRIES };
+    return { ok: false, error: 'MAX_RETRIES_REACHED', attempts: MAX_RETRIES, isPermanent: false };
   }
 
   /**
@@ -324,6 +361,7 @@ export async function dispatchTelegramNotification({
     });
     return {
       decision: 'SUPPRESSED_DUPLICATE',
+      deliveryState: 'SUPPRESSED_DUPLICATE',
       signature,
       repeatCount: state.repeatCount,
       windowRemainingMs: windowMs - timeSinceLast,
@@ -378,24 +416,30 @@ export async function dispatchTelegramNotification({
       logTelegramEvent('TELEGRAM_NOTIFY_SUCCESS', {
         reportId: report.reportId,
         decision,
+        deliveryState: 'DELIVERED',
         messageId: res.result?.message_id,
         durationMs: Date.now() - startTime,
       });
 
       return {
         decision,
+        deliveryState: 'DELIVERED',
         messageId: res.result?.message_id,
         notifiedAt: now,
         attemptCount: res.attempts || 1,
       };
     } else {
+      const deliveryState = res.isPermanent ? 'FAILED_PERMANENT' : 'FAILED_RETRYABLE';
       logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
         reportId: report.reportId,
+        decision: 'FAILED',
+        deliveryState,
         error: res.error,
         status: res.status,
       });
       return {
         decision: 'FAILED',
+        deliveryState,
         error: res.error,
         status: res.status,
         attemptCount: res.attempts || 3,
