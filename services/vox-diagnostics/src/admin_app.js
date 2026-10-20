@@ -369,7 +369,11 @@
       if (metricSince && rCreated < metricSince) match = false;
       if (query && !id.includes(query) && !rDev.includes(query) && !rVer.includes(query) && !rSig.includes(query) && !rNotes.toLowerCase().includes(query)) match = false;
       if (plat && !rPlat.includes(plat)) match = false;
-      if (stat && rStat !== stat) match = false;
+      if (stat === 'ACTIVE') {
+        if (['RESOLVED', 'VERIFIED', 'CLOSED', 'IGNORED', 'IGNORED_TEST'].includes(rStat)) match = false;
+      } else if (stat && rStat !== stat) {
+        match = false;
+      }
       if (purp && rPurp !== purp) match = false;
       if (cat && rCat !== cat) match = false;
       if (ver && !rVer.includes(ver)) match = false;

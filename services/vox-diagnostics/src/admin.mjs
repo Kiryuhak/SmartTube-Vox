@@ -1,4 +1,4 @@
-import { normalizeStatus, STATUS_LABELS } from './storage.mjs';
+import { normalizeStatus, STATUS_LABELS, PRIMARY_STATUSES, STATUS_COLORS } from './storage.mjs';
 import crypto from 'crypto';
 
 /**
@@ -1149,7 +1149,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
               ${r.error_category ? `<span class="tag tag-error">${escapeHtml(r.error_category)}</span>` : '<span style="color: var(--text-muted);">-</span>'}
               ${r.error_signature ? `<small style="display:block;color:var(--text-dim);font-family:monospace;font-size:11px;">${escapeHtml(r.error_signature)}</small>` : ''}
             </td>
-            <td><select class="status-select" data-status="${normStatus}" aria-label="Статус отчёта ${escapeHtml(r.report_id)}">${Object.entries(STATUS_LABELS).map(([key,label]) => `<option value="${key}" ${key === normStatus ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select></td>
+            <td><select class="status-select" data-status="${normStatus}" aria-label="Статус отчёта ${escapeHtml(r.report_id)}">${PRIMARY_STATUSES.map(key => `<option value="${key}" ${key === normStatus ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[key])}</option>`).join('')}</select></td>
             <td style="white-space: nowrap;">
               <button class="btn btn-primary btn-open-report" data-action="open-report" data-report-id="${escapeHtml(r.report_id)}" style="margin-right: 4px;">Открыть</button>
               <button class="btn" data-action="quick-note" data-report-id="${escapeHtml(r.report_id)}">Заметка</button>
@@ -1218,7 +1218,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
               <button class="btn" data-action="filter-signature" data-signature="${escapeHtml(i.error_signature || '')}">В отчёты</button>
             </td>
             <td>
-              <select class="select-filter issue-status" aria-label="Статус проблемы">${Object.entries(STATUS_LABELS).map(([key,label]) => `<option value="${key}" ${key === i.issue_status ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select>
+              <select class="select-filter issue-status" aria-label="Статус проблемы">${PRIMARY_STATUSES.map(key => `<option value="${key}" ${key === i.issue_status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[key])}</option>`).join('')}</select>
               <input class="search-input issue-version" aria-label="Версия исправления" placeholder="Версия" value="${escapeHtml(i.fixed_in_version || '')}" style="min-width:100px;width:110px">
               <input class="search-input issue-patch" aria-label="Патч" placeholder="Patch" value="${escapeHtml(i.fix_patch || '')}" style="min-width:85px;width:90px">
               <input class="search-input issue-commit" aria-label="Коммит" placeholder="Commit" value="${escapeHtml(i.fix_commit || '')}" style="min-width:95px;width:100px">

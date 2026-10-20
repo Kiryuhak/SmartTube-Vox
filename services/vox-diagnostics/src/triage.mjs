@@ -1,6 +1,14 @@
 export const STATUSES = [
   'NEW',
   'INVESTIGATING',
+  'ROOT_CAUSE_FOUND',
+  'FIX_IMPLEMENTED',
+  'TESTING',
+  'FIXED_AWAITING_VERIFICATION',
+  'VERIFIED',
+  'REGRESSION',
+  'KNOWN_LIMITATION',
+  'IGNORED',
   'TRIAGED',
   'IN_PROGRESS',
   'NEEDS_INFO',
@@ -12,7 +20,6 @@ export const STATUSES = [
   'RESOLVED',
   'KNOWN_ISSUE',
   'IGNORED_TEST',
-  'IGNORED',
   'WONT_FIX',
 ];
 export const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -927,7 +934,7 @@ export function getDerivedStatus(report = {}, classification = null) {
   }
 
   // Зафиксированные разработчиком статусы жизненного цикла
-  if (['IN_PROGRESS', 'FIXED_PENDING_VERIFICATION', 'RESOLVED', 'CLOSED', 'WONT_FIX', 'KNOWN_ISSUE'].includes(rawStatus)) {
+  if (['IN_PROGRESS', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'VERIFIED', 'CLOSED', 'REGRESSION', 'WONT_FIX', 'KNOWN_LIMITATION', 'KNOWN_ISSUE'].includes(rawStatus)) {
     return rawStatus;
   }
 

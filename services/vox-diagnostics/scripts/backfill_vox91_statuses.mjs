@@ -337,6 +337,19 @@ export function generateBackfillSql() {
     statements.push(`INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES ('STATUS_CHANGED', 'REPORT', '${ref.reportId}', ${now}, 'AUTOMATION');`);
   }
 
+  // 3. Update Historical Incidents Catalog (28 historical reports across 13 incident groups)
+  for (const item of HISTORICAL_INCIDENTS_CATALOG) {
+    statements.push(`UPDATE issues SET status = '${item.newStatus}', fixed_in_version = '32.56-vox.9.1', fix_commit = '${escapeSql(item.fixCommit)}', updated_at = ${now} WHERE signature = '${escapeSql(item.signature)}';`);
+    for (const rid of item.reportIds) {
+      const noteText = escapeSql(`[VOX 9.1 Backfill] Group: ${item.groupKey}, Category: ${item.category}. Reason: ${item.reason}`);
+      statements.push(`UPDATE reports SET status = '${item.newStatus}', developer_notes = '${noteText}', updated_at = ${now} WHERE report_id = '${rid}';`);
+      statements.push(`INSERT INTO report_status_history (report_id, from_status, to_status, changed_at, actor, reason) VALUES ('${rid}', '${item.oldStatus}', '${item.newStatus}', ${now}, 'AUTOMATION', 'VOX_9_1_HISTORICAL_BACKFILL');`);
+      statements.push(`INSERT INTO report_notes (report_id, note, created_at, actor) VALUES ('${rid}', '${noteText}', ${now}, 'AUTOMATION');`);
+      statements.push(`INSERT INTO report_changes (report_id, kind, changed_at) VALUES ('${rid}', 'STATUS_CHANGED', ${now});`);
+      statements.push(`INSERT INTO admin_audit (action, target_type, target_id, created_at, actor) VALUES ('STATUS_CHANGED', 'REPORT', '${rid}', ${now}, 'AUTOMATION');`);
+    }
+  }
+
   return statements.join('\n');
 }
 
@@ -375,6 +388,193 @@ export function analyzeFixtureReports() {
   }
 
   return results;
+}
+
+
+export const HISTORICAL_INCIDENTS_CATALOG = [
+  {
+    groupKey: 'OTA_RATE_LIMIT',
+    category: 'OTA',
+    reportIds: ['VOX-6561494F', 'VOX-936CFDE4'],
+    signature: 'OTA|OTA_RATE_LIMIT|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Превышение лимита запросов к API релизов GitHub (HTTP 429 / 403) при частых периодических проверках обновлений',
+    fixCommit: 'c67b476e1',
+    fixPatch: 'Patch #44',
+    verificationState: 'VERIFIED_EMULATOR_AWAITING_PHYSICAL',
+    reason: 'Внедрён адаптивный период охлаждения (cooldown), дедупликация повторных запросов и экспоненциальный бэкофф'
+  },
+  {
+    groupKey: 'OTA_FAILED_BENIGN',
+    category: 'OTA',
+    reportIds: ['VOX-F8C23801', 'VOX-8A73CDB3', 'VOX-61FF0AF8', 'VOX-78443F30'],
+    signature: 'OTA|NO_UPDATE|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'KNOWN_LIMITATION',
+    rootCause: 'Штатный ответ сервера обновлений: релиз не найден или установлена актуальная версия (404/NO_UPDATE)',
+    fixCommit: 'e5354a713',
+    fixPatch: 'Patch #45',
+    verificationState: 'VERIFIED_EMULATOR',
+    reason: 'Каноническая реклассификация штатного отсутствия обновлений из ошибки в benign NO_UPDATE статус'
+  },
+  {
+    groupKey: 'OTA_FAILED_NETWORK',
+    category: 'OTA',
+    reportIds: ['VOX-9CF8B14A', 'VOX-08125C76', 'VOX-F0B4A75B'],
+    signature: 'OTA|PARTIAL_DOWNLOAD|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Сетевой обрыв при скачивании APK обновления, приводивший к повреждению файла установщика',
+    fixCommit: 'c67b476e1',
+    fixPatch: 'Patch #44',
+    verificationState: 'VERIFIED_EMULATOR_AWAITING_PHYSICAL',
+    reason: 'Атомарная загрузка во временный файл .tmp и строгая верификация размера (Content-Length) перед передачей в PackageInstaller'
+  },
+  {
+    groupKey: 'OTA_FAILED_HISTORICAL',
+    category: 'OTA',
+    reportIds: ['VOX-707B7E10'],
+    signature: 'OTA|OTA_FAILED|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Устаревшие события со старых версий (v8.2-beta), перенесённые в отчёт при миграции',
+    fixCommit: 'c67b476e1',
+    fixPatch: 'Patch #44',
+    verificationState: 'VERIFIED_EMULATOR',
+    reason: 'Все события в отчёте являются историческими (>24ч) и адресованы в сборке 9.1'
+  },
+  {
+    groupKey: 'PLAYER_SOURCE_OOM',
+    category: 'PLAYER',
+    reportIds: ['VOX-4D15A94E'],
+    signature: 'PLAYER|PLAYER_OUT_OF_MEMORY|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'KNOWN_LIMITATION',
+    rootCause: 'Нехватка оперативной памяти (OOM) на бюджетных устройствах при одновременной работе тяжелого декодера и фонового кеширования',
+    fixCommit: '64d5116a4',
+    fixPatch: 'Patch #46',
+    verificationState: 'KNOWN_LIMITATION',
+    reason: 'Память ограничена физическими характеристиками устройства (1GB RAM); внедрен fallback на пониженный битрейт'
+  },
+  {
+    groupKey: 'PLAYER_SOURCE_ERROR_MEDIA',
+    category: 'PLAYER',
+    reportIds: ['VOX-EAB92F2F', 'VOX-19F57287', 'VOX-DE23D34D', 'VOX-DACBE715'],
+    signature: 'PLAYER|PLAYER_SOURCE_ERROR|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Сбой источника медиапотока ExoPlayer и бесконечный спиннер «Восстановление соединения» при микроразрывах сети',
+    fixCommit: '64d5116a4',
+    fixPatch: 'Patch #47',
+    verificationState: 'VERIFIED_EMULATOR_AWAITING_PHYSICAL',
+    reason: 'Внедрён авто-рекавери контроллер (bounded player recovery, stall failover, автоматический перезапуск потока без закрытия видео)'
+  },
+  {
+    groupKey: 'PLAYER_HTTP_ERROR_403',
+    category: 'PLAYER',
+    reportIds: ['VOX-D134CD89', 'VOX-BAE1F61E', 'VOX-82E64C77', 'VOX-BDDBE424'],
+    signature: 'PLAYER|PLAYER_HTTP_ERROR|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Истечение срока действия стримингового URL YouTube (HTTP 403 InvalidResponseCodeException)',
+    fixCommit: '40dab7a56',
+    fixPatch: 'Patch #44',
+    verificationState: 'VERIFIED_EMULATOR_AWAITING_PHYSICAL',
+    reason: 'Каноническая one-shot процедура сброса кеша плеера (PlayerCacheRecoveryPolicy) и бесшовного повторного открытия потока'
+  },
+  {
+    groupKey: 'PLAYER_REBUFFER_STALL',
+    category: 'PLAYER',
+    reportIds: ['VOX-99400330', 'VOX-67C3A751', 'VOX-6D5DE6B3', 'VOX-7A8588E'],
+    signature: 'PLAYER|PLAYER_REBUFFER|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Повторная буферизация видео при скачках сетевого джиттера и рассинхронизации аудиотреков',
+    fixCommit: '493c69ffd',
+    fixPatch: 'Patch #47',
+    verificationState: 'VERIFIED_EMULATOR_AWAITING_PHYSICAL',
+    reason: 'Реализована адаптивная политика ABR и динамический RMS-даккинг аудио с мягкой атакой и затуханием'
+  },
+  {
+    groupKey: 'PLAYER_STARTUP_SLOW',
+    category: 'PLAYER',
+    reportIds: ['VOX-072E7194'],
+    signature: 'PLAYER|PLAYER_STARTUP_SLOW|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'INVESTIGATING',
+    rootCause: 'Повышенная задержка первичного запуска видеопотока из-за параллельного DNS-резолвинга и выбора дорожек',
+    fixCommit: 'N/A',
+    fixPatch: 'N/A',
+    verificationState: 'INVESTIGATING_ACTIVE',
+    reason: 'Инцидент оставлен в активном статусе INVESTIGATING для дополнительного профилирования сетевого стека'
+  },
+  {
+    groupKey: 'TRANSLATION_WATCHDOG_TIMEOUT',
+    category: 'TRANSLATION',
+    reportIds: ['VOX-CBC3A737'],
+    signature: 'TRANSLATION|WATCHDOG_TIMEOUT|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'FIXED_AWAITING_VERIFICATION',
+    rootCause: 'Ложное срабатывание сторожевого таймера (watchdog) при длительном ожидании перевода длинных видео (>1ч)',
+    fixCommit: '8c28d5ad3',
+    fixPatch: 'Patch #45',
+    verificationState: 'VERIFIED_EMULATOR_AWAITING_PHYSICAL',
+    reason: 'Внедрена многоуровневая адаптивная политика ожидания L1-L5 и устранено ложное срабатывание watchdog в коммите 5f60eb66b'
+  },
+  {
+    groupKey: 'TRANSLATION_FALLBACK_ATTEMPT',
+    category: 'TRANSLATION',
+    reportIds: ['VOX-A30168DD'],
+    signature: 'TRANSLATION|FALLBACK_ATTEMPT|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'KNOWN_LIMITATION',
+    rootCause: 'Штатный откат с Lively Voice (нейроголос) на стандартный голос при пиковой нагрузке на кластер Яндекса',
+    fixCommit: '5f60eb66b',
+    fixPatch: 'Patch #45',
+    verificationState: 'KNOWN_LIMITATION',
+    reason: 'Штатное проектное поведение для обеспечения непрерывности перевода; не является сбоем приложения'
+  },
+  {
+    groupKey: 'UI_HUD_STATE_INCONSISTENT',
+    category: 'UI',
+    reportIds: ['VOX-16B0A28B'],
+    signature: 'UI|HUD_STATE_INCONSISTENT|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'IGNORED',
+    rootCause: 'Синтетический стресс-тест интерфейса на эмуляторе при искусственной симуляции потери фокуса',
+    fixCommit: '47c784c5f',
+    fixPatch: 'Patch #46',
+    verificationState: 'IGNORED_SYNTHETIC',
+    reason: 'Отчёт сгенерирован тестовым стендом для верификации самовосстановления HUD; помечен как IGNORED'
+  },
+  {
+    groupKey: 'SYSTEM_AUTO_BETA_ROUTINE',
+    category: 'SYSTEM',
+    reportIds: ['VOX-ACE7107E'],
+    signature: 'SYSTEM|AUTO_BETA_ROUTINE|ANDROID_TV_API34',
+    oldStatus: 'NEW',
+    newStatus: 'IGNORED',
+    rootCause: 'Периодический сервисный опрос тестового стенда эмулятора автоматических сборок',
+    fixCommit: '457ffc27a',
+    fixPatch: 'Patch #45',
+    verificationState: 'IGNORED_SYNTHETIC',
+    reason: 'Служебный отчёт синтетического автотеста; исключён из активных инцидентов'
+  }
+];
+
+export function generateRollbackSql() {
+  const now = Date.now();
+  const statements = [];
+  statements.push('-- SmartTube VOX 9.1: Backfill Rollback Migration');
+  statements.push('-- Reverts issue statuses to NEW/INVESTIGATING prior to backfill\n');
+  for (const item of HISTORICAL_INCIDENTS_CATALOG) {
+    statements.push(`UPDATE issues SET status = 'NEW', updated_at = ${now} WHERE signature = '${escapeSql(item.signature)}';`);
+    for (const rid of item.reportIds) {
+      statements.push(`UPDATE reports SET status = 'NEW', updated_at = ${now} WHERE report_id = '${rid}';`);
+    }
+  }
+  return statements.join('\n');
 }
 
 // CLI Execution

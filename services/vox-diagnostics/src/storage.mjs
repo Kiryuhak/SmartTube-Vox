@@ -3,9 +3,21 @@ import { classifyReport, compareVoxVersions, technicalSummary, normalizePlatform
 export const DEFAULT_RETENTION_DAYS = 30;
 export const DEFAULT_RETENTION_MS = DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-export const CANONICAL_STATUSES = [
+export const PRIMARY_STATUSES = [
   'NEW',
   'INVESTIGATING',
+  'ROOT_CAUSE_FOUND',
+  'FIX_IMPLEMENTED',
+  'TESTING',
+  'FIXED_AWAITING_VERIFICATION',
+  'VERIFIED',
+  'REGRESSION',
+  'KNOWN_LIMITATION',
+  'IGNORED',
+];
+
+export const CANONICAL_STATUSES = [
+  ...PRIMARY_STATUSES,
   'TRIAGED',
   'IN_PROGRESS',
   'NEEDS_INFO',
@@ -16,45 +28,84 @@ export const CANONICAL_STATUSES = [
   'KNOWN_ISSUE',
   'RESOLVED',
   'CLOSED',
-  'IGNORED',
   'IGNORED_TEST',
   'WONT_FIX',
 ];
 
 export const STATUS_LABELS = {
   NEW: 'Новый',
-  INVESTIGATING: 'Расследование',
-  TRIAGED: 'Разобран',
+  INVESTIGATING: 'В работе',
+  ROOT_CAUSE_FOUND: 'Причина найдена',
+  FIX_IMPLEMENTED: 'Исправлено в коде',
+  TESTING: 'На проверке',
+  FIXED_AWAITING_VERIFICATION: 'Исправлено — ждёт проверки',
+  VERIFIED: 'Исправлено — подтверждено',
+  REGRESSION: 'Повторная ошибка',
+  KNOWN_LIMITATION: 'Известное ограничение',
+  IGNORED: 'Игнорируется',
+  // Обратная совместимость с легаси-статусами
   IN_PROGRESS: 'В работе',
+  TRIAGED: 'В работе',
   NEEDS_INFO: 'Нужны данные',
   DUPLICATE: 'Дубликат',
   FIXED_PENDING_VERIFY: 'Исправлено — ждёт проверки',
   FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
   FIXED_PENDING_VALIDATION: 'Исправлено — ждёт проверки',
-  KNOWN_ISSUE: 'Известная проблема',
-  RESOLVED: 'Решено',
-  CLOSED: 'Закрыто',
-  IGNORED: 'Игнорировать',
-  IGNORED_TEST: 'Тест / игнор',
-  WONT_FIX: 'Не будет исправлено',
+  KNOWN_ISSUE: 'Известное ограничение',
+  RESOLVED: 'Исправлено — подтверждено',
+  CLOSED: 'Исправлено — подтверждено',
+  IGNORED_TEST: 'Игнорируется',
+  WONT_FIX: 'Известное ограничение',
+};
+
+export const STATUS_COLORS = {
+  NEW: '#6b7280',
+  INVESTIGATING: '#3b82f6',
+  ROOT_CAUSE_FOUND: '#8b5cf6',
+  FIX_IMPLEMENTED: '#14b8a6',
+  TESTING: '#f59e0b',
+  FIXED_AWAITING_VERIFICATION: '#06b6d4',
+  VERIFIED: '#10b981',
+  REGRESSION: '#ef4444',
+  KNOWN_LIMITATION: '#64748b',
+  IGNORED: '#475569',
+  // Легаси алиасы
+  IN_PROGRESS: '#3b82f6',
+  TRIAGED: '#3b82f6',
+  FIXED_PENDING_VERIFY: '#06b6d4',
+  FIXED_PENDING_VERIFICATION: '#06b6d4',
+  FIXED_PENDING_VALIDATION: '#06b6d4',
+  RESOLVED: '#10b981',
+  CLOSED: '#10b981',
+  KNOWN_ISSUE: '#64748b',
+  IGNORED_TEST: '#475569',
+  WONT_FIX: '#64748b',
+  DUPLICATE: '#64748b',
 };
 
 export const ALLOWED_STATUS_TRANSITIONS = {
-  NEW: new Set(['NEW', 'INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'DUPLICATE', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'NEEDS_INFO', 'WONT_FIX']),
-  INVESTIGATING: new Set(['INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_ISSUE', 'WONT_FIX']),
-  IN_PROGRESS: new Set(['INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_ISSUE', 'WONT_FIX']),
-  TRIAGED: new Set(['INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_ISSUE', 'WONT_FIX']),
-  FIXED_PENDING_VERIFY: new Set(['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'DUPLICATE']),
-  FIXED_PENDING_VERIFICATION: new Set(['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'DUPLICATE']),
-  FIXED_PENDING_VALIDATION: new Set(['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'KNOWN_ISSUE', 'DUPLICATE']),
-  RESOLVED: new Set(['RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
-  CLOSED: new Set(['RESOLVED', 'CLOSED', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
-  DUPLICATE: new Set(['DUPLICATE', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'NEW', 'RESOLVED']),
-  IGNORED: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX']),
-  IGNORED_TEST: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX']),
-  NEEDS_INFO: new Set(['NEEDS_INFO', 'INVESTIGATING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'NEW']),
-  KNOWN_ISSUE: new Set(['KNOWN_ISSUE', 'INVESTIGATING', 'IN_PROGRESS', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST']),
-  WONT_FIX: new Set(['WONT_FIX', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'IGNORED', 'IGNORED_TEST']),
+  NEW: new Set(['NEW', 'INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TRIAGED', 'DUPLICATE', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'VERIFIED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'NEEDS_INFO', 'WONT_FIX']),
+  INVESTIGATING: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW']),
+  IN_PROGRESS: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW']),
+  ROOT_CAUSE_FOUND: new Set(['ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'INVESTIGATING', 'IN_PROGRESS', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'IGNORED', 'IGNORED_TEST']),
+  FIX_IMPLEMENTED: new Set(['FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'INVESTIGATING', 'IN_PROGRESS', 'REGRESSION']),
+  TESTING: new Set(['TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'VERIFIED', 'RESOLVED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'FIX_IMPLEMENTED']),
+  FIXED_AWAITING_VERIFICATION: new Set(['FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'TESTING', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'DUPLICATE']),
+  FIXED_PENDING_VERIFY: new Set(['FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'TESTING', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'DUPLICATE']),
+  FIXED_PENDING_VERIFICATION: new Set(['FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'TESTING', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'DUPLICATE']),
+  FIXED_PENDING_VALIDATION: new Set(['FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'TESTING', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'DUPLICATE']),
+  VERIFIED: new Set(['VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
+  RESOLVED: new Set(['VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
+  CLOSED: new Set(['VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
+  REGRESSION: new Set(['REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING']),
+  TRIAGED: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX']),
+  DUPLICATE: new Set(['DUPLICATE', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'NEW', 'VERIFIED', 'RESOLVED']),
+  IGNORED: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX', 'KNOWN_LIMITATION']),
+  IGNORED_TEST: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX', 'KNOWN_LIMITATION']),
+  NEEDS_INFO: new Set(['NEEDS_INFO', 'INVESTIGATING', 'IN_PROGRESS', 'VERIFIED', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'NEW']),
+  KNOWN_LIMITATION: new Set(['KNOWN_LIMITATION', 'KNOWN_ISSUE', 'INVESTIGATING', 'IN_PROGRESS', 'FIX_IMPLEMENTED', 'FIXED_AWAITING_VERIFICATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST']),
+  KNOWN_ISSUE: new Set(['KNOWN_LIMITATION', 'KNOWN_ISSUE', 'INVESTIGATING', 'IN_PROGRESS', 'FIX_IMPLEMENTED', 'FIXED_AWAITING_VERIFICATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'IGNORED', 'IGNORED_TEST']),
+  WONT_FIX: new Set(['WONT_FIX', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION']),
 };
 
 export function isValidStatusTransition(fromStatus, toStatus) {
@@ -66,14 +117,20 @@ export function isValidStatusTransition(fromStatus, toStatus) {
   return allowed ? allowed.has(to) : false;
 }
 
-/**
- * Нормализует строковый статус к каноническому виду:
- * NEW, INVESTIGATING, IN_PROGRESS, TRIAGED, NEEDS_INFO, DUPLICATE, FIXED_PENDING_VERIFY, FIXED_PENDING_VERIFICATION, KNOWN_ISSUE, RESOLVED, CLOSED, IGNORED, IGNORED_TEST, WONT_FIX
- */
 export function normalizeStatus(rawStatus) {
   if (!rawStatus) return 'NEW';
   const s = String(rawStatus).toUpperCase().trim();
   if (s === 'INVESTIGATING') return 'INVESTIGATING';
+  if (s === 'ROOT_CAUSE_FOUND') return 'ROOT_CAUSE_FOUND';
+  if (s === 'FIX_IMPLEMENTED') return 'FIX_IMPLEMENTED';
+  if (s === 'TESTING') return 'TESTING';
+  if (s === 'FIXED_AWAITING_VERIFICATION') return 'FIXED_AWAITING_VERIFICATION';
+  if (s === 'VERIFIED') return 'VERIFIED';
+  if (s === 'REGRESSION') return 'REGRESSION';
+  if (s === 'KNOWN_LIMITATION') return 'KNOWN_LIMITATION';
+  if (s === 'IGNORED') return 'IGNORED';
+
+  // Легаси-совместимость
   if (s === 'DUPLICATE' || s === 'DUP') return 'DUPLICATE';
   if (s === 'FIXED_PENDING_VERIFY') return 'FIXED_PENDING_VERIFY';
   if (s === 'FIXED_PENDING_VERIFICATION' || s === 'PENDING_VERIFICATION' || s === 'FIXED') return 'FIXED_PENDING_VERIFICATION';
@@ -84,31 +141,34 @@ export function normalizeStatus(rawStatus) {
   if (s === 'CLOSED') return 'CLOSED';
   if (s === 'RESOLVED') return 'RESOLVED';
   if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
-  if (s === 'IGNORED') return 'IGNORED';
   if (s === 'IGNORED_TEST' || s === 'TEST') return 'IGNORED_TEST';
   if (s === 'WONT_FIX' || s === 'WONTFIX') return 'WONT_FIX';
   if (s === 'NEW') return 'NEW';
   return s;
 }
 
+export function toCanonicalStatus(rawStatus) {
+  if (!rawStatus) return 'NEW';
+  const s = String(rawStatus).toUpperCase().trim();
+  if (s === 'NEW') return 'NEW';
+  if (['INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'REVIEWED', 'NEEDS_INFO'].includes(s)) return 'INVESTIGATING';
+  if (s === 'ROOT_CAUSE_FOUND') return 'ROOT_CAUSE_FOUND';
+  if (s === 'FIX_IMPLEMENTED') return 'FIX_IMPLEMENTED';
+  if (s === 'TESTING') return 'TESTING';
+  if (['FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'PENDING_VERIFICATION', 'FIXED'].includes(s)) return 'FIXED_AWAITING_VERIFICATION';
+  if (['VERIFIED', 'RESOLVED', 'CLOSED'].includes(s)) return 'VERIFIED';
+  if (['REGRESSION', 'REOPENED'].includes(s)) return 'REGRESSION';
+  if (['KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN'].includes(s)) return 'KNOWN_LIMITATION';
+  if (['IGNORED', 'IGNORED_TEST', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP'].includes(s)) return 'IGNORED';
+  return 'NEW';
+}
+
 export const CANONICAL_INCIDENT_STATUSES = [
-  'NEW',
-  'INVESTIGATING',
-  'DUPLICATE',
-  'FIXED_PENDING_VERIFY',
-  'RESOLVED',
-  'IGNORED',
+  ...PRIMARY_STATUSES,
 ];
 
 export function toCanonicalIncidentStatus(rawStatus) {
-  if (!rawStatus) return 'NEW';
-  const s = String(rawStatus).toUpperCase().trim();
-  if (['INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'REVIEWED', 'NEEDS_INFO'].includes(s)) return 'INVESTIGATING';
-  if (['DUPLICATE', 'DUP'].includes(s)) return 'DUPLICATE';
-  if (['FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'PENDING_VERIFICATION', 'FIXED', 'KNOWN_ISSUE', 'KNOWN'].includes(s)) return 'FIXED_PENDING_VERIFY';
-  if (['RESOLVED', 'CLOSED'].includes(s)) return 'RESOLVED';
-  if (['IGNORED', 'IGNORED_TEST', 'TEST', 'WONT_FIX', 'WONTFIX'].includes(s)) return 'IGNORED';
-  return 'NEW';
+  return toCanonicalStatus(rawStatus);
 }
 
 /**
@@ -791,7 +851,13 @@ export class ReportStorage {
 
   async updateIssue(signature, patch, actor = 'ADMIN') {
     if (!signature || typeof signature !== 'string' || signature.length > 256) throw new RangeError('Invalid signature');
-    const allowed = ['status', 'fixedInVersion', 'fixPatch', 'fixCommit', 'title', 'actor', 'duplicateOf', 'duplicate_of', 'occurrences'];
+    const allowed = [
+      'status', 'fixedInVersion', 'fixPatch', 'fixCommit', 'title', 'actor',
+      'duplicateOf', 'duplicate_of', 'occurrences',
+      'rootCause', 'root_cause', 'verificationMethod', 'verification_method',
+      'verificationResult', 'verification_result', 'verificationEnvironment', 'verification_environment',
+      'evidence', 'reason'
+    ];
     if (!patch || typeof patch !== 'object' || Object.keys(patch).some(key => !allowed.includes(key))) throw new RangeError('Invalid issue patch');
     const effectiveActor = patch.actor || actor;
     const normStatus = patch.status !== undefined ? normalizeStatus(patch.status) : undefined;
@@ -807,6 +873,24 @@ export class ReportStorage {
     const currentNorm = normalizeStatus(before.issue_status || before.status);
     if (normStatus !== undefined && currentNorm && currentNorm !== normStatus && !isValidStatusTransition(currentNorm, normStatus)) {
       throw new RangeError(`Invalid status transition from ${currentNorm} to ${normStatus}`);
+    }
+
+    if (normStatus === 'VERIFIED') {
+      const hasEvidence = Boolean(
+        (patch.reason && patch.reason.trim().length > 0) ||
+        (patch.evidence && patch.evidence.trim().length > 0) ||
+        (patch.verificationMethod && patch.verificationMethod.trim().length > 0) ||
+        (patch.verification_method && patch.verification_method.trim().length > 0) ||
+        (patch.verificationResult && patch.verificationResult.trim().length > 0) ||
+        (patch.verification_result && patch.verification_result.trim().length > 0) ||
+        (patch.fixCommit && patch.fixCommit.trim().length > 0) ||
+        (patch.fix_commit && patch.fix_commit.trim().length > 0) ||
+        (before.fix_commit && before.fix_commit.trim().length > 0) ||
+        (before.fix_patch && before.fix_patch.trim().length > 0)
+      );
+      if (!hasEvidence) {
+        throw new RangeError('Transition to VERIFIED requires verification evidence or commit reference');
+      }
     }
 
     const rawDup = patch.duplicateOf ?? patch.duplicate_of;
