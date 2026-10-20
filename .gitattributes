@@ -1,0 +1,6 @@
+# Preserve LF line endings for shell scripts, python scripts and gradlew
+*.sh text eol=lf
+*.py text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
