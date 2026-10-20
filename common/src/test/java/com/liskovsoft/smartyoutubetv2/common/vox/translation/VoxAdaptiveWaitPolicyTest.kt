@@ -112,4 +112,27 @@ class VoxAdaptiveWaitPolicyTest {
         val eval = policy.onPoll(percent = 50, remainingSec = 10, stage = "PROCESSING", nowMs = hardDeadline + 1000L)
         assertEquals(VoxAdaptiveWaitPolicy.Verdict.HARD_TIMEOUT, eval.verdict)
     }
+
+    @Test
+    fun testDurationBoundaryFourHours() {
+        // Exactly 4 hours (14,400s) is allowed
+        assertTrue(VoxAdaptiveWaitPolicy.isDurationSupported(14400.0))
+        assertTrue(VoxAdaptiveWaitPolicy.isDurationSupported(14399.0))
+        assertTrue(VoxAdaptiveWaitPolicy.isDurationSupported(1.0))
+
+        // Exceeding 4 hours is rejected
+        assertFalse(VoxAdaptiveWaitPolicy.isDurationSupported(14400.1))
+        assertFalse(VoxAdaptiveWaitPolicy.isDurationSupported(14401.0))
+        assertFalse(VoxAdaptiveWaitPolicy.isDurationSupported(57600.0))
+        assertFalse(VoxAdaptiveWaitPolicy.isDurationSupported(0.0))
+        assertFalse(VoxAdaptiveWaitPolicy.isDurationSupported(-1.0))
+
+        val policyBoundary = VoxAdaptiveWaitPolicy(videoDurationSec = 14400.0, initialTimeMs = 1000L)
+        val evalBoundary = policyBoundary.onPoll(percent = 10, remainingSec = -1, stage = "PROCESSING", nowMs = 2000L)
+        assertEquals(VoxAdaptiveWaitPolicy.Verdict.HEALTHY_LONG_SYNTHESIS, evalBoundary.verdict)
+
+        val policyExceeded = VoxAdaptiveWaitPolicy(videoDurationSec = 14401.0, initialTimeMs = 1000L)
+        val evalExceeded = policyExceeded.onPoll(percent = 10, remainingSec = -1, stage = "PROCESSING", nowMs = 2000L)
+        assertEquals(VoxAdaptiveWaitPolicy.Verdict.UNSUPPORTED_DURATION, evalExceeded.verdict)
+    }
 }
