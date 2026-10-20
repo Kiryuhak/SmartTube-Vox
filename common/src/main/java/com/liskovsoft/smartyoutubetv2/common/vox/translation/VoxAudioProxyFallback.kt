@@ -34,25 +34,44 @@ object VoxAudioProxyFallback {
 
     /**
      * Checks if given URL is a direct Yandex S3 translation audio URL.
+     * Supports https, http, private and public mds/s3 clusters with /tts/ paths.
      */
     fun isDirectS3(audioUrl: String?): Boolean {
         if (audioUrl.isNullOrBlank()) return false
-        return audioUrl.startsWith(AUDIO_SOURCE_PREFIX)
+        val trimmed = audioUrl.trim()
+        val lower = trimmed.lowercase()
+        if (!lower.startsWith("https://") && !lower.startsWith("http://")) return false
+        if (trimmed.startsWith(AUDIO_SOURCE_PREFIX, ignoreCase = true)) return true
+        return (lower.contains("s3-private.mds.yandex.net/tts/") ||
+                lower.contains("s3.mds.yandex.net/tts/") ||
+                lower.contains("s3.yandex.net/tts/") ||
+                lower.contains("vtrans.s3-private.mds.yandex.net/"))
     }
 
     /**
-     * Rewrites direct Yandex S3 audio URL to proxified worker URL.
+     * Rewrites direct Yandex S3 audio URL to proxified worker URL while preserving query params.
      */
     fun proxifyAudio(audioUrl: String?, proxyWorkerHost: String? = null): String {
-        if (audioUrl.isNullOrBlank() || !audioUrl.startsWith(AUDIO_SOURCE_PREFIX)) {
-            return audioUrl ?: ""
-        }
+        if (audioUrl.isNullOrBlank()) return ""
         val host = resolveProxyWorkerHost(proxyWorkerHost)
-        return audioUrl.replace(AUDIO_SOURCE_PREFIX, "https://$host$AUDIO_PROXY_PATH_PREFIX")
+        if (audioUrl.startsWith(AUDIO_SOURCE_PREFIX)) {
+            return audioUrl.replace(AUDIO_SOURCE_PREFIX, "https://$host$AUDIO_PROXY_PATH_PREFIX")
+        }
+        val ttsProdIdx = audioUrl.indexOf("/tts/prod/")
+        if (ttsProdIdx >= 0) {
+            val subPath = audioUrl.substring(ttsProdIdx + "/tts/prod/".length)
+            return "https://$host$AUDIO_PROXY_PATH_PREFIX$subPath"
+        }
+        val ttsIdx = audioUrl.indexOf("/tts/")
+        if (ttsIdx >= 0 && isDirectS3(audioUrl)) {
+            val subPath = audioUrl.substring(ttsIdx + "/tts/".length)
+            return "https://$host$AUDIO_PROXY_PATH_PREFIX$subPath"
+        }
+        return audioUrl
     }
 
     /**
-     * Rewrites proxified worker URL back to direct Yandex S3 audio URL.
+     * Rewrites proxified worker URL back to direct Yandex S3 audio URL while preserving query params.
      */
     fun unproxifyAudio(audioUrl: String?): String {
         if (audioUrl.isNullOrBlank()) return ""

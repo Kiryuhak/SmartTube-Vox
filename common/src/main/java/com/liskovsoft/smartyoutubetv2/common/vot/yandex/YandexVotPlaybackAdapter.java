@@ -94,6 +94,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         void onPlaybackPaused(long generationId);
         void onPlaybackStopped(long generationId);
         void onPlaybackError(long generationId, @NonNull String category);
+        default void onRouteFallbackAttempted(long generationId, @NonNull String fallbackUrl) {}
     }
 
     public interface AudioPlayerFactory {
@@ -305,7 +306,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     @Override
     public void onStateChanged(@NonNull YandexVotState state) {
         synchronized (lock) {
-            if (state.getGenerationId() < currentGeneration && currentGeneration != 0) {
+            if (activePlayer != null && state.getGenerationId() < currentGeneration && currentGeneration != 0) {
                 YandexVotLog.w(TAG, "Dropping stale state: stateGen=" + state.getGenerationId() + " currentGen=" + currentGeneration);
                 return;
             }
@@ -323,7 +324,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
     public void startPlayback(long generationId, @Nullable String audioUrl, float speed) {
         synchronized (lock) {
-            if (generationId < currentGeneration && currentGeneration != 0) {
+            if (activePlayer != null && generationId < currentGeneration && currentGeneration != 0) {
                 YandexVotLog.w(TAG, "Dropping stale startPlayback: gen=" + generationId + " currentGen=" + currentGeneration);
                 return;
             }
@@ -402,6 +403,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                         if (fallbackUrl != null) {
                             YandexVotLog.w(TAG, "generation=" + generationId + " primary route failed (" + error.getMessage() + "), retrying route fallback: " + fallbackUrl);
                             currentSourceUrl = fallbackUrl;
+                            notifyRouteFallbackLocked(generationId, fallbackUrl);
                             prepareWithRouteLocked(generationId, player, fallbackUrl, currentPlaybackSpeed);
                             return;
                         }
@@ -585,7 +587,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
     public void refreshSource(long generationId, @NonNull String newAudioUrl, long resumePositionMs, float speed) {
         synchronized (lock) {
-            if (generationId < currentGeneration && currentGeneration != 0) {
+            if (activePlayer != null && generationId < currentGeneration && currentGeneration != 0) {
                 YandexVotLog.w(TAG, "Dropping stale refreshSource: gen=" + generationId + " currentGen=" + currentGeneration);
                 return;
             }
@@ -637,7 +639,9 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
                         if (routeTracker != null && routeTracker.canAttemptFallback()) {
                             String fallbackUrl = routeTracker.trySwitchToFallback();
                             if (fallbackUrl != null) {
+                                YandexVotLog.w(TAG, "generation=" + generationId + " refresh primary route failed, retrying route fallback: " + fallbackUrl);
                                 currentSourceUrl = fallbackUrl;
+                                notifyRouteFallbackLocked(generationId, fallbackUrl);
                                 prepareWithRouteLocked(generationId, player, fallbackUrl, currentPlaybackSpeed);
                                 return;
                             }
@@ -727,6 +731,12 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     private void notifyErrorLocked(long gen, @NonNull String category) {
         if (stateListener != null) {
             stateListener.onPlaybackError(gen, category);
+        }
+    }
+
+    private void notifyRouteFallbackLocked(long gen, @NonNull String fallbackUrl) {
+        if (stateListener != null) {
+            stateListener.onRouteFallbackAttempted(gen, fallbackUrl);
         }
     }
 

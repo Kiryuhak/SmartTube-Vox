@@ -232,7 +232,7 @@ public class VotProgressOverlay {
             if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
             mMotionState = MotionState.EXPANDING_READY;
             showExpandedContent(getStringSafe(R.string.vot_progress_ready), R.drawable.ic_vot_ready, false);
-            animateWidth(wideWidthPx(), () -> {
+            animateWidth(readyWidthPx(), () -> {
                 if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
                 mMotionState = MotionState.READY;
                 VoxSafeLogger.d(
@@ -562,6 +562,21 @@ public class VotProgressOverlay {
     }
 
     private int wideWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_wide_width); }
+
+    /** Measures dynamic wrap width for the ready confirmation pill (icon + text + balanced 28dp right air). */
+    private int readyWidthPx() {
+        int iconSize = dpToPx(24);
+        int startPadding = dpToPx(16);
+        int gap = dpToPx(16);
+        int textWidth = 0;
+        if (mTitle != null && mTitle.getPaint() != null) {
+            String text = getStringSafe(R.string.vot_progress_ready);
+            textWidth = (int) Math.ceil(mTitle.getPaint().measureText(text));
+        }
+        int rightAir = dpToPx(28); // 24-32dp visual air on the right
+        int calculated = startPadding + iconSize + gap + textWidth + rightAir;
+        return Math.max(circleWidthPx(), calculated);
+    }
     private int circleWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_circle_size); }
     private int overlayHeightPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_height); }
     private int dpToPx(int dp) { return Math.round(dp * mContext.getResources().getDisplayMetrics().density); }

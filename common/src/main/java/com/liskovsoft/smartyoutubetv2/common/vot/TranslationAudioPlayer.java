@@ -15,6 +15,7 @@ import com.google.android.exoplayer2.audio.AudioProcessor;
 import com.google.android.exoplayer2.source.ExtractorMediaSource;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
 import com.google.android.exoplayer2.util.Util;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioBooster;
@@ -22,6 +23,8 @@ import com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioLevelProcessor;
 
 public class TranslationAudioPlayer implements Player.EventListener {
     private static final String TAG = TranslationAudioPlayer.class.getSimpleName();
+    public static final int CONNECT_TIMEOUT_MS = 15_000;
+    public static final int READ_TIMEOUT_MS = 15_000;
 
     public interface PlaybackCallback {
         void onPrepared();
@@ -65,10 +68,22 @@ public class TranslationAudioPlayer implements Player.EventListener {
 
         Log.i(TAG, "VOT_AUDIO session=" + mSessionId + " create");
         String userAgent = Util.getUserAgent(mContext, "SmartTubeVOT");
-        DefaultDataSourceFactory dataSourceFactory = new DefaultDataSourceFactory(mContext, userAgent);
+        DefaultHttpDataSourceFactory httpDataSourceFactory = new DefaultHttpDataSourceFactory(
+                userAgent,
+                null,
+                CONNECT_TIMEOUT_MS,
+                READ_TIMEOUT_MS,
+                true // allowCrossProtocolRedirects
+        );
+        DefaultDataSourceFactory dataSourceFactory = new DefaultDataSourceFactory(
+                mContext,
+                null,
+                httpDataSourceFactory
+        );
         ExtractorMediaSource mediaSource = new ExtractorMediaSource.Factory(dataSourceFactory)
+                .setLoadErrorHandlingPolicy(new VoxTranslationLoadErrorHandlingPolicy())
                 .createMediaSource(Uri.parse(url));
-        Log.i(TAG, "VOT_AUDIO session=" + mSessionId + " source_set");
+        Log.i(TAG, "VOT_AUDIO session=" + mSessionId + " source_set url=" + url);
 
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(mContext) {
             @Override

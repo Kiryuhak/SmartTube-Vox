@@ -281,6 +281,27 @@ public class YandexVotOrchestrator {
         }
     }
 
+    public long nextGenerationId() {
+        synchronized (lock) {
+            cancelActiveOperationsLocked();
+            return ++generationCounter;
+        }
+    }
+
+    public long getCurrentGenerationId() {
+        synchronized (lock) {
+            return generationCounter;
+        }
+    }
+
+    public void ensureGenerationAtLeast(long minGen) {
+        synchronized (lock) {
+            if (minGen > generationCounter) {
+                generationCounter = minGen;
+            }
+        }
+    }
+
     public void shutdown() {
         cancel();
         if (ownsScheduler) {
@@ -765,7 +786,7 @@ public class YandexVotOrchestrator {
             if (lastRemainingTime == -1 || (remaining > 0 && remaining < lastRemainingTime)) {
                 consecutiveStalledPolls = 0;
                 lastRemainingTime = remaining;
-            } else if (remaining > 0 && remaining == lastRemainingTime) {
+            } else if (remaining >= 0 && remaining == lastRemainingTime) {
                 consecutiveStalledPolls++;
                 if (consecutiveStalledPolls >= MAX_CONSECUTIVE_STALLED_POLLS) {
                     YandexVotLog.e(TAG, "VOT stalled job detected (" + consecutiveStalledPolls + " identical polls): gen=" + gen);
