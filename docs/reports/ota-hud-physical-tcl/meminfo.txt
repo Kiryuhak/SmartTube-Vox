@@ -1,0 +1,59 @@
+Applications Memory Usage (in Kilobytes):
+Uptime: 61240705 Realtime: 340301696
+
+** MEMINFO in pid 10397 [io.github.kiryuhak.smarttubevot.stable] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap    40711    40664        8       14    41428    72936    31442    30779
+  Dalvik Heap    55119    54956       96       19    55556    20037    10019    10018
+ Dalvik Other     8861     3888        0        0    13984                           
+        Stack     2652     2652        0        0     2660                           
+       Ashmem      449      188        0        0     1136                           
+    Other dev       36       16       12        0      448                           
+     .so mmap    29474      772    25704       10    60192                           
+    .jar mmap     3834        0      796        0    42696                           
+    .apk mmap    19846      296     7156        0    38136                           
+    .ttf mmap     1347        0     1008        0     1932                           
+    .dex mmap    33390    33264       28        0    34292                           
+    .oat mmap      135        0       76        0     2108                           
+    .art mmap     8344     6516     1148       56    17264                           
+   Other mmap     1832      100      716        0     4584                           
+      Unknown     4661     4616       32        0     4916                           
+        TOTAL   210790   147928    36780       99   321332    92973    41461    40797
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    62620                          72820
+         Native Heap:    40664                          41428
+                Code:    69140                         189348
+               Stack:     2652                           2660
+            Graphics:        0                              0
+       Private Other:     9632
+              System:    26082
+             Unknown:                                   15076
+ 
+           TOTAL PSS:   210790            TOTAL RSS:   321332       TOTAL SWAP PSS:       99
+ 
+ Objects
+               Views:      419         ViewRootImpl:        3
+         AppContexts:        8           Activities:        1
+              Assets:       25        AssetManagers:        0
+       Local Binders:      101        Proxy Binders:       47
+       Parcel memory:       23         Parcel count:       73
+    Death Recipients:        3             WebViews:        1
+ 
+ SQL
+         MEMORY_USED:      360
+  PAGECACHE_OVERFLOW:      148          MALLOC_SIZE:       46
+ 
+ DATABASES
+      pgsz     dbsz   Lookaside(b) cache hits cache misses cache size  Dbname
+PER CONNECTION STATS
+         4      104            105    69    91    25  /data/user/0/io.github.kiryuhak.smarttubevot.stable/no_backup/androidx.work.workdb
+         4        8                    0     0     0    (attached) temp
+         4      104             32     4    15     3  /data/user/0/io.github.kiryuhak.smarttubevot.stable/no_backup/androidx.work.workdb (2)
+POOL STATS
+     cache hits  cache misses    cache size  Dbname
+             75           127           202  /data/user/0/io.github.kiryuhak.smarttubevot.stable/no_backup/androidx.work.workdb
