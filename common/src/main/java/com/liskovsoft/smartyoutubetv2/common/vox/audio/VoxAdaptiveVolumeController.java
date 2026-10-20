@@ -81,6 +81,7 @@ public class VoxAdaptiveVolumeController {
     private final TickScheduler mScheduler;
     private final VoxSmartDuckingPolicy mPolicy;
     private final VoxVolumeLinkCoordinator mVolumeLinkCoordinator;
+    private final VoxTranslationTimelineTracker mTimelineTracker = new VoxTranslationTimelineTracker();
     @Nullable private VoxAudioLevelProcessor mLevelProcessor;
 
     private AutoVolumeMode mMode = AutoVolumeMode.ADAPTIVE;
@@ -161,6 +162,15 @@ public class VoxAdaptiveVolumeController {
     }
 
     @NonNull
+    public synchronized VoxTranslationTimelineTracker getTimelineTracker() {
+        return mTimelineTracker;
+    }
+
+    @NonNull
+    public synchronized VoxTranslationTimelineTracker.Metrics getTimelineMetrics() {
+        return mTimelineTracker.currentMetrics();
+    }
+
     public synchronized VoxSmartDuckingPolicy.State getDuckingState() {
         return mDuckingState;
     }
@@ -175,6 +185,7 @@ public class VoxAdaptiveVolumeController {
             mAutoVolumeMutedOnStart = isMuted || currentVideoVolume <= 0.001f;
         }
 
+        mTimelineTracker.reset();
         mDuckingState = mPolicy.initState(mInitialVolumeOnStart);
         mLastReportedState = VoxSmartDuckingPolicy.DuckingState.IDLE;
         mLastReportedBaseline = mInitialVolumeOnStart;
@@ -193,6 +204,7 @@ public class VoxAdaptiveVolumeController {
         if (!mIsActive && mAutoVolumeMutedOnStart == null) return;
         mIsActive = false;
         mScheduler.cancel(mTickRunnable);
+        mTimelineTracker.logMetrics("STOP");
 
         // Restore original video volume
         float baselineVol = mDuckingState.getBaseline();
@@ -286,6 +298,15 @@ public class VoxAdaptiveVolumeController {
 
         Float rms = mLevelProcessor != null ? mLevelProcessor.getLatestRms(300L) : null;
         boolean hasRms = rms != null;
+
+        mTimelineTracker.onTick(
+                nowMs,
+                hostPlaying,
+                translationPlaying,
+                rms != null ? rms : 0.0f,
+                currentVolume,
+                1.0f
+        );
 
         VoxSmartDuckingPolicy.Input input = new VoxSmartDuckingPolicy.Input(
                 nowMs,
