@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { TelegramClient } from '../src/notifications/telegram.mjs';
+import { TelegramClient, maskChatId } from '../src/notifications/telegram.mjs';
 import { formatTestMessage, buildDashboardKeyboard } from '../src/notifications/telegram_formatter.mjs';
 
 function loadSecureEnv() {
@@ -58,7 +58,7 @@ async function main() {
     process.exit(0);
   }
 
-  console.log(`Отправка тестового уведомления в чат ${chatId}...`);
+  console.log(`Отправка тестового уведомления в чат ${maskChatId(chatId)}...`);
   const client = new TelegramClient(token);
 
   const syntheticBundle = {
