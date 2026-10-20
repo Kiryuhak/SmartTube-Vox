@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_ota_progress_full_root"
+    android:layout_width="560dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_vox_ota_card"
+    android:padding="28dp">
+
+    <!-- Top Row: Icon + Headers + Action Icons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="top">
+
+        <!-- Stage Badge Icon -->
+        <FrameLayout
+            android:id="@+id/vox_ota_progress_badge"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_vox_ota_icon_blue">
+
+            <ImageView
+                android:id="@+id/vox_ota_progress_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_vox_ota_arrow_down"
+                android:contentDescription="Stage Icon" />
+        </FrameLayout>
+
+        <!-- Titles Column -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="18dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/vox_ota_progress_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Загрузка обновления"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/vox_ota_progress_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="SmartTube Vox - 9.1"
+                android:textColor="#CBD5E1"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/vox_ota_progress_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Пожалуйста, не выключайте устройство"
+                android:textColor="#8E9DAE"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Top-Right Action Icons -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/vox_ota_btn_minimize_icon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_vox_ota_btn_icon"
+                android:src="@drawable/ic_vox_ota_minimize"
+                android:scaleType="centerInside"
+                android:focusable="true"
+                android:contentDescription="Свернуть" />
+
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="match_parent" />
+
+            <ImageButton
+                android:id="@+id/vox_ota_btn_close_icon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_vox_ota_btn_icon"
+                android:src="@drawable/ic_vox_ota_close"
+                android:scaleType="centerInside"
+                android:focusable="true"
+                android:contentDescription="Закрыть" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Progress Bar & Percentage -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ProgressBar
+            android:id="@+id/vox_ota_progressbar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="10dp"
+            android:layout_weight="1"
+            android:progressDrawable="@drawable/bg_vox_ota_progressbar"
+            android:max="100"
+            android:progress="42" />
+
+        <TextView
+            android:id="@+id/vox_ota_percent_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="42%"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
+
+    <!-- Metrics Row (Speed & Size) -->
+    <LinearLayout
+        android:id="@+id/vox_ota_metrics_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Speed Metric -->
+        <LinearLayout
+            android:id="@+id/vox_ota_speed_block"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_vox_ota_speed"
+                android:contentDescription="Speed" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/vox_ota_speed_val"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="6,8 МБ/с"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Скорость загрузки"
+                    android:textColor="#8E9DAE"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <!-- Size Metric -->
+        <LinearLayout
+            android:id="@+id/vox_ota_size_block"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_vox_ota_file"
+                android:contentDescription="Size" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/vox_ota_size_val"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="156 МБ / 368 МБ"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Размер файла"
+                    android:textColor="#8E9DAE"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Bottom Actions: [ Свернуть ] [ Отменить загрузку ] -->
+    <LinearLayout
+        android:id="@+id/vox_ota_bottom_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/vox_ota_btn_minimize"
+            android:layout_width="140dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_vox_ota_btn_secondary"
+            android:text="Свернуть"
+            android:textColor="#E0E6ED"
+            android:textSize="15sp"
+            android:focusable="true"
+            android:nextFocusRight="@+id/vox_ota_btn_cancel_download" />
+
+        <Space
+            android:layout_width="14dp"
+            android:layout_height="match_parent" />
+
+        <Button
+            android:id="@+id/vox_ota_btn_cancel_download"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_vox_ota_btn_danger"
+            android:text="Отменить загрузку"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:focusable="true"
+            android:nextFocusLeft="@+id/vox_ota_btn_minimize" />
+    </LinearLayout>
+</LinearLayout>

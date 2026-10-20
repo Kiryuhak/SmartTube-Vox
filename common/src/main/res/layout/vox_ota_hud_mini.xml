@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_ota_mini_hud_root"
+    android:layout_width="350dp"
+    android:layout_height="72dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_vox_ota_mini_card"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:focusable="false"
+    android:clickable="false">
+
+    <!-- Mini Stage Badge Icon -->
+    <FrameLayout
+        android:id="@+id/vox_ota_mini_badge"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:background="@drawable/bg_vox_ota_icon_blue">
+
+        <ImageView
+            android:id="@+id/vox_ota_mini_icon"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_vox_ota_arrow_down"
+            android:contentDescription="Mini Stage Icon" />
+    </FrameLayout>
+
+    <!-- Center Column: Title + Status + Progress bar -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/vox_ota_mini_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Загрузка обновления..."
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/vox_ota_mini_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="156 МБ / 368 МБ • 6,8 МБ/с"
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <ProgressBar
+            android:id="@+id/vox_ota_mini_progressbar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3.5dp"
+            android:layout_marginTop="4dp"
+            android:progressDrawable="@drawable/bg_vox_ota_progressbar_mini"
+            android:max="100"
+            android:progress="42" />
+    </LinearLayout>
+
+    <!-- Right Action Buttons: [ Expand ] [ Close ] -->
+    <ImageButton
+        android:id="@+id/vox_ota_mini_btn_expand"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_vox_ota_btn_icon"
+        android:src="@drawable/ic_vox_ota_expand"
+        android:scaleType="centerInside"
+        android:focusable="true"
+        android:nextFocusRight="@+id/vox_ota_mini_btn_close"
+        android:contentDescription="Развернуть" />
+
+    <Space
+        android:layout_width="6dp"
+        android:layout_height="match_parent" />
+
+    <ImageButton
+        android:id="@+id/vox_ota_mini_btn_close"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_vox_ota_btn_icon"
+        android:src="@drawable/ic_vox_ota_close"
+        android:scaleType="centerInside"
+        android:focusable="true"
+        android:nextFocusLeft="@+id/vox_ota_mini_btn_expand"
+        android:contentDescription="Отменить" />
+</LinearLayout>

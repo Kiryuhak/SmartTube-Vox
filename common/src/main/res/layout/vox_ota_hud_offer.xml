@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_ota_offer_root"
+    android:layout_width="500dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_vox_ota_card"
+    android:padding="28dp">
+
+    <!-- Top Row: Icon + Headers -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Badge Icon -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_vox_ota_icon_blue">
+
+            <ImageView
+                android:id="@+id/vox_ota_offer_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_vox_ota_arrow_up"
+                android:contentDescription="Update Icon" />
+        </FrameLayout>
+
+        <!-- Titles Column -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="18dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/vox_ota_offer_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Доступно обновление"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/vox_ota_offer_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="SmartTube Vox - 9.1"
+                android:textColor="#E0E6ED"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/vox_ota_offer_current_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="Текущая версия: 9.0"
+                android:textColor="#8E9DAE"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Changelog Block: "Что нового:" -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="Что нового:"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="4dp">
+
+        <TextView
+            android:id="@+id/vox_ota_bullet1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="• Улучшения стабильности"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/vox_ota_bullet2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="• Исправления ошибок"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/vox_ota_bullet3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="• Новые функции"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Bottom Actions: [ Обновить ] [ Позже ] -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="26dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/vox_ota_btn_update"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_vox_ota_btn_primary"
+            android:text="Обновить"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:focusable="true"
+            android:nextFocusRight="@+id/vox_ota_btn_later" />
+
+        <Space
+            android:layout_width="14dp"
+            android:layout_height="match_parent" />
+
+        <Button
+            android:id="@+id/vox_ota_btn_later"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_vox_ota_btn_secondary"
+            android:text="Позже"
+            android:textColor="#E0E6ED"
+            android:textSize="15sp"
+            android:focusable="true"
+            android:nextFocusLeft="@+id/vox_ota_btn_update" />
+    </LinearLayout>
+</LinearLayout>

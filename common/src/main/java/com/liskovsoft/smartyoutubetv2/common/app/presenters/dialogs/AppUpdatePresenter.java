@@ -164,26 +164,7 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
             return;
         }
 
-        mSettingsPresenter.appendSingleButton(
-                UiOptionItem.from(getContext().getString(R.string.install_update), optionItem -> {
-                    GeneralData.instance(getContext()).setChangelog(release.getChangelog());
-                    mSettingsPresenter.closeDialog();
-                    VoxOtaDownloadDialog.show(
-                            getContext(),
-                            release,
-                            asset,
-                            apkFile -> {
-                                VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
-                                return kotlin.Unit.INSTANCE;
-                            },
-                            error -> {
-                                MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
-                                return kotlin.Unit.INSTANCE;
-                            }
-                    );
-                }, false));
-        mSettingsPresenter.appendStringsCategory(getContext().getString(R.string.update_changelog), createChangelogOptions(release.getChangelog()));
-        mSettingsPresenter.showDialog(String.format("%s %s", getContext().getString(R.string.app_name), release.getVersionName()), AppUpdatePresenter::unhold);
+        com.liskovsoft.smartyoutubetv2.common.vox.ota.hud.VoxOtaHudPresenter.showUpdateAvailable(getContext(), release, asset);
     }
 
     private void pinVoxUpdateSection(VoxReleaseInfo release, VoxReleaseAsset asset) {
@@ -195,19 +176,7 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
             @Override
             public void onAction() {
                 GeneralData.instance(getContext()).setChangelog(release.getChangelog());
-                VoxOtaDownloadDialog.show(
-                        getContext(),
-                        release,
-                        asset,
-                        apkFile -> {
-                            VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
-                            return kotlin.Unit.INSTANCE;
-                        },
-                        error -> {
-                            MessageHelpers.showMessage(getContext(), error.getUserMessageRu());
-                            return kotlin.Unit.INSTANCE;
-                        }
-                );
+                com.liskovsoft.smartyoutubetv2.common.vox.ota.hud.VoxOtaHudPresenter.showUpdateAvailable(getContext(), release, asset);
             }
 
             @Override

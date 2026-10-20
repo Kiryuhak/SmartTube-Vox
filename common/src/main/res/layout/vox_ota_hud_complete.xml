@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_ota_complete_root"
+    android:layout_width="480dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_vox_ota_card"
+    android:padding="28dp">
+
+    <!-- Top Row: Icon + Header + Close Icon -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="top">
+
+        <!-- Green Check Badge -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_vox_ota_icon_green">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_vox_ota_check"
+                android:contentDescription="Checkmark" />
+        </FrameLayout>
+
+        <!-- Titles Column -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="18dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/vox_ota_complete_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Обновление загружено"
+                android:textColor="#FFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/vox_ota_complete_version"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="SmartTube Vox - 9.1"
+                android:textColor="#E0E6ED"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Файл успешно скачан и проверен"
+                android:textColor="#8E9DAE"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Top-Right Close Button -->
+        <ImageButton
+            android:id="@+id/vox_ota_btn_close_complete"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="12dp"
+            android:background="@drawable/bg_vox_ota_btn_icon"
+            android:src="@drawable/ic_vox_ota_close"
+            android:scaleType="centerInside"
+            android:focusable="true"
+            android:contentDescription="Закрыть" />
+    </LinearLayout>
+
+    <!-- Bottom Actions: [ Установить ] [ Позже ] -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="26dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/vox_ota_btn_install"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_vox_ota_btn_primary"
+            android:text="Установить"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:focusable="true"
+            android:nextFocusRight="@+id/vox_ota_btn_later_complete" />
+
+        <Space
+            android:layout_width="14dp"
+            android:layout_height="match_parent" />
+
+        <Button
+            android:id="@+id/vox_ota_btn_later_complete"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_vox_ota_btn_secondary"
+            android:text="Позже"
+            android:textColor="#E0E6ED"
+            android:textSize="15sp"
+            android:focusable="true"
+            android:nextFocusLeft="@+id/vox_ota_btn_install" />
+    </LinearLayout>
+</LinearLayout>

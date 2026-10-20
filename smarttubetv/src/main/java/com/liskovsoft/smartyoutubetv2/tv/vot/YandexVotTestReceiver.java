@@ -1130,6 +1130,16 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
                         com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaPreInstallValidator.validate(context, new java.io.File(path));
                 Log.i("VOX_OTA_TEST", "validateApk: isValid=" + res.isValid() + " code=" + (res.getErrorCode() != null ? res.getErrorCode().name() : "NONE") + " msg=" + res.getMessage());
             }
+        } else if ("showTestOtaHud".equalsIgnoreCase(action)) {
+            String state = intent.getStringExtra("state");
+            if (state == null || state.isEmpty()) {
+                state = "offer_stable";
+            }
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.hud.VoxOtaHudPresenter.showTestState(context, state);
+            Log.i("VOX_OTA_TEST", "showTestOtaHud: state=" + state);
+        } else if ("dismissOtaHud".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.hud.VoxOtaHudPresenter.dismissAll();
+            Log.i("VOX_OTA_TEST", "dismissOtaHud: invoked");
         }
     }
 }
