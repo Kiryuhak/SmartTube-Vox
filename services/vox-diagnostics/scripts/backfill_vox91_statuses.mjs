@@ -408,7 +408,7 @@ export const HISTORICAL_INCIDENTS_CATALOG = [
   {
     groupKey: 'OTA_FAILED_BENIGN',
     category: 'OTA',
-    reportIds: ['VOX-F8C23801', 'VOX-8A73CDB3', 'VOX-61FF0AF8', 'VOX-78443F30'],
+    reportIds: ['VOX-F8C23801', 'VOX-8A73CDB3', 'VOX-61FF0AF8', 'VOX-78A43F30'],
     signature: 'OTA|NO_UPDATE|ANDROID_TV_API34',
     oldStatus: 'NEW',
     newStatus: 'KNOWN_LIMITATION',
@@ -486,7 +486,7 @@ export const HISTORICAL_INCIDENTS_CATALOG = [
   {
     groupKey: 'PLAYER_REBUFFER_STALL',
     category: 'PLAYER',
-    reportIds: ['VOX-99400330', 'VOX-67C3A751', 'VOX-6D5DE6B3', 'VOX-7A8588E'],
+    reportIds: ['VOX-99400330', 'VOX-67C3A751', 'VOX-6D5DE6B3', 'VOX-7A85888E'],
     signature: 'PLAYER|PLAYER_REBUFFER|ANDROID_TV_API34',
     oldStatus: 'NEW',
     newStatus: 'FIXED_AWAITING_VERIFICATION',

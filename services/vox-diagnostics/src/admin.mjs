@@ -1,4 +1,4 @@
-import { normalizeStatus, STATUS_LABELS, PRIMARY_STATUSES, STATUS_COLORS } from './storage.mjs';
+import { normalizeStatus, STATUS_LABELS, PRIMARY_STATUSES, STATUS_COLORS, CANONICAL_STATUSES } from './storage.mjs';
 import crypto from 'crypto';
 
 /**
@@ -562,12 +562,15 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     .tag-tizen { background: rgba(59, 130, 246, 0.15); color: var(--accent); }
     .tag-error { background: rgba(239, 68, 68, 0.15); color: #f87171; }
     .tag-status-new { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
-    .tag-status-in_progress, .tag-status-reviewed { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
-    .tag-status-needs_info { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
-    .tag-status-fixed_pending_verification { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
-    .tag-status-closed { background: rgba(16, 185, 129, 0.15); color: #34d399; }
-    .tag-status-known, .tag-status-known_issue { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
-    .tag-status-resolved { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .tag-status-investigating, .tag-status-in_progress, .tag-status-triaged, .tag-status-reviewed { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .tag-status-root_cause_found { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .tag-status-fix_implemented { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+    .tag-status-testing { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+    .tag-status-fixed_awaiting_verification, .tag-status-fixed_pending_verification { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; }
+    .tag-status-verified { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .tag-status-regression { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+    .tag-status-known_limitation, .tag-status-known, .tag-status-known_issue, .tag-status-wont_fix { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
+    .tag-status-resolved, .tag-status-closed { background: rgba(16, 185, 129, 0.15); color: #34d399; }
     .tag-status-test, .tag-status-ignored, .tag-status-ignored_test { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
     .tag-purpose-test { background: rgba(156, 163, 175, 0.2); color: var(--text-muted); font-size: 10px; }
 
@@ -628,13 +631,23 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       outline: none;
     }
     .status-select[data-status="NEW"] { color: #93c5fd; border-color: rgba(147, 197, 253, 0.3); }
-    .status-select[data-status="IN_PROGRESS"] { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); }
-    .status-select[data-status="NEEDS_INFO"] { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); }
+    .status-select[data-status="INVESTIGATING"] { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); }
+    .status-select[data-status="ROOT_CAUSE_FOUND"] { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+    .status-select[data-status="FIX_IMPLEMENTED"] { color: #60a5fa; border-color: rgba(96, 165, 250, 0.3); }
+    .status-select[data-status="TESTING"] { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
+    .status-select[data-status="FIXED_AWAITING_VERIFICATION"] { color: #2dd4bf; border-color: rgba(45, 212, 191, 0.3); }
+    .status-select[data-status="VERIFIED"] { color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
+    .status-select[data-status="REGRESSION"] { color: #f87171; border-color: rgba(239, 68, 68, 0.3); }
+    .status-select[data-status="KNOWN_LIMITATION"] { color: #94a3b8; border-color: rgba(148, 163, 184, 0.3); }
+    .status-select[data-status="IGNORED"] { color: #9ca3af; border-color: rgba(156, 163, 175, 0.3); }
+    /* Legacy states */
     .status-select[data-status="FIXED_PENDING_VERIFICATION"] { color: #2dd4bf; border-color: rgba(45, 212, 191, 0.3); }
-    .status-select[data-status="CLOSED"] { color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
     .status-select[data-status="RESOLVED"] { color: #6ee7b7; border-color: rgba(110, 231, 183, 0.3); }
-    .status-select[data-status="KNOWN_ISSUE"] { color: #cbd5e1; border-color: rgba(203, 213, 225, 0.3); }
-    .status-select[data-status="IGNORED_TEST"], .status-select[data-status="IGNORED"] { color: #9ca3af; border-color: rgba(156, 163, 175, 0.3); }
+    .status-select[data-status="IGNORED_TEST"] { color: #9ca3af; border-color: rgba(156, 163, 175, 0.3); }
+    .status-select[data-status="IN_PROGRESS"], .status-select[data-status="TRIAGED"] { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); }
+    .status-select[data-status="NEEDS_INFO"] { color: #c084fc; border-color: rgba(192, 132, 252, 0.3); }
+    .status-select[data-status="CLOSED"] { color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
+    .status-select[data-status="KNOWN_ISSUE"], .status-select[data-status="WONT_FIX"] { color: #cbd5e1; border-color: rgba(203, 213, 225, 0.3); }
     .note-preview {
       display: block;
       max-width: 180px;
@@ -1036,13 +1049,20 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
         <select id="filterStatus" class="select-filter" aria-label="Статус">
           <option value="">Все статусы</option>
           <option value="NEW">Новый</option>
-          <option value="IN_PROGRESS">В работе</option>
-          <option value="NEEDS_INFO">Нужны данные</option>
-          <option value="FIXED_PENDING_VERIFICATION">Исправлено — ждёт проверки</option>
-          <option value="CLOSED">Закрыто</option>
+          <option value="INVESTIGATING">В работе</option>
+          <option value="FIXED_AWAITING_VERIFICATION">Исправлено — ждёт проверки</option>
+          <option value="KNOWN_LIMITATION">Известное ограничение</option>
+          <option value="IGNORED">Игнорируется</option>
+          <option value="FIXED_PENDING_VERIFICATION">Исправлено (легаси)</option>
           <option value="RESOLVED">Решено</option>
-          <option value="KNOWN_ISSUE">Известная проблема</option>
           <option value="IGNORED_TEST">Тест / игнор</option>
+          <option value="ROOT_CAUSE_FOUND">Причина найдена</option>
+          <option value="FIX_IMPLEMENTED">Исправлено в коде</option>
+          <option value="TESTING">На проверке</option>
+          <option value="VERIFIED">Исправлено — подтверждено</option>
+          <option value="REGRESSION">Повторная ошибка</option>
+          <option value="CLOSED">Закрыто</option>
+          <option value="KNOWN_ISSUE">Известная проблема</option>
         </select>
 
         <select id="filterCategory" class="select-filter" aria-label="Категория">
@@ -1149,7 +1169,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
               ${r.error_category ? `<span class="tag tag-error">${escapeHtml(r.error_category)}</span>` : '<span style="color: var(--text-muted);">-</span>'}
               ${r.error_signature ? `<small style="display:block;color:var(--text-dim);font-family:monospace;font-size:11px;">${escapeHtml(r.error_signature)}</small>` : ''}
             </td>
-            <td><select class="status-select" data-status="${normStatus}" aria-label="Статус отчёта ${escapeHtml(r.report_id)}">${PRIMARY_STATUSES.map(key => `<option value="${key}" ${key === normStatus ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[key])}</option>`).join('')}</select></td>
+            <td><select class="status-select" data-status="${normStatus}" aria-label="Статус отчёта ${escapeHtml(r.report_id)}">${(CANONICAL_STATUSES.includes(normStatus) ? CANONICAL_STATUSES : [normStatus, ...CANONICAL_STATUSES]).map(key => `<option value="${escapeHtml(key)}" ${key === normStatus ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[key] || key)}</option>`).join('')}</select></td>
             <td style="white-space: nowrap;">
               <button class="btn btn-primary btn-open-report" data-action="open-report" data-report-id="${escapeHtml(r.report_id)}" style="margin-right: 4px;">Открыть</button>
               <button class="btn" data-action="quick-note" data-report-id="${escapeHtml(r.report_id)}">Заметка</button>
@@ -1305,13 +1325,22 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
                 <label for="detailStatusSelect" style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Статус:</label>
                 <select id="detailStatusSelect" class="select-filter" style="font-weight: 600;">
                   <option value="NEW">Новый</option>
-                  <option value="IN_PROGRESS">В работе</option>
-                  <option value="NEEDS_INFO">Нужны данные</option>
-                  <option value="FIXED_PENDING_VERIFICATION">Исправлено — ждёт проверки</option>
-                  <option value="CLOSED">Закрыто</option>
+                  <option value="INVESTIGATING">В работе</option>
+                  <option value="ROOT_CAUSE_FOUND">Причина найдена</option>
+                  <option value="FIX_IMPLEMENTED">Исправлено в коде</option>
+                  <option value="TESTING">На проверке</option>
+                  <option value="FIXED_AWAITING_VERIFICATION">Исправлено — ждёт проверки</option>
+                  <option value="VERIFIED">Исправлено — подтверждено</option>
+                  <option value="REGRESSION">Повторная ошибка</option>
+                  <option value="KNOWN_LIMITATION">Известное ограничение</option>
+                  <option value="IGNORED">Игнорируется</option>
+                  <option value="FIXED_PENDING_VERIFICATION">Исправлено — ждёт проверки (Legacy)</option>
                   <option value="RESOLVED">Решено</option>
-                  <option value="KNOWN_ISSUE">Известная проблема</option>
                   <option value="IGNORED_TEST">Тест / игнор</option>
+                  <option value="IN_PROGRESS">В работе (Legacy)</option>
+                  <option value="NEEDS_INFO">Нужны данные</option>
+                  <option value="CLOSED">Закрыто</option>
+                  <option value="KNOWN_ISSUE">Известная проблема</option>
                 </select>
                 <button class="btn btn-primary" id="detailSaveBtn" data-action="save-detail-ops">Сохранить</button>
               </div>

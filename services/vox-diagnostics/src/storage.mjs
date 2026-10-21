@@ -45,17 +45,17 @@ export const STATUS_LABELS = {
   IGNORED: 'Игнорируется',
   // Обратная совместимость с легаси-статусами
   IN_PROGRESS: 'В работе',
-  TRIAGED: 'В работе',
+  TRIAGED: 'Разобран',
   NEEDS_INFO: 'Нужны данные',
   DUPLICATE: 'Дубликат',
   FIXED_PENDING_VERIFY: 'Исправлено — ждёт проверки',
   FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
   FIXED_PENDING_VALIDATION: 'Исправлено — ждёт проверки',
-  KNOWN_ISSUE: 'Известное ограничение',
-  RESOLVED: 'Исправлено — подтверждено',
-  CLOSED: 'Исправлено — подтверждено',
-  IGNORED_TEST: 'Игнорируется',
-  WONT_FIX: 'Известное ограничение',
+  KNOWN_ISSUE: 'Известная проблема',
+  RESOLVED: 'Решено',
+  CLOSED: 'Закрыто',
+  IGNORED_TEST: 'Тест / игнор',
+  WONT_FIX: 'Не будет исправлено',
 };
 
 export const STATUS_COLORS = {

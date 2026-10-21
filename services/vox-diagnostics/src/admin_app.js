@@ -10,27 +10,47 @@
   // Canonical Statuses & UI Labels
   const CANONICAL_STATUSES = [
     'NEW',
-    'TRIAGED',
-    'IN_PROGRESS',
-    'NEEDS_INFO',
+    'INVESTIGATING',
+    'ROOT_CAUSE_FOUND',
+    'FIX_IMPLEMENTED',
+    'TESTING',
+    'FIXED_AWAITING_VERIFICATION',
+    'VERIFIED',
+    'REGRESSION',
+    'KNOWN_LIMITATION',
+    'IGNORED',
+    // Legacy & Alias Statuses
     'FIXED_PENDING_VERIFICATION',
+    'RESOLVED',
+    'IGNORED_TEST',
+    'IN_PROGRESS',
+    'TRIAGED',
+    'NEEDS_INFO',
     'CLOSED',
     'KNOWN_ISSUE',
-    'IGNORED_TEST',
-    'RESOLVED',
     'WONT_FIX',
   ];
 
   const STATUS_LABELS = {
     NEW: 'Новый',
-    TRIAGED: 'Разобран',
-    IN_PROGRESS: 'В работе',
-    NEEDS_INFO: 'Нужны данные',
+    INVESTIGATING: 'В работе',
+    ROOT_CAUSE_FOUND: 'Причина найдена',
+    FIX_IMPLEMENTED: 'Исправлено в коде',
+    TESTING: 'На проверке',
+    FIXED_AWAITING_VERIFICATION: 'Исправлено — ждёт проверки',
+    VERIFIED: 'Исправлено — подтверждено',
+    REGRESSION: 'Повторная ошибка',
+    KNOWN_LIMITATION: 'Известное ограничение',
+    IGNORED: 'Игнорируется',
+    // Legacy / historical statuses
     FIXED_PENDING_VERIFICATION: 'Исправлено — ждёт проверки',
-    CLOSED: 'Закрыто',
     RESOLVED: 'Решено',
-    KNOWN_ISSUE: 'Известная проблема',
     IGNORED_TEST: 'Тест / игнор',
+    IN_PROGRESS: 'В работе',
+    TRIAGED: 'Разобран',
+    NEEDS_INFO: 'Нужны данные',
+    CLOSED: 'Закрыто',
+    KNOWN_ISSUE: 'Известная проблема',
     WONT_FIX: 'Не будет исправлено',
   };
 
@@ -41,6 +61,15 @@
   function normalizeStatus(rawStatus) {
     if (!rawStatus) return 'NEW';
     const s = String(rawStatus).toUpperCase().trim();
+    if (s === 'FIXED_AWAITING_VERIFICATION') return 'FIXED_AWAITING_VERIFICATION';
+    if (s === 'KNOWN_LIMITATION') return 'KNOWN_LIMITATION';
+    if (s === 'INVESTIGATING') return 'INVESTIGATING';
+    if (s === 'ROOT_CAUSE_FOUND') return 'ROOT_CAUSE_FOUND';
+    if (s === 'FIX_IMPLEMENTED') return 'FIX_IMPLEMENTED';
+    if (s === 'TESTING') return 'TESTING';
+    if (s === 'VERIFIED') return 'VERIFIED';
+    if (s === 'REGRESSION') return 'REGRESSION';
+    if (s === 'IGNORED') return 'IGNORED';
     if (s === 'TRIAGED') return 'TRIAGED';
     if (s === 'REVIEWED' || s === 'IN_PROGRESS') return 'IN_PROGRESS';
     if (s === 'NEEDS_INFO' || s === 'INFO_NEEDED') return 'NEEDS_INFO';
@@ -48,7 +77,7 @@
     if (s === 'CLOSED') return 'CLOSED';
     if (s === 'RESOLVED') return 'RESOLVED';
     if (s === 'KNOWN' || s === 'KNOWN_ISSUE') return 'KNOWN_ISSUE';
-    if (s === 'IGNORED_TEST' || s === 'TEST' || s === 'IGNORED') return 'IGNORED_TEST';
+    if (s === 'IGNORED_TEST' || s === 'TEST') return 'IGNORED_TEST';
     if (s === 'WONT_FIX' || s === 'WONTFIX') return 'WONT_FIX';
     if (s === 'NEW') return 'NEW';
     return s;
@@ -78,8 +107,12 @@
   }
 
   function statusSelectHtml(status, id) {
-    return '<select class="status-select" data-status="' + escapeHtml(status) + '" aria-label="Статус отчёта ' + escapeHtml(id) + '">' +
-      CANONICAL_STATUSES.map(key => '<option value="' + key + '"' + (key === status ? ' selected' : '') + '>' + escapeHtml(STATUS_LABELS[key]) + '</option>').join('') + '</select>';
+    const norm = normalizeStatus(status);
+    const statuses = CANONICAL_STATUSES.includes(norm)
+      ? CANONICAL_STATUSES
+      : [norm, ...CANONICAL_STATUSES];
+    return '<select class="status-select" data-status="' + escapeHtml(norm) + '" aria-label="Статус отчёта ' + escapeHtml(id) + '">' +
+      statuses.map(key => '<option value="' + escapeHtml(key) + '"' + (key === norm ? ' selected' : '') + '>' + escapeHtml(STATUS_LABELS[key] || key) + '</option>').join('') + '</select>';
   }
 
   async function updateInlineStatus(select) {
