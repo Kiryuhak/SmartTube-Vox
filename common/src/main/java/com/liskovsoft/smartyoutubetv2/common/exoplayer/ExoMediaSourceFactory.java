@@ -58,6 +58,7 @@ public class ExoMediaSourceFactory {
     //private static ExoMediaSourceFactory sInstance;
     private static final int MAX_SEGMENTS_PER_LOAD = 1;
     private static final int SABR_READ_TIMEOUT_MS = 4_000;
+    private static final int MEDIA_READ_TIMEOUT_MS = 8_000;
     private static final String USER_AGENT = DefaultHeaders.APP_USER_AGENT;
     @SuppressLint("StaticFieldLeak")
     private static final DefaultBandwidthMeter BANDWIDTH_METER = new DefaultBandwidthMeter();
@@ -116,7 +117,7 @@ public class ExoMediaSourceFactory {
      * @return A new DataSource factory.
      */
     private DataSource.Factory buildDataSourceFactory(boolean useBandwidthMeter) {
-        return buildDataSourceFactory(useBandwidthMeter, (int) OkHttpManager.getReadTimeoutMs());
+        return buildDataSourceFactory(useBandwidthMeter, MEDIA_READ_TIMEOUT_MS);
     }
 
     private DataSource.Factory buildDataSourceFactory(boolean useBandwidthMeter, int readTimeoutMs) {

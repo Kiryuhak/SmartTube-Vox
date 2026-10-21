@@ -43,25 +43,125 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     private var sourceRecoveryCount: Int = 0
     private var engineSwitchCount: Int = 0
     private var currentEngine: Int = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT
+    private var currentVideoId: String? = null
+    private var isInternalRecoveryReload: Boolean = false
 
     private var lastObservedPositionMs: Long = 0L
     private var lastObservedBufferedMs: Long = 0L
+    private var lastObservedProgressTimestampMs: Long = 0L
+    private var lastObservedRenderedPositionMs: Long = 0L
 
     fun getState(): VoxPlayerRecoveryState = currentState
     fun getSourceRecoveryCount(): Int = sourceRecoveryCount
     fun getEngineSwitchCount(): Int = engineSwitchCount
     fun getCurrentGeneration(): Long = recoveryGeneration
+    fun getCurrentVideoId(): String? = currentVideoId
+
+    fun isRecovering(): Boolean {
+        return currentState == VoxPlayerRecoveryState.RECOVERING_SOURCE ||
+                currentState == VoxPlayerRecoveryState.RECOVERING_NETWORK
+    }
+
+    private fun currentTimeMs(): Long {
+        return VoxPlayerRecoveryTestHooks.mockCurrentTimeMs ?: System.currentTimeMillis()
+    }
 
     @Synchronized
-    fun onPlaybackStart(sessionId: Long, isLive: Boolean, engine: Int) {
+    @JvmOverloads
+    fun onPlaybackStart(sessionId: Long, isLive: Boolean, engine: Int, videoId: String? = null) {
+        val isSameVideoRecovery = (isRecovering() || isInternalRecoveryReload) &&
+                videoId != null && videoId == currentVideoId
+
+        if (isSameVideoRecovery) {
+            isLiveSession = isLive
+            currentEngine = engine
+            isInternalRecoveryReload = false
+            return
+        }
+
         recoveryGeneration++
         reset()
+        currentVideoId = videoId
+        isInternalRecoveryReload = false
         currentSessionId = sessionId
         isLiveSession = isLive
         currentEngine = engine
         currentState = VoxPlayerRecoveryState.IDLE
         sourceRecoveryCount = 0
         engineSwitchCount = 0
+        lastObservedProgressTimestampMs = currentTimeMs()
+        lastObservedRenderedPositionMs = 0L
+    }
+
+    @Synchronized
+    fun onPaused() {
+        lastObservedProgressTimestampMs = currentTimeMs()
+    }
+
+    @Synchronized
+    fun onSeekProcessed(positionMs: Long, bufferedPositionMs: Long) {
+        lastObservedPositionMs = positionMs
+        lastObservedRenderedPositionMs = positionMs
+        lastObservedBufferedMs = bufferedPositionMs
+        lastObservedProgressTimestampMs = currentTimeMs()
+    }
+
+    @Synchronized
+    fun onPlaybackCheck(positionMs: Long, bufferedPositionMs: Long, isPlaying: Boolean, playWhenReady: Boolean) {
+        if (isLiveSession || currentState == VoxPlayerRecoveryState.FAILED) {
+            return
+        }
+
+        val now = currentTimeMs()
+
+        if (!playWhenReady) {
+            lastObservedPositionMs = positionMs
+            lastObservedBufferedMs = bufferedPositionMs
+            lastObservedProgressTimestampMs = now
+            return
+        }
+
+        if (lastObservedProgressTimestampMs == 0L) {
+            lastObservedProgressTimestampMs = now
+            lastObservedPositionMs = positionMs
+            lastObservedBufferedMs = bufferedPositionMs
+            return
+        }
+
+        val isPositionAdvancing = positionMs > lastObservedPositionMs
+        val isBufferAdvancing = !VoxPlayerRecoveryTestHooks.bufferFreeze &&
+                (VoxPlayerRecoveryTestHooks.slowNetworkWithProgress ||
+                        bufferedPositionMs >= lastObservedBufferedMs + VoxPlayerRecoveryPolicy.MEANINGFUL_BUFFER_DELTA_MS)
+
+        if (isPositionAdvancing || isBufferAdvancing) {
+            lastObservedProgressTimestampMs = now
+        }
+
+        lastObservedPositionMs = positionMs
+        if (isBufferAdvancing) {
+            lastObservedBufferedMs = bufferedPositionMs
+        }
+
+        val elapsed = now - lastObservedProgressTimestampMs
+        val bufferRemainingMs = bufferedPositionMs - positionMs
+
+        val isStalled = (elapsed >= VoxPlayerRecoveryPolicy.STALL_WATCHDOG_TIMEOUT_MS) &&
+                (!isPositionAdvancing && !isBufferAdvancing || bufferRemainingMs < 1000L ||
+                        VoxPlayerRecoveryTestHooks.bufferFreeze || VoxPlayerRecoveryTestHooks.forceFrozenProgress)
+
+        if (isStalled && currentState != VoxPlayerRecoveryState.FAILED && !isRecovering()) {
+            lastObservedPositionMs = positionMs
+            lastObservedBufferedMs = bufferedPositionMs
+            lastObservedProgressTimestampMs = now
+
+            if (sourceRecoveryCount < VoxPlayerRecoveryPolicy.MAX_SOURCE_RECOVERIES) {
+                triggerSourceRefresh(positionMs, playWhenReady, "BUFFER_FREEZE_NO_PROGRESS")
+            } else if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
+                triggerEngineFailover(positionMs, playWhenReady, "BUFFER_FREEZE_ENGINE_FALLBACK")
+            } else {
+                triggerTerminalFailure("BUFFER_FREEZE_LIMIT_EXHAUSTED")
+            }
+        }
     }
 
     @Synchronized
@@ -208,6 +308,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
         sourceRecoveryCount++
         recoveryGeneration++
+        isInternalRecoveryReload = true
         val gen = recoveryGeneration
         currentState = VoxPlayerRecoveryState.RECOVERING_SOURCE
 
@@ -239,6 +340,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
         engineSwitchCount++
         recoveryGeneration++
+        isInternalRecoveryReload = true
         val gen = recoveryGeneration
         currentState = VoxPlayerRecoveryState.RECOVERING_NETWORK
 
@@ -309,6 +411,8 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     fun reset() {
         recoveryGeneration++
         handler.removeCallbacksAndMessages(null)
+        isInternalRecoveryReload = false
+        lastObservedProgressTimestampMs = 0L
         currentState = VoxPlayerRecoveryState.IDLE
     }
 }

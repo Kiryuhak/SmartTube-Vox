@@ -20,11 +20,19 @@ object VoxPlayerRecoveryTestHooks {
     @Volatile
     var slowNetworkWithProgress: Boolean = false
 
+    @Volatile
+    var forceFrozenProgress: Boolean = false
+
+    @Volatile
+    var mockCurrentTimeMs: Long? = null
+
     fun reset() {
         bufferFreeze = false
         dnsFailure = false
         http403 = false
         sourceRefreshFailure = false
         slowNetworkWithProgress = false
+        forceFrozenProgress = false
+        mockCurrentTimeMs = null
     }
 }

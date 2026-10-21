@@ -383,4 +383,190 @@ class VoxPlayerRecoveryControllerTest {
         assertEquals(0, mockActionHandler.engineSwitchCount) // NO ping-pong switch!
         assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
     }
+
+
+    // 15. internal reload preserves recovery attempts and generation
+    @Test
+    fun test15_InternalReloadPreservesRecoveryAttemptsAndGeneration() {
+        val videoId = "vid_stall_123"
+        controller.onPlaybackStart(sessionId = 200L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = videoId)
+        controller.onBufferingStarted(positionMs = 15_000L, bufferedPositionMs = 15_000L, playWhenReady = true)
+
+        // Watchdog fires -> attempt 1
+        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, controller.getSourceRecoveryCount())
+        val gen1 = controller.getCurrentGeneration()
+
+        // Internal reload triggered by onSourceRefreshRequested calls onPlaybackStart with the SAME videoId
+        controller.onPlaybackStart(sessionId = 201L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = videoId)
+
+        // Generation and recovery attempt must NOT be wiped!
+        assertEquals(1, controller.getSourceRecoveryCount())
+        assertEquals(gen1, controller.getCurrentGeneration())
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+
+        // Another failure/stall occurs -> advances to attempt 2
+        val err = IOException("403 Forbidden")
+        controller.handlePlayerError(err, 15_000L, true)
+        assertEquals(2, controller.getSourceRecoveryCount())
+
+        // Another internal reload occurs
+        controller.onPlaybackStart(sessionId = 202L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = videoId)
+        assertEquals(2, controller.getSourceRecoveryCount())
+
+        // Third failure -> advances to engine failover (Stage 2)
+        controller.handlePlayerError(err, 15_000L, true)
+        assertEquals(1, controller.getEngineSwitchCount())
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_NETWORK, controller.getState())
+
+        // Engine restart occurs
+        controller.onPlaybackStart(sessionId = 203L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, videoId = videoId)
+        assertEquals(1, controller.getEngineSwitchCount())
+
+        // Fourth failure -> terminal failure! (Strictly bounded, no infinite reload loop)
+        controller.handlePlayerError(err, 15_000L, true)
+        assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
+        assertEquals(1, mockActionHandler.recoveryFailedCount)
+    }
+
+    // 16. no byte progress while playing triggers watchdog
+    @Test
+    fun test16_NoByteProgressWhilePlayingTriggersWatchdog() {
+        val videoId = "vid_nobytes_456"
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 10_000L
+        controller.onPlaybackStart(sessionId = 210L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = videoId)
+
+        // Player starts playing at pos 5000, buffer 5500
+        controller.onPlaybackCheck(positionMs = 5_000L, bufferedPositionMs = 5_500L, isPlaying = true, playWhenReady = true)
+
+        // At 12000ms: position advanced to 5400ms (playing from buffer), but buffer did not grow
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 12_000L
+        controller.onPlaybackCheck(positionMs = 5_400L, bufferedPositionMs = 5_500L, isPlaying = true, playWhenReady = true)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        // At 13000ms: position reached buffer end (5500ms) and FROZE
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 13_000L
+        controller.onPlaybackCheck(positionMs = 5_500L, bufferedPositionMs = 5_500L, isPlaying = false, playWhenReady = true)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        // At 18000ms: 5000ms has elapsed with position completely frozen at 5500ms and buffer empty
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 18_000L
+        controller.onPlaybackCheck(positionMs = 5_500L, bufferedPositionMs = 5_500L, isPlaying = false, playWhenReady = true)
+
+        // Stall watchdog must trigger source refresh!
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+        assertEquals(3_500L, mockActionHandler.lastTargetPositionMs) // 5500 - 2000
+    }
+
+    // 17. user pause does not trigger stall watchdog
+    @Test
+    fun test17_UserPauseDoesNotTriggerStallWatchdog() {
+        val videoId = "vid_pause_789"
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 10_000L
+        controller.onPlaybackStart(sessionId = 220L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = videoId)
+
+        // User pauses the video
+        controller.onPaused()
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 30_000L // 20s later
+        controller.onPlaybackCheck(positionMs = 10_000L, bufferedPositionMs = 10_000L, isPlaying = false, playWhenReady = false)
+
+        // No stall recovery triggered while paused!
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+        assertEquals(0, mockActionHandler.sourceRefreshCount)
+    }
+
+    // 18. user seek updates observed position and avoids clobbering
+    @Test
+    fun test18_UserSeekUpdatesObservedPosition() {
+        val videoId = "vid_seek_101"
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 10_000L
+        controller.onPlaybackStart(sessionId = 230L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = videoId)
+
+        // User seeks to 120_000L
+        controller.onSeekProcessed(positionMs = 120_000L, bufferedPositionMs = 120_000L)
+
+        // Advance time 5s with frozen buffer
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 15_100L
+        controller.onPlaybackCheck(positionMs = 120_000L, bufferedPositionMs = 120_000L, isPlaying = false, playWhenReady = true)
+
+        // Target position must be based on the seeked position (120_000 - 2000 = 118_000), not 0
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(118_000L, mockActionHandler.lastTargetPositionMs)
+    }
+
+    // 19. new video reset clears recovery budget
+    @Test
+    fun test19_NewVideoResetsRecoveryBudget() {
+        controller.onPlaybackStart(sessionId = 240L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "vid_old")
+        val err = IOException("403 Forbidden")
+        controller.handlePlayerError(err, 10_000L, true)
+        assertEquals(1, controller.getSourceRecoveryCount())
+
+        // A DIFFERENT video is opened by user
+        controller.onPlaybackStart(sessionId = 241L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "vid_new")
+
+        // Fresh session: budget reset
+        assertEquals(0, controller.getSourceRecoveryCount())
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+    }
+
+    // 20. controlled reproduction matrix S1 to S20
+    @Test
+    fun test20_ControlledReproductionMatrixS1ToS20() {
+        // S1: Video starts then network data stops
+        VoxPlayerRecoveryTestHooks.reset()
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 1_000L
+        controller.onPlaybackStart(sessionId = 301L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "s1")
+        controller.onPlaybackCheck(5_000L, 5_000L, false, true)
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 6_000L
+        controller.onPlaybackCheck(5_000L, 5_000L, false, true)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+
+        // S2: HTTP connection alive but no bytes arrive
+        mockActionHandler.reset()
+        controller.reset()
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 1_000L
+        controller.onPlaybackStart(sessionId = 302L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "s2")
+        controller.onPlaybackCheck(10_000L, 10_000L, false, true)
+        VoxPlayerRecoveryTestHooks.bufferFreeze = true
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 6_000L
+        controller.onPlaybackCheck(10_000L, 10_000L, false, true)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+
+        // S3: HTTP 403 midway
+        mockActionHandler.reset()
+        controller.reset()
+        controller.onPlaybackStart(sessionId = 303L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "s3")
+        val isHandled = controller.handlePlayerError(IOException("HTTP 403 Forbidden"), 20_000L, true)
+        assertTrue(isHandled)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+
+        // S7: Engine failover
+        mockActionHandler.reset()
+        controller.reset()
+        controller.onPlaybackStart(sessionId = 307L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "s7")
+        val dnsErr = UnknownHostException("DNS resolution failed")
+        controller.handlePlayerError(dnsErr, 15_000L, true)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_NETWORK, controller.getState())
+        assertEquals(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, mockActionHandler.lastNextEngine)
+
+        // S8: Both engines fail -> terminal FAILED
+        controller.handlePlayerError(dnsErr, 15_000L, true)
+        assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
+
+        // S11 & S12: Pause while buffering and resume
+        mockActionHandler.reset()
+        controller.reset()
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 1_000L
+        controller.onPlaybackStart(sessionId = 311L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "s11")
+        controller.onPaused()
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 10_000L
+        controller.onPlaybackCheck(5_000L, 5_000L, false, false) // paused
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState()) // no false trigger
+        controller.onPlaybackCheck(5_000L, 5_000L, true, true) // resumed
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+    }
 }
+

@@ -52,6 +52,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             Log.w(TAG, "Recovery: refreshing source at targetPosMs=" + targetPositionMs);
             YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
             YouTubeServiceManager.instance().switchNextClientNow();
+            Video video = getVideo();
+            if (video != null && targetPositionMs >= 0) {
+                video.pendingPosMs = targetPositionMs;
+            }
             if (getPlayer() != null) {
                 getPlayer().setPositionMs(targetPositionMs);
                 getPlayer().setPlayWhenReady(playWhenReady);
@@ -66,6 +70,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             Log.w(TAG, "Recovery: switching engine to " + nextEngine + " at targetPosMs=" + targetPositionMs);
             getPlayerTweaksData().setRuntimeFallbackEngine(nextEngine);
             YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
+            Video video = getVideo();
+            if (video != null && targetPositionMs >= 0) {
+                video.pendingPosMs = targetPositionMs;
+            }
             if (getPlayer() != null) {
                 getPlayer().setPositionMs(targetPositionMs);
                 getPlayer().setPlayWhenReady(playWhenReady);
@@ -223,6 +231,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onSeekEnd() {
         mBufferingDetector.reset();
+        if (mRecoveryController != null && getPlayer() != null) {
+            mRecoveryController.onSeekProcessed(getPlayer().getPositionMs(), getPlayer().getBufferedPositionMs());
+        }
         // Needed to detect additional buffering (e.g. hanged clients).
         // Don't worry this event will be canceled by subsequent onPlay() or onPause() if everything is ok.
         mBufferingDetector.onStartBuffering();
@@ -246,16 +257,17 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     public void onTickle() {
         super.onTickle();
         if (mRecoveryController != null && getPlayer() != null) {
-            if (getPlayer().isPlaying()) {
-                mRecoveryController.onPlaybackProgress(
-                    getPlayer().getPositionMs(),
-                    getPlayer().getBufferedPositionMs()
-                );
+            long posMs = getPlayer().getPositionMs();
+            long bufMs = getPlayer().getBufferedPositionMs();
+            boolean isPlaying = getPlayer().isPlaying();
+            boolean playWhenReady = getPlayer().getPlayWhenReady();
+
+            mRecoveryController.onPlaybackCheck(posMs, bufMs, isPlaying, playWhenReady);
+
+            if (isPlaying) {
+                mRecoveryController.onPlaybackProgress(posMs, bufMs);
             } else {
-                mRecoveryController.onBufferProgress(
-                    getPlayer().getBufferedPositionMs(),
-                    getPlayer().getPlayWhenReady()
-                );
+                mRecoveryController.onBufferProgress(bufMs, playWhenReady);
             }
         }
     }
@@ -263,6 +275,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onPause() {
         mBufferingDetector.onStopBuffering();
+        if (mRecoveryController != null) {
+            mRecoveryController.onPaused();
+        }
     }
 
     @Override
@@ -276,7 +291,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             long sessionId = System.currentTimeMillis();
             boolean isLive = item != null && item.isLive;
             int engine = getPlayerTweaksData() != null ? getPlayerTweaksData().getEffectivePlayerDataSource() : PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT;
-            mRecoveryController.onPlaybackStart(sessionId, isLive, engine);
+            String videoId = item != null ? item.videoId : null;
+            mRecoveryController.onPlaybackStart(sessionId, isLive, engine, videoId);
         }
     }
 
