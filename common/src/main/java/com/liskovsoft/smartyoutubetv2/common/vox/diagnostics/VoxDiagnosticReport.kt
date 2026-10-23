@@ -50,7 +50,8 @@ data class VoxDiagnosticReport(
     val incidentSummary: Map<String, Any>? = null,
     val errorCategory: String? = null,
     val errorSignature: String? = null,
-    val isSynthetic: Boolean = false
+    val isSynthetic: Boolean = false,
+    val installationId: String? = null
 ) {
     fun withCanonicalClassification(): VoxDiagnosticReport {
         val effectiveTrigger = triggerEvent ?: incidentSummary?.get("triggerCode")?.toString()
@@ -247,6 +248,11 @@ data class VoxDiagnosticReport(
                 null
             }
 
+            val installId = try {
+                VoxInstallationIdManager.getInstance(context).getInstallationId()
+            } catch (e: Exception) {
+                null
+            }
             val stableReportId = reportId ?: ("VOX-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).uppercase(Locale.ROOT))
             val safePlatform = if (profile.platform == com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxPlatform.UNKNOWN) {
                 "UNKNOWN_PLATFORM"
@@ -288,7 +294,8 @@ data class VoxDiagnosticReport(
                 channel = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getBuildChannel().id,
                 aggregationWindowMs = aggregationWindowMs,
                 incidentSummary = incidentSummary,
-                isSynthetic = syntheticFlag
+                isSynthetic = syntheticFlag,
+                installationId = installId
             ).withCanonicalClassification()
         }
 
@@ -402,6 +409,7 @@ data class VoxDiagnosticReport(
                 val errorCategory = if (root.has("errorCategory") && !root.isNull("errorCategory")) root.optString("errorCategory") else null
                 val errorSignature = if (root.has("errorSignature") && !root.isNull("errorSignature")) root.optString("errorSignature") else null
                 val isSynthetic = root.optBoolean("isSynthetic", false)
+                val installationId = if (root.has("installationId") && !root.isNull("installationId")) root.optString("installationId") else null
 
                 VoxDiagnosticReport(
                     schema = schema,
@@ -436,7 +444,8 @@ data class VoxDiagnosticReport(
                     incidentSummary = incidentSummary,
                     errorCategory = errorCategory,
                     errorSignature = errorSignature,
-                    isSynthetic = isSynthetic
+                    isSynthetic = isSynthetic,
+                    installationId = installationId
                 )
             } catch (e: Exception) {
                 null
@@ -448,6 +457,7 @@ data class VoxDiagnosticReport(
         val root = JSONObject()
         root.put("schema", schema)
         if (reportId != null) root.put("reportId", reportId)
+        if (!installationId.isNullOrEmpty()) root.put("installationId", installationId)
         root.put("timestamp", timestamp)
         root.put("reportPurpose", reportPurpose)
         root.put("autoSubmitted", autoSubmitted)
@@ -517,6 +527,9 @@ data class VoxDiagnosticReport(
         sb.append("=== SmartTube VOX — Диагностический отчёт ===\n\n")
         if (!reportId.isNullOrBlank()) {
             sb.append("ID отчёта: ").append(reportId).append("\n")
+        }
+        if (!installationId.isNullOrBlank()) {
+            sb.append("ID установки: ").append(installationId).append("\n")
         }
         sb.append("Схема отчёта: ").append(schema).append("\n")
         sb.append("Назначение: ").append(reportPurpose).append("\n")

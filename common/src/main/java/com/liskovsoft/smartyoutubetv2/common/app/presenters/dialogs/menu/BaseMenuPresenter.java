@@ -129,8 +129,13 @@ public abstract class BaseMenuPresenter extends BasePresenter<Void> {
         }
 
         Video section = Video.from(video);
+        section.channelGroupId = null; // isolate from custom user group context
+        if (section.channelId == null) {
+            section.channelId = video.getChannelIdOrName();
+        }
         section.videoId = section.playlistId = section.playlistParams = null; // reset to proper comparison
-        section.title = video.createChannelTitle();
+        String channelName = video.getAuthor() != null && !video.getAuthor().isEmpty() ? video.getAuthor() : video.getChannelIdOrName();
+        section.title = channelName != null ? channelName : video.createChannelTitle();
 
         return section;
     }

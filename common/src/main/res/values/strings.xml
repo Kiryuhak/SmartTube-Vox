@@ -785,6 +785,9 @@
     <string name="vox_live_refreshing">Refreshing live stream…</string>
     <string name="vox_player_recovery_failed">Could not restore connection</string>
     <string name="vox_player_recovery_retry">Retry</string>
+    <string name="vox_player_recovery_exhausted_message">Could not restore video. Check connection or try another quality.</string>
+    <string name="vox_player_dns_error_message">Could not connect to video server. Check connection and DNS settings.</string>
+    <string name="vox_player_recovery_back">Back</string>
     <string name="vox_fixing_connection">Restoring connection…</string>
     <string name="vox_fixing_dns">Restoring connection…</string>
     <string name="vox_fixing_playback">Restoring playback…</string>
@@ -1135,4 +1138,8 @@
     <string name="vox_ota_error_release_not_found">Update data not found on server</string>
     <string name="vox_ota_error_invalid_release">Invalid update data format</string>
     <string name="vox_ota_error_version_not_newer">Found version is not newer than current</string>
+    <string name="vox_analytics_heartbeat_toggle">Anonymous Activity Analytics</string>
+    <string name="vox_analytics_heartbeat_toggle_desc">Active fleet estimation (every 30 min during playback, zero personal data)</string>
+    <string name="vox_analytics_mode_enabled">Enabled (every 30 min)</string>
+    <string name="vox_analytics_mode_disabled">Disabled by user</string>
 </resources>

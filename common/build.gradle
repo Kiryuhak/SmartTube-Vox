@@ -124,4 +124,5 @@ dependencies {
     implementation project(':appupdatechecker2')
 
     implementation project(':slidableactivity') // https://github.com/r0adkll/Slidr
+    implementation 'com.android.tools.build:apksig:7.4.2'
 }

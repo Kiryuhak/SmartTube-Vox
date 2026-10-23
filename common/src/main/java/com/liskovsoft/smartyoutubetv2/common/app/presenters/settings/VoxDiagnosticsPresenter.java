@@ -15,6 +15,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticReport;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsClient;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsScheduler;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogEvent;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogLevel;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore;
@@ -78,6 +79,26 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
                     show();
                 },
                 isAutoDiagActive
+        ));
+
+        // 2. Статус анонимной аналитики (Heartbeat) и переключатель
+        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxHeartbeatManager heartbeatManager =
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxHeartbeatManager.getInstance(context);
+        boolean isAnalyticsActive = !heartbeatManager.isAnalyticsOptedOut() &&
+                !com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsLifecycleManager.instance(context).isUserOptedOut();
+        String analyticsStatus = isAnalyticsActive
+                ? context.getString(R.string.vox_analytics_mode_enabled)
+                : context.getString(R.string.vox_analytics_mode_disabled);
+
+        presenter.appendSingleSwitch(UiOptionItem.from(
+                context.getString(R.string.vox_analytics_heartbeat_toggle),
+                analyticsStatus,
+                optionItem -> {
+                    heartbeatManager.setAnalyticsOptedOut(!optionItem.isSelected());
+                    presenter.closeDialog();
+                    show();
+                },
+                isAnalyticsActive
         ));
 
         List<OptionItem> options = new ArrayList<>();
@@ -323,7 +344,10 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
                 null,
                 0L
         );
+        performReportSubmission(activity, report);
+    }
 
+    private void performReportSubmission(Activity activity, VoxDiagnosticReport report) {
         VoxDiagnosticsClient.instance().submitReportAsync(report, new VoxDiagnosticsClient.Callback() {
             @Override
             public void onSuccess(String reportId) {
@@ -333,8 +357,9 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
 
             @Override
             public void onError(String errorMessage) {
+                VoxDiagnosticsScheduler.instance(activity).enqueueOfflineReport(report);
                 if (activity.isFinishing() || activity.isDestroyed()) return;
-                showSendFailureDialog(activity, errorMessage);
+                showSendFailureDialog(activity, errorMessage, report);
             }
         });
     }
@@ -380,7 +405,7 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         }
     }
 
-    private void showSendFailureDialog(Activity activity, String errorMessage) {
+    private void showSendFailureDialog(Activity activity, String errorMessage, VoxDiagnosticReport report) {
         String msg = activity.getString(R.string.vox_diagnostics_send_failed_retry) + "\n\n" + errorMessage;
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, R.style.AppDialog);
@@ -389,7 +414,7 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
                 .setCancelable(true)
                 .setPositiveButton(R.string.vox_diagnostics_btn_retry, (dialog, which) -> {
                     dialog.dismiss();
-                    performReportSubmission(activity);
+                    performReportSubmission(activity, report);
                 })
                 .setNeutralButton(R.string.vox_logs_copy, (dialog, which) -> {
                     copyJournalToClipboard();

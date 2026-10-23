@@ -18,6 +18,10 @@ object VoxDiagnosticsPolicy {
 
     const val BETA_DIAGNOSTICS_INTERVAL_MS = 6 * 60 * 60 * 1000L      // 6 часов
     const val STABLE_DIAGNOSTICS_INTERVAL_MS = 72 * 60 * 60 * 1000L   // 72 часа
+    const val STANDARD_DIAGNOSTICS_INTERVAL_MS = 6 * 60 * 60 * 1000L   // 6 часов (Режим A)
+    const val EXTENDED_DIAGNOSTICS_INTERVAL_MS = 12 * 60 * 60 * 1000L  // 12 часов (Режим B)
+    const val STANDARD_CYCLE_DURATION_MS = 72 * 60 * 60 * 1000L       // 3 суток (72 часа)
+    const val EXTENDED_CYCLE_DURATION_MS = 120 * 60 * 60 * 1000L      // 5 суток (120 часов)
     const val INCIDENT_AGGREGATION_WINDOW_MS = 45 * 1000L              // Окно агрегации инцидентов (30-60с)
     const val INCIDENT_MIN_INTERVAL_MS = 5 * 60 * 1000L                // Минимальный интервал между авто-отчетами об инцидентах
     const val MAX_OFFLINE_QUEUE_SIZE = 10                              // Ограниченная очередь оффлайн отчетов
@@ -71,6 +75,11 @@ object VoxDiagnosticsPolicy {
     @JvmStatic
     @JvmOverloads
     fun canSendPeriodicDiagnostics(context: Context, now: Long = System.currentTimeMillis()): Boolean {
+        val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
+        if (lifecycle.getCycleStartedAt() > 0L || lifecycle.isUserOptedOut()) {
+            return lifecycle.canSendPeriodic(now)
+        }
+
         val manager = VoxUpdateChannelManager.instance(context)
         val lastSubmission = manager.getLastDiagnosticsSubmissionTimestamp()
 
@@ -89,6 +98,10 @@ object VoxDiagnosticsPolicy {
     @JvmStatic
     @JvmOverloads
     fun canSendIncidentDiagnostics(context: Context, now: Long = System.currentTimeMillis()): Boolean {
+        val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
+        if (lifecycle.isUserOptedOut()) return false
+        if (lifecycle.getCycleStartedAt() > 0L && !lifecycle.isAutoDiagnosticsPermitted(now)) return false
+
         val manager = VoxUpdateChannelManager.instance(context)
         val enabled = if (manager.isBetaChannel()) manager.isBetaDiagnosticsEnabled() else manager.isStableDiagnosticsEnabled()
         if (!enabled) return false
@@ -254,7 +267,9 @@ object VoxDiagnosticsPolicy {
             val playerErrors = listOf(
                 VoxLogCode.PLAYER_HTTP_ERROR, VoxLogCode.PLAYER_REBUFFER, VoxLogCode.PLAYER_SOURCE_ERROR,
                 VoxLogCode.PLAYER_RENDERER_ERROR, VoxLogCode.PLAYER_DECODER_ERROR,
-                VoxLogCode.PLAYER_RECOVERABLE_403
+                VoxLogCode.PLAYER_RECOVERABLE_403,
+                VoxLogCode.PLAYER_DNS_RESOLUTION_ERROR, VoxLogCode.PLAYER_CONNECT_TIMEOUT,
+                VoxLogCode.PLAYER_READ_TIMEOUT, VoxLogCode.PLAYER_CONNECTION_RESET
             )
             if (event.code in playerErrors) {
                 val playerSuccesses = listOf(

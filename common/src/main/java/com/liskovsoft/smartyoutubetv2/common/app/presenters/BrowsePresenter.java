@@ -138,6 +138,10 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         getView().selectSection(selectedSectionIndex != -1 ? selectedSectionIndex : mBootSectionIndex, true);
 
         checkYandexOnboarding();
+
+        try {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxHeartbeatManager.getInstance(getContext()).notifyUserActivity();
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -1455,7 +1459,8 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     }
 
     private Observable<List<MediaGroup>> createPinnedRowAction(Video item) {
-        return ChannelPresenter.instance(getContext()).obtainChannelObservable(item.channelId);
+        String chId = item.channelId != null ? item.channelId : item.getChannelIdOrName();
+        return ChannelPresenter.instance(getContext()).obtainChannelObservable(chId);
     }
 
     /**
@@ -1574,7 +1579,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     }
 
     private boolean enableRows(Video item) {
-        return getMainUIData().isPinnedChannelRowsEnabled() && item.hasChannel() && !item.isPlaylistAsChannel();
+        return getMainUIData().isPinnedChannelRowsEnabled() && (item.hasChannel() || item.getChannelIdOrName() != null) && !item.isPlaylistAsChannel() && item.channelGroupId == null;
     }
 
     private void handleLoadError(Throwable error) {

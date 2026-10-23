@@ -14,6 +14,8 @@ import android.view.MotionEvent;
 
 import androidx.fragment.app.Fragment;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.manager.PlayerEngine;
@@ -45,6 +47,7 @@ public class PlaybackActivity extends LeanbackActivity {
     private boolean gamepadTriggerPressed = false;
     private PlaybackFragment mPlaybackFragment;
     private boolean mIsBackgroundAudioOnlyActive = false;
+    private final AtomicBoolean mIsFinishingPlayback = new AtomicBoolean(false);
     private VoxBackgroundPlaybackState mBackgroundState = VoxBackgroundPlaybackState.IDLE;
 
     public VoxBackgroundPlaybackState getBackgroundState() {
@@ -192,6 +195,11 @@ public class PlaybackActivity extends LeanbackActivity {
     }
 
     private void finishPlaybackInternal() {
+        if (isFinishing() || isDestroyed() || mIsFinishingPlayback.getAndSet(true)) {
+            Log.d(TAG, "finishPlaybackInternal: already finishing or destroyed, skipping");
+            return;
+        }
+
         Log.d(TAG, "Finishing activity...");
 
         int backgroundMode = getPlayerData().getBackgroundMode();
@@ -204,6 +212,7 @@ public class PlaybackActivity extends LeanbackActivity {
             if (!mIsBackgroundAudioOnlyActive) {
                 enterBackgroundAudioOnly();
             }
+            mIsFinishingPlayback.set(false);
             getViewManager().blockTop(this);
             getViewManager().startParentView(this);
             return;
@@ -254,15 +263,23 @@ public class PlaybackActivity extends LeanbackActivity {
             mPlaybackFragment.blockEngine(false);
             mPlaybackFragment.setMediaSessionReleaseReason("ACTIVITY_FINISH");
         }
+        if (mPlaybackFragment != null) {
+            try {
+                mPlaybackFragment.onFinish();
+            } catch (Exception e) {
+                Log.e(TAG, "finishReally: error on fragment onFinish: " + e.getMessage());
+            }
+        }
         BackgroundPlaybackService.stop(this);
         super.finishReally();
-
-        mPlaybackFragment.onFinish();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        try {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxHeartbeatManager.getInstance(this).notifyUserActivity();
+        } catch (Exception ignored) {}
         if (mIsBackgroundAudioOnlyActive) {
             mBackgroundState = VoxBackgroundPlaybackState.RESTORING;
             exitBackgroundAudioOnly();

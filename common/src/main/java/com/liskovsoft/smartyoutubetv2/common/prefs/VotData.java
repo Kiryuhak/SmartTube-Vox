@@ -394,11 +394,11 @@ public class VotData extends SharedPreferencesBase {
     }
 
     public float getOriginalVolumeMultiplier() {
-        return getOriginalVolumePercent() / 100f;
+        return com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioTaper.toPerceptualOriginalVolumeMultiplier(getOriginalVolumePercent());
     }
 
     public float getTranslationVolumeMultiplier() {
-        return getTranslationVolumePercent() / 100f;
+        return com.liskovsoft.smartyoutubetv2.common.vox.audio.VoxAudioTaper.toPerceptualTranslationVolumeMultiplier(getTranslationVolumePercent());
     }
 
     public boolean isVoxProxyEnabled() {

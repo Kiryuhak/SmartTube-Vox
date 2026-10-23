@@ -333,7 +333,11 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             maybeReleasePlayer();
         }
 
-        mPlaybackPresenter.onFinish();
+        try {
+            mPlaybackPresenter.onFinish();
+        } catch (Exception e) {
+            Log.e(TAG, "onFinish: error on presenter onFinish: " + e.getMessage());
+        }
     }
 
     public void onPIPChanged(boolean isInPIP) {
@@ -479,9 +483,14 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
             mMediaSessionReleaseReason = "PLAYER_RELEASE";
         }
         if (mPlayerGlue != null) {
-            ((PlaybackTransportRowPresenter) mPlayerGlue.getPlaybackRowPresenter()).setOnActionLongClickedListener(null);
-            ((PlaybackTransportRowPresenter) mPlayerGlue.getPlaybackRowPresenter()).setOnActionClickedListener(null);
-            mPlayerGlue.getPlayerAdapter().onDetachedFromHost();
+            if (mPlayerGlue.getPlaybackRowPresenter() instanceof PlaybackTransportRowPresenter) {
+                PlaybackTransportRowPresenter rowPresenter = (PlaybackTransportRowPresenter) mPlayerGlue.getPlaybackRowPresenter();
+                rowPresenter.setOnActionLongClickedListener(null);
+                rowPresenter.setOnActionClickedListener(null);
+            }
+            if (mPlayerGlue.getPlayerAdapter() != null) {
+                mPlayerGlue.getPlayerAdapter().onDetachedFromHost();
+            }
             mPlayerGlue.setHost(null);
             mPlayerGlue = null;
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(

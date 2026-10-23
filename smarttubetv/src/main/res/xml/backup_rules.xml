@@ -3,4 +3,6 @@
     <!-- Exclude secure OAuth token store and encryption key from cloud backup -->
     <exclude domain="sharedpref" path="vot_auth_secure.xml" />
     <exclude domain="file" path="vot_sec_key.bin" />
+    <!-- Exclude unique Installation ID from cloud backup to prevent cross-device cloning -->
+    <exclude domain="sharedpref" path="vox_installation_identity.xml" />
 </full-backup-content>

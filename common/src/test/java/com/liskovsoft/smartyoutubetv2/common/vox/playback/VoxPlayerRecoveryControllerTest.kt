@@ -38,6 +38,7 @@ class VoxPlayerRecoveryControllerTest {
         var lastNextEngine: Int = -1
         var lastGen: Long = -1L
         var lastRetryRunnable: Runnable? = null
+        var lastFailureReason: String? = null
 
         override fun onSourceRefreshRequested(targetPositionMs: Long, playWhenReady: Boolean, gen: Long) {
             sourceRefreshCount++
@@ -54,6 +55,15 @@ class VoxPlayerRecoveryControllerTest {
             lastGen = gen
         }
 
+        var qualityFallbackCount = 0
+        override fun onQualityFallbackRequested(targetPositionMs: Long, playWhenReady: Boolean, gen: Long): Boolean {
+            qualityFallbackCount++
+            lastTargetPositionMs = targetPositionMs
+            lastPlayWhenReady = playWhenReady
+            lastGen = gen
+            return true
+        }
+
         override fun onRecoverySucceeded(gen: Long) {
             recoverySucceededCount++
             lastGen = gen
@@ -62,6 +72,13 @@ class VoxPlayerRecoveryControllerTest {
         override fun onRecoveryFailed(gen: Long, onRetry: Runnable) {
             recoveryFailedCount++
             lastGen = gen
+            lastRetryRunnable = onRetry
+        }
+
+        override fun onRecoveryFailed(gen: Long, failureReason: String, onRetry: Runnable) {
+            recoveryFailedCount++
+            lastGen = gen
+            lastFailureReason = failureReason
             lastRetryRunnable = onRetry
         }
 
@@ -80,6 +97,7 @@ class VoxPlayerRecoveryControllerTest {
         fun reset() {
             sourceRefreshCount = 0
             engineSwitchCount = 0
+            qualityFallbackCount = 0
             recoverySucceededCount = 0
             recoveryFailedCount = 0
             showOverlayCount = 0
@@ -88,6 +106,7 @@ class VoxPlayerRecoveryControllerTest {
             lastTargetPositionMs = -1L
             lastPlayWhenReady = false
             lastNextEngine = -1
+            lastFailureReason = null
             lastGen = -1L
             lastRetryRunnable = null
         }
@@ -273,15 +292,20 @@ class VoxPlayerRecoveryControllerTest {
         assertTrue(mockActionHandler.lastPlayWhenReady)
     }
 
-    // 10. success -> RECOVERED
+    // 10. success -> RECOVERED after sustained verification
     @Test
     fun test10_SuccessTransitionsToRecovered() {
         controller.onPlaybackStart(sessionId = 111L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT)
         controller.handlePlayerError(IOException("Response code: 403"), 20_000L, true)
         assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
 
-        // Playback progresses successfully after refresh
-        controller.onPlaybackProgress(positionMs = 21_000L, bufferedPositionMs = 26_000L)
+        // Initial playback progress triggers verification stage (not immediate success)
+        controller.onPlaybackProgress(positionMs = 20_500L, bufferedPositionMs = 25_000L)
+        assertEquals(VoxPlayerRecoveryState.RECOVERY_VERIFYING, controller.getState())
+
+        // Advance looper and progress beyond verification threshold (4000ms & >= 2000ms progress)
+        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        controller.onPlaybackProgress(positionMs = 23_000L, bufferedPositionMs = 28_000L)
 
         assertEquals(VoxPlayerRecoveryState.RECOVERED, controller.getState())
         assertEquals(1, mockActionHandler.hideOverlayCount)
@@ -568,5 +592,169 @@ class VoxPlayerRecoveryControllerTest {
         controller.onPlaybackCheck(5_000L, 5_000L, true, true) // resumed
         assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
     }
-}
 
+    // 21. UnknownHostException triggers bounded engine failover
+    @Test
+    fun test21_UnknownHostExceptionTriggersEngineFailover() {
+        controller.onPlaybackStart(sessionId = 401L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_test_1")
+        val dnsErr = UnknownHostException("Unable to resolve host googlevideo.com")
+        val handled = controller.handlePlayerError(dnsErr, 25_000L, true)
+        assertTrue(handled)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_NETWORK, controller.getState())
+        assertEquals(1, mockActionHandler.engineSwitchCount)
+        assertEquals(PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, mockActionHandler.lastNextEngine)
+        assertEquals(23_000L, mockActionHandler.lastTargetPositionMs) // 25_000 - 2000 offset
+    }
+
+    // 22. DNS timeout triggers network recovery
+    @Test
+    fun test22_DnsTimeoutTriggersRecovery() {
+        controller.onPlaybackStart(sessionId = 402L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_test_2")
+        val timeoutErr = IOException("DNS resolution timed out after 5000ms", java.net.SocketTimeoutException("connect timed out"))
+        val handled = controller.handlePlayerError(timeoutErr, 30_000L, true)
+        assertTrue(handled)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+    }
+
+    // 23. Connection reset triggers recovery
+    @Test
+    fun test23_ConnectionResetTriggersRecovery() {
+        controller.onPlaybackStart(sessionId = 403L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_test_3")
+        val resetErr = java.net.SocketException("Connection reset by peer")
+        val handled = controller.handlePlayerError(resetErr, 40_000L, true)
+        assertTrue(handled)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+        assertEquals(38_000L, mockActionHandler.lastTargetPositionMs)
+    }
+
+    // 24. Socket timeout triggers recovery
+    @Test
+    fun test24_SocketTimeoutTriggersRecovery() {
+        controller.onPlaybackStart(sessionId = 404L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_test_4")
+        val sockTimeoutErr = java.net.SocketTimeoutException("Read timed out")
+        val handled = controller.handlePlayerError(sockTimeoutErr, 50_000L, true)
+        assertTrue(handled)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+    }
+
+    // 25. Transient DNS failure recovers upon network restoration
+    @Test
+    fun test25_TransientDnsFailureRecoversUponNetworkRestoration() {
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 1_000L
+        controller.onPlaybackStart(sessionId = 405L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_test_5")
+
+        // DNS error triggers engine failover
+        val dnsErr = UnknownHostException("Unable to resolve host rr1.googlevideo.com")
+        controller.handlePlayerError(dnsErr, 60_000L, true)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_NETWORK, controller.getState())
+
+        // Network restores: player restarts with OkHttp and starts playing at 58_000L
+        controller.onPlaybackStart(sessionId = 406L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, videoId = "dns_test_5")
+        controller.onPlaybackProgress(positionMs = 58_100L, bufferedPositionMs = 60_000L)
+
+        // Enters verification window
+        assertEquals(VoxPlayerRecoveryState.RECOVERY_VERIFYING, controller.getState())
+
+        // Advance 4 seconds with > 2000ms position delta
+        VoxPlayerRecoveryTestHooks.mockCurrentTimeMs = 5_200L
+        controller.onPlaybackProgress(positionMs = 60_200L, bufferedPositionMs = 65_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+
+        // Verified sustained recovery!
+        assertEquals(VoxPlayerRecoveryState.RECOVERED, controller.getState())
+        assertEquals(1, mockActionHandler.recoverySucceededCount)
+        assertEquals(0, controller.getEngineSwitchCount()) // budget reset after sustained playback
+    }
+
+    // 26. Prolonged DNS failure exhausts to terminal failed with DNS reason
+    @Test
+    fun test26_ProlongedDnsFailureExhaustsToTerminalFailedWithDnsReason() {
+        controller.onPlaybackStart(sessionId = 407L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_test_6")
+
+        val dnsErr = UnknownHostException("Unable to resolve host")
+        // Attempt 1: Switch engine
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_NETWORK, controller.getState())
+        assertEquals(1, controller.getEngineSwitchCount())
+
+        // Engine restarts but DNS is STILL dead
+        controller.onPlaybackStart(sessionId = 408L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, videoId = "dns_test_6")
+
+        // Second failure -> terminal FAILED with DNS_FAILURE_EXHAUSTED
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+        assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
+        assertEquals(1, mockActionHandler.recoveryFailedCount)
+        assertNotNull(mockActionHandler.lastFailureReason)
+        assertTrue(mockActionHandler.lastFailureReason!!.contains("DNS"))
+        assertEquals(1, mockActionHandler.hideSpinnerCount)
+    }
+
+    // 27. Quality fallback is NOT triggered on pure DNS failure
+    @Test
+    fun test27_NoQualityFallbackOnPureDnsFailure() {
+        controller.onPlaybackStart(sessionId = 409L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dns_4k_test")
+        controller.updateMediaTrackInfo("vp9", 2160, 58_000_000L) // 4K 58 Mbps stream
+
+        val dnsErr = UnknownHostException("DNS lookup failed for googlevideo.com")
+        // Attempt 1: Engine failover
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+        assertEquals(1, controller.getEngineSwitchCount())
+
+        controller.onPlaybackStart(sessionId = 410L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, videoId = "dns_4k_test")
+
+        // Attempt 2: Another DNS failure
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+
+        // Must FAIL directly without calling quality fallback!
+        assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
+        assertEquals(0, mockActionHandler.qualityFallbackCount)
+        assertEquals(0, controller.getQualityFallbackCount())
+    }
+
+    // 28. Position preserved across network failures
+    @Test
+    fun test28_PositionPreservedAcrossNetworkFailures() {
+        controller.onPlaybackStart(sessionId = 411L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "pos_test")
+        val resetErr = java.net.SocketException("Connection reset")
+        controller.handlePlayerError(resetErr, 150_000L, true)
+        assertEquals(148_000L, mockActionHandler.lastTargetPositionMs) // 150s - 2s offset
+    }
+
+    // 29. Recovery preserves limiter during engine recreation
+    @Test
+    fun test29_RecoveryPreservesLimiterDuringEngineRecreation() {
+        val vid = "vid_limiter"
+        controller.onPlaybackStart(sessionId = 412L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = vid)
+        val dnsErr = UnknownHostException("DNS error")
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+        assertEquals(1, controller.getEngineSwitchCount())
+
+        // Internal reload with new engine
+        controller.onPlaybackStart(sessionId = 413L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, videoId = vid)
+        // Limiter must NOT be wiped!
+        assertEquals(1, controller.getEngineSwitchCount())
+    }
+
+    // 30. Manual retry resets budget after DNS failure
+    @Test
+    fun test30_ManualRetryResetsBudgetAfterDnsFailure() {
+        controller.onPlaybackStart(sessionId = 414L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "manual_retry_test")
+        val dnsErr = UnknownHostException("DNS error")
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+        controller.onPlaybackStart(sessionId = 415L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP, videoId = "manual_retry_test")
+        controller.handlePlayerError(dnsErr, 10_000L, true)
+        assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
+
+        // User clicks retry in the dialog
+        assertNotNull(mockActionHandler.lastRetryRunnable)
+        mockActionHandler.lastRetryRunnable!!.run()
+
+        // Fresh attempt initiated
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, controller.getSourceRecoveryCount())
+        assertEquals(0, controller.getEngineSwitchCount())
+    }
+}

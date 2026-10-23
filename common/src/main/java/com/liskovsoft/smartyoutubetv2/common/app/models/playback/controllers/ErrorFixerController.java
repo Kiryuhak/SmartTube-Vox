@@ -84,28 +84,48 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         }
 
         @Override
+        public boolean onQualityFallbackRequested(long targetPositionMs, boolean playWhenReady, long gen) {
+            Log.w(TAG, "Recovery: quality fallback requested at targetPosMs=" + targetPositionMs);
+            return handleQualityFallback(targetPositionMs, playWhenReady);
+        }
+
+        @Override
         public void onRecoverySucceeded(long gen) {
             Log.i(TAG, "Recovery: succeeded for generation " + gen);
         }
 
         @Override
         public void onRecoveryFailed(long gen, Runnable onRetry) {
-            Log.e(TAG, "Recovery: failed for generation " + gen);
+            onRecoveryFailed(gen, "UNKNOWN", onRetry);
+        }
+
+        @Override
+        public void onRecoveryFailed(long gen, String failureReason, Runnable onRetry) {
+            Log.e(TAG, "Recovery: failed for generation " + gen + ", reason: " + failureReason);
+            boolean isDns = failureReason != null && failureReason.contains("DNS");
+            int messageResId = isDns ? R.string.vox_player_dns_error_message : R.string.vox_player_recovery_exhausted_message;
+            String message = getContext().getString(messageResId);
+
             if (getPlayer() != null) {
                 getPlayer().showProgressBar(false);
-                getPlayer().setTitle(getContext().getString(R.string.vox_player_recovery_failed));
+                getPlayer().setTitle(message);
                 getPlayer().setPlayWhenReady(false);
             }
             AppDialogPresenter dialog = getAppDialogPresenter();
             if (dialog != null) {
-                String title = getContext().getString(R.string.vox_player_recovery_failed);
                 List<OptionItem> options = new ArrayList<>();
                 options.add(UiOptionItem.from(getContext().getString(R.string.vox_player_recovery_retry), item -> {
                     dialog.closeDialog();
                     onRetry.run();
                 }));
-                dialog.appendStringsCategory(title, options);
-                dialog.showDialog(title);
+                options.add(UiOptionItem.from(getContext().getString(R.string.vox_player_recovery_back), item -> {
+                    dialog.closeDialog();
+                    if (getPlayer() != null) {
+                        getPlayer().finish();
+                    }
+                }));
+                dialog.appendStringsCategory(message, options);
+                dialog.showDialog(message);
             }
         }
 
@@ -262,6 +282,14 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             boolean isPlaying = getPlayer().isPlaying();
             boolean playWhenReady = getPlayer().getPlayWhenReady();
 
+            FormatItem format = getPlayer().getVideoFormat();
+            if (format != null) {
+                String codec = format.getFormatId();
+                int height = format.getHeight();
+                long bitrate = format.getTrack() != null && format.getTrack().format != null ? format.getTrack().format.bitrate : 0L;
+                mRecoveryController.updateMediaTrackInfo(codec, height, bitrate);
+            }
+
             mRecoveryController.onPlaybackCheck(posMs, bufMs, isPlaying, playWhenReady);
 
             if (isPlaying) {
@@ -309,9 +337,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     public void onEngineReleased() {
         mBufferingDetector.reset();
         mPlayerCacheRecoveryPolicy.reset();
-        if (mRecoveryController != null) {
-            mRecoveryController.reset();
-        }
+        // Do not reset mRecoveryController here: engine release occurs during recovery restart.
     }
 
     private void runEngineErrorAction(int type, int rendererIndex, Throwable error) {
@@ -684,6 +710,53 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             // This helps to persist the format between engine restart
             getPlayerData().setTempVideoFormat(formatItem);
         }
+    }
+
+    private boolean handleQualityFallback(long targetPositionMs, boolean playWhenReady) {
+        if (getPlayer() == null) {
+            return false;
+        }
+
+        FormatItem savedFormat = getPlayerData().getFormat(FormatItem.TYPE_VIDEO);
+        if (savedFormat != null && savedFormat.isPreset()) {
+            Log.w(TAG, "Quality fallback skipped: user has explicitly chosen format preset: %s", savedFormat.getTitle());
+            return false;
+        }
+
+        List<FormatItem> videoFormats = getPlayer().getVideoFormats();
+        if (videoFormats == null || videoFormats.isEmpty()) {
+            return false;
+        }
+
+        FormatItem currentFormat = getPlayer().getVideoFormat();
+        if (currentFormat == null) {
+            return false;
+        }
+
+        int currentRes = Math.max(currentFormat.getWidth(), currentFormat.getHeight());
+        if (currentRes < 2160) {
+            return false;
+        }
+
+        int idx = videoFormats.indexOf(currentFormat);
+        int nextIdx = idx + 1;
+
+        if (videoFormats.size() > nextIdx) {
+            FormatItem fallbackItem = videoFormats.get(nextIdx);
+            Log.w(TAG, "Recovery: falling back quality from %s to %s for 4K stability", currentFormat.getTitle(), fallbackItem.getTitle());
+            getPlayer().setFormat(fallbackItem);
+            getPlayerData().setTempVideoFormat(fallbackItem);
+            Video video = getVideo();
+            if (video != null && targetPositionMs >= 0) {
+                video.pendingPosMs = targetPositionMs;
+            }
+            if (mVideoLoaderController != null) {
+                mVideoLoaderController.restartEngine();
+            }
+            return true;
+        }
+
+        return false;
     }
 
     private boolean isOutOfMemory(Throwable error) {

@@ -57,7 +57,7 @@ class VoxPlaybackBufferPolicyTest {
         assertEquals(35_000, config.minBufferMs)
         assertEquals(60_000, config.maxBufferMs)
         assertEquals(2_000, config.bufferForPlaybackMs)
-        assertEquals(4_000, config.bufferForPlaybackAfterRebufferMs)
+        assertEquals(5_000, config.bufferForPlaybackAfterRebufferMs)
         assertEquals(30_000, config.backBufferMs)
         assertTrue(config.targetBufferBytes >= 48 * 1024 * 1024)
     }
@@ -116,5 +116,30 @@ class VoxPlaybackBufferPolicyTest {
 
         assertEquals(VoxBufferProfile.BALANCED, config.profile)
         assertTrue(config.targetBufferBytes >= 20 * 1024 * 1024)
+    }
+
+    @Test
+    fun testDecoderErrorClassification_separatesFromNetworkStarvation() {
+        val cause = VoxPlaybackBufferPolicy.classifyRebuffer(
+            bitrate = 15_000_000L,
+            bufferAheadMs = 20_000L,
+            measuredBandwidthBps = 50_000_000L,
+            isDecoderError = true
+        )
+        assertEquals(VoxBufferRootCause.DECODER_LIMITED, cause)
+    }
+
+    @Test
+    fun testAdaptive4KUgoosSk1BufferCeiling() {
+        val config = VoxPlaybackBufferPolicy.resolveAdaptive(
+            tier = VoxPerformanceTier.POWERFUL,
+            ramBytes = 4L * 1024 * 1024 * 1024,
+            videoHeight = 2160,
+            bitrate = 45_300_000L,
+            rebufferCount = 2
+        )
+        assertTrue(config.targetBufferBytes <= 96 * 1024 * 1024)
+        assertEquals(VoxBufferProfile.HIGH_PERFORMANCE, config.profile)
+        assertEquals(6_000, config.bufferForPlaybackAfterRebufferMs)
     }
 }

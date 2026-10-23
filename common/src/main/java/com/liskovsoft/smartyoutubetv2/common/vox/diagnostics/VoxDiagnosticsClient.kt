@@ -94,43 +94,83 @@ class VoxDiagnosticsClient(
                 return Result.Success(report.reportId ?: "VOX-UNIT-TEST-LOCAL")
             }
 
-            val url = URL(endpointUrl)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                doOutput = true
-                doInput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "SmartTube-VOX-Diagnostics/1.0")
+            var lastException: Exception? = null
+            var successResult: Result? = null
+            val maxAttempts = 3
+            val backoffsMs = longArrayOf(0L, 300L, 1000L)
+
+            for (attempt in 0 until maxAttempts) {
+                if (attempt > 0) {
+                    try {
+                        Thread.sleep(backoffsMs[attempt])
+                    } catch (ie: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        break
+                    }
+                    Log.w(TAG, "Retrying diagnostic report upload (attempt ${attempt + 1}/$maxAttempts)")
+                }
+
+                var connection: HttpURLConnection? = null
+                try {
+                    val url = URL(endpointUrl)
+                    connection = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = TIMEOUT_MS
+                        readTimeout = TIMEOUT_MS
+                        doOutput = true
+                        doInput = true
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        setRequestProperty("Accept", "application/json")
+                        setRequestProperty("User-Agent", "SmartTube-VOX-Diagnostics/1.0")
+                        setRequestProperty("Connection", "close")
+                    }
+
+                    OutputStreamWriter(connection.outputStream, StandardCharsets.UTF_8).use { writer ->
+                        writer.write(sanitizedJson)
+                        writer.flush()
+                    }
+
+                    val responseCode = connection.responseCode
+                    val responseStream = if (responseCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream ?: connection.inputStream
+                    }
+
+                    val responseBody = BufferedReader(InputStreamReader(responseStream, StandardCharsets.UTF_8)).use { reader ->
+                        reader.readText()
+                    }
+
+                    if (responseCode in 200..299) {
+                        val respJson = JSONObject(responseBody)
+                        val reportId = respJson.optString("reportId", report.reportId ?: "VOX-${System.currentTimeMillis() % 1000000}")
+                        Log.i(TAG, "Diagnostic report submitted successfully: $reportId")
+                        successResult = Result.Success(reportId)
+                        break
+                    } else {
+                        Log.e(TAG, "Diagnostics service returned error $responseCode: $responseBody")
+                        return Result.Error("HTTP error $responseCode: $responseBody")
+                    }
+                } catch (ioe: java.io.IOException) {
+                    lastException = ioe
+                    Log.w(TAG, "Network error on attempt ${attempt + 1}: ${ioe.message}")
+                } finally {
+                    try {
+                        connection?.disconnect()
+                    } catch (ignored: Exception) {}
+                }
             }
 
-            OutputStreamWriter(connection.outputStream, StandardCharsets.UTF_8).use { writer ->
-                writer.write(sanitizedJson)
-                writer.flush()
+            if (successResult != null) {
+                return successResult
             }
 
-            val responseCode = connection.responseCode
-            val responseStream = if (responseCode in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream ?: connection.inputStream
+            if (lastException != null) {
+                Log.e(TAG, "Failed to submit diagnostic report after $maxAttempts attempts", lastException)
+                return Result.Error(lastException.message ?: "Connection error", lastException)
             }
 
-            val responseBody = BufferedReader(InputStreamReader(responseStream, StandardCharsets.UTF_8)).use { reader ->
-                reader.readText()
-            }
-
-            if (responseCode in 200..299) {
-                val respJson = JSONObject(responseBody)
-                val reportId = respJson.optString("reportId", "VOX-${System.currentTimeMillis() % 1000000}")
-                Log.i(TAG, "Diagnostic report submitted successfully: $reportId")
-                Result.Success(reportId)
-            } else {
-                Log.e(TAG, "Diagnostics service returned error $responseCode: $responseBody")
-                Result.Error("HTTP error $responseCode: $responseBody")
-            }
+            Result.Error("Unknown transmission error")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to submit diagnostic report", e)
             Result.Error(e.message ?: "Connection error", e)

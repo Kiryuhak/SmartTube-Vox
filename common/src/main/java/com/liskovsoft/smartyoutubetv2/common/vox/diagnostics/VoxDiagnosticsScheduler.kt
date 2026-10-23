@@ -348,7 +348,9 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                     "Offline diagnostic report successfully submitted: $reportId",
                     sentCtx
                 )
-                VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(System.currentTimeMillis())
+                val nowMs = System.currentTimeMillis()
+                VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(nowMs)
+                VoxDiagnosticsLifecycleManager.instance(context).setLastSubmissionTimestamp(nowMs)
                 synchronized(queueLock) {
                     saveToDiskLocked()
                 }
@@ -441,7 +443,9 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 VoxDiagnosticsClient.instance().submitReportAsync(finalReport, object : VoxDiagnosticsClient.Callback {
                     override fun onSuccess(reportId: String) {
                         Log.i(TAG, "Periodic diagnostics successfully submitted: $reportId")
-                        VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(System.currentTimeMillis())
+                        val nowMs = System.currentTimeMillis()
+                VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(nowMs)
+                VoxDiagnosticsLifecycleManager.instance(context).setLastSubmissionTimestamp(nowMs)
                         isRunning.set(false)
                         onComplete?.onComplete(true)
                     }
@@ -611,7 +615,9 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                             "Incident diagnostic report submitted: $reportId",
                             sentCtx
                         )
-                        VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(System.currentTimeMillis())
+                        val nowMs = System.currentTimeMillis()
+                VoxUpdateChannelManager.instance(context).setLastDiagnosticsSubmissionTimestamp(nowMs)
+                VoxDiagnosticsLifecycleManager.instance(context).setLastSubmissionTimestamp(nowMs)
                         onComplete?.onComplete(true)
                     }
 

@@ -3,9 +3,11 @@
     <cloud-backup>
         <exclude domain="sharedpref" path="vot_auth_secure.xml" />
         <exclude domain="file" path="vot_sec_key.bin" />
+        <exclude domain="sharedpref" path="vox_installation_identity.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="vot_auth_secure.xml" />
         <exclude domain="file" path="vot_sec_key.bin" />
+        <exclude domain="sharedpref" path="vox_installation_identity.xml" />
     </device-transfer>
 </data-extraction-rules>

@@ -121,15 +121,15 @@ object VoxPlaybackBufferPolicy {
 
         // 3. Сетевой VOD: разделение по производительности и объему оперативной памяти
         return when {
-            // Флагманские ТВ-боксы (RAM >= 3.5GB, POWERFUL Tier, 4K/2K)
-            tier == VoxPerformanceTier.POWERFUL || (ramMb >= 3500 && videoHeight >= 1440) -> {
-                val targetBytes = (safeRam / 16).toInt().coerceIn(48 * 1024 * 1024, MAX_TARGET_BUFFER_BYTES)
+            // Флагманские ТВ-боксы (RAM >= 3.0GB, POWERFUL Tier, UGOOS SK1, 4K/2K)
+            tier == VoxPerformanceTier.POWERFUL || ramMb >= 3000 || (ramMb >= 2500 && videoHeight >= 1440) -> {
+                val targetBytes = (safeRam / 16).toInt().coerceIn(48 * 1024 * 1024, 96 * 1024 * 1024)
                 VoxBufferConfiguration(
                     profile = VoxBufferProfile.HIGH_PERFORMANCE,
                     minBufferMs = 35_000,
                     maxBufferMs = 60_000,
                     bufferForPlaybackMs = 2_000,
-                    bufferForPlaybackAfterRebufferMs = 4_000,
+                    bufferForPlaybackAfterRebufferMs = 5_000,
                     backBufferMs = 30_000,
                     targetBufferBytes = targetBytes
                 )
@@ -197,27 +197,27 @@ object VoxPlaybackBufferPolicy {
         rebufferCount: Int = 0
     ): VoxBufferConfiguration {
         val baseConfig = resolve(tier, ramBytes, isLive, isLocal, videoHeight)
-        val is4K = videoHeight >= 2160 || bitrate >= 25_000_000L
+        // Понижен порог детекции до 15 Mbps для охвата 4K VP9 17.7-45.3 Mbps потоков (VOX-EF0F761F / VOX-0BF9F24D)
+        val isHighBitrateOr4K = videoHeight >= 2160 || bitrate >= 15_000_000L
 
-        if (isLive || isLocal || !is4K) {
+        if (isLive || isLocal || !isHighBitrateOr4K) {
             return baseConfig
         }
 
-        // Для 4K / High Bitrate VOD (например, VP9 45 Mbps):
-        // Масштабируем буфер вверх с учетом гистерезиса при ребуферах
+        // Для 4K / High Bitrate VOD (например, UGOOS SK1 VP9 45.3 Mbps):
+        // Масштабируем буфер вверх с учетом гистерезиса при ребуферах и защитой от OOM
         val safeRam = if (ramBytes <= 0L) 2L * 1024 * 1024 * 1024 else ramBytes
         val boost = if (rebufferCount >= 2) 1.5f else 1.0f
 
         val adaptiveMinBufferMs = (35_000 * boost).toInt().coerceIn(35_000, 60_000)
         val adaptiveMaxBufferMs = (60_000 * boost).toInt().coerceIn(60_000, 100_000)
         val adaptiveBufferForPlaybackMs = if (rebufferCount >= 1) 3_500 else 2_000
-        val adaptiveBufferAfterRebufferMs = if (rebufferCount >= 2) 6_000 else 4_500
+        val adaptiveBufferAfterRebufferMs = if (rebufferCount >= 2) 6_000 else 5_000
 
-        // Рассчитываем targetBufferBytes: при 45 Mbps 25 секунд видео = ~140 MB.
-        // Ограничиваем потолком RAM устройства (до 128 MB)
-        val maxAllowedBytes = if (safeRam >= 3L * 1024 * 1024 * 1024) MAX_TARGET_BUFFER_BYTES else 96 * 1024 * 1024
-        val neededBytes = if (bitrate > 0) (bitrate / 8 * 25).toInt() else 64 * 1024 * 1024
-        val targetBytes = neededBytes.coerceIn(64 * 1024 * 1024, maxAllowedBytes)
+        // Рассчитываем targetBufferBytes с жестким потолком 96 МБ во избежание OutOfMemoryError
+        val maxAllowedBytes = 96 * 1024 * 1024
+        val neededBytes = if (bitrate > 0) (bitrate / 8 * 20).toInt() else 64 * 1024 * 1024
+        val targetBytes = neededBytes.coerceIn(48 * 1024 * 1024, maxAllowedBytes)
 
         return VoxBufferConfiguration(
             profile = VoxBufferProfile.HIGH_PERFORMANCE,
@@ -241,33 +241,48 @@ object VoxPlaybackBufferPolicy {
         measuredBandwidthBps: Long = 0L,
         droppedFrames: Int = 0,
         is4K: Boolean = false,
-        targetBufferBytes: Int = 0
+        targetBufferBytes: Int = 0,
+        isDecoderError: Boolean = false
     ): VoxBufferRootCause {
+        if (isDecoderError) {
+            return VoxBufferRootCause.DECODER_LIMITED
+        }
         val bitrateMbps = if (bitrate > 0) bitrate / 1_000_000.0 else 0.0
         val measuredMbps = if (measuredBandwidthBps > 0) measuredBandwidthBps / 1_000_000.0 else 0.0
 
         return when {
-            droppedFrames > 60 -> VoxBufferRootCause.DECODER_LIMITED
+            droppedFrames > 60 ->
+                VoxBufferRootCause.DECODER_LIMITED
             // Если заданный лимит буфера в байтах вмещает менее 10-12 секунд видео при данном битрейте
             targetBufferBytes > 0 && bitrate > 0 && (targetBufferBytes.toLong() * 8_000L / bitrate) < 12_000L ->
                 VoxBufferRootCause.BUFFER_POLICY_TOO_SMALL
             measuredMbps in 0.001..2.0 ->
                 VoxBufferRootCause.CDN_THROTTLED
-            measuredMbps > 0 && measuredMbps < (bitrateMbps * 0.8) ->
-                VoxBufferRootCause.NETWORK_LIMITED
-            bitrateMbps >= 35.0 && measuredMbps > 0 && measuredMbps < bitrateMbps * 1.2 ->
+            // Измеренная скорость сети доступна:
+            measuredBandwidthBps > 0L -> when {
+                // Если скорость сети значительно превышает битрейт, сбой не связан с сетью или битрейтом
+                measuredMbps >= (bitrateMbps * 1.2) ->
+                    if (droppedFrames in 20..60) VoxBufferRootCause.DECODER_LIMITED else VoxBufferRootCause.UNKNOWN
+                // Скорость сети существенно ниже битрейта (< 80%) — сетевое ограничение
+                measuredMbps < (bitrateMbps * 0.8) ->
+                    VoxBufferRootCause.NETWORK_LIMITED
+                // Высокий битрейт (>= 35 Mbps) при дефиците запаса пропускной способности сети
+                bitrateMbps >= 35.0 && measuredMbps < (bitrateMbps * 1.2) ->
+                    VoxBufferRootCause.BITRATE_TOO_HIGH
+                else ->
+                    VoxBufferRootCause.UNKNOWN
+            }
+            // Анализ декодера при повышенных пропусках кадров на тяжелых потоках
+            droppedFrames in 20..60 && (bitrateMbps >= 35.0 || is4K) ->
                 VoxBufferRootCause.BITRATE_TOO_HIGH
-            bufferAheadMs <= 500 && (bitrateMbps >= 25.0 || is4K) ->
+            // Опустошение буфера при агрессивной буферной политике
+            bufferAheadMs <= 500 && (bitrateMbps in 25.0..39.9 || (is4K && bitrateMbps < 40.0)) ->
                 VoxBufferRootCause.BUFFER_POLICY_TOO_SMALL
-            bitrateMbps >= 40.0 ->
-                VoxBufferRootCause.BITRATE_TOO_HIGH
-            // Если измеренная скорость значительно превышает битрейт, сбой не связан с пропускной способностью
-            measuredBandwidthBps > 0 && measuredMbps >= (bitrateMbps * 1.2) ->
+            // При недостатке данных (нет измерений сети и нет данных о декодере) не утверждаем ложную причину
+            measuredBandwidthBps <= 0L ->
                 VoxBufferRootCause.UNKNOWN
-            // Для умеренного битрейта (< 25 Mbps) при отсутствии измерений сети не ставим ложноположительный NETWORK_LIMITED
-            measuredBandwidthBps <= 0L && bitrateMbps < 25.0 ->
+            else ->
                 VoxBufferRootCause.UNKNOWN
-            else -> VoxBufferRootCause.NETWORK_LIMITED
         }
     }
 }

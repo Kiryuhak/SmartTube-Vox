@@ -24,6 +24,9 @@ object VoxPlayerRecoveryTestHooks {
     var forceFrozenProgress: Boolean = false
 
     @Volatile
+    var forceQualityFallbackEligible: Boolean = false
+
+    @Volatile
     var mockCurrentTimeMs: Long? = null
 
     fun reset() {
@@ -33,6 +36,7 @@ object VoxPlayerRecoveryTestHooks {
         sourceRefreshFailure = false
         slowNetworkWithProgress = false
         forceFrozenProgress = false
+        forceQualityFallbackEligible = false
         mockCurrentTimeMs = null
     }
 }

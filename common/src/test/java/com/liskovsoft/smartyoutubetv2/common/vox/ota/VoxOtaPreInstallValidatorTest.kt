@@ -215,4 +215,33 @@ class VoxOtaPreInstallValidatorTest {
         assertFalse("Partial temp file with length mismatch must be rejected", result.isValid)
         assertEquals(VoxOtaErrorCode.DOWNLOAD_INCOMPLETE, result.errorCode)
     }
+    @Test
+    fun test_realReleaseApkSignature() {
+        val realApk = File("../build/release-candidate/vox-9.1/SmartTube_vot_32.56-vox.9.1_armeabi-v7a.apk").canonicalFile
+        println("Testing real APK at: " + realApk.absolutePath + " exists=" + realApk.exists())
+        if (!realApk.exists()) return
+
+        try {
+            val jarFile = java.util.jar.JarFile(realApk)
+            val entry = jarFile.getJarEntry("AndroidManifest.xml")
+            if (entry != null) {
+                jarFile.getInputStream(entry).use { stream ->
+                    val buffer = ByteArray(8192)
+                    while (stream.read(buffer) > 0) {}
+                }
+                val certs = entry.certificates
+                println("JarFile certs count: " + (certs?.size ?: 0))
+                if (certs != null && certs.isNotEmpty()) {
+                    for (c in certs) {
+                        val md = java.security.MessageDigest.getInstance("SHA-256")
+                        val digest = md.digest(c.encoded).joinToString("") { "%02x".format(it) }
+                        println("JarFile cert sha256: " + digest)
+                    }
+                }
+            }
+            jarFile.close()
+        } catch (t: Throwable) {
+            println("JarFile error: " + t)
+        }
+    }
 }

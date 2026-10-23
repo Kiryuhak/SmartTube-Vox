@@ -210,11 +210,27 @@ object VoxOtaPreInstallValidator {
                 true
             }
             if (!isMockTest) {
-                return fail(
-                    VoxOtaErrorCode.SIGNATURE_MISMATCH,
-                    "Цифровая подпись APK не соответствует официальному ключу VOX или установленному приложению",
-                    mapOf("apkFile" to apkFile.name)
+                val apkSigs = VoxOtaSecurityVerifier.getApkSignaturesSha256(context, apkFile)
+                val installedSigs = VoxOtaSecurityVerifier.getInstalledAppSignaturesSha256(context)
+                val details = mutableMapOf(
+                    "apkFile" to apkFile.name,
+                    "apkSignaturesCount" to apkSigs.size.toString()
                 )
+                if (apkSigs.isNotEmpty()) {
+                    details["apkSignerSha256"] = apkSigs.first()
+                }
+                if (installedSigs.isNotEmpty()) {
+                    details["installedSignerSha256"] = installedSigs.first()
+                }
+
+                val isCertMismatch = apkSigs.isNotEmpty() && !apkSigs.contains(VoxOtaSecurityVerifier.EXPECTED_SIGNER_SHA256)
+                val errorCode = if (isCertMismatch) VoxOtaErrorCode.SIGNATURE_MISMATCH else VoxOtaErrorCode.APK_INVALID
+                val message = if (isCertMismatch) {
+                    "Цифровая подпись APK не соответствует официальному ключу VOX или установленному приложению (несовместимый сертификат)"
+                } else {
+                    "Не удалось проверить цифровую подпись скачанного APK пакета"
+                }
+                return fail(errorCode, message, details)
             }
         }
 

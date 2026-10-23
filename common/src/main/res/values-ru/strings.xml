@@ -799,6 +799,9 @@
     <string name="vox_live_refreshing">Обновляем прямой эфир…</string>
     <string name="vox_player_recovery_failed">Не удалось восстановить соединение</string>
     <string name="vox_player_recovery_retry">Повторить</string>
+    <string name="vox_player_recovery_exhausted_message">Не удалось восстановить видео. Проверьте соединение или попробуйте другое качество.</string>
+    <string name="vox_player_dns_error_message">Не удалось подключиться к серверу видео. Проверьте подключение и настройки DNS.</string>
+    <string name="vox_player_recovery_back">Назад</string>
     <string name="vox_fixing_connection">Восстанавливаем соединение…</string>
     <string name="vox_fixing_dns">Восстанавливаем соединение…</string>
     <string name="vox_fixing_playback">Восстанавливаем воспроизведение…</string>
@@ -1058,4 +1061,8 @@
     <string name="vox_ota_error_release_not_found">Данные обновления не найдены на сервере</string>
     <string name="vox_ota_error_invalid_release">Некорректный формат данных обновления</string>
     <string name="vox_ota_error_version_not_newer">Найдена версия не новее текущей</string>
+    <string name="vox_analytics_heartbeat_toggle">Анонимная аналитика активности</string>
+    <string name="vox_analytics_heartbeat_toggle_desc">Оценка активных установок (каждые 30 мин при просмотре, без личных данных)</string>
+    <string name="vox_analytics_mode_enabled">Включена (раз в 30 мин)</string>
+    <string name="vox_analytics_mode_disabled">Выключена пользователем</string>
 </resources>

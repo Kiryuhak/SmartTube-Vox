@@ -7,17 +7,30 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger
+import java.util.UUID
 
 /**
- * Controller for bounded player recovery during stalls, frozen buffers, HTTP 403 errors, and DNS failures.
+ * Controller for bounded, non-looping player recovery during stalls, frozen buffers,
+ * HTTP 403 errors, DNS failures, and high-bitrate 4K rebuffering.
  *
  * Guarantees:
- * 1. Bounded multi-stage recovery (Stage 1: Source refresh / in-memory cache clear, Stage 2: Engine switch).
- * 2. Strict prevention of engine ping-pong loops (at most 1 engine switch per session).
- * 3. Monotonic progress detection (bufferedPosition advancement >= 1000ms extends watchdog for slow networks).
- * 4. Zero PII logging (never leaks signed URLs, authorization tokens, or queries).
- * 5. Generation and session fencing: stale callbacks from older generations are dropped.
- * 6. Terminal FAILED state: hides buffering spinner, shows clear message and surfaces manual "Повторить" retry action.
+ * 1. Bounded multi-stage recovery:
+ *    - Stage 1: Source refresh (up to MAX_SOURCE_RECOVERIES = 2).
+ *    - Stage 2: Network engine switch (up to MAX_ENGINE_SWITCHES = 1, no ping-pong).
+ *    - Stage 3: Quality fallback for 4K / high-bitrate (up to MAX_QUALITY_FALLBACKS = 1).
+ *    - Stage 4: Terminal failure (RECOVERY_EXHAUSTED) with manual retry & safe back options.
+ * 2. Real sustained success verification:
+ *    - Playback must advance position by >= 2,000ms AND remain playing for >= 4,000ms.
+ *    - Immediate rebuffering during verification fails verification and escalates to the next stage.
+ *    - Zero premature PLAYER_RECOVERY_SUCCEEDED events.
+ * 3. Attempt limiter preservation:
+ *    - Counters survive internal video reloads and engine restarts for the same video.
+ *    - Reset ONLY upon confirmed sustained playback or explicit opening of a new video.
+ * 4. Concurrency safety:
+ *    - Only 1 active recovery at a time. Watchdog and errors cannot spawn parallel recoveries.
+ * 5. Clean terminal UX:
+ *    - Hides buffering spinner on failure, shows localized exhausted message with Retry and Back.
+ *    - Back navigation is always responsive and safe.
  */
 class VoxPlayerRecoveryController @JvmOverloads constructor(
     private val actionHandler: PlayerRecoveryActionHandler,
@@ -27,8 +40,12 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     interface PlayerRecoveryActionHandler {
         fun onSourceRefreshRequested(targetPositionMs: Long, playWhenReady: Boolean, gen: Long)
         fun onEngineSwitchRequested(nextEngine: Int, targetPositionMs: Long, playWhenReady: Boolean, gen: Long)
+        fun onQualityFallbackRequested(targetPositionMs: Long, playWhenReady: Boolean, gen: Long): Boolean = false
         fun onRecoverySucceeded(gen: Long)
         fun onRecoveryFailed(gen: Long, onRetry: Runnable)
+        fun onRecoveryFailed(gen: Long, failureReason: String, onRetry: Runnable) {
+            onRecoveryFailed(gen, onRetry)
+        }
         fun showRecoveryOverlay(messageResId: Int)
         fun hideRecoveryOverlay()
         fun hideBufferingSpinner()
@@ -42,35 +59,67 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     private var recoveryGeneration: Long = 0L
     private var sourceRecoveryCount: Int = 0
     private var engineSwitchCount: Int = 0
+    private var qualityFallbackCount: Int = 0
     private var currentEngine: Int = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT
     private var currentVideoId: String? = null
     private var isInternalRecoveryReload: Boolean = false
 
+    // Diagnostic context tracking
+    private var recoverySequenceId: String? = null
+    private var recoveryStartTimeMs: Long = 0L
+    private var activeRecoveryReason: String? = null
+    private var currentCodec: String? = null
+    private var currentHeight: Int = 0
+    private var currentBitrate: Long = 0L
+
+    // Progress & verification tracking
     private var lastObservedPositionMs: Long = 0L
     private var lastObservedBufferedMs: Long = 0L
     private var lastObservedProgressTimestampMs: Long = 0L
     private var lastObservedRenderedPositionMs: Long = 0L
+    private var verificationStartPositionMs: Long = -1L
+    private var verificationStartTimeMs: Long = 0L
+
+    private val verificationRunnable = Runnable {
+        checkVerificationSuccess()
+    }
 
     fun getState(): VoxPlayerRecoveryState = currentState
     fun getSourceRecoveryCount(): Int = sourceRecoveryCount
     fun getEngineSwitchCount(): Int = engineSwitchCount
+    fun getQualityFallbackCount(): Int = qualityFallbackCount
     fun getCurrentGeneration(): Long = recoveryGeneration
     fun getCurrentVideoId(): String? = currentVideoId
+    fun getRecoverySequenceId(): String? = recoverySequenceId
 
     fun isRecovering(): Boolean {
         return currentState == VoxPlayerRecoveryState.RECOVERING_SOURCE ||
-                currentState == VoxPlayerRecoveryState.RECOVERING_NETWORK
+                currentState == VoxPlayerRecoveryState.SOURCE_REFRESHED ||
+                currentState == VoxPlayerRecoveryState.RECOVERING_NETWORK ||
+                currentState == VoxPlayerRecoveryState.RECOVERING_QUALITY ||
+                currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING
+    }
+
+    fun isTerminalFailed(): Boolean {
+        return currentState == VoxPlayerRecoveryState.FAILED ||
+                currentState == VoxPlayerRecoveryState.RECOVERY_EXHAUSTED
     }
 
     private fun currentTimeMs(): Long {
-        return VoxPlayerRecoveryTestHooks.mockCurrentTimeMs ?: System.currentTimeMillis()
+        return VoxPlayerRecoveryTestHooks.mockCurrentTimeMs ?: android.os.SystemClock.elapsedRealtime()
+    }
+
+    fun updateMediaTrackInfo(codec: String?, height: Int, bitrate: Long) {
+        currentCodec = codec
+        currentHeight = height
+        currentBitrate = bitrate
     }
 
     @Synchronized
     @JvmOverloads
     fun onPlaybackStart(sessionId: Long, isLive: Boolean, engine: Int, videoId: String? = null) {
-        val isSameVideoRecovery = (isRecovering() || isInternalRecoveryReload) &&
-                videoId != null && videoId == currentVideoId
+        val isSameVideoRecovery = videoId != null && videoId == currentVideoId &&
+                (isRecovering() || isInternalRecoveryReload)
 
         if (isSameVideoRecovery) {
             isLiveSession = isLive
@@ -89,6 +138,11 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         currentState = VoxPlayerRecoveryState.IDLE
         sourceRecoveryCount = 0
         engineSwitchCount = 0
+        qualityFallbackCount = 0
+        recoverySequenceId = null
+        activeRecoveryReason = null
+        verificationStartPositionMs = -1L
+        verificationStartTimeMs = 0L
         lastObservedProgressTimestampMs = currentTimeMs()
         lastObservedRenderedPositionMs = 0L
     }
@@ -108,7 +162,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
     @Synchronized
     fun onPlaybackCheck(positionMs: Long, bufferedPositionMs: Long, isPlaying: Boolean, playWhenReady: Boolean) {
-        if (isLiveSession || currentState == VoxPlayerRecoveryState.FAILED) {
+        if (isLiveSession || isTerminalFailed()) {
             return
         }
 
@@ -149,34 +203,34 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
                 (!isPositionAdvancing && !isBufferAdvancing || bufferRemainingMs < 1000L ||
                         VoxPlayerRecoveryTestHooks.bufferFreeze || VoxPlayerRecoveryTestHooks.forceFrozenProgress)
 
-        if (isStalled && currentState != VoxPlayerRecoveryState.FAILED && !isRecovering()) {
+        if (isStalled && !isTerminalFailed() && !isRecovering()) {
             lastObservedPositionMs = positionMs
             lastObservedBufferedMs = bufferedPositionMs
             lastObservedProgressTimestampMs = now
 
-            if (sourceRecoveryCount < VoxPlayerRecoveryPolicy.MAX_SOURCE_RECOVERIES) {
-                triggerSourceRefresh(positionMs, playWhenReady, "BUFFER_FREEZE_NO_PROGRESS")
-            } else if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
-                triggerEngineFailover(positionMs, playWhenReady, "BUFFER_FREEZE_ENGINE_FALLBACK")
-            } else {
-                triggerTerminalFailure("BUFFER_FREEZE_LIMIT_EXHAUSTED")
-            }
+            escalateRecovery(positionMs, playWhenReady, "BUFFER_FREEZE_NO_PROGRESS")
         }
     }
 
     @Synchronized
     fun onBufferingStarted(positionMs: Long, bufferedPositionMs: Long, playWhenReady: Boolean) {
-        if (isLiveSession || currentState == VoxPlayerRecoveryState.FAILED) {
+        if (isLiveSession || isTerminalFailed()) {
             return
         }
 
         lastObservedPositionMs = positionMs
         lastObservedBufferedMs = bufferedPositionMs
 
+        if (currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
+            // Immediate rebuffer during verification window! Escalates to next stage.
+            handler.removeCallbacks(verificationRunnable)
+            onVerificationFailed("REBUFFER_DURING_VERIFICATION")
+            return
+        }
+
         if (currentState != VoxPlayerRecoveryState.BUFFERING) {
             currentState = VoxPlayerRecoveryState.BUFFERING
             handler.removeCallbacksAndMessages(null)
-
             scheduleStallWatchdog(recoveryGeneration, currentSessionId, playWhenReady)
         }
     }
@@ -194,7 +248,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
     @Synchronized
     fun onBufferProgress(bufferedPositionMs: Long, playWhenReady: Boolean) {
-        if (isLiveSession || currentState == VoxPlayerRecoveryState.FAILED) return
+        if (isLiveSession || isTerminalFailed()) return
 
         if (VoxPlayerRecoveryTestHooks.bufferFreeze) {
             return
@@ -206,7 +260,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         if (progress) {
             lastObservedBufferedMs = bufferedPositionMs
             if (currentState == VoxPlayerRecoveryState.BUFFERING) {
-                // Buffer is advancing (slow network with steady progress). Extend watchdog timeout.
+                // Buffer is advancing steadily. Extend watchdog timeout.
                 handler.removeCallbacksAndMessages(null)
                 scheduleStallWatchdog(recoveryGeneration, currentSessionId, playWhenReady)
             }
@@ -215,85 +269,192 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
     @Synchronized
     fun onPlaybackProgress(positionMs: Long, bufferedPositionMs: Long) {
-        if (isLiveSession) return
+        if (isLiveSession || isTerminalFailed()) return
 
         lastObservedPositionMs = positionMs
         lastObservedBufferedMs = bufferedPositionMs
 
         if (currentState == VoxPlayerRecoveryState.RECOVERING_SOURCE ||
+            currentState == VoxPlayerRecoveryState.SOURCE_REFRESHED ||
             currentState == VoxPlayerRecoveryState.RECOVERING_NETWORK ||
-            currentState == VoxPlayerRecoveryState.BUFFERING) {
+            currentState == VoxPlayerRecoveryState.RECOVERING_QUALITY ||
+            (currentState == VoxPlayerRecoveryState.BUFFERING && isInternalRecoveryReload)) {
 
-            val wasRecovering = currentState == VoxPlayerRecoveryState.RECOVERING_SOURCE ||
-                    currentState == VoxPlayerRecoveryState.RECOVERING_NETWORK
+            // Playback has just resumed after recovery action.
+            // Transition to RECOVERY_VERIFYING instead of premature success.
+            currentState = VoxPlayerRecoveryState.RECOVERY_VERIFYING
+            verificationStartPositionMs = positionMs
+            verificationStartTimeMs = currentTimeMs()
+            handler.removeCallbacks(verificationRunnable)
+            handler.postDelayed(verificationRunnable, VoxPlayerRecoveryPolicy.VERIFICATION_WINDOW_MS)
 
-            currentState = VoxPlayerRecoveryState.RECOVERED
+            val ctx = buildTelemetryContext("RECOVERY_VERIFYING")
+            ctx["verifyingAtPosMs"] = positionMs.toString()
+            VoxSafeLogger.info(
+                VoxLogCategory.PLAYER,
+                VoxLogCode.PLAYER_RECOVERY_VERIFYING,
+                "Воспроизведение возобновлено, начата проверка устойчивости",
+                ctx
+            )
+            return
+        }
+
+        if (currentState == VoxPlayerRecoveryState.BUFFERING) {
+            currentState = VoxPlayerRecoveryState.IDLE
             handler.removeCallbacksAndMessages(null)
-            actionHandler.hideRecoveryOverlay()
-            actionHandler.onRecoverySucceeded(recoveryGeneration)
+            return
+        }
 
-            if (wasRecovering) {
-                val ctx = HashMap<String, String>()
-                ctx["sessionId"] = currentSessionId.toString()
-                ctx["sourceRecoveries"] = sourceRecoveryCount.toString()
-                ctx["engineSwitches"] = engineSwitchCount.toString()
-                ctx["restoredPositionMs"] = positionMs.toString()
-                VoxSafeLogger.info(
-                    VoxLogCategory.PLAYER,
-                    VoxLogCode.PLAYER_RECOVERY_SUCCEEDED,
-                    "Восстановление воспроизведения завершено успешно",
-                    ctx
-                )
+        if (currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
+            val progressDelta = positionMs - verificationStartPositionMs
+            val elapsed = currentTimeMs() - verificationStartTimeMs
+            if (elapsed >= VoxPlayerRecoveryPolicy.VERIFICATION_WINDOW_MS &&
+                progressDelta >= VoxPlayerRecoveryPolicy.VERIFICATION_MIN_PROGRESS_MS) {
+                confirmRecoverySuccess(positionMs)
             }
-
-            sourceRecoveryCount = 0
-            engineSwitchCount = 0
         }
     }
 
     @Synchronized
+    private fun checkVerificationSuccess() {
+        if (currentState != VoxPlayerRecoveryState.RECOVERY_VERIFYING) return
+
+        val progressDelta = lastObservedPositionMs - verificationStartPositionMs
+        val elapsed = currentTimeMs() - verificationStartTimeMs
+
+        if (elapsed >= VoxPlayerRecoveryPolicy.VERIFICATION_WINDOW_MS &&
+            progressDelta >= VoxPlayerRecoveryPolicy.VERIFICATION_MIN_PROGRESS_MS) {
+            confirmRecoverySuccess(lastObservedPositionMs)
+        } else if (elapsed >= VoxPlayerRecoveryPolicy.VERIFICATION_WINDOW_MS + 4_000L) {
+            // Max verification window exceeded without sufficient progress
+            onVerificationFailed("VERIFICATION_TIMEOUT_NO_PROGRESS")
+        } else {
+            // Still within verification period, check again in 1000ms
+            handler.postDelayed(verificationRunnable, 1_000L)
+        }
+    }
+
+    @Synchronized
+    private fun onVerificationFailed(reason: String) {
+        val safePosMs = Math.max(0L, lastObservedPositionMs - VoxPlayerRecoveryPolicy.POSITION_RESTORE_SAFE_OFFSET_MS)
+        escalateRecovery(safePosMs, true, reason)
+    }
+
+    @Synchronized
+    private fun confirmRecoverySuccess(positionMs: Long) {
+        if (currentState != VoxPlayerRecoveryState.RECOVERY_VERIFYING && !isRecovering()) {
+            return
+        }
+
+        currentState = VoxPlayerRecoveryState.RECOVERED
+        handler.removeCallbacksAndMessages(null)
+        actionHandler.hideRecoveryOverlay()
+        actionHandler.onRecoverySucceeded(recoveryGeneration)
+
+        val ctx = buildTelemetryContext("RECOVERY_SUCCEEDED", activeRecoveryReason, positionMs, "VERIFIED_SUSTAINED")
+        ctx["restoredPositionMs"] = positionMs.toString()
+        VoxSafeLogger.info(
+            VoxLogCategory.PLAYER,
+            VoxLogCode.PLAYER_RECOVERY_SUCCEEDED,
+            "Восстановление воспроизведения подтверждено устойчивым воспроизведением",
+            ctx
+        )
+
+        // Reset limiter after verified sustained playback
+        sourceRecoveryCount = 0
+        engineSwitchCount = 0
+        qualityFallbackCount = 0
+        recoverySequenceId = null
+        activeRecoveryReason = null
+        verificationStartPositionMs = -1L
+        verificationStartTimeMs = 0L
+    }
+
+    @Synchronized
     fun handlePlayerError(error: Throwable?, currentPositionMs: Long, playWhenReady: Boolean): Boolean {
-        if (isLiveSession) return false
+        if (isLiveSession || isTerminalFailed()) return false
 
         val is403 = VoxPlayerRecoveryTestHooks.http403 || VoxPlayerRecoveryPolicy.isStaleOrForbiddenSource(error)
         val isDns = VoxPlayerRecoveryTestHooks.dnsFailure || VoxPlayerRecoveryPolicy.isDnsFailure(error)
 
         if (is403) {
-            return triggerSourceRefresh(currentPositionMs, playWhenReady, "HTTP_403_FORBIDDEN")
+            escalateRecovery(currentPositionMs, playWhenReady, "HTTP_403_FORBIDDEN")
+            return true
         }
 
         if (isDns) {
-            return triggerEngineFailover(currentPositionMs, playWhenReady, "DNS_FAILURE")
+            if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
+                return triggerEngineFailover(currentPositionMs, playWhenReady, "DNS_FAILURE")
+            } else {
+                triggerTerminalFailure("DNS_FAILURE_EXHAUSTED")
+                return true
+            }
+        }
+
+        if (VoxPlayerRecoveryPolicy.isConnectionReset(error)) {
+            escalateRecovery(currentPositionMs, playWhenReady, "CONNECTION_RESET")
+            return true
+        }
+
+        if (VoxPlayerRecoveryPolicy.isConnectTimeout(error) || VoxPlayerRecoveryPolicy.isReadTimeout(error)) {
+            escalateRecovery(currentPositionMs, playWhenReady, "SOCKET_TIMEOUT")
+            return true
         }
 
         if (VoxPlayerRecoveryPolicy.isNetworkTransportError(error)) {
-            if (sourceRecoveryCount < VoxPlayerRecoveryPolicy.MAX_SOURCE_RECOVERIES) {
-                return triggerSourceRefresh(currentPositionMs, playWhenReady, "NETWORK_TRANSPORT_ERROR")
-            } else if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
-                return triggerEngineFailover(currentPositionMs, playWhenReady, "NETWORK_TRANSPORT_FALLBACK")
-            } else {
-                triggerTerminalFailure("NETWORK_TRANSPORT_EXHAUSTED")
-                return true
-            }
+            escalateRecovery(currentPositionMs, playWhenReady, "NETWORK_TRANSPORT_ERROR")
+            return true
         }
 
         return false
     }
 
     private fun onStallWatchdogTriggered(gen: Long, playWhenReady: Boolean) {
-        if (currentState != VoxPlayerRecoveryState.BUFFERING) return
+        if (currentState != VoxPlayerRecoveryState.BUFFERING &&
+            currentState != VoxPlayerRecoveryState.RECOVERING_SOURCE &&
+            currentState != VoxPlayerRecoveryState.RECOVERING_NETWORK &&
+            currentState != VoxPlayerRecoveryState.RECOVERING_QUALITY &&
+            currentState != VoxPlayerRecoveryState.SOURCE_REFRESHED) return
 
         if (VoxPlayerRecoveryTestHooks.slowNetworkWithProgress) {
             scheduleStallWatchdog(gen, currentSessionId, playWhenReady)
             return
         }
 
-        if (sourceRecoveryCount < VoxPlayerRecoveryPolicy.MAX_SOURCE_RECOVERIES) {
-            triggerSourceRefresh(lastObservedPositionMs, playWhenReady, "BUFFER_STALL_WATCHDOG")
+        escalateRecovery(lastObservedPositionMs, playWhenReady, "BUFFER_STALL_WATCHDOG")
+    }
+
+    @Synchronized
+    private fun escalateRecovery(currentPosMs: Long, playWhenReady: Boolean, reason: String) {
+        if (sourceRecoveryCount < VoxPlayerRecoveryPolicy.MAX_SOURCE_RECOVERIES && !VoxPlayerRecoveryTestHooks.sourceRefreshFailure) {
+            triggerSourceRefresh(currentPosMs, playWhenReady, reason)
         } else if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
-            triggerEngineFailover(lastObservedPositionMs, playWhenReady, "BUFFER_STALL_ENGINE_FALLBACK")
+            triggerEngineFailover(currentPosMs, playWhenReady, reason)
+        } else if (qualityFallbackCount < VoxPlayerRecoveryPolicy.MAX_QUALITY_FALLBACKS && canTriggerQualityFallback(reason)) {
+            triggerQualityFallback(currentPosMs, playWhenReady, reason)
         } else {
-            triggerTerminalFailure("MAX_ATTEMPTS_EXHAUSTED")
+            val terminalReason = if (reason.contains("DNS") || VoxPlayerRecoveryPolicy.isDnsFailureReason(reason)) {
+                "DNS_FAILURE_EXHAUSTED"
+            } else {
+                "MAX_ATTEMPTS_EXHAUSTED"
+            }
+            triggerTerminalFailure(terminalReason)
+        }
+    }
+
+    private fun canTriggerQualityFallback(reason: String = activeRecoveryReason ?: ""): Boolean {
+        // Quality fallback is strictly for high bitrate buffer exhaustion, NEVER for pure DNS failure!
+        if (reason.contains("DNS") || VoxPlayerRecoveryPolicy.isDnsFailureReason(reason)) {
+            return false
+        }
+        return currentHeight >= 2160 || currentBitrate >= 35_000_000L || VoxPlayerRecoveryTestHooks.forceQualityFallbackEligible
+    }
+
+    private fun ensureRecoverySequenceId(reason: String) {
+        if (recoverySequenceId == null) {
+            recoverySequenceId = "REC-" + UUID.randomUUID().toString().substring(0, 8)
+            recoveryStartTimeMs = currentTimeMs()
+            activeRecoveryReason = reason
         }
     }
 
@@ -302,10 +463,14 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
             if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
                 return triggerEngineFailover(currentPosMs, playWhenReady, reason + "_FALLBACK_ENGINE")
             }
+            if (qualityFallbackCount < VoxPlayerRecoveryPolicy.MAX_QUALITY_FALLBACKS && canTriggerQualityFallback()) {
+                return triggerQualityFallback(currentPosMs, playWhenReady, reason + "_FALLBACK_QUALITY")
+            }
             triggerTerminalFailure(reason + "_EXHAUSTED")
             return true
         }
 
+        ensureRecoverySequenceId(reason)
         sourceRecoveryCount++
         recoveryGeneration++
         isInternalRecoveryReload = true
@@ -313,14 +478,9 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         currentState = VoxPlayerRecoveryState.RECOVERING_SOURCE
 
         val safePosMs = Math.max(0L, currentPosMs - VoxPlayerRecoveryPolicy.POSITION_RESTORE_SAFE_OFFSET_MS)
+        actionHandler.showRecoveryOverlay(R.string.vox_fixing_playback)
 
-        actionHandler.showRecoveryOverlay(R.string.vox_fixing_connection)
-
-        val ctx = HashMap<String, String>()
-        ctx["sessionId"] = currentSessionId.toString()
-        ctx["recoveryAttempt"] = sourceRecoveryCount.toString()
-        ctx["reason"] = reason
-        ctx["targetPosMs"] = safePosMs.toString()
+        val ctx = buildTelemetryContext("RECOVERY_STARTED", reason, safePosMs)
         VoxSafeLogger.warn(
             VoxLogCategory.PLAYER,
             VoxLogCode.PLAYER_RECOVERY_STARTED,
@@ -334,10 +494,19 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
     private fun triggerEngineFailover(currentPosMs: Long, playWhenReady: Boolean, reason: String): Boolean {
         if (engineSwitchCount >= VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
-            triggerTerminalFailure("ENGINE_SWITCH_LIMIT_EXHAUSTED")
+            if (qualityFallbackCount < VoxPlayerRecoveryPolicy.MAX_QUALITY_FALLBACKS && canTriggerQualityFallback(reason)) {
+                return triggerQualityFallback(currentPosMs, playWhenReady, reason + "_FALLBACK_QUALITY")
+            }
+            val terminalReason = if (reason.contains("DNS") || VoxPlayerRecoveryPolicy.isDnsFailureReason(reason)) {
+                "DNS_FAILURE_EXHAUSTED"
+            } else {
+                "ENGINE_SWITCH_LIMIT_EXHAUSTED"
+            }
+            triggerTerminalFailure(terminalReason)
             return true
         }
 
+        ensureRecoverySequenceId(reason)
         engineSwitchCount++
         recoveryGeneration++
         isInternalRecoveryReload = true
@@ -352,15 +521,10 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         currentEngine = nextEngine
 
         val safePosMs = Math.max(0L, currentPosMs - VoxPlayerRecoveryPolicy.POSITION_RESTORE_SAFE_OFFSET_MS)
+        actionHandler.showRecoveryOverlay(R.string.vox_fixing_playback)
 
-        actionHandler.showRecoveryOverlay(R.string.vox_fixing_connection)
-
-        val ctx = HashMap<String, String>()
-        ctx["sessionId"] = currentSessionId.toString()
-        ctx["engineSwitchAttempt"] = engineSwitchCount.toString()
+        val ctx = buildTelemetryContext("RECOVERY_NETWORK", reason, safePosMs)
         ctx["nextEngine"] = nextEngine.toString()
-        ctx["reason"] = reason
-        ctx["targetPosMs"] = safePosMs.toString()
         VoxSafeLogger.warn(
             VoxLogCategory.NETWORK,
             VoxLogCode.DNS_RECOVERY_STARTED,
@@ -372,17 +536,46 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         return true
     }
 
+    private fun triggerQualityFallback(currentPosMs: Long, playWhenReady: Boolean, reason: String): Boolean {
+        if (qualityFallbackCount >= VoxPlayerRecoveryPolicy.MAX_QUALITY_FALLBACKS) {
+            triggerTerminalFailure("QUALITY_FALLBACK_LIMIT_EXHAUSTED")
+            return true
+        }
+
+        ensureRecoverySequenceId(reason)
+        qualityFallbackCount++
+        recoveryGeneration++
+        isInternalRecoveryReload = true
+        val gen = recoveryGeneration
+        currentState = VoxPlayerRecoveryState.RECOVERING_QUALITY
+
+        val safePosMs = Math.max(0L, currentPosMs - VoxPlayerRecoveryPolicy.POSITION_RESTORE_SAFE_OFFSET_MS)
+        actionHandler.showRecoveryOverlay(R.string.vox_fixing_playback)
+
+        val ctx = buildTelemetryContext("RECOVERY_QUALITY", reason, safePosMs)
+        VoxSafeLogger.warn(
+            VoxLogCategory.PLAYER,
+            VoxLogCode.PLAYER_RECOVERY_STARTED,
+            "Запущено снижение качества потока для восстановления воспроизведения",
+            ctx
+        )
+
+        val handled = actionHandler.onQualityFallbackRequested(safePosMs, playWhenReady, gen)
+        if (!handled) {
+            triggerTerminalFailure("QUALITY_FALLBACK_NOT_AVAILABLE")
+            return false
+        }
+        return true
+    }
+
     private fun triggerTerminalFailure(reason: String) {
         currentState = VoxPlayerRecoveryState.FAILED
         handler.removeCallbacksAndMessages(null)
         actionHandler.hideBufferingSpinner()
         actionHandler.hideRecoveryOverlay()
 
-        val ctx = HashMap<String, String>()
-        ctx["sessionId"] = currentSessionId.toString()
+        val ctx = buildTelemetryContext("RECOVERY_EXHAUSTED", reason, lastObservedPositionMs)
         ctx["finalReason"] = reason
-        ctx["sourceRecoveries"] = sourceRecoveryCount.toString()
-        ctx["engineSwitches"] = engineSwitchCount.toString()
         VoxSafeLogger.error(
             VoxLogCategory.PLAYER,
             VoxLogCode.PLAYER_RECOVERY_FAILED,
@@ -394,13 +587,77 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         val retryRunnable = Runnable {
             retryManual()
         }
-        actionHandler.onRecoveryFailed(recoveryGeneration, retryRunnable)
+        actionHandler.onRecoveryFailed(recoveryGeneration, reason, retryRunnable)
+    }
+
+    private fun buildTelemetryContext(
+        stage: String,
+        reason: String? = activeRecoveryReason,
+        targetPosMs: Long = lastObservedPositionMs,
+        verificationResult: String? = null
+    ): HashMap<String, String> {
+        val ctx = HashMap<String, String>()
+        val seqId = recoverySequenceId ?: "REC-$currentSessionId"
+        ctx["recoverySequenceId"] = seqId
+        ctx["playbackSessionId"] = currentSessionId.toString()
+        val totalAttempts = sourceRecoveryCount + engineSwitchCount + qualityFallbackCount
+        ctx["recoveryAttempt"] = totalAttempts.toString()
+        ctx["sourceRefreshCount"] = sourceRecoveryCount.toString()
+        ctx["engineSwitchCount"] = engineSwitchCount.toString()
+        ctx["qualityFallbackCount"] = qualityFallbackCount.toString()
+        ctx["recoveryReason"] = reason ?: "UNKNOWN"
+        ctx["recoveryStage"] = stage
+        val elapsed = if (recoveryStartTimeMs > 0L) currentTimeMs() - recoveryStartTimeMs else 0L
+        ctx["recoveryElapsedMs"] = elapsed.toString()
+        val bufferAhead = Math.max(0L, lastObservedBufferedMs - lastObservedPositionMs)
+        ctx["bufferAheadMs"] = bufferAhead.toString()
+        ctx["selectedCodec"] = currentCodec ?: "UNKNOWN"
+        ctx["selectedHeight"] = if (currentHeight > 0) currentHeight.toString() else "UNKNOWN"
+        ctx["selectedBitrate"] = if (currentBitrate > 0L) currentBitrate.toString() else "UNKNOWN"
+        val engineStr = when (currentEngine) {
+            PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP -> "OKHTTP"
+            PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET -> "CRONET"
+            else -> "DEFAULT"
+        }
+        ctx["networkEngine"] = engineStr
+        val isDns = reason?.contains("DNS") == true || VoxPlayerRecoveryPolicy.isDnsFailureReason(reason)
+        ctx["dnsResolutionFailed"] = isDns.toString()
+        val isTimeout = reason?.contains("TIMEOUT") == true
+        ctx["connectionTimeout"] = isTimeout.toString()
+        if (isDns) {
+            ctx["networkFailureType"] = "DNS_RESOLUTION_FAILED"
+        } else if (isTimeout) {
+            ctx["networkFailureType"] = "TIMEOUT"
+        } else if (reason?.contains("RESET") == true) {
+            ctx["networkFailureType"] = "CONNECTION_RESET"
+        } else if (reason?.contains("403") == true || reason?.contains("HTTP") == true) {
+            ctx["networkFailureType"] = "HTTP_ERROR"
+        } else {
+            ctx["networkFailureType"] = "BUFFER_STALL"
+        }
+        if (verificationResult != null) {
+            ctx["verificationResult"] = verificationResult
+            ctx["recoveryVerificationResult"] = verificationResult
+        }
+        if (stage == "RECOVERY_EXHAUSTED") {
+            ctx["finalRecoveryReason"] = reason ?: "UNKNOWN"
+        }
+        ctx["targetPosMs"] = targetPosMs.toString()
+        return ctx
     }
 
     @Synchronized
     fun retryManual() {
+        if (isRecovering()) {
+            return
+        }
         sourceRecoveryCount = 0
         engineSwitchCount = 0
+        qualityFallbackCount = 0
+        recoverySequenceId = null
+        activeRecoveryReason = null
+        verificationStartPositionMs = -1L
+        verificationStartTimeMs = 0L
         recoveryGeneration++
         currentState = VoxPlayerRecoveryState.IDLE
         val safePosMs = Math.max(0L, lastObservedPositionMs - VoxPlayerRecoveryPolicy.POSITION_RESTORE_SAFE_OFFSET_MS)
@@ -413,6 +670,10 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         handler.removeCallbacksAndMessages(null)
         isInternalRecoveryReload = false
         lastObservedProgressTimestampMs = 0L
+        verificationStartPositionMs = -1L
+        verificationStartTimeMs = 0L
+        recoverySequenceId = null
+        activeRecoveryReason = null
         currentState = VoxPlayerRecoveryState.IDLE
     }
 }

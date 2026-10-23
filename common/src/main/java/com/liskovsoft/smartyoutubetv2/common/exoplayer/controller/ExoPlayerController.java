@@ -74,6 +74,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private boolean mOfflineReadyLogged = false;
     private static final java.util.concurrent.atomic.AtomicInteger sSessionSeq = new java.util.concurrent.atomic.AtomicInteger(0);
     private int mPlaybackSessionId = 0;
+    private boolean mLastIsDecoderError = false;
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -648,14 +649,24 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         } else if (error.type == ExoPlaybackException.TYPE_RENDERER) {
             logCode = VoxLogCode.PLAYER_DECODER_ERROR;
         } else if (error.type == ExoPlaybackException.TYPE_SOURCE) {
-            if (isLocalSource) {
-                logCode = VoxLogCode.PLAYER_LOCAL_SOURCE_ERROR;
-            } else if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException ||
-                       nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.HttpDataSourceException) {
-                logCode = VoxLogCode.PLAYER_HTTP_ERROR;
-            } else {
-                logCode = VoxLogCode.PLAYER_SOURCE_ERROR;
+            logCode = com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.classifyPlayerSourceError(nested, isLocalSource);
+            String netFailureType = com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.classifyNetworkFailureType(nested);
+            errorCtx.put("networkFailureType", netFailureType);
+            if (com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isDnsFailure(nested)) {
+                errorCtx.put("dnsResolutionFailed", "true");
             }
+            if (com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isConnectTimeout(nested) ||
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isReadTimeout(nested)) {
+                errorCtx.put("connectionTimeout", "true");
+            }
+            long bufferAhead = Math.max(0L, mPlayer != null ? mPlayer.getBufferedPosition() - mPlayer.getCurrentPosition() : 0L);
+            errorCtx.put("bufferAheadMs", String.valueOf(bufferAhead));
+        }
+        boolean isDecoderErr = (error.type == ExoPlaybackException.TYPE_RENDERER) || (nested instanceof android.media.MediaCodec.CodecException) || (nested.getClass().getName().contains("MediaCodec"));
+        mLastIsDecoderError = isDecoderErr;
+        if (isDecoderErr) {
+            errorCtx.put("isDecoderError", "true");
+            errorCtx.put("rootCause", com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.classifyRebuffer(0L, 0L, 0L, 0, false, 0, true).name());
         }
         VoxSafeLogger.e(VoxLogCategory.PLAYER, logCode, "Сбой воспроизведения ExoPlayer", errorCtx, null);
 
@@ -781,6 +792,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                 );
             }
             mEventListener.onPlay();
+            mLastIsDecoderError = false;
             if (com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
                 com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onFirstFrame(getVideo(), 0);
                 com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onAudioStart(getVideo(), 0);
@@ -841,7 +853,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
                     com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxBufferRootCause rootCause =
                             com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.classifyRebuffer(
-                                    bitrate, buffered, 0L, 0, height >= 2160, 0);
+                                    bitrate, buffered, 0L, 0, height >= 2160, 0, mLastIsDecoderError);
+                    if (mLastIsDecoderError) ctx.put("isDecoderError", "true");
                     ctx.put("rootCause", rootCause.name());
 
                     VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_REBUFFER, "Буферизация потока", ctx);

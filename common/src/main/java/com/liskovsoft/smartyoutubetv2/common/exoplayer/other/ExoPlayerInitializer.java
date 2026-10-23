@@ -115,12 +115,13 @@ public class ExoPlayerInitializer {
             case PlayerData.BUFFER_HIGHEST:
                 minBufferMs = 50_000;
                 maxBufferMs = 100_000;
-                baseBuilder.setTargetBufferBytes(mMaxBufferBytes);
+                baseBuilder.setTargetBufferBytes(Math.min(mMaxBufferBytes, 96 * 1024 * 1024));
                 baseBuilder.setBackBuffer(minBufferMs, true);
                 break;
             case PlayerData.BUFFER_HIGH:
                 minBufferMs = 50_000;
                 maxBufferMs = 50_000;
+                baseBuilder.setTargetBufferBytes(voxCfg.getTargetBufferBytes());
                 baseBuilder.setBackBuffer(minBufferMs, true);
                 break;
             case PlayerData.BUFFER_MEDIUM:
