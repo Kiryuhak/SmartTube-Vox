@@ -108,7 +108,7 @@ export class TelegramClient {
 
         if (response.ok) {
           const resJson = await response.json().catch(() => null);
-          if (!resJson || resJson.ok !== true || !resJson.result || (typeof resJson.result === 'object' && resJson.result.message_id === undefined && typeof resJson.result !== 'boolean')) {
+          if (!resJson || resJson.ok !== true || resJson.result === undefined || resJson.result === null) {
             const errDescription = resJson?.description || 'INVALID_TELEGRAM_JSON_RESPONSE';
             logTelegramEvent('TELEGRAM_NOTIFY_FAILED', {
               status: response.status,
@@ -243,6 +243,85 @@ export class TelegramClient {
     }
 
     return this._request('sendDocument', formData, true);
+  }
+
+  /**
+   * Получение информации о боте (getMe).
+   */
+  async getMe() {
+    return this._request('getMe', {}, false);
+  }
+
+  /**
+   * Получение последних апдейтов при polling (getUpdates).
+   */
+  async getUpdates({ offset, limit = 10, timeout = 0 } = {}) {
+    const payload = { limit, timeout };
+    if (offset !== undefined) payload.offset = offset;
+    return this._request('getUpdates', payload, false);
+  }
+
+  /**
+   * Получение текущей конфигурации webhook (getWebhookInfo).
+   */
+  async getWebhookInfo() {
+    return this._request('getWebhookInfo', {}, false);
+  }
+
+  /**
+   * Установка адреса webhook (setWebhook).
+   */
+  async setWebhook({ url, secretToken, allowedUpdates, dropPendingUpdates = false }) {
+    const payload = {
+      url,
+      drop_pending_updates: Boolean(dropPendingUpdates),
+    };
+    if (secretToken) payload.secret_token = secretToken;
+    if (allowedUpdates) payload.allowed_updates = allowedUpdates;
+    return this._request('setWebhook', payload, false);
+  }
+
+  /**
+   * Удаление webhook (deleteWebhook).
+   */
+  async deleteWebhook({ dropPendingUpdates = false } = {}) {
+    return this._request('deleteWebhook', { drop_pending_updates: Boolean(dropPendingUpdates) }, false);
+  }
+
+  /**
+   * Редактирование текста существующего сообщения (editMessageText).
+   */
+  async editMessageText({ chatId, messageId, inlineMessageId, text, parseMode = 'HTML', replyMarkup }) {
+    const payload = {
+      text,
+      parse_mode: parseMode,
+      disable_web_page_preview: true,
+    };
+    if (chatId) payload.chat_id = chatId;
+    if (messageId) payload.message_id = messageId;
+    if (inlineMessageId) payload.inline_message_id = inlineMessageId;
+    if (replyMarkup) payload.reply_markup = replyMarkup;
+
+    const res = await this._request('editMessageText', payload, false);
+    if (!res.ok && res.error && res.error.includes('message is not modified')) {
+      return { ok: true, notModified: true, result: true, attempts: res.attempts };
+    }
+    return res;
+  }
+
+  /**
+   * Ответ на нажатие inline-кнопки (answerCallbackQuery).
+   */
+  async answerCallbackQuery({ callbackQueryId, text, showAlert = false, url, cacheTime = 0 }) {
+    const payload = {
+      callback_query_id: callbackQueryId,
+      show_alert: Boolean(showAlert),
+      cache_time: cacheTime,
+    };
+    if (text) payload.text = text;
+    if (url) payload.url = url;
+
+    return this._request('answerCallbackQuery', payload, false);
   }
 }
 

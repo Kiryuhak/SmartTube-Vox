@@ -23,6 +23,12 @@ export const STATUSES = [
   'WONT_FIX',
 ];
 export const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+export const EVENT_FRESHNESS = [
+  'NEW_AFTER_RELEASE',
+  'HISTORICAL',
+  'RECURRING',
+  'UNKNOWN_AGE',
+];
 export const USER_FRIENDLY_ISSUE_LABELS_RU = {
   PLAYER_REBUFFER: 'Повторная буферизация видео',
   PLAYER_STARTUP_SLOW: 'Видео долго запускается',
@@ -944,4 +950,47 @@ export function getDerivedStatus(report = {}, classification = null) {
   }
 
   return 'NEW';
+}
+
+
+/**
+ * Оценивает актуальность событий в отчёте (Event Freshness),
+ * отделяя её от workflow-статуса отчёта (Report Status).
+ */
+export function calculateEventFreshness(report = {}, classification = null) {
+  const p = report.payload || report;
+  const c = classification || classifyReport(p);
+  const events = c.events || p.safeRecentEvents || p.events || [];
+
+  if (!events || events.length === 0) {
+    const rawTs = p.timestamp || p.created_at || report.timestamp || report.created_at;
+    if (rawTs) {
+      const ts = Number(rawTs);
+      if (Number.isFinite(ts) && ts > 0) {
+        // Cutoff: VOX 9.1 release timestamp (Oct 21, 2026 UTC)
+        const RELEASE_9_1_CUTOFF = 1792540800000;
+        return ts >= RELEASE_9_1_CUTOFF ? 'NEW_AFTER_RELEASE' : 'HISTORICAL';
+      }
+    }
+    return 'UNKNOWN_AGE';
+  }
+
+  // Рекуррентные / повторяющиеся сбои
+  const errorEvents = events.filter(e => !e.isSyntheticFixture && (e.level === 'ERROR' || ['HIGH', 'CRITICAL'].includes(e.severity) || (e.event && e.event.includes('REBUFFER'))));
+  const hasRebufferRepeat = events.some(e => Number(e.context?.rebufferCount || e.safeContext?.rebufferCount || 0) >= 2);
+  if (errorEvents.length >= 3 || hasRebufferRepeat) {
+    return 'RECURRING';
+  }
+
+  // Активный инцидент после релиза
+  if (c.reportActiveIncident && !c.isHistorical) {
+    return 'NEW_AFTER_RELEASE';
+  }
+
+  // Исторические события
+  if (c.isHistorical || events.every(e => e.isHistorical || e.lifecycle === 'HISTORICAL')) {
+    return 'HISTORICAL';
+  }
+
+  return 'NEW_AFTER_RELEASE';
 }

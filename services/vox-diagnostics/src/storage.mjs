@@ -184,6 +184,9 @@ export class ReportStorage {
     this.issues = new Map();
     this.audit = [];
     this.changes = [];
+    this.installations = new Map();
+    this.heartbeats = new Map();
+    this.dailyAnalytics = new Map();
   }
 
   async recordChange(reportId, kind, action = null) {
@@ -205,6 +208,7 @@ export class ReportStorage {
     const createdAt = report.receivedAt || report.timestamp || Date.now();
     const expiresAt = createdAt + retentionMs;
     const reportId = report.reportId;
+    const installationId = report.installationId || report.installation_id || null;
     const schemaVersion = report.schema || 'vox-diagnostic-report-v2';
     const appVersion = report.appVersion || 'unknown';
     const platform = report.platform || 'unknown';
@@ -277,6 +281,22 @@ export class ReportStorage {
     }
 
     await this.recordChange(reportId, 'CREATED');
+    if (installationId) {
+      await this.recordInstallationActivity({
+        installationId,
+        manufacturer: report.manufacturer || '',
+        model: report.model || '',
+        platform,
+        osVersion: report.osVersion || '',
+        sdkInt: report.sdkInt || 0,
+        appVersion,
+        timestamp: createdAt,
+        isError: Boolean(errorCategory),
+        isHeartbeat: false,
+        reportId,
+        status,
+      });
+    }
     if (errorSignature && classification.reportActiveIncident !== false && !isSynth && reportPurpose !== 'TEST') {
       await this.reopenRegressedIssue(errorSignature, appVersion);
     }
@@ -996,10 +1016,11 @@ export class ReportStorage {
         this.db.prepare(`
           SELECT 
             SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
-            SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED') THEN 1 ELSE 0 END) as count_in_progress,
-            SUM(CASE WHEN UPPER(status) = 'RESOLVED' THEN 1 ELSE 0 END) as count_resolved,
-            SUM(CASE WHEN UPPER(status) IN ('KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
-            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'TEST') THEN 1 ELSE 0 END) as count_ignored_test
+            SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
+            SUM(CASE WHEN UPPER(status) IN ('FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED') THEN 1 ELSE 0 END) as count_fixed_awaiting,
+            SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'CLOSED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
+            SUM(CASE WHEN UPPER(status) IN ('KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
+            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST') THEN 1 ELSE 0 END) as count_ignored_test
           FROM reports
         `).first(),
         this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
@@ -1013,6 +1034,7 @@ export class ReportStorage {
       const reports7d = weekRow?.count || 0;
       const newCount = Number(countsRes?.count_new) || 0;
       const inProgressCount = Number(countsRes?.count_in_progress) || 0;
+      const fixedAwaitingCount = Number(countsRes?.count_fixed_awaiting) || 0;
       const resolvedCount = Number(countsRes?.count_resolved) || 0;
       const knownIssueCount = Number(countsRes?.count_known_issue) || 0;
       const ignoredTestCount = Number(countsRes?.count_ignored_test) || 0;
@@ -1041,12 +1063,17 @@ export class ReportStorage {
 
       return {
         totalReports,
+        total: totalReports,
         reports24h,
+        last24Hours: reports24h,
         reports7d,
+        last7Days: reports7d,
         newCount,
         inProgressCount,
+        fixedAwaitingCount,
         resolvedCount,
         knownIssueCount,
+        knownCount: knownIssueCount,
         ignoredTestCount,
         activeIssuesCount,
         attentionCount,
@@ -1054,7 +1081,31 @@ export class ReportStorage {
         translationCount,
         downloadCount,
         networkCount,
-        statusBreakdown,
+        counts: {
+          count_new: newCount,
+          count_in_progress: inProgressCount,
+          count_fixed_awaiting: fixedAwaitingCount,
+          count_resolved: resolvedCount,
+          count_known: knownIssueCount,
+          count_ignored_test: ignoredTestCount,
+        },
+        statusCounts: {
+          NEW: newCount,
+          IN_PROGRESS: inProgressCount,
+          INVESTIGATING: inProgressCount,
+          FIXED_AWAITING_VERIFICATION: fixedAwaitingCount,
+          RESOLVED: resolvedCount,
+          KNOWN_LIMITATION: knownIssueCount,
+          KNOWN_ISSUE: knownIssueCount,
+          IGNORED_TEST: ignoredTestCount,
+        },
+        statusBreakdown: [
+          { status: 'NEW', label: 'Новый', count: newCount },
+          { status: 'IN_PROGRESS', label: 'В работе', count: inProgressCount },
+          { status: 'RESOLVED', label: 'Решено', count: resolvedCount },
+          { status: 'KNOWN_ISSUE', label: 'Известная проблема', count: knownIssueCount },
+          { status: 'IGNORED_TEST', label: 'Тест / игнор', count: ignoredTestCount },
+        ],
         platformBreakdown: platformsRes?.results || [],
         versionDistribution: versionsRes?.results || [],
         topCategories: categoriesRes?.results || [],
@@ -1068,6 +1119,7 @@ export class ReportStorage {
 
       let newCount = 0;
       let inProgressCount = 0;
+      let fixedAwaitingCount = 0;
       let resolvedCount = 0;
       let knownIssueCount = 0;
       let ignoredTestCount = 0;
@@ -1086,10 +1138,11 @@ export class ReportStorage {
       for (const r of all) {
         const normStatus = normalizeStatus(r.status);
         if (normStatus === 'NEW') newCount++;
-        else if (normStatus === 'IN_PROGRESS') inProgressCount++;
-        else if (normStatus === 'RESOLVED') resolvedCount++;
-        else if (normStatus === 'KNOWN_ISSUE') knownIssueCount++;
-        else if (normStatus === 'IGNORED_TEST') ignoredTestCount++;
+        else if (normStatus === 'IN_PROGRESS' || normStatus === 'INVESTIGATING' || normStatus === 'TRIAGED' || normStatus === 'TESTING' || normStatus === 'FIX_IMPLEMENTED' || normStatus === 'ROOT_CAUSE_FOUND') inProgressCount++;
+        else if (normStatus === 'FIXED_AWAITING_VERIFICATION' || normStatus === 'FIXED_PENDING_VERIFICATION') fixedAwaitingCount++;
+        else if (normStatus === 'RESOLVED' || normStatus === 'VERIFIED' || normStatus === 'CLOSED') resolvedCount++;
+        else if (normStatus === 'KNOWN_LIMITATION' || normStatus === 'KNOWN_ISSUE') knownIssueCount++;
+        else if (normStatus === 'IGNORED_TEST' || normStatus === 'IGNORED') ignoredTestCount++;
 
         const c = String(r.error_category || '').toUpperCase();
         if (c === 'LIVE' || c === 'PLAYBACK') liveCount++;
@@ -1123,12 +1176,17 @@ export class ReportStorage {
 
       return {
         totalReports,
+        total: totalReports,
         reports24h,
+        last24Hours: reports24h,
         reports7d,
+        last7Days: reports7d,
         newCount,
         inProgressCount,
+        fixedAwaitingCount,
         resolvedCount,
         knownIssueCount,
+        knownCount: knownIssueCount,
         ignoredTestCount,
         activeIssuesCount,
         attentionCount,
@@ -1136,7 +1194,31 @@ export class ReportStorage {
         translationCount,
         downloadCount,
         networkCount,
-        statusBreakdown,
+        counts: {
+          count_new: newCount,
+          count_in_progress: inProgressCount,
+          count_fixed_awaiting: fixedAwaitingCount,
+          count_resolved: resolvedCount,
+          count_known: knownIssueCount,
+          count_ignored_test: ignoredTestCount,
+        },
+        statusCounts: {
+          NEW: newCount,
+          IN_PROGRESS: inProgressCount,
+          INVESTIGATING: inProgressCount,
+          FIXED_AWAITING_VERIFICATION: fixedAwaitingCount,
+          RESOLVED: resolvedCount,
+          KNOWN_LIMITATION: knownIssueCount,
+          KNOWN_ISSUE: knownIssueCount,
+          IGNORED_TEST: ignoredTestCount,
+        },
+        statusBreakdown: [
+          { status: 'NEW', label: 'Новый', count: newCount },
+          { status: 'IN_PROGRESS', label: 'В работе', count: inProgressCount },
+          { status: 'RESOLVED', label: 'Решено', count: resolvedCount },
+          { status: 'KNOWN_ISSUE', label: 'Известная проблема', count: knownIssueCount },
+          { status: 'IGNORED_TEST', label: 'Тест / игнор', count: ignoredTestCount },
+        ],
         platformBreakdown: Array.from(platformsMap.entries()).map(([platform, count]) => ({ platform, count })),
         versionDistribution: Array.from(versionsMap.entries()).map(([app_version, count]) => ({ app_version, count })).slice(0, 8),
         topCategories: Array.from(categoriesMap.entries()).map(([error_category, count]) => ({ error_category, count })).slice(0, 8),
@@ -1176,4 +1258,385 @@ export class ReportStorage {
       return deleted;
     }
   }
+
+  async recordInstallationActivity({
+    installationId,
+    manufacturer = '',
+    model = '',
+    platform = '',
+    osVersion = '',
+    sdkInt = 0,
+    appVersion = '',
+    timestamp = Date.now(),
+    isError = false,
+    isHeartbeat = false,
+    reportId = null,
+    status = 'NEW'
+  } = {}) {
+    if (!installationId || typeof installationId !== 'string') return null;
+    const cleanId = installationId.trim();
+    if (!cleanId) return null;
+
+    let inst = this.installations.get(cleanId);
+    if (!inst) {
+      inst = {
+        installationId: cleanId,
+        manufacturer,
+        model,
+        platform,
+        androidVersion: osVersion,
+        sdkInt,
+        currentAppVersion: appVersion,
+        firstSeenAt: timestamp,
+        lastSeenAt: timestamp,
+        lastHeartbeatAt: isHeartbeat ? timestamp : 0,
+        reportsCount: isHeartbeat ? 0 : 1,
+        errorCount: isError ? 1 : 0,
+        appVersionHistory: appVersion ? [appVersion] : [],
+        reports: [],
+      };
+      this.installations.set(cleanId, inst);
+    } else {
+      inst.lastSeenAt = Math.max(inst.lastSeenAt || 0, timestamp);
+      if (manufacturer && !inst.manufacturer) inst.manufacturer = manufacturer;
+      if (model && !inst.model) inst.model = model;
+      if (platform && !inst.platform) inst.platform = platform;
+      if (osVersion && !inst.androidVersion) inst.androidVersion = osVersion;
+      if (sdkInt && !inst.sdkInt) inst.sdkInt = sdkInt;
+      if (appVersion) {
+        inst.currentAppVersion = appVersion;
+        if (!inst.appVersionHistory.includes(appVersion)) {
+          inst.appVersionHistory.push(appVersion);
+        }
+      }
+      if (isHeartbeat) {
+        inst.lastHeartbeatAt = timestamp;
+      } else {
+        inst.reportsCount = (inst.reportsCount || 0) + 1;
+      }
+      if (isError) {
+        inst.errorCount = (inst.errorCount || 0) + 1;
+      }
+    }
+
+    if (reportId && !isHeartbeat) {
+      if (!inst.reports.some(r => r.reportId === reportId)) {
+        inst.reports.push({ reportId, status, timestamp, errorCategory: isError ? 'ERROR' : null });
+      }
+    }
+
+    if (this.db) {
+      try {
+        const stmt = this.db.prepare(
+          `INSERT INTO installations (
+            installation_id, manufacturer, model, platform, android_version,
+            sdk_int, current_app_version, first_seen_at, last_seen_at,
+            last_heartbeat_at, reports_count, error_count, app_version_history
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(installation_id) DO UPDATE SET
+            manufacturer = CASE WHEN excluded.manufacturer != '' THEN excluded.manufacturer ELSE installations.manufacturer END,
+            model = CASE WHEN excluded.model != '' THEN excluded.model ELSE installations.model END,
+            platform = CASE WHEN excluded.platform != '' THEN excluded.platform ELSE installations.platform END,
+            android_version = CASE WHEN excluded.android_version != '' THEN excluded.android_version ELSE installations.android_version END,
+            sdk_int = CASE WHEN excluded.sdk_int > 0 THEN excluded.sdk_int ELSE installations.sdk_int END,
+            current_app_version = CASE WHEN excluded.current_app_version != '' THEN excluded.current_app_version ELSE installations.current_app_version END,
+            last_seen_at = excluded.last_seen_at,
+            last_heartbeat_at = CASE WHEN excluded.last_heartbeat_at > 0 THEN excluded.last_heartbeat_at ELSE installations.last_heartbeat_at END,
+            reports_count = installations.reports_count + excluded.reports_count,
+            error_count = installations.error_count + excluded.error_count,
+            app_version_history = excluded.app_version_history`
+        );
+        await stmt.bind(
+          cleanId,
+          inst.manufacturer || '',
+          inst.model || '',
+          inst.platform || '',
+          inst.androidVersion || '',
+          inst.sdkInt || 0,
+          inst.currentAppVersion || '',
+          inst.firstSeenAt,
+          inst.lastSeenAt,
+          inst.lastHeartbeatAt || 0,
+          isHeartbeat ? 0 : 1,
+          isError ? 1 : 0,
+          JSON.stringify(inst.appVersionHistory)
+        ).run();
+      } catch (err) {}
+    }
+
+    return inst;
+  }
+
+  async recordHeartbeat(data = {}) {
+    const { installationId, appVersion, platform, manufacturer, model, sdkInt, timestamp } = data;
+    if (!installationId || typeof installationId !== 'string') {
+      throw new Error('installationId is required for heartbeat');
+    }
+    const ts = timestamp || Date.now();
+    return this.recordInstallationActivity({
+      installationId,
+      appVersion,
+      platform,
+      manufacturer,
+      model,
+      sdkInt,
+      timestamp: ts,
+      isHeartbeat: true,
+      isError: false,
+    });
+  }
+
+  async getDevices({ search = '', limit = 50, offset = 0 } = {}) {
+    const term = search ? search.toLowerCase().trim() : '';
+
+    const allInstMap = new Map();
+    for (const [id, inst] of this.installations.entries()) {
+      allInstMap.set(id, { ...inst, reports: [...(inst.reports || [])] });
+    }
+
+    const unassignedReports = [];
+    const allReports = Array.from(this.inMemoryReports.values());
+    for (const r of allReports) {
+      let p = {};
+      try { p = typeof r.payload_json === 'string' ? JSON.parse(r.payload_json) : (r.payload || {}); } catch (_) {}
+      const installId = r.installation_id || p.installationId || p.installation_id;
+      const reportId = r.report_id || r.reportId;
+      const status = normalizeStatus(r.status || 'NEW');
+      const ts = r.created_at || r.createdAt || Date.now();
+      const model = p.model || r.device_family || 'Unknown Model';
+      const manufacturer = p.manufacturer || '';
+
+      if (installId && typeof installId === 'string' && installId.trim()) {
+        const cleanId = installId.trim();
+        let inst = allInstMap.get(cleanId);
+        if (!inst) {
+          inst = {
+            installationId: cleanId,
+            manufacturer,
+            model,
+            platform: r.platform || '',
+            androidVersion: p.osVersion || '',
+            sdkInt: p.sdkInt || 0,
+            currentAppVersion: r.app_version || 'unknown',
+            firstSeenAt: ts,
+            lastSeenAt: ts,
+            lastHeartbeatAt: 0,
+            reportsCount: 0,
+            errorCount: r.error_category ? 1 : 0,
+            appVersionHistory: r.app_version ? [r.app_version] : [],
+            reports: [],
+          };
+          allInstMap.set(cleanId, inst);
+        }
+        if (!inst.reports.some(item => item.reportId === reportId)) {
+          inst.reports.push({ reportId, status, timestamp: ts, errorCategory: r.error_category });
+          inst.reportsCount = inst.reports.length;
+        }
+        inst.firstSeenAt = Math.min(inst.firstSeenAt || ts, ts);
+        inst.lastSeenAt = Math.max(inst.lastSeenAt || ts, ts);
+      } else {
+        unassignedReports.push({
+          reportId,
+          model,
+          manufacturer,
+          status,
+          appVersion: r.app_version || 'unknown',
+          createdAt: ts,
+          errorCategory: r.error_category,
+        });
+      }
+    }
+
+    const modelGroupsMap = new Map();
+    for (const inst of allInstMap.values()) {
+      if (term) {
+        const matches = (inst.installationId && inst.installationId.toLowerCase().includes(term)) ||
+          (inst.model && inst.model.toLowerCase().includes(term)) ||
+          (inst.manufacturer && inst.manufacturer.toLowerCase().includes(term)) ||
+          (inst.currentAppVersion && inst.currentAppVersion.toLowerCase().includes(term));
+        if (!matches) continue;
+      }
+
+      const modelKey = inst.model || 'Unknown Model';
+      let group = modelGroupsMap.get(modelKey);
+      if (!group) {
+        group = {
+          model: modelKey,
+          manufacturer: inst.manufacturer || '',
+          installationsCount: 0,
+          reportsCount: 0,
+          installations: [],
+        };
+        modelGroupsMap.set(modelKey, group);
+      }
+
+      const activeInvestigations = inst.reports.filter(r => r.status === 'INVESTIGATING').length;
+      const independentIncidents = new Set(inst.reports.map(r => r.errorCategory || r.reportId)).size;
+
+      group.installations.push({
+        installationId: inst.installationId,
+        manufacturer: inst.manufacturer,
+        model: inst.model,
+        androidVersion: inst.androidVersion,
+        sdkInt: inst.sdkInt,
+        voxVersion: inst.currentAppVersion,
+        firstSeenAt: inst.firstSeenAt,
+        lastSeenAt: inst.lastSeenAt,
+        reportsCount: inst.reportsCount,
+        activeInvestigationsCount: activeInvestigations,
+        independentIncidentsCount: independentIncidents,
+        appVersionHistory: inst.appVersionHistory || [],
+        reports: inst.reports,
+      });
+
+      group.installationsCount++;
+      group.reportsCount += inst.reportsCount;
+    }
+
+    const models = Array.from(modelGroupsMap.values());
+    models.sort((a, b) => b.reportsCount - a.reportsCount);
+
+    return {
+      totalInstallations: allInstMap.size,
+      modelsCount: models.length,
+      models: models.slice(offset, offset + limit),
+      unassignedReportsCount: unassignedReports.length,
+      unassignedReports,
+    };
+  }
+
+  async getAnalytics({ period = '7d', now = Date.now() } = {}) {
+    const periodMap = {
+      '1d': 24 * 3600 * 1000,
+      '3d': 3 * 24 * 3600 * 1000,
+      '7d': 7 * 24 * 3600 * 1000,
+      '30d': 30 * 24 * 3600 * 1000,
+      '90d': 90 * 24 * 3600 * 1000,
+      'all': 365 * 24 * 3600 * 1000,
+    };
+    const durationMs = periodMap[period] || periodMap['7d'];
+    const periodStart = now - durationMs;
+    const onlineThreshold = now - (45 * 60 * 1000);
+
+    const devicesData = await this.getDevices({ limit: 10000 });
+    const allInstallations = [];
+    for (const m of devicesData.models) {
+      allInstallations.push(...m.installations);
+    }
+
+    let activeNow = 0;
+    let activeInPeriod = 0;
+    let newInPeriod = 0;
+    let returningInPeriod = 0;
+    let upgradedInstallations = 0;
+    let installationsWithErrors = 0;
+    let totalIncidents = 0;
+
+    const versionDist = Object.create(null);
+    const manufacturerDist = Object.create(null);
+    const modelDist = Object.create(null);
+    const apiDist = Object.create(null);
+    const errorCatDist = Object.create(null);
+    const versionTransitions = [];
+
+    const daysCount = Math.max(1, Math.min(90, Math.ceil(durationMs / (24 * 3600 * 1000))));
+    const timeline = [];
+    for (let d = daysCount - 1; d >= 0; d--) {
+      const dStart = now - (d + 1) * 24 * 3600 * 1000;
+      const dEnd = now - d * 24 * 3600 * 1000;
+      const dateKey = new Date(dStart).toISOString().slice(0, 10);
+      timeline.push({ date: dateKey, start: dStart, end: dEnd, active: 0, new: 0, errors: 0 });
+    }
+
+    for (const inst of allInstallations) {
+      const lastSeen = inst.lastSeenAt || 0;
+      const firstSeen = inst.firstSeenAt || lastSeen;
+
+      if (lastSeen >= onlineThreshold) {
+        activeNow++;
+      }
+
+      if (lastSeen >= periodStart) {
+        activeInPeriod++;
+        if (firstSeen >= periodStart) {
+          newInPeriod++;
+        } else {
+          returningInPeriod++;
+        }
+
+        if (inst.appVersionHistory && inst.appVersionHistory.length > 1) {
+          upgradedInstallations++;
+          for (let i = 0; i < inst.appVersionHistory.length - 1; i++) {
+            versionTransitions.push({
+              from: inst.appVersionHistory[i],
+              to: inst.appVersionHistory[i + 1],
+              count: 1,
+            });
+          }
+        }
+
+        const hasErrors = (inst.reports && inst.reports.some(r => r.errorCategory)) || inst.errorCount > 0;
+        if (hasErrors) {
+          installationsWithErrors++;
+        }
+
+        if (inst.voxVersion) versionDist[inst.voxVersion] = (versionDist[inst.voxVersion] || 0) + 1;
+        if (inst.manufacturer) manufacturerDist[inst.manufacturer] = (manufacturerDist[inst.manufacturer] || 0) + 1;
+        if (inst.model) modelDist[inst.model] = (modelDist[inst.model] || 0) + 1;
+        if (inst.sdkInt) {
+          const apiLabel = `API ${inst.sdkInt}${inst.androidVersion ? ' (Android ' + inst.androidVersion + ')' : ''}`;
+          apiDist[apiLabel] = (apiDist[apiLabel] || 0) + 1;
+        }
+
+        for (const bucket of timeline) {
+          if (lastSeen >= bucket.start && lastSeen < bucket.end) {
+            bucket.active++;
+          }
+          if (firstSeen >= bucket.start && firstSeen < bucket.end) {
+            bucket.new++;
+          }
+          if (hasErrors && lastSeen >= bucket.start && lastSeen < bucket.end) {
+            bucket.errors++;
+          }
+        }
+      }
+    }
+
+    for (const r of this.inMemoryReports.values()) {
+      const ts = r.created_at || r.createdAt || 0;
+      if (ts >= periodStart && r.error_category) {
+        errorCatDist[r.error_category] = (errorCatDist[r.error_category] || 0) + 1;
+        totalIncidents++;
+      }
+    }
+
+    const errorRatePercent = activeInPeriod > 0
+      ? Math.round((installationsWithErrors / activeInPeriod) * 1000) / 10
+      : 0;
+    const incidentFrequency = activeInPeriod > 0
+      ? Math.round((totalIncidents / activeInPeriod) * 100) / 100
+      : 0;
+
+    return {
+      period,
+      activeNow,
+      activeInPeriod,
+      totalRegistered: allInstallations.length,
+      newInstallations: newInPeriod,
+      returningInstallations: returningInPeriod,
+      upgradedInstallations,
+      installationsWithErrors,
+      errorRatePercent,
+      incidentFrequency,
+      totalIncidents,
+      timeline,
+      versionDistribution: versionDist,
+      manufacturerDistribution: manufacturerDist,
+      modelDistribution: modelDist,
+      apiLevelDistribution: apiDist,
+      errorCategoryDistribution: errorCatDist,
+      versionTransitions,
+    };
+  }
+
 }

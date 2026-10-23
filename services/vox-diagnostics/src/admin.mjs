@@ -881,7 +881,123 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     #viewIssues tbody td:nth-child(6)::before { content: 'Решено'; }
     #viewIssues tbody td:nth-child(7)::before { content: 'Известно'; }
     #viewIssues tbody td:nth-child(n+3):nth-child(-n+7)::before { display: block; color: var(--text-dim); font-size: 10px; text-transform: uppercase; margin-bottom: 3px; }
-  </style>
+  
+    /* Batch Action Bar */
+    .batch-action-bar {
+      position: sticky;
+      top: 10px;
+      z-index: 100;
+      background: rgba(19, 28, 46, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      animation: slideDown 0.2s ease-out;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .batch-bar-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .batch-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Device Cards */
+    .device-model-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 16px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .device-model-header {
+      padding: 14px 18px;
+      background: var(--surface-alt);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .device-model-header:hover {
+      background: rgba(59, 130, 246, 0.1);
+    }
+    .installations-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .installations-table th, .installations-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      text-align: left;
+    }
+    .install-id-pill {
+      font-family: monospace;
+      font-size: 12px;
+      background: rgba(255,255,255,0.06);
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: #93c5fd;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Analytics Styles */
+    .analytics-period-btn.active {
+      background: var(--accent) !important;
+      color: #fff !important;
+    }
+    .chart-bar-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .chart-bar-label {
+      width: 130px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-muted);
+    }
+    .chart-bar-track {
+      flex: 1;
+      height: 18px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0 10px;
+      position: relative;
+    }
+    .chart-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      border-radius: 4px;
+      transition: width 0.4s ease-out;
+    }
+    .chart-bar-value {
+      width: 45px;
+      text-align: right;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+
+</style>
 </head>
 <body>
   <!-- Header -->
@@ -900,6 +1016,8 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       <div class="action-menu-dropdown">
         <button class="btn" id="headerMoreBtn" title="Ещё действия">⋯</button>
         <div class="action-menu-popup" id="headerMorePopup">
+          <button class="action-menu-item" id="downloadAllPendingZipBtn" style="color: #34d399;">📦 Скачать все незавершённые ZIP (NEW + В работе)</button>
+          <button class="action-menu-item" id="batchInvestigateBtn" style="color: #60a5fa;">🚀 Перевести утверждённые отчёты в «В работе»</button>
           <button class="action-menu-item" id="purgeAllBtn" style="color: var(--danger);">🗑️ Очистить все логи</button>
         </div>
       </div>
@@ -1016,10 +1134,33 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     <button class="nav-tab active" id="tabBtnReports" data-tab="reports">Все отчёты (${reports.length})</button>
     <button class="nav-tab" id="tabBtnIssues" data-tab="issues">Частые проблемы (${groupedIssues.length})</button>
     <button class="nav-tab" id="tabBtnStats" data-tab="metrics" data-tab-name="metrics">Сводка и метрики</button>
+    <button class="nav-tab" id="tabBtnDevices" data-tab="devices">Устройства</button>
+    <button class="nav-tab" id="tabBtnAnalytics" data-tab="analytics">Аналитика</button>
   </div>
 
   <!-- VIEW 1: ВСЕ ОТЧЁТЫ -->
   <div id="viewReports">
+    <!-- Batch Action Floating Toolbar -->
+    <div id="batchActionBar" class="batch-action-bar" style="display: none;">
+      <div class="batch-bar-content">
+        <span class="batch-selected-label">Выбрано отчётов: <strong id="batchSelectedCount">0</strong></span>
+        <div class="batch-actions-group">
+          <select id="batchStatusSelect" class="filter-input-sm">
+            <option value="">Сменить статус...</option>
+            <option value="NEW">Новый (NEW)</option>
+            <option value="INVESTIGATING">В работе (INVESTIGATING)</option>
+            <option value="FIXED_PENDING_VERIFICATION">Исправлено (Ожидает)</option>
+            <option value="RESOLVED">Решено (RESOLVED)</option>
+            <option value="IGNORED">Игнорировать (IGNORED)</option>
+          </select>
+          <button class="btn btn-sm btn-primary" id="batchApplyStatusBtn">Применить</button>
+          <button class="btn btn-sm btn-secondary" id="batchAddNoteBtn">Добавить заметку</button>
+          <button class="btn btn-sm btn-secondary" id="batchDownloadSelectedZipBtn">📦 Скачать ZIP выбранных</button>
+          <button class="btn btn-sm" id="batchClearSelectionBtn" title="Снять выбор">✕</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Category Chips (Operations Dashboard 3.0) -->
     <div class="category-chips" id="categoryChips">
       <button class="category-chip active" type="button" data-chip-category="">ALL</button>
@@ -1301,6 +1442,84 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
             ${(stats.topIssues || []).map(i => `<tr><td style="font-family: monospace; font-size: 11px;">${escapeHtml(i.error_signature)}</td><td><strong>${i.count}</strong></td></tr>`).join('') || '<tr><td colspan="2">Нет данных</td></tr>'}
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- VIEW 4: УСТРОЙСТВА И УСТАНОВКИ -->
+  <div id="viewDevices" style="display: none;">
+    <div class="section-card" style="margin-bottom: 20px;">
+      <div class="filter-bar" style="margin-bottom: 0;">
+        <input type="text" id="deviceSearchInput" placeholder="🔍 Поиск по Installation ID, модели, производителю, версии..." class="filter-input" style="flex: 1;" />
+        <button class="btn btn-secondary" id="refreshDevicesBtn">Обновить устройства</button>
+      </div>
+    </div>
+    <div id="devicesSummaryKpis" class="kpi-primary-grid" style="margin-bottom: 20px;">
+      <!-- Dynamic Devices KPIs -->
+    </div>
+    <div id="devicesListContainer">
+      <div style="text-align: center; padding: 40px; color: var(--text-muted);">Загрузка списка устройств...</div>
+    </div>
+  </div>
+
+  <!-- VIEW 5: LIVE ADMIN ANALYTICS DASHBOARD -->
+  <div id="viewAnalytics" style="display: none;">
+    <!-- Period Selector Bar -->
+    <div class="section-card" style="margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 15px; font-weight: 600; color: var(--text-bright);">Период аналитики:</div>
+        <div class="analytics-period-selector" id="analyticsPeriodSelector" style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-sm analytics-period-btn" data-period="1d">1 день</button>
+          <button class="btn btn-sm analytics-period-btn" data-period="3d">3 дня</button>
+          <button class="btn btn-sm analytics-period-btn active" data-period="7d">7 дней</button>
+          <button class="btn btn-sm analytics-period-btn" data-period="30d">30 дней</button>
+          <button class="btn btn-sm analytics-period-btn" data-period="90d">90 дней</button>
+          <button class="btn btn-sm analytics-period-btn" data-period="all">Всё время</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics KPIs -->
+    <div class="kpi-primary-grid" id="analyticsKpisContainer" style="margin-bottom: 24px;">
+      <!-- Dynamic Analytics KPIs -->
+    </div>
+
+    <!-- Analytics Charts Grid -->
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <div class="section-card">
+        <div class="section-title">Динамика активных установок</div>
+        <div id="chartActiveTimeline" style="min-height: 220px; display: flex; align-items: center; justify-content: center;">
+          <div style="color: var(--text-muted);">Построение графика...</div>
+        </div>
+      </div>
+      <div class="section-card">
+        <div class="section-title">Новые установки за период</div>
+        <div id="chartNewTimeline" style="min-height: 220px; display: flex; align-items: center; justify-content: center;">
+          <div style="color: var(--text-muted);">Построение графика...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <div class="section-card">
+        <div class="section-title">Распределение по версиям VOX</div>
+        <div id="chartVersionDist" style="min-height: 200px;"></div>
+      </div>
+      <div class="section-card">
+        <div class="section-title">Категории ошибок и сбоев</div>
+        <div id="chartErrorDist" style="min-height: 200px;"></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom: 24px;">
+      <div class="section-card">
+        <div class="section-title">Топ моделей устройств</div>
+        <div id="chartModelDist" style="min-height: 200px;"></div>
+      </div>
+      <div class="section-card">
+        <div class="section-title">Распределение по Android API</div>
+        <div id="chartApiDist" style="min-height: 200px;"></div>
       </div>
     </div>
   </div>

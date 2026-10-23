@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import { ReportStorage, normalizeStatus } from './storage.mjs';
+import { buildDiagnosticsZip } from './export.mjs';
 import { checkAdminAuth, resolveAuth, createAdminSession, renderAdminHtml } from './admin.mjs';
 import { ADMIN_APP_JS } from './admin_client.mjs';
 import { sendReportNotification } from './notifier.mjs';
-import { dispatchTelegramNotification } from './notifications/telegram.mjs';
+import { dispatchTelegramNotification, TelegramClient, maskChatId } from './notifications/telegram.mjs';
+import { handleTelegramUpdate, buildMainMenuKeyboard, getCanonicalDashboardUrl } from './notifications/telegram_bot.mjs';
 import { classifyReport, buildClassificationSignature, isSyntheticTestReport, structuredEvents, technicalSummary, STATUSES, SEVERITIES, inferCategoryFromCode, inferSubsystemFromCode } from './triage.mjs';
 
 /**
@@ -21,8 +23,11 @@ export function prepareReportDownloadJson(report) {
   const errorCategory = report.error_category || report.errorCategory || p.errorCategory || classification.errorCategory || null;
   const errorSignature = report.error_signature || report.errorSignature || p.errorSignature || classification.signature || '';
 
+  const installationId = report.installation_id || report.installationId || p.installationId || p.installation_id || null;
+
   return {
     reportId: report.report_id || report.reportId,
+    installationId,
     createdAt: report.created_at || report.createdAt,
     platform: report.platform || 'unknown',
     appVersion: report.app_version || report.appVersion || 'unknown',
@@ -218,6 +223,29 @@ export function generateErrorSignature(report = {}) {
 
 const defaultStorage = new ReportStorage();
 
+// Bounded in-memory tracker for recently processed Telegram update_ids (prevents duplicate execution)
+const processedTelegramUpdates = new Set();
+const MAX_TELEGRAM_DEDUP_CACHE = 1000;
+
+export function isProcessedTelegramUpdate(updateId) {
+  if (!updateId) return false;
+  return processedTelegramUpdates.has(Number(updateId));
+}
+
+export function markTelegramUpdateProcessed(updateId) {
+  if (!updateId) return;
+  const num = Number(updateId);
+  if (processedTelegramUpdates.size >= MAX_TELEGRAM_DEDUP_CACHE) {
+    const oldest = processedTelegramUpdates.values().next().value;
+    processedTelegramUpdates.delete(oldest);
+  }
+  processedTelegramUpdates.add(num);
+}
+
+export function resetProcessedTelegramUpdates() {
+  processedTelegramUpdates.clear();
+}
+
 export async function handleRequest(request, env = {}, customStorage = null) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -295,6 +323,9 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     <div class="status-badge"><span class="dot"></span> Работает</div>
     <h1>SmartTube VOX Diagnostics</h1>
     <p>Сервис диагностики SmartTube VOX работает.</p>
+    <div style="margin: 24px 0 20px;">
+      <a href="/admin" style="display: inline-block; background: #3b82f6; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px; box-sizing: border-box; min-height: 48px; line-height: 24px;">🌐 Панель управления (/admin)</a>
+    </div>
     <div class="info">Отчёты отправляются только с согласия пользователя и защищены.</div>
   </div>
 </body>
@@ -327,14 +358,69 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     });
   }
 
+  // 2.1 Telegram Bot Webhook endpoint (POST /api/telegram/webhook or /telegram/webhook)
+  if (request.method === 'POST' && (path === '/api/telegram/webhook' || path === '/telegram/webhook')) {
+    // 1. Sliding window rate limiter
+    if (!checkRateLimit(request)) {
+      return jsonResponse({ error: 'rate_limited', message: 'Too many requests' }, 429);
+    }
+
+    // 2. Bounded payload size check (max 64 KB for Telegram Bot API updates)
+    const contentLength = Number(request.headers.get('content-length')) || 0;
+    if (contentLength > 64 * 1024) {
+      return jsonResponse({ error: 'payload_too_large', message: 'Update size exceeds limit' }, 413);
+    }
+
+    // 3. Webhook secret token verification
+    if (env.TELEGRAM_WEBHOOK_SECRET) {
+      const headerSecret = request.headers.get('x-telegram-bot-api-secret-token');
+      if (headerSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
+        return jsonResponse({ error: 'unauthorized', message: 'Invalid webhook secret token' }, 401);
+      }
+    }
+
+    if (!env.TELEGRAM_BOT_TOKEN) {
+      return jsonResponse({ error: 'misconfigured', message: 'TELEGRAM_BOT_TOKEN not configured' }, 503);
+    }
+
+    let update;
+    try {
+      update = await request.json();
+    } catch {
+      return jsonResponse({ error: 'bad_request', message: 'Invalid JSON payload' }, 400);
+    }
+
+    // 4. Duplicate update protection (idempotency)
+    if (update && update.update_id) {
+      if (isProcessedTelegramUpdate(update.update_id)) {
+        return jsonResponse({ ok: true, duplicate: true }, 200);
+      }
+      markTelegramUpdateProcessed(update.update_id);
+    }
+
+    try {
+      const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+      const result = await handleTelegramUpdate({ update, env, storage, client });
+      return jsonResponse({ ok: true, result }, 200);
+    } catch (err) {
+      console.error('[TelegramWebhookError]', err.message);
+      return jsonResponse({ ok: false, error: err.message }, 200);
+    }
+  }
+
   // 3. Developer Admin UI (GET /admin)
   if (request.method === 'GET' && (path === '/admin' || path === '/admin/')) {
     if (!checkAdminAuth(request, env)) {
+      const errorParam = url.searchParams.get('error');
+      const hasError = errorParam === 'invalid_credentials';
+      const errorBanner = hasError
+        ? '<div class="error-banner">❌ Неверный ключ администратора. Проверьте правильность ключа и попробуйте снова.</div>'
+        : '';
       const loginHtml = `<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
   <title>Вход в панель управления — SmartTube VOX</title>
   <style>
     body {
@@ -347,53 +433,73 @@ export async function handleRequest(request, env = {}, customStorage = null) {
       min-height: 100vh;
       margin: 0;
       padding: 20px;
+      box-sizing: border-box;
     }
     .login-box {
       background: #111827;
       border: 1px solid #374151;
       border-radius: 12px;
-      padding: 32px;
+      padding: 32px 24px;
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
+      box-sizing: border-box;
       box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     }
     h2 { margin-top: 0; font-size: 20px; color: #fff; margin-bottom: 8px; }
     p { font-size: 14px; color: #9ca3af; margin-bottom: 24px; line-height: 1.4; }
+    .error-banner {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 20px;
+    }
     input {
       width: 100%;
       box-sizing: border-box;
-      padding: 12px 14px;
+      padding: 14px 16px;
       background: #1f2937;
       border: 1px solid #374151;
       border-radius: 8px;
       color: #fff;
-      font-size: 14px;
+      font-size: 16px;
+      min-height: 48px;
       margin-bottom: 16px;
       outline: none;
+      -webkit-appearance: none;
     }
     input:focus { border-color: #3b82f6; }
     button {
       width: 100%;
-      padding: 12px;
+      min-height: 48px;
+      padding: 14px;
       background: #3b82f6;
       border: none;
       border-radius: 8px;
       color: #fff;
       font-weight: 600;
-      font-size: 15px;
+      font-size: 16px;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
     }
     button:hover { background: #2563eb; }
-    .footer { margin-top: 16px; font-size: 12px; color: #6b7280; text-align: center; }
+    .footer { margin-top: 20px; font-size: 12px; color: #6b7280; text-align: center; }
   </style>
 </head>
 <body>
   <div class="login-box">
     <h2>SmartTube VOX Admin</h2>
     <p>Для доступа к диагностическим отчётам требуется ключ администратора.</p>
+    ${errorBanner}
     <form method="POST" action="/admin/session">
       <input type="password" name="secret" placeholder="Ключ администратора" autocomplete="current-password" required autofocus />
-      <button type="submit">Войти</button>
+      <button type="submit">Войти в панель</button>
     </form>
     <div class="footer">Закрытый служебный раздел разработчика</div>
   </div>
@@ -404,6 +510,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'WWW-Authenticate': 'Bearer realm="VOX-Admin"',
+          'Cache-Control': 'no-store',
           'X-Content-Type-Options': 'nosniff',
         },
       });
@@ -433,12 +540,24 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const submitted = form?.get('secret');
     const valid = typeof submitted === 'string' && submitted.length <= 256 && env.ADMIN_SECRET &&
       checkAdminAuth(new Request(request.url, { headers: { authorization: `Bearer ${submitted}` } }), env);
-    if (!valid) return jsonResponse({ error: 'unauthorized' }, 401);
+    if (!valid) {
+      const acceptHeader = request.headers.get('accept') || '';
+      if (acceptHeader.includes('text/html')) {
+        return new Response(null, {
+          status: 303,
+          headers: {
+            Location: '/admin?error=invalid_credentials',
+            'Cache-Control': 'no-store',
+          },
+        });
+      }
+      return jsonResponse({ error: 'unauthorized' }, 401);
+    }
     return new Response(null, {
       status: 303,
       headers: {
         Location: '/admin',
-        'Set-Cookie': `vox_admin_session=${createAdminSession(env.ADMIN_SECRET)}; Path=/; Max-Age=28800; HttpOnly; SameSite=Strict; Secure`,
+        'Set-Cookie': `vox_admin_session=${createAdminSession(env.ADMIN_SECRET)}; Path=/; Max-Age=28800; HttpOnly; SameSite=Lax; Secure`,
         'Cache-Control': 'no-store',
       },
     });
@@ -474,6 +593,169 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
     try { return jsonResponse(await storage.listChanges(url.searchParams.get('cursor') || 0, url.searchParams.get('limit') || 50)); }
     catch { return jsonResponse({ error: 'invalid_cursor' }, 400); }
+  }
+
+  // 3.2 Telegram Admin Management APIs
+  if (request.method === 'GET' && path === '/v1/admin/telegram/info') {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    if (!env.TELEGRAM_BOT_TOKEN) {
+      return jsonResponse({
+        configured: false,
+        tokenPresent: false,
+        chatIdPresent: Boolean(env.TELEGRAM_CHAT_ID),
+        testChatIdPresent: Boolean(env.TELEGRAM_TEST_CHAT_ID),
+      });
+    }
+
+    try {
+      const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+      const [meRes, webhookRes] = await Promise.all([
+        client.getMe(),
+        client.getWebhookInfo(),
+      ]);
+
+      return jsonResponse({
+        configured: true,
+        tokenPresent: true,
+        chatIdPresent: Boolean(env.TELEGRAM_CHAT_ID),
+        chatIdMasked: env.TELEGRAM_CHAT_ID ? maskChatId(env.TELEGRAM_CHAT_ID) : null,
+        notificationsEnabled: env.TELEGRAM_NOTIFICATIONS_ENABLED === 'true' || env.TELEGRAM_NOTIFICATIONS_ENABLED === true,
+        bot: meRes.ok ? {
+          id: meRes.result?.id,
+          username: meRes.result?.username,
+          firstName: meRes.result?.first_name,
+        } : null,
+        webhook: webhookRes.ok ? {
+          url: webhookRes.result?.url,
+          hasCustomCert: webhookRes.result?.has_custom_certificate,
+          pendingUpdateCount: webhookRes.result?.pending_update_count,
+          lastErrorDate: webhookRes.result?.last_error_date,
+          lastErrorMessage: webhookRes.result?.last_error_message,
+        } : null,
+      });
+    } catch (e) {
+      return jsonResponse({ configured: true, error: e.message }, 500);
+    }
+  }
+
+  if (request.method === 'POST' && path === '/v1/admin/telegram/setup-webhook') {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    if (!env.TELEGRAM_BOT_TOKEN) return jsonResponse({ error: 'TELEGRAM_BOT_TOKEN not configured' }, 400);
+
+    const body = await request.json().catch(() => ({}));
+    let workerUrl = body.workerUrl || env.WORKER_URL || `${url.protocol}//${url.host}`;
+    try {
+      const targetHost = new URL(workerUrl).host.toLowerCase();
+      const currentHost = url.host.toLowerCase();
+      const isAllowedHost = targetHost === currentHost ||
+        targetHost === 'vox-diagnostics.amn2402.workers.dev' ||
+        targetHost === 'diagnostics.smarttube.app' ||
+        targetHost.endsWith('.workers.dev') ||
+        targetHost.endsWith('.smarttube.app');
+      if (!isAllowedHost) {
+        return jsonResponse({ error: 'invalid_worker_url', message: 'Webhook target host is not permitted' }, 400);
+      }
+    } catch {
+      return jsonResponse({ error: 'invalid_worker_url', message: 'Malformed workerUrl' }, 400);
+    }
+    const webhookUrl = `${workerUrl.replace(/\/+$/, '')}/api/telegram/webhook`;
+    const secretToken = body.secretToken || env.TELEGRAM_WEBHOOK_SECRET || undefined;
+
+    const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+    const setupRes = await client.setWebhook({
+      url: webhookUrl,
+      secretToken,
+      dropPendingUpdates: Boolean(body.dropPendingUpdates),
+    });
+
+    return jsonResponse({
+      ok: setupRes.ok,
+      webhookUrl,
+      result: setupRes.result,
+      error: setupRes.error,
+    });
+  }
+
+  if (request.method === 'POST' && path === '/v1/admin/telegram/test-dispatch') {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    if (!env.TELEGRAM_BOT_TOKEN) return jsonResponse({ error: 'TELEGRAM_BOT_TOKEN not configured' }, 400);
+
+    const targetChat = env.TELEGRAM_CHAT_ID || env.TELEGRAM_ALLOWED_CHAT_ID || env.TELEGRAM_TEST_CHAT_ID;
+    if (!targetChat) return jsonResponse({ error: 'TELEGRAM_CHAT_ID not configured' }, 400);
+
+    const body = await request.json().catch(() => ({}));
+    const correlationId = body.correlationId || `VOX-TG-E2E-${Date.now().toString(36).toUpperCase()}`;
+
+    const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+    const testText = [
+      '🧪 <b>SmartTube VOX 9.1 — Telegram Live E2E Verification</b>',
+      '',
+      `Отправлено: <code>${new Date().toISOString()}</code>`,
+      'Сервис: <code>vox-diagnostics</code>',
+      'Статус канала: 🟢 <b>DELIVERED</b>',
+      `Корреляция: <code>${correlationId}</code>`,
+      '',
+      'Интерактивный центр мониторинга готов к приёму команд: <b>/status</b>, <b>/issues</b>, <b>/reports</b>, <b>/release</b>.',
+    ].join('\n');
+
+    const res = await client.sendMessage({
+      chatId: targetChat,
+      text: testText,
+      parseMode: 'HTML',
+      replyMarkup: buildMainMenuKeyboard(getCanonicalDashboardUrl(env)),
+    });
+
+    let persisted = false;
+    let deliveryRecord = null;
+    if (res.ok && body.persist === true && storage && storage.recordTelegramDelivery && body.reportId) {
+      deliveryRecord = {
+        decision: 'SENT_NEW',
+        notifiedAt: Date.now(),
+        messageId: res.result?.message_id,
+        repeatCount: 0,
+      };
+      await storage.recordTelegramDelivery(body.reportId, deliveryRecord);
+      persisted = true;
+    }
+
+    return jsonResponse({
+      ok: res.ok,
+      messageId: res.result?.message_id,
+      correlationId,
+      persisted,
+      deliveryRecord,
+      chatIdMasked: maskChatId(targetChat),
+      error: res.error,
+    });
+  }
+
+  if (request.method === 'GET' && path === '/v1/admin/telegram/bootstrap') {
+    if (!checkAdminAuth(request, env)) return jsonResponse({ error: 'unauthorized' }, 401);
+    if (!env.TELEGRAM_BOT_TOKEN) return jsonResponse({ error: 'TELEGRAM_BOT_TOKEN not configured' }, 400);
+
+    const client = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
+    const webhookInfo = await client.getWebhookInfo();
+    let updates = [];
+    if (webhookInfo.ok && !webhookInfo.result?.url) {
+      const upRes = await client.getUpdates({ limit: 10 });
+      if (upRes.ok && Array.isArray(upRes.result)) {
+        updates = upRes.result.map(u => ({
+          updateId: u.update_id,
+          chatId: u.message?.chat?.id || u.callback_query?.message?.chat?.id,
+          chatType: u.message?.chat?.type,
+          userId: u.message?.from?.id || u.callback_query?.from?.id,
+          date: u.message?.date,
+          command: u.message?.text?.startsWith('/') ? u.message.text.split(' ')[0] : undefined,
+        })).filter(u => Boolean(u.chatId));
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      hasWebhook: Boolean(webhookInfo.result?.url),
+      webhookUrl: webhookInfo.result?.url || null,
+      detectedUpdates: updates,
+    });
   }
 
   // 4. Admin API: Grouped issues (GET /v1/admin/issues or /api/admin/issues)
@@ -533,6 +815,101 @@ export async function handleRequest(request, env = {}, customStorage = null) {
 
     const issues = await storage.getGroupedIssues({ limit, offset, status });
     return jsonResponse({ issues });
+  }
+
+  // 4.1 Admin API: Bulk Diagnostics ZIP Export (GET/POST /v1/admin/export/zip)
+  if ((request.method === 'GET' || request.method === 'POST') && (path === '/v1/admin/export/zip' || path === '/api/admin/export/zip')) {
+    if (!checkAdminAuth(request, env, 'reports:download')) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const statuses = url.searchParams.get('status') || url.searchParams.get('statuses') || undefined;
+    const search = url.searchParams.get('search') || undefined;
+    const category = url.searchParams.get('category') || url.searchParams.get('errorCategory') || undefined;
+    const platform = url.searchParams.get('platform') || undefined;
+    const appVersion = url.searchParams.get('appVersion') || undefined;
+    const device = url.searchParams.get('device') || undefined;
+    const signature = url.searchParams.get('signature') || undefined;
+    const cursor = url.searchParams.get('cursor') || undefined;
+
+    try {
+      const result = await buildDiagnosticsZip(storage, {
+        statuses,
+        search,
+        errorCategory: category,
+        platform,
+        appVersion,
+        device,
+        signature,
+        cursor,
+      });
+
+      const headers = {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${result.filename}"`,
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Total-Reports': String(result.totalReports),
+        'X-Export-Truncated': String(Boolean(result.isTruncated)),
+      };
+      if (result.isTruncated && result.nextCursor) {
+        headers['X-Export-Next-Cursor'] = result.nextCursor;
+      }
+
+      return new Response(result.buffer, {
+        status: 200,
+        headers,
+      });
+    } catch (err) {
+      return jsonResponse({ error: 'export_failed', message: err.message }, 500);
+    }
+  }
+
+  // 4.2 Admin API: Devices Grouping and Search (GET /v1/admin/devices)
+  if (request.method === 'GET' && (path === '/v1/admin/devices' || path === '/api/admin/devices')) {
+    if (!checkAdminAuth(request, env, 'reports:read')) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const search = url.searchParams.get('search') || url.searchParams.get('q') || '';
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+    const devices = await storage.getDevices({ search, limit, offset });
+    return jsonResponse(devices);
+  }
+
+  // 4.3 Analytics Heartbeat Ingestion (POST /v1/analytics/heartbeat or /v1/heartbeat)
+  if (request.method === 'POST' && (path === '/v1/analytics/heartbeat' || path === '/v1/heartbeat')) {
+    try {
+      const body = await request.json();
+      if (!body || typeof body !== 'object' || !body.installationId) {
+        return jsonResponse({ error: 'invalid_payload', message: 'installationId is required' }, 400);
+      }
+      const installId = String(body.installationId).trim();
+      if (installId.length < 8 || installId.length > 64) {
+        return jsonResponse({ error: 'invalid_installation_id' }, 400);
+      }
+      await storage.recordHeartbeat({
+        installationId: installId,
+        appVersion: body.appVersion ? String(body.appVersion).slice(0, 64) : '',
+        platform: body.platform ? String(body.platform).slice(0, 64) : '',
+        manufacturer: body.manufacturer ? String(body.manufacturer).slice(0, 64) : '',
+        model: body.model ? String(body.model).slice(0, 64) : '',
+        sdkInt: typeof body.sdkInt === 'number' ? body.sdkInt : 0,
+        timestamp: typeof body.timestamp === 'number' ? body.timestamp : Date.now(),
+      });
+      return jsonResponse({ ok: true, status: 'received' }, 200);
+    } catch (err) {
+      return jsonResponse({ error: 'bad_request', message: err.message }, 400);
+    }
+  }
+
+  // 4.4 Admin API: Live Analytics Aggregates (GET /v1/admin/analytics)
+  if (request.method === 'GET' && (path === '/v1/admin/analytics' || path === '/api/admin/analytics')) {
+    if (!checkAdminAuth(request, env, 'reports:read')) {
+      return jsonResponse({ error: 'unauthorized', message: 'Admin authentication required' }, 401);
+    }
+    const period = url.searchParams.get('period') || '7d';
+    const analytics = await storage.getAnalytics({ period });
+    return jsonResponse(analytics);
   }
 
   // 5. Admin API: List reports (GET /v1/admin/reports)

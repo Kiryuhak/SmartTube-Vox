@@ -204,6 +204,7 @@
   let headerMorePopup = null;
   let refreshButton = null;
   let purgeAllBtn = null;
+  let batchInvestigateBtn = null;
   let reportsTableBody = null;
   let issuesTableBody = null;
   let modalOverlay = null;
@@ -278,6 +279,7 @@
     headerMorePopup = document.getElementById('headerMorePopup');
     refreshButton = document.getElementById('refreshButton');
     purgeAllBtn = document.getElementById('purgeAllBtn');
+    batchInvestigateBtn = document.getElementById('batchInvestigateBtn');
     reportsTableBody = document.getElementById('reportsTableBody');
     issuesTableBody = document.getElementById('issuesTableBody');
     modalOverlay = document.getElementById('modalOverlay');
@@ -312,10 +314,14 @@
     const viewReports = document.getElementById('viewReports');
     const viewIssues = document.getElementById('viewIssues');
     const viewStats = document.getElementById('viewStats');
+    const viewDevices = document.getElementById('viewDevices');
+    const viewAnalytics = document.getElementById('viewAnalytics');
 
     if (viewReports) viewReports.style.display = (normalizedTab === 'reports') ? 'block' : 'none';
     if (viewIssues) viewIssues.style.display = (normalizedTab === 'issues') ? 'block' : 'none';
     if (viewStats) viewStats.style.display = (normalizedTab === 'stats') ? 'block' : 'none';
+    if (viewDevices) viewDevices.style.display = (normalizedTab === 'devices') ? 'block' : 'none';
+    if (viewAnalytics) viewAnalytics.style.display = (normalizedTab === 'analytics') ? 'block' : 'none';
 
     document.querySelectorAll('.nav-tab').forEach(tab => {
       const t = tab.getAttribute('data-tab');
@@ -327,6 +333,10 @@
       loadIssues();
     } else if (normalizedTab === 'stats') {
       loadStats();
+    } else if (normalizedTab === 'devices') {
+      loadDevices();
+    } else if (normalizedTab === 'analytics') {
+      loadAnalytics(currentAnalyticsPeriod || '7d');
     }
   }
 
@@ -537,6 +547,7 @@
             data-status="${escapeHtml(normStatus)}"
             data-purpose="${escapeHtml(r.report_purpose || 'USER')}"
             data-signature="${escapeHtml(r.error_signature || '')}">
+          <td style="text-align: center;"><input type="checkbox" class="report-select-cb" data-report-id="${escapeHtml(r.report_id)}" style="cursor: pointer;" /></td>
           <td>
             <span class="report-id" data-action="open-report" data-report-id="${escapeHtml(r.report_id)}">${escapeHtml(r.report_id)}</span>
             ${r.report_purpose === 'TEST' ? '<span class="tag tag-purpose-test">TEST</span>' : ''}
@@ -1281,6 +1292,60 @@
     if (purgeModalOverlay) purgeModalOverlay.style.display = 'none';
   }
 
+  const TARGET_INVESTIGATING_REPORTS = [
+    'VOX-FC763605', 'VOX-319BD42A', 'VOX-BAEAAEB6', 'VOX-EF0F761F',
+    'VOX-0BF9F24D', 'VOX-C04586D3', 'VOX-D5F0C645', 'VOX-C6A533DD',
+    'VOX-6B514E8A', 'VOX-2BC4753A', 'VOX-EC363B97', 'VOX-6D00AEA9',
+    'VOX-3345BBFD', 'VOX-BD27BAD9', 'VOX-7AE27244', 'VOX-9121247C',
+    'VOX-78151084', 'VOX-87B9400C', 'VOX-28070F7A'
+  ];
+
+  async function batchTransitionToInvestigating() {
+    if (!confirm('Перевести ' + TARGET_INVESTIGATING_REPORTS.length + ' утверждённых отчётов в статус «В работе» (INVESTIGATING)?')) {
+      return;
+    }
+    const btn = document.getElementById('batchInvestigateBtn');
+    if (btn) btn.disabled = true;
+    let successCount = 0;
+    let failCount = 0;
+    let authBlocked = false;
+
+    for (const reportId of TARGET_INVESTIGATING_REPORTS) {
+      try {
+        const response = await fetch('/v1/admin/reports/' + encodeURIComponent(reportId), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'INVESTIGATING',
+            developer_notes: 'Переведено в работу по результатам аудита (Section 24 Security Hardening).'
+          })
+        });
+        if (response.status === 401 || response.status === 403) {
+          authBlocked = true;
+          break;
+        }
+        if (response.ok) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (err) {
+        failCount++;
+      }
+    }
+
+    if (btn) btn.disabled = false;
+
+    if (authBlocked) {
+      showToast('Ошибка аутентификации (BLOCKED_AUTH): требуется вход администратора', true);
+    } else if (successCount > 0) {
+      showToast('Успешно обновлено ' + successCount + ' отчётов' + (failCount > 0 ? (' (ошибок: ' + failCount + ')') : ''));
+      refreshDashboard();
+    } else {
+      showToast('Не удалось обновить отчёты (ошибок: ' + failCount + ')', true);
+    }
+  }
+
   async function executeSafePurge() {
     if (purgeConfirmInput?.value.trim() !== 'УДАЛИТЬ') return;
     if (purgeConfirmBtn) purgeConfirmBtn.disabled = true;
@@ -1307,7 +1372,483 @@
   /**
    * Global event listeners registration.
    */
-  function setupEventListeners() {
+
+  let currentAnalyticsPeriod = '7d';
+
+  // --- ZIP EXPORT ---
+  async function downloadZipArchive(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const url = '/v1/admin/export/zip' + (qs ? '?' + qs : '');
+    showToast('Подготовка ZIP-архива...');
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (res.status === 401 || res.status === 403) {
+        showToast('Нет доступа к выгрузке (401/403): требуется авторизация', true);
+        return;
+      }
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        showToast('Ошибка формирования ZIP: ' + (errJson.message || res.statusText || res.status), true);
+        return;
+      }
+      const blob = await res.blob();
+      const filenameHeader = res.headers.get('Content-Disposition') || '';
+      const match = filenameHeader.match(/filename="?([^";]+)"?/i);
+      const filename = match ? match[1] : 'SmartTube-VOX-Diagnostics.zip';
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      const totalReports = res.headers.get('X-Total-Reports') || '';
+      const isTruncated = res.headers.get('X-Export-Truncated') === 'true';
+      if (isTruncated) {
+        showToast(`Внимание: архив ограничен первыми ${totalReports} отчётами. Для остальных сузьте фильтры.`);
+      } else {
+        showToast(totalReports ? `ZIP-архив успешно скачан (${totalReports} отчётов)` : 'ZIP-архив успешно скачан');
+      }
+    } catch (err) {
+      showToast('Ошибка при скачивании архива: ' + err.message, true);
+    }
+  }
+
+  // --- BATCH SELECTION & OPERATIONS ---
+  function getSelectedReportIds() {
+    return Array.from(document.querySelectorAll('.report-select-cb:checked'))
+      .map(cb => cb.dataset.reportId)
+      .filter(Boolean);
+  }
+
+  function updateBatchActionBar() {
+    const selected = getSelectedReportIds();
+    const bar = document.getElementById('batchActionBar');
+    const countEl = document.getElementById('batchSelectedCount');
+    if (countEl) countEl.textContent = String(selected.length);
+    if (bar) {
+      bar.style.display = selected.length > 0 ? 'block' : 'none';
+    }
+    const selectAllCb = document.getElementById('selectAllReportsCb');
+    const allCbs = document.querySelectorAll('.report-select-cb');
+    if (selectAllCb && allCbs.length > 0) {
+      selectAllCb.checked = selected.length === allCbs.length;
+      selectAllCb.indeterminate = selected.length > 0 && selected.length < allCbs.length;
+    }
+  }
+
+  async function applyBatchStatus() {
+    const selected = getSelectedReportIds();
+    const selectEl = document.getElementById('batchStatusSelect');
+    const status = selectEl ? selectEl.value : '';
+    if (!status) {
+      showToast('Выберите статус для применения', true);
+      return;
+    }
+    if (!confirm('Перевести ' + selected.length + ' отчётов в статус ' + status + '?')) {
+      return;
+    }
+    let successCount = 0;
+    let failCount = 0;
+    for (const id of selected) {
+      try {
+        const res = await fetch('/v1/admin/reports/' + encodeURIComponent(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        if (res.ok) successCount++; else failCount++;
+      } catch (_) { failCount++; }
+    }
+    showToast('Обновлено ' + successCount + ' отчётов' + (failCount > 0 ? ' (ошибок: ' + failCount + ')' : ''));
+    refreshDashboard();
+  }
+
+  async function applyBatchNote() {
+    const selected = getSelectedReportIds();
+    const note = prompt('Введите текст заметки для ' + selected.length + ' выбранных отчётов:');
+    if (!note || !note.trim()) return;
+    let successCount = 0;
+    for (const id of selected) {
+      try {
+        const res = await fetch('/v1/admin/reports/' + encodeURIComponent(id) + '/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: note.trim() })
+        });
+        if (res.ok) successCount++;
+      } catch (_) {}
+    }
+    showToast('Заметка добавлена к ' + successCount + ' отчётам');
+    refreshDashboard();
+  }
+
+  function downloadSelectedZip() {
+    const selected = getSelectedReportIds();
+    if (selected.length === 0) {
+      showToast('Нет выбранных отчётов', true);
+      return;
+    }
+    downloadZipArchive({ search: selected.join(' ') });
+  }
+
+  function clearBatchSelection() {
+    document.querySelectorAll('.report-select-cb').forEach(cb => { cb.checked = false; });
+    const selectAllCb = document.getElementById('selectAllReportsCb');
+    if (selectAllCb) { selectAllCb.checked = false; selectAllCb.indeterminate = false; }
+    updateBatchActionBar();
+  }
+
+  // --- DEVICES VIEW ---
+  async function loadDevices() {
+    const container = document.getElementById('devicesListContainer');
+    const kpiContainer = document.getElementById('devicesSummaryKpis');
+    const searchInput = document.getElementById('deviceSearchInput');
+    const q = searchInput ? searchInput.value.trim() : '';
+
+    if (container) container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Загрузка списка устройств...</div>';
+
+    try {
+      const res = await fetch('/v1/admin/devices?search=' + encodeURIComponent(q));
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('AUTH_ERROR: Нет доступа к разделу устройств (401/403). Требуется авторизация администратора.');
+      }
+      if (res.status >= 500) {
+        throw new Error('SERVER_ERROR: Ошибка сервера (' + res.status + '). Сервер временно недоступен.');
+      }
+      if (!res.ok) {
+        throw new Error('REQUEST_ERROR: Ошибка запроса (' + res.status + ')');
+      }
+      const data = await res.json();
+
+      if (kpiContainer) {
+        kpiContainer.innerHTML = `
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Всего установок</div>
+              <div class="kpi-val" style="color: #60a5fa;">${data.totalInstallations || 0}</div>
+            </div>
+            <div class="kpi-sub">Уникальных UUID установок</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Моделей устройств</div>
+              <div class="kpi-val" style="color: #34d399;">${data.modelsCount || 0}</div>
+            </div>
+            <div class="kpi-sub">Групп оборудования</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Ранее поступившие</div>
+              <div class="kpi-val" style="color: #fbbf24;">${data.unassignedReportsCount || 0}</div>
+            </div>
+            <div class="kpi-sub">Без Installation ID (сохранены)</div>
+          </div>
+        `;
+      }
+
+      if (!data.models || data.models.length === 0) {
+        if (container) {
+          container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Устройства не найдены.</div>';
+        }
+        return;
+      }
+
+      let html = '';
+      for (const m of data.models) {
+        html += `
+          <div class="device-model-card">
+            <div class="device-model-header" data-action="toggle-model">
+              <div>
+                <strong style="font-size: 15px; color: var(--text-bright);">${escapeHtml(m.model)}</strong>
+                <span class="tag tag-android" style="margin-left: 8px;">${escapeHtml(m.manufacturer || 'OEM')}</span>
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted);">
+                Установок: <strong style="color:#60a5fa;">${m.installationsCount}</strong> &nbsp;|&nbsp;
+                Отчётов: <strong>${m.reportsCount}</strong>
+              </div>
+            </div>
+            <div class="device-model-body">
+              <table class="installations-table">
+                <thead>
+                  <tr>
+                    <th>Installation ID</th>
+                    <th>Система / API</th>
+                    <th>Текущая версия</th>
+                    <th>История версий</th>
+                    <th>Первый запуск</th>
+                    <th>Посл. активность</th>
+                    <th>Отчёты</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(m.installations || []).map(inst => `
+                    <tr>
+                      <td>
+                        <span class="install-id-pill" title="Нажмите, чтобы скопировать" data-action="copy-id" data-id="${escapeHtml(inst.installationId)}">
+                          📋 ${escapeHtml(inst.installationId)}
+                        </span>
+                      </td>
+                      <td>API ${inst.sdkInt || '-'} ${inst.androidVersion ? ('(Android ' + escapeHtml(inst.androidVersion) + ')') : ''}</td>
+                      <td><strong>${escapeHtml(inst.voxVersion || '-')}</strong></td>
+                      <td>
+                        ${(inst.appVersionHistory || []).map(v => `<span class="tag tag-android" style="font-size:10px;margin-right:2px;">${escapeHtml(v)}</span>`).join('')}
+                      </td>
+                      <td>${formatDateTime(inst.firstSeenAt)}</td>
+                      <td>${formatDateTime(inst.lastSeenAt)}</td>
+                      <td>
+                        <strong style="color:${inst.activeInvestigationsCount > 0 ? '#60a5fa' : 'inherit'};">${inst.reportsCount}</strong>
+                        ${inst.activeInvestigationsCount > 0 ? `<span class="tag tag-status-investigating" style="font-size:10px;margin-left:4px;">В работе: ${inst.activeInvestigationsCount}</span>` : ''}
+                      </td>
+                      <td>
+                        <button class="btn btn-sm btn-primary" data-action="filter-installation" data-install-id="${escapeHtml(inst.installationId)}">
+                          Показать отчёты
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      if (data.unassignedReports && data.unassignedReports.length > 0) {
+        html += `
+          <div class="device-model-card" style="border-color: rgba(251, 191, 36, 0.3);">
+            <div class="device-model-header" style="background: rgba(251, 191, 36, 0.08);">
+              <div>
+                <strong style="color: #fbbf24;">Ранее поступившие отчёты (без Installation ID)</strong>
+                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">Не объединены в вымышленное устройство</span>
+              </div>
+              <div>Отчётов: <strong>${data.unassignedReports.length}</strong></div>
+            </div>
+            <div style="padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 8px;">
+              ${data.unassignedReports.map(r => `
+                <button class="btn btn-sm" data-action="open-report" data-report-id="${escapeHtml(r.reportId)}">
+                  ${escapeHtml(r.reportId)} (${escapeHtml(r.model || 'Unknown')})
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      if (container) container.innerHTML = html;
+    } catch (err) {
+      let msg = err.message || 'Ошибка сети';
+      if (msg.startsWith('AUTH_ERROR:')) msg = msg.replace('AUTH_ERROR:', '').trim();
+      else if (msg.startsWith('SERVER_ERROR:')) msg = msg.replace('SERVER_ERROR:', '').trim();
+      else if (msg.startsWith('REQUEST_ERROR:')) msg = msg.replace('REQUEST_ERROR:', '').trim();
+      else if (err.name === 'TypeError' || msg.includes('Failed to fetch')) msg = 'Сервер недоступен. Проверьте сетевое соединение.';
+
+      if (kpiContainer) {
+        kpiContainer.innerHTML = `
+          <div class="kpi-card" style="border-left: 3px solid var(--danger); grid-column: 1 / -1;">
+            <div>
+              <div class="kpi-title" style="color: var(--danger);">Ошибка загрузки устройств</div>
+              <div class="kpi-sub" style="color: var(--text-muted); margin-top: 6px;">${escapeHtml(msg)}</div>
+            </div>
+          </div>
+        `;
+      }
+      if (container) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);font-size:14px;"><div style="font-size:24px;margin-bottom:8px;">⚠️</div>' + escapeHtml(msg) + '</div>';
+      }
+      showToast(msg, true);
+    }
+  }
+
+  // --- ANALYTICS VIEW ---
+  async function loadAnalytics(period = '7d') {
+    currentAnalyticsPeriod = period;
+    const kpiContainer = document.getElementById('analyticsKpisContainer');
+
+    document.querySelectorAll('.analytics-period-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-period') === period);
+    });
+
+    try {
+      const res = await fetch('/v1/admin/analytics?period=' + encodeURIComponent(period));
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('AUTH_ERROR: Нет доступа к аналитике (401/403). Требуется авторизация администратора.');
+      }
+      if (res.status >= 500) {
+        throw new Error('SERVER_ERROR: Ошибка сервера (' + res.status + '). Сервер временно недоступен.');
+      }
+      if (!res.ok) {
+        throw new Error('REQUEST_ERROR: Ошибка запроса аналитики (' + res.status + ')');
+      }
+      const data = await res.json();
+
+      if (kpiContainer) {
+        kpiContainer.innerHTML = `
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Сейчас активны</div>
+              <div class="kpi-val" style="color: #34d399;">${data.activeNow || 0}</div>
+            </div>
+            <div class="kpi-sub">В окне 45 минут</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Активны за период</div>
+              <div class="kpi-val" style="color: #60a5fa;">${data.activeInPeriod || 0}</div>
+            </div>
+            <div class="kpi-sub">Всего уникальных за ${data.period}</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Новые установки</div>
+              <div class="kpi-val" style="color: #a78bfa;">${data.newInstallations || 0}</div>
+            </div>
+            <div class="kpi-sub">Впервые запущены в период</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Обновились</div>
+              <div class="kpi-val" style="color: #38bdf8;">${data.upgradedInstallations || 0}</div>
+            </div>
+            <div class="kpi-sub">Сменили версию приложения</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Установки с ошибками</div>
+              <div class="kpi-val" style="color: ${(data.errorRatePercent || 0) > 10 ? '#ef4444' : '#fbbf24'};">${data.errorRatePercent || 0}%</div>
+            </div>
+            <div class="kpi-sub">${data.installationsWithErrors || 0} устройств со сбоями</div>
+          </div>
+          <div class="kpi-card">
+            <div>
+              <div class="kpi-title">Частота инцидентов</div>
+              <div class="kpi-val" style="color: #f472b6;">${data.incidentFrequency || 0}</div>
+            </div>
+            <div class="kpi-sub">Отчётов на активную установку</div>
+          </div>
+        `;
+      }
+
+      renderTimelineAreaChart('chartActiveTimeline', data.timeline, 'active', '#3b82f6');
+      renderTimelineAreaChart('chartNewTimeline', data.timeline, 'new', '#a78bfa');
+      renderDistributionBars('chartVersionDist', data.versionDistribution);
+      renderDistributionBars('chartErrorDist', data.errorCategoryDistribution, '#ef4444');
+      renderDistributionBars('chartModelDist', data.modelDistribution, '#34d399');
+      renderDistributionBars('chartApiDist', data.apiLevelDistribution, '#fbbf24');
+
+    } catch (err) {
+      let msg = err.message || 'Ошибка сети';
+      if (msg.startsWith('AUTH_ERROR:')) msg = msg.replace('AUTH_ERROR:', '').trim();
+      else if (msg.startsWith('SERVER_ERROR:')) msg = msg.replace('SERVER_ERROR:', '').trim();
+      else if (msg.startsWith('REQUEST_ERROR:')) msg = msg.replace('REQUEST_ERROR:', '').trim();
+      else if (err.name === 'TypeError' || msg.includes('Failed to fetch')) msg = 'Сервер недоступен. Проверьте сетевое соединение.';
+
+      if (kpiContainer) {
+        kpiContainer.innerHTML = `
+          <div class="kpi-card" style="border-left: 3px solid var(--danger); grid-column: 1 / -1;">
+            <div>
+              <div class="kpi-title" style="color: var(--danger);">Ошибка загрузки аналитики</div>
+              <div class="kpi-sub" style="color: var(--text-muted); margin-top: 6px;">${escapeHtml(msg)}</div>
+            </div>
+          </div>
+        `;
+      }
+      ['chartActiveTimeline', 'chartNewTimeline', 'chartVersionDist', 'chartErrorDist', 'chartModelDist', 'chartApiDist'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div style="color:var(--danger);padding:30px;text-align:center;font-size:12px;">' + escapeHtml(msg) + '</div>';
+      });
+      showToast(msg, true);
+    }
+  }
+
+  // Pure SVG Timeline Area Chart
+  function renderTimelineAreaChart(containerId, timeline = [], field = 'active', strokeColor = '#3b82f6') {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!timeline || timeline.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-muted);padding:40px;text-align:center;">Нет данных за выбранный период</div>';
+      return;
+    }
+
+    const W = 520;
+    const H = 180;
+    const padL = 35;
+    const padR = 20;
+    const padT = 20;
+    const padB = 30;
+
+    const values = timeline.map(t => Number(t[field] || 0));
+    const maxVal = Math.max(5, ...values);
+    const n = timeline.length;
+
+    const points = values.map((val, i) => {
+      const x = padL + (i / Math.max(1, n - 1)) * (W - padL - padR);
+      const y = H - padB - (val / maxVal) * (H - padT - padB);
+      return { x, y, val, date: timeline[i].date };
+    });
+
+    const pathData = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    const areaData = pathData + ' L' + points[points.length - 1].x.toFixed(1) + ',' + (H - padB) + ' L' + points[0].x.toFixed(1) + ',' + (H - padB) + ' Z';
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%;overflow:visible;">
+      <defs>
+        <linearGradient id="grad_${containerId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.35" />
+          <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0" />
+        </linearGradient>
+      </defs>
+      <!-- Grid Lines -->
+      <line x1="${padL}" y1="${padT}" x2="${W - padR}" y2="${padT}" stroke="rgba(255,255,255,0.06)" />
+      <line x1="${padL}" y1="${(padT + H - padB)/2}" x2="${W - padR}" y2="${(padT + H - padB)/2}" stroke="rgba(255,255,255,0.06)" />
+      <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="rgba(255,255,255,0.12)" />
+      <!-- Y Axis Labels -->
+      <text x="${padL - 6}" y="${padT + 4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${maxVal}</text>
+      <text x="${padL - 6}" y="${H - padB + 3}" fill="var(--text-muted)" font-size="10" text-anchor="end">0</text>
+      <!-- Area & Line -->
+      <path d="${areaData}" fill="url(#grad_${containerId})" />
+      <path d="${pathData}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+      <!-- Dots -->
+      ${points.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${strokeColor}" stroke="#111726" stroke-width="1.5"><title>${p.date}: ${p.val}</title></circle>`).join('')}
+      <!-- Date Labels -->
+      <text x="${padL}" y="${H - 8}" fill="var(--text-muted)" font-size="10">${timeline[0]?.date?.slice(5) || ''}</text>
+      <text x="${W - padR}" y="${H - 8}" fill="var(--text-muted)" font-size="10" text-anchor="end">${timeline[timeline.length - 1]?.date?.slice(5) || ''}</text>
+    </svg>`;
+
+    el.innerHTML = svg;
+  }
+
+  function renderDistributionBars(containerId, distObj = {}, barColor = '#3b82f6') {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const entries = Object.entries(distObj || {}).sort((a, b) => b[1] - a[1]);
+    if (entries.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-muted);padding:30px;text-align:center;">Нет данных</div>';
+      return;
+    }
+    const total = entries.reduce((acc, e) => acc + e[1], 0);
+    const max = entries[0][1] || 1;
+
+    let html = '<div style="display:flex;flex-direction:column;gap:8px;padding:8px 0;">';
+    for (const [key, count] of entries.slice(0, 8)) {
+      const pct = Math.round((count / total) * 100);
+      const widthPct = Math.max(4, Math.round((count / max) * 100));
+      html += `
+        <div class="chart-bar-row">
+          <div class="chart-bar-label" title="${escapeHtml(key)}">${escapeHtml(key)}</div>
+          <div class="chart-bar-track">
+            <div class="chart-bar-fill" style="width:${widthPct}%;background:${barColor};"></div>
+          </div>
+          <div class="chart-bar-value">${count} <span style="font-size:10px;color:var(--text-muted);font-weight:normal;">(${pct}%)</span></div>
+        </div>
+      `;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+    function setupEventListeners() {
     // Navigation Tabs
     document.querySelectorAll('.nav-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1424,6 +1965,52 @@
       if (headerMorePopup) headerMorePopup.classList.remove('open');
     });
 
+    // Bulk ZIP from Action Menu
+    const downloadAllPendingZipBtn = document.getElementById('downloadAllPendingZipBtn');
+    if (downloadAllPendingZipBtn) {
+      downloadAllPendingZipBtn.addEventListener('click', () => {
+        if (headerMorePopup) headerMorePopup.classList.remove('open');
+        downloadZipArchive();
+      });
+    }
+
+    if (batchInvestigateBtn) {
+      batchInvestigateBtn.addEventListener('click', () => {
+        if (headerMorePopup) headerMorePopup.classList.remove('open');
+        batchTransitionToInvestigating();
+      });
+    }
+
+    // Batch Actions Floating Toolbar
+    const batchDownloadSelectedZipBtn = document.getElementById('batchDownloadSelectedZipBtn');
+    if (batchDownloadSelectedZipBtn) {
+      batchDownloadSelectedZipBtn.addEventListener('click', downloadSelectedZip);
+    }
+
+    const batchApplyStatusBtn = document.getElementById('batchApplyStatusBtn');
+    if (batchApplyStatusBtn) {
+      batchApplyStatusBtn.addEventListener('click', applyBatchStatus);
+    }
+
+    const batchAddNoteBtn = document.getElementById('batchAddNoteBtn');
+    if (batchAddNoteBtn) {
+      batchAddNoteBtn.addEventListener('click', applyBatchNote);
+    }
+
+    const batchClearSelectionBtn = document.getElementById('batchClearSelectionBtn');
+    if (batchClearSelectionBtn) {
+      batchClearSelectionBtn.addEventListener('click', clearBatchSelection);
+    }
+
+    const selectAllReportsCb = document.getElementById('selectAllReportsCb');
+    if (selectAllReportsCb) {
+      selectAllReportsCb.addEventListener('change', () => {
+        const checked = selectAllReportsCb.checked;
+        document.querySelectorAll('.report-select-cb').forEach(cb => { cb.checked = checked; });
+        updateBatchActionBar();
+      });
+    }
+
     // Refresh & Purge
     if (refreshButton) {
       refreshButton.addEventListener('click', () => refreshDashboard(pageCursor));
@@ -1444,6 +2031,28 @@
         }
       });
     }
+
+    // Devices view listeners
+    const refreshDevicesBtn = document.getElementById('refreshDevicesBtn');
+    if (refreshDevicesBtn) {
+      refreshDevicesBtn.addEventListener('click', () => loadDevices());
+    }
+    const deviceSearchInput = document.getElementById('deviceSearchInput');
+    if (deviceSearchInput) {
+      let searchTimeout = null;
+      deviceSearchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => loadDevices(), 300);
+      });
+    }
+
+    // Analytics period buttons listeners
+    document.querySelectorAll('.analytics-period-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = btn.getAttribute('data-period');
+        if (p) loadAnalytics(p);
+      });
+    });
 
     // Modal tabs
     document.querySelectorAll('.modal-tab-btn').forEach(btn => {
@@ -1537,6 +2146,9 @@
     document.addEventListener('change', (e) => {
       if (e.target && e.target.classList.contains('status-select') && !e.target.closest('#detailWorkflowCard')) {
         updateInlineStatus(e.target);
+      }
+      if (e.target && e.target.classList.contains('report-select-cb')) {
+        updateBatchActionBar();
       }
     });
 

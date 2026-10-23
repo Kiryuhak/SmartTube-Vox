@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { classifyReport, getDerivedStatus, extractReportIssues } from '../src/triage.mjs';
+import { classifyReport, getDerivedStatus, extractReportIssues, EVENT_FRESHNESS, calculateEventFreshness } from '../src/triage.mjs';
 import { ReportStorage, CANONICAL_STATUSES, normalizeStatus } from '../src/storage.mjs';
 import { AutoTriageService } from '../src/automation/auto_triage.mjs';
 import { dispatchTelegramNotification } from '../src/notifications/telegram.mjs';
@@ -267,4 +267,49 @@ test('Dashboard Hardening: healthCardsIgnoreHistorical', () => {
   const classified = classifyReport(report);
   assert.equal(classified.activeEventCount, 0);
   assert.equal(classified.reportActiveIncident, false);
+});
+
+
+// 13. eventFreshnessClassification
+test('Event Freshness: classifies NEW_AFTER_RELEASE, HISTORICAL, RECURRING, UNKNOWN_AGE', () => {
+  assert.deepEqual(EVENT_FRESHNESS, ['NEW_AFTER_RELEASE', 'HISTORICAL', 'RECURRING', 'UNKNOWN_AGE']);
+
+  // Case 1: Fresh incident after release
+  const freshReport = {
+    status: 'NEW',
+    payload: {
+      appVersion: '32.56-vox.9.1',
+      safeRecentEvents: [{ code: 'PLAYER_REBUFFER', timestamp: Date.now() - 5000, level: 'ERROR' }]
+    }
+  };
+  assert.equal(calculateEventFreshness(freshReport), 'NEW_AFTER_RELEASE');
+
+  // Case 2: Historical events only
+  const histReport = {
+    status: 'NEW',
+    payload: {
+      appVersion: '32.56-vox.9.1',
+      safeRecentEvents: [{ code: 'PLAYER_REBUFFER', timestamp: Date.now() - 86400000 * 3, isHistorical: true, level: 'ERROR' }]
+    }
+  };
+  assert.equal(calculateEventFreshness(histReport), 'HISTORICAL');
+
+  // Case 3: Recurring events (rebuffer repeat count >= 2 or multiple errors)
+  const recurringReport = {
+    status: 'NEW',
+    payload: {
+      appVersion: '32.56-vox.9.1',
+      safeRecentEvents: [
+        { code: 'PLAYER_REBUFFER', timestamp: Date.now() - 1000, level: 'ERROR', safeContext: { rebufferCount: 3 } }
+      ]
+    }
+  };
+  assert.equal(calculateEventFreshness(recurringReport), 'RECURRING');
+
+  // Case 4: Unknown age (empty report without timestamps)
+  const emptyReport = {
+    status: 'NEW',
+    payload: {}
+  };
+  assert.equal(calculateEventFreshness(emptyReport), 'UNKNOWN_AGE');
 });
