@@ -250,6 +250,13 @@ public final class VotMediaFormatSelector {
                 return true;
             }
         }
+        String lang = format.getLanguage();
+        if (lang != null) {
+            String lower = lang.toLowerCase(Locale.US);
+            if (lower.contains("dubbed") || lower.contains(".d.") || lower.endsWith(".d")) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -260,7 +267,14 @@ public final class VotMediaFormatSelector {
         String trackId = format.getAudioTrackId();
         if (trackId != null) {
             String lower = trackId.toLowerCase(Locale.US);
-            if (lower.contains("dubbed-auto") || lower.contains("autodub")) {
+            if (lower.contains("dubbed-auto") || lower.contains("autodub") || lower.contains("auto-dub")) {
+                return true;
+            }
+        }
+        String lang = format.getLanguage();
+        if (lang != null) {
+            String lower = lang.toLowerCase(Locale.US);
+            if (lower.contains("dubbed-auto") || lower.contains("autodub") || lower.contains("auto-dub")) {
                 return true;
             }
         }

@@ -105,12 +105,27 @@ public final class VotAudioTrackHelper {
     }
 
     public static boolean isYoutubeAutoDub(@Nullable TrackInfo info) {
-        return info != null && info.acont != null && info.acont.contains("dubbed-auto");
+        if (info == null) return false;
+        if (info.acont != null && (info.acont.contains("dubbed-auto") || info.acont.contains("autodub") || info.acont.contains("auto-dub"))) {
+            return true;
+        }
+        if (info.rawLabel != null) {
+            String lower = info.rawLabel.toLowerCase(Locale.US);
+            return lower.contains("dubbed-auto") || lower.contains("autodub") || lower.contains("auto-dub");
+        }
+        return false;
     }
 
     public static boolean isDubbed(@Nullable TrackInfo info) {
-        return info != null && info.acont != null
-                && (info.acont.contains("dubbed") || info.acont.contains("dubbed-auto"));
+        if (info == null) return false;
+        if (info.acont != null && (info.acont.contains("dubbed") || info.acont.contains("dubbed-auto") || info.acont.contains("autodub") || info.acont.contains(".d.") || info.acont.endsWith(".d"))) {
+            return true;
+        }
+        if (info.rawLabel != null) {
+            String lower = info.rawLabel.toLowerCase(Locale.US);
+            return lower.contains("dubbed") || lower.contains("autodub") || lower.contains(".d.") || lower.endsWith(".d");
+        }
+        return false;
     }
 
     public static boolean isOriginalTrack(@Nullable TrackInfo info) {

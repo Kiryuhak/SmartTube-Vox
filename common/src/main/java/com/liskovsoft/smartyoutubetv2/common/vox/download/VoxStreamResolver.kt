@@ -139,8 +139,12 @@ class DefaultVoxStreamResolver(
         }
         if (candidates.isEmpty()) return null
 
-        // Исключаем дублированные русские дорожки, если есть оригиналы
-        val nonRussian = candidates.filter { !VotMediaFormatSelector.isRussianFormat(it) && !VotMediaFormatSelector.isDubbedFormat(it) }
+        // Исключаем дублированные и авто-дублированные русские дорожки, если есть оригиналы
+        val nonRussian = candidates.filter {
+            !VotMediaFormatSelector.isRussianFormat(it) &&
+            !VotMediaFormatSelector.isDubbedFormat(it) &&
+            !VotMediaFormatSelector.isAutoDubbedFormat(it)
+        }
         val pool = if (nonRussian.isNotEmpty()) nonRussian else candidates
 
         // Сортируем по максимальному битрейту для лучшего качества звука в MKV
