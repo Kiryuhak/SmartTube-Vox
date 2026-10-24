@@ -13,6 +13,8 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -198,18 +200,59 @@ public class Utils {
     }
 
     public static void showMultiChooser(Context context, Uri url) {
-        Intent primaryIntent = new Intent(Intent.ACTION_VIEW);
+        if (context == null || url == null) {
+            return;
+        }
+
+        copyToClipboard(context, url.toString());
+
+        Intent primaryIntent = new Intent(Intent.ACTION_VIEW, url);
         Intent secondaryIntent = new Intent(Intent.ACTION_SEND);
-        primaryIntent.setData(url);
         secondaryIntent.putExtra(Intent.EXTRA_TEXT, url.toString());
         secondaryIntent.setType("text/plain");
-        Intent chooserIntent = Intent.createChooser(primaryIntent, context.getResources().getText(R.string.share_link));
+
+        CharSequence title;
+        try {
+            title = context.getResources().getText(R.string.share_link);
+        } catch (Throwable e) {
+            title = "Share link";
+        }
+
+        Intent chooserIntent = Intent.createChooser(primaryIntent, title);
         chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { secondaryIntent });
         chooserIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
+        if (!(context instanceof Activity)) {
+            chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            primaryIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+
+        boolean launched = false;
         try {
             context.startActivity(chooserIntent);
-        } catch (ActivityNotFoundException e) {
-            Log.e(TAG, "Chooser intent not found", e);
+            launched = true;
+        } catch (Throwable e) {
+            Log.e(TAG, "Chooser intent launch failed: " + e.getMessage(), e);
+        }
+
+        if (!launched) {
+            MessageHelpers.showMessage(context, url.toString());
+        }
+    }
+
+    public static void copyToClipboard(Context context, String text) {
+        if (context == null || text == null) {
+            return;
+        }
+
+        try {
+            ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                ClipData clip = ClipData.newPlainText("SmartTube", text);
+                clipboard.setPrimaryClip(clip);
+            }
+        } catch (Throwable e) {
+            Log.e(TAG, "Failed to copy to clipboard: " + e.getMessage(), e);
         }
     }
 
