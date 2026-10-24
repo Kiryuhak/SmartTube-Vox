@@ -757,4 +757,16 @@ class VoxPlayerRecoveryControllerTest {
         assertEquals(1, controller.getSourceRecoveryCount())
         assertEquals(0, controller.getEngineSwitchCount())
     }
+
+    // 31. Live session HTTP 403 triggers source refresh
+    @Test
+    fun test31_LiveSessionHttp403TriggersSourceRefresh() {
+        controller.onPlaybackStart(sessionId = 416L, isLive = true, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "live_stream_403")
+        val http403Err = java.io.IOException("response code: 403 Forbidden")
+        val handled = controller.handlePlayerError(http403Err, 30_000L, true)
+        assertTrue(handled)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, controller.getSourceRecoveryCount())
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+    }
 }

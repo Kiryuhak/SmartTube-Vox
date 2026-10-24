@@ -372,7 +372,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
     @Synchronized
     fun handlePlayerError(error: Throwable?, currentPositionMs: Long, playWhenReady: Boolean): Boolean {
-        if (isLiveSession || isTerminalFailed()) return false
+        if (isTerminalFailed()) return false
 
         val is403 = VoxPlayerRecoveryTestHooks.http403 || VoxPlayerRecoveryPolicy.isStaleOrForbiddenSource(error)
         val isDns = VoxPlayerRecoveryTestHooks.dnsFailure || VoxPlayerRecoveryPolicy.isDnsFailure(error)
@@ -381,6 +381,10 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
             escalateRecovery(currentPositionMs, playWhenReady, "HTTP_403_FORBIDDEN")
             return true
         }
+
+        // Live sessions delegate live-specific stall/DVR handling to VoxLiveStallRecoveryController,
+        // but HTTP 403 / token expiry is handled above via bounded source refresh.
+        if (isLiveSession) return false
 
         if (isDns) {
             if (engineSwitchCount < VoxPlayerRecoveryPolicy.MAX_ENGINE_SWITCHES) {
