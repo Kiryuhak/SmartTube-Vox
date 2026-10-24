@@ -204,7 +204,12 @@ public class Utils {
             return;
         }
 
-        copyToClipboard(context, url.toString());
+        // Validate scheme to ensure only web URLs are shared (no internal file/content leaks)
+        String scheme = url.getScheme();
+        if (scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
+            Log.e(TAG, "Cannot share non-web URI: " + url);
+            return;
+        }
 
         Intent primaryIntent = new Intent(Intent.ACTION_VIEW, url);
         Intent secondaryIntent = new Intent(Intent.ACTION_SEND);
@@ -214,7 +219,7 @@ public class Utils {
         CharSequence title;
         try {
             title = context.getResources().getText(R.string.share_link);
-        } catch (Throwable e) {
+        } catch (Resources.NotFoundException | NullPointerException e) {
             title = "Share link";
         }
 
@@ -231,11 +236,16 @@ public class Utils {
         try {
             context.startActivity(chooserIntent);
             launched = true;
-        } catch (Throwable e) {
-            Log.e(TAG, "Chooser intent launch failed: " + e.getMessage(), e);
+        } catch (ActivityNotFoundException e) {
+            Log.e(TAG, "Chooser intent not found on this device: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            // Catches AndroidRuntimeException (e.g. non-activity context issues) and framework runtime errors
+            Log.e(TAG, "Chooser runtime failure (" + e.getClass().getSimpleName() + "): " + e.getMessage(), e);
         }
 
         if (!launched) {
+            // Resilient fallback for Android TV: copy link to clipboard on failure and notify the user explicitly
+            copyToClipboard(context, url.toString());
             MessageHelpers.showMessage(context, url.toString());
         }
     }
@@ -251,7 +261,7 @@ public class Utils {
                 ClipData clip = ClipData.newPlainText("SmartTube", text);
                 clipboard.setPrimaryClip(clip);
             }
-        } catch (Throwable e) {
+        } catch (RuntimeException e) {
             Log.e(TAG, "Failed to copy to clipboard: " + e.getMessage(), e);
         }
     }

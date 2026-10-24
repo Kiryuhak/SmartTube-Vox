@@ -1,18 +1,18 @@
 package com.liskovsoft.smartyoutubetv2.common.utils
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.shadows.ShadowApplication
@@ -25,6 +25,8 @@ class VoxShareLinkChooserTest {
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("empty", ""))
     }
 
     @Test
@@ -35,6 +37,21 @@ class VoxShareLinkChooserTest {
         Utils.copyToClipboard(null, null)
         Utils.copyToClipboard(context, null)
         Utils.copyToClipboard(null, "test")
+    }
+
+    @Test
+    fun nonWebUri_rejectedAndDoesNotLaunchChooserOrPolluteClipboard() {
+        val sensitiveUri = Uri.parse("file:///data/data/com.liskovsoft.smartyoutubetv2/databases/prefs.db")
+        Utils.showMultiChooser(context, sensitiveUri)
+
+        // Must not launch chooser for file:// or content:// URIs
+        val startedIntent = ShadowApplication.getInstance().nextStartedActivity
+        assertNull("Chooser must not be launched for non-http/https URI", startedIntent)
+
+        // Must not copy to clipboard
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
+        assertTrue("Clipboard must not contain sensitive local URI", clipText.isNullOrEmpty())
     }
 
     @Test
@@ -52,14 +69,9 @@ class VoxShareLinkChooserTest {
     }
 
     @Test
-    fun showMultiChooser_withApplicationContext_addsNewTaskFlagAndDoesNotCrash() {
+    fun showMultiChooser_withApplicationContext_addsNewTaskFlagAndLaunchesChooser() {
         val testUri = Uri.parse("https://youtu.be/sample123")
         Utils.showMultiChooser(context, testUri)
-
-        // Verify that the link is always copied to clipboard
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        assertNotNull(clipboard)
-        assertEquals(testUri.toString(), clipboard!!.primaryClip?.getItemAt(0)?.text?.toString())
 
         // Verify that Chooser intent was started with FLAG_ACTIVITY_NEW_TASK
         val startedIntent = ShadowApplication.getInstance().nextStartedActivity
@@ -72,26 +84,43 @@ class VoxShareLinkChooserTest {
     }
 
     @Test
-    fun displayShareVideoDialog_constructsValidUrlAndCopies() {
-        Utils.displayShareVideoDialog(context, "abcVideo", 90)
+    fun showMultiChooser_whenChooserThrowsActivityNotFound_gracefullyFallsBackToClipboard() {
+        val testUri = Uri.parse("https://youtu.be/fallbackTest")
+        val throwingContext = object : ContextWrapper(context) {
+            override fun startActivity(intent: Intent?) {
+                throw android.content.ActivityNotFoundException("No chooser activity on TV")
+            }
+        }
 
+        // Should not throw
+        Utils.showMultiChooser(throwingContext, testUri)
+
+        // Verify fallback copied to clipboard
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        assertEquals("https://youtu.be/abcVideo?t=90", clipboard?.primaryClip?.getItemAt(0)?.text?.toString())
+        assertEquals(testUri.toString(), clipboard?.primaryClip?.getItemAt(0)?.text?.toString())
     }
 
     @Test
-    fun displaySharePlaylistDialog_constructsValidUrlAndCopies() {
-        Utils.displaySharePlaylistDialog(context, "PLtest_playlist")
-
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        assertEquals("https://www.youtube.com/playlist?list=PLtest_playlist", clipboard?.primaryClip?.getItemAt(0)?.text?.toString())
+    fun displayShareVideoDialog_constructsValidUrl() {
+        val uri = Utils.convertToFullVideoUrl("abcVideo", 90)
+        assertEquals("https://youtu.be/abcVideo?t=90", uri.toString())
     }
 
     @Test
-    fun displayShareChannelDialog_constructsValidUrlAndCopies() {
-        Utils.displayShareChannelDialog(context, "UCtest_channel")
+    fun displaySharePlaylistDialog_constructsValidUrl() {
+        val uri = Utils.convertToPlaylistUrl("PLtest_playlist")
+        assertEquals("https://www.youtube.com/playlist?list=PLtest_playlist", uri.toString())
+    }
 
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        assertEquals("https://www.youtube.com/channel/UCtest_channel", clipboard?.primaryClip?.getItemAt(0)?.text?.toString())
+    @Test
+    fun displayShareChannelDialog_constructsValidUrl() {
+        val uri = Utils.convertToFullChannelUrl("UCtest_channel")
+        assertEquals("https://www.youtube.com/channel/UCtest_channel", uri.toString())
+    }
+
+    @Test
+    fun displayShareEmbedVideoDialog_constructsValidUrl() {
+        val uri = Utils.convertToEmbedVideoUrl("xyzVideo", 45)
+        assertEquals("https://www.youtube.com/embed/xyzVideo?start=45", uri.toString())
     }
 }
