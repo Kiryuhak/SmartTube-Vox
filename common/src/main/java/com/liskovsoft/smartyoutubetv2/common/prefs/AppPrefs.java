@@ -112,8 +112,11 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     }
 
     public boolean isDownloadedSectionMigrated() {
-        return getBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), false)
-                || getBoolean(DOWNLOADED_SECTION_MIGRATED, false);
+        String profileKey = getProfileKey(DOWNLOADED_SECTION_MIGRATED, true);
+        if (contains(profileKey)) {
+            return getBoolean(profileKey, false);
+        }
+        return getBoolean(DOWNLOADED_SECTION_MIGRATED, false);
     }
 
     public void setDownloadedSectionMigrated(boolean migrated) {
@@ -122,8 +125,11 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     }
 
     public boolean isDownloadedSectionExplicitlyHidden() {
-        return getBoolean(getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true), false)
-                || getBoolean(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, false);
+        String profileKey = getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true);
+        if (contains(profileKey)) {
+            return getBoolean(profileKey, false);
+        }
+        return getBoolean(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, false);
     }
 
     public void setDownloadedSectionExplicitlyHidden(boolean hidden) {
@@ -214,7 +220,7 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     //    return key;
     //}
 
-    private String getProfileKey(String key, boolean isMultiProfilesEnabled) {
+    public String getProfileKey(String key, boolean isMultiProfilesEnabled) {
         String profileName = getProfileName();
         if (!TextUtils.isEmpty(profileName) && isMultiProfilesEnabled) {
             key = profileName + "_" + key;

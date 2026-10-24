@@ -420,4 +420,55 @@ class DownloadsSectionPersistenceTest {
             restartedService.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED)
         )
     }
+
+    @Test
+    fun testScenarioK_ConflictingValues_ProfileTrue_GlobalFalse() {
+        val account = createMockAccount("ConflictProfileA")
+        prefs.onAccountChanged(account)
+
+        val profileKey = prefs.getProfileKey("downloaded_section_explicitly_hidden", true)
+        prefs.putBoolean(profileKey, true)
+        prefs.putBoolean("downloaded_section_explicitly_hidden", false)
+
+        assertTrue(
+            "Scenario K: profile=true must evaluate to hidden even if global=false",
+            prefs.isDownloadedSectionExplicitlyHidden
+        )
+
+        // Verify that manual re-enable from UI unhides and clears both keys
+        val service = SidebarService.instance(context)
+        service.enableSection(BrowsePresenter.TYPE_DOWNLOADED, true)
+        assertFalse(
+            "Scenario K: User manual re-enable must clear hidden flag across both keys",
+            prefs.isDownloadedSectionExplicitlyHidden
+        )
+    }
+
+    @Test
+    fun testScenarioL_ConflictingValues_ProfileFalse_GlobalTrue() {
+        val account = createMockAccount("ConflictProfileB")
+        prefs.onAccountChanged(account)
+
+        val profileKey = prefs.getProfileKey("downloaded_section_explicitly_hidden", true)
+        prefs.putBoolean(profileKey, false)
+        prefs.putBoolean("downloaded_section_explicitly_hidden", true)
+
+        // Profile precedence: when profile explicitly sets false, it takes precedence over global fallback
+        assertFalse(
+            "Scenario L: profile explicit false takes precedence over global fallback true",
+            prefs.isDownloadedSectionExplicitlyHidden
+        )
+
+        // When user explicitly clicks to re-enable in UI, setDownloadedSectionExplicitlyHidden(false) sets both to false
+        val service = SidebarService.instance(context)
+        service.enableSection(BrowsePresenter.TYPE_DOWNLOADED, true)
+        assertFalse(
+            "Scenario L: Re-enabling clears both profile and global keys",
+            prefs.isDownloadedSectionExplicitlyHidden
+        )
+        assertTrue(
+            "Scenario L: Section is now pinned",
+            service.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED)
+        )
+    }
 }
