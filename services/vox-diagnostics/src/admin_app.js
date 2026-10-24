@@ -1375,6 +1375,85 @@
 
   let currentAnalyticsPeriod = '7d';
 
+  // --- COMPLETE ACTIVE REPORTS ZIP EXPORT (NEW + INVESTIGATING) ---
+  async function downloadAllActiveZip() {
+    const exportSnapshotUntil = Date.now();
+    let currentCursor = null;
+    let part = 1;
+    let totalDownloaded = 0;
+    let hasMoreParts = true;
+
+    showToast('Подготовка выгрузки всех активных отчётов (NEW + В работе)...');
+
+    try {
+      while (hasMoreParts) {
+        const params = new URLSearchParams({
+          statuses: 'NEW,INVESTIGATING',
+          until: String(exportSnapshotUntil),
+          part: String(part),
+        });
+        if (currentCursor) {
+          params.set('cursor', currentCursor);
+        }
+
+        const url = '/v1/admin/export/zip?' + params.toString();
+        if (part > 1) {
+          showToast('Загрузка части ' + part + ' архива...');
+        }
+
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (res.status === 401 || res.status === 403) {
+          showToast('Нет доступа к выгрузке (401/403): требуется авторизация администратора', true);
+          return;
+        }
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          const errMsg = errJson.message || res.statusText || String(res.status);
+          showToast('Ошибка формирования части ' + part + ': ' + errMsg, true);
+          return;
+        }
+
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^";]+)"?/i);
+        const defaultName = part > 1 ? ('VOX_Diagnostics_Active_part' + part + '.zip') : 'VOX_Diagnostics_Active.zip';
+        const filename = match ? match[1] : defaultName;
+
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+
+        const partReports = parseInt(res.headers.get('X-Total-Reports') || '0', 10);
+        totalDownloaded += partReports;
+        const isTruncated = res.headers.get('X-Export-Truncated') === 'true';
+        const nextCursor = res.headers.get('X-Export-Next-Cursor');
+
+        if (isTruncated && nextCursor) {
+          showToast('Часть ' + part + ' скачана (' + partReports + ' отчётов). Загрузка следующей части...');
+          currentCursor = nextCursor;
+          part++;
+          await new Promise((r) => setTimeout(r, 600));
+        } else {
+          hasMoreParts = false;
+        }
+      }
+
+      if (part > 1) {
+        showToast('Выгрузка завершена: успешно скачано частей: ' + part + ' (всего ' + totalDownloaded + ' отчётов)');
+      } else {
+        showToast(totalDownloaded > 0 ? ('Архив успешно скачан (' + totalDownloaded + ' отчётов)') : 'Архив скачан (0 активных отчётов)');
+      }
+    } catch (err) {
+      console.error('[AdminApp] Active ZIP export failed:', err);
+      showToast('Ошибка при скачивании архива: ' + err.message, true);
+    }
+  }
+
   // --- ZIP EXPORT ---
   async function downloadZipArchive(params = {}) {
     const qs = new URLSearchParams(params).toString();
@@ -1394,7 +1473,7 @@
       const blob = await res.blob();
       const filenameHeader = res.headers.get('Content-Disposition') || '';
       const match = filenameHeader.match(/filename="?([^";]+)"?/i);
-      const filename = match ? match[1] : 'SmartTube-VOX-Diagnostics.zip';
+      const filename = match ? match[1] : 'VOX_Diagnostics_Active.zip';
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
@@ -1965,12 +2044,27 @@
       if (headerMorePopup) headerMorePopup.classList.remove('open');
     });
 
+    // Complete Active Reports ZIP Export (NEW + INVESTIGATING)
+    const downloadAllActiveZipBtn = document.getElementById('downloadAllActiveZipBtn');
+    if (downloadAllActiveZipBtn) {
+      downloadAllActiveZipBtn.addEventListener('click', () => {
+        downloadAllActiveZip();
+      });
+    }
+
+    const headerDownloadAllZipBtn = document.getElementById('headerDownloadAllZipBtn');
+    if (headerDownloadAllZipBtn) {
+      headerDownloadAllZipBtn.addEventListener('click', () => {
+        downloadAllActiveZip();
+      });
+    }
+
     // Bulk ZIP from Action Menu
     const downloadAllPendingZipBtn = document.getElementById('downloadAllPendingZipBtn');
     if (downloadAllPendingZipBtn) {
       downloadAllPendingZipBtn.addEventListener('click', () => {
         if (headerMorePopup) headerMorePopup.classList.remove('open');
-        downloadZipArchive();
+        downloadAllActiveZip();
       });
     }
 

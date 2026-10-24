@@ -541,6 +541,17 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     .btn-outline {
       background: transparent;
     }
+    .btn-success {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #10b981;
+      color: #34d399;
+      font-weight: 600;
+    }
+    .btn-success:hover {
+      background: #10b981;
+      border-color: #10b981;
+      color: #fff;
+    }
     .btn-sm {
       height: 28px;
       padding: 3px 10px;
@@ -1009,6 +1020,9 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
     </div>
     <div class="header-actions">
       <span class="retention-pill">Хранение: 30 дней</span>
+      <button class="btn btn-success" id="headerDownloadAllZipBtn" type="button" title="Скачать все новые и в работе диагностические отчёты (ZIP)">
+        <span>📦 Скачать все новые и в работе (ZIP)</span>
+      </button>
       <button class="btn btn-primary" id="refreshButton">
         <span>Обновить</span>
       </button>
@@ -1016,7 +1030,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       <div class="action-menu-dropdown">
         <button class="btn" id="headerMoreBtn" title="Ещё действия">⋯</button>
         <div class="action-menu-popup" id="headerMorePopup">
-          <button class="action-menu-item" id="downloadAllPendingZipBtn" style="color: #34d399;">📦 Скачать все незавершённые ZIP (NEW + В работе)</button>
+          <button class="action-menu-item" id="downloadAllPendingZipBtn" style="color: #34d399;">📦 Скачать все новые и в работе (ZIP)</button>
           <button class="action-menu-item" id="batchInvestigateBtn" style="color: #60a5fa;">🚀 Перевести утверждённые отчёты в «В работе»</button>
           <button class="action-menu-item" id="purgeAllBtn" style="color: var(--danger);">🗑️ Очистить все логи</button>
         </div>
@@ -1232,6 +1246,9 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
 
         <button class="btn btn-outline" id="resetFiltersBtn" type="button" style="display: none;">
           <span>Сбросить</span>
+        </button>
+        <button class="btn btn-success" id="downloadAllActiveZipBtn" type="button" title="Скачать все новые и в работе диагностические отчёты (ZIP)">
+          <span>📦 Скачать все новые и в работе (ZIP)</span>
         </button>
       </div>
 

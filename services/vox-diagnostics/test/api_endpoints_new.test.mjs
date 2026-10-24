@@ -26,7 +26,7 @@ test('API Gate 1: Bulk ZIP export requires admin authorization', async () => {
   const resAuth = await handleRequest(reqAuth, env);
   assert.equal(resAuth.status, 200, 'Authorized request must return 200');
   assert.equal(resAuth.headers.get('content-type'), 'application/zip');
-  assert.ok(resAuth.headers.get('content-disposition').includes('SmartTube-VOX-Diagnostics-'));
+  assert.ok(resAuth.headers.get('content-disposition').includes('VOX_Diagnostics_Active_') || resAuth.headers.get('content-disposition').includes('SmartTube-VOX-Diagnostics-'));
   const body = await resAuth.arrayBuffer();
   assert.ok(body.byteLength > 100, 'Zip file must contain valid PK bytes');
 });

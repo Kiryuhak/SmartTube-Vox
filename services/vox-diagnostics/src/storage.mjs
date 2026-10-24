@@ -514,13 +514,14 @@ export class ReportStorage {
   /**
    * Возвращает список отчётов с фильтрацией и пагинацией.
    */
-  async listReports({ platform, appVersion, errorCategory, status, reportPurpose, search, severity, device, signature, hasNotes, hasDuplicates, attention, since, sort = 'newest', cursor, limit = 50, offset = 0 } = {}) {
+  async listReports({ platform, appVersion, errorCategory, status, statuses, reportPurpose, search, severity, device, signature, hasNotes, hasDuplicates, attention, since, until, sort = 'newest', cursor, limit = 50, offset = 0, includePayload = false } = {}) {
     const lim = Math.min(Math.max(1, limit), 100);
     const off = Math.max(0, offset);
 
     if (this.db) {
+      const payloadCol = includePayload ? 'payload_json, ' : '';
       let query = `SELECT report_id, created_at, schema_version, app_version, platform,
-                          device_family, error_category, expires_at, status, developer_notes,
+                          device_family, error_category, ${payloadCol}expires_at, status, developer_notes,
                           report_purpose, error_signature, severity, subsystem, stage,
                           event_error_category, updated_at,
                           (SELECT COUNT(*) FROM reports related WHERE related.error_signature = reports.error_signature AND related.report_id != reports.report_id AND reports.error_signature != '') AS related_count
@@ -539,7 +540,11 @@ export class ReportStorage {
         query += ` AND error_category = ?`;
         params.push(errorCategory);
       }
-      if (status) {
+      if (Array.isArray(statuses) && statuses.length > 0) {
+        const placeholders = statuses.map(() => '?').join(', ');
+        query += ` AND status IN (${placeholders})`;
+        params.push(...statuses.map(s => normalizeStatus(s)));
+      } else if (status) {
         const norm = normalizeStatus(status);
         if (norm === 'IN_PROGRESS') {
           query += ` AND status IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED', 'in_progress', 'reviewed', 'triaged')`;
@@ -572,6 +577,7 @@ export class ReportStorage {
       if (hasDuplicates === true) query += " AND error_signature != '' AND (SELECT COUNT(*) FROM reports r2 WHERE r2.error_signature = reports.error_signature) > 1";
       if (attention === true) query += " AND status NOT IN ('IGNORED_TEST', 'TEST', 'ignored_test', 'test', 'RESOLVED', 'resolved') AND (status IN ('NEW', 'IN_PROGRESS') OR severity IN ('HIGH', 'CRITICAL') OR EXISTS (SELECT 1 FROM issues WHERE issues.signature = reports.error_signature AND issues.reopened_at > 0 AND issues.status = 'IN_PROGRESS'))";
       if (since) { query += ' AND created_at >= ?'; params.push(Number(since)); }
+      if (until) { query += ' AND created_at <= ?'; params.push(Number(until)); }
       if (cursor && sort === 'newest') {
         const [created, id] = String(cursor).split(':');
         if (!Number.isSafeInteger(Number(created)) || !id) throw new RangeError('Invalid cursor');
@@ -593,7 +599,10 @@ export class ReportStorage {
       if (platform) list = list.filter((r) => r.platform === platform);
       if (appVersion) list = list.filter((r) => r.app_version === appVersion);
       if (errorCategory) list = list.filter((r) => r.error_category === errorCategory);
-      if (status) {
+      if (Array.isArray(statuses) && statuses.length > 0) {
+        const normStatuses = statuses.map(s => normalizeStatus(s));
+        list = list.filter(r => normStatuses.includes(normalizeStatus(r.status)));
+      } else if (status) {
         const norm = normalizeStatus(status);
         list = list.filter((r) => normalizeStatus(r.status) === norm);
       }
@@ -615,6 +624,7 @@ export class ReportStorage {
       if (hasDuplicates === true) list = list.filter(r => r.error_signature && [...this.inMemoryReports.values()].some(other => other.report_id !== r.report_id && other.error_signature === r.error_signature));
       if (attention === true) list = list.filter(r => !['IGNORED_TEST', 'RESOLVED'].includes(normalizeStatus(r.status)) && (['NEW', 'IN_PROGRESS'].includes(normalizeStatus(r.status)) || ['HIGH', 'CRITICAL'].includes(r.severity) || (this.issues.get(r.error_signature)?.reopened_at > 0 && this.issues.get(r.error_signature)?.issue_status === 'IN_PROGRESS')));
       if (since) list = list.filter(r => r.created_at >= Number(since));
+      if (until) list = list.filter(r => r.created_at <= Number(until));
       if (cursor && sort === 'newest') {
         const [created, id] = String(cursor).split(':');
         if (!Number.isSafeInteger(Number(created)) || !id) throw new RangeError('Invalid cursor');
@@ -626,7 +636,8 @@ export class ReportStorage {
         : sort === 'status' ? normalizeStatus(a.status).localeCompare(normalizeStatus(b.status)) || b.created_at - a.created_at
         : sort === 'version' ? b.app_version.localeCompare(a.app_version) || b.created_at - a.created_at
         : b.created_at - a.created_at || b.report_id.localeCompare(a.report_id));
-      return list.slice(off, off + lim).map((r) => ({
+      const actualOffset = cursor ? 0 : off;
+      return list.slice(actualOffset, actualOffset + lim).map((r) => ({
         report_id: r.report_id,
         created_at: r.created_at,
         schema_version: r.schema_version,
@@ -634,6 +645,7 @@ export class ReportStorage {
         platform: r.platform,
         device_family: r.device_family,
         error_category: r.error_category,
+        ...(includePayload ? { payload_json: r.payload_json, payload: r.payload } : {}),
         expires_at: r.expires_at,
         status: normalizeStatus(r.status),
         developer_notes: r.developer_notes,

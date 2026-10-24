@@ -14,36 +14,62 @@ import { classifyReport, buildClassificationSignature, isSyntheticTestReport, st
  */
 export function prepareReportDownloadJson(report) {
   if (!report) return null;
-  const p = report.payload || {};
-  const sanitizedPayload = sanitizePayload(p);
+  let p = report.payload;
+  if (!p && report.payload_json && typeof report.payload_json === 'string') {
+    try { p = JSON.parse(report.payload_json); } catch (_) { p = null; }
+  }
+  if (!p || (typeof p === 'object' && Object.keys(p).length === 0)) {
+    if (report.safeRecentEvents || report.structuredEvents || report.model || report.deviceTier || report.events || report.device) {
+      p = report;
+    } else {
+      p = p || {};
+    }
+  }
 
-  const status = normalizeStatus(report.status);
-  const developerNotes = report.developer_notes || report.developerNotes || '';
+  const rawStatus = report.status || p.status;
+  const status = normalizeStatus(rawStatus);
+  const developerNotes = report.developer_notes || report.developerNotes || p.developerNotes || p.developer_notes || '';
   const classification = classifyReport(p);
   const errorCategory = report.error_category || report.errorCategory || p.errorCategory || classification.errorCategory || null;
   const errorSignature = report.error_signature || report.errorSignature || p.errorSignature || classification.signature || '';
 
   const installationId = report.installation_id || report.installationId || p.installationId || p.installation_id || null;
+  const reportId = report.report_id || report.reportId || p.reportId || p.report_id;
+  const createdAt = report.created_at || report.createdAt || p.createdAt || p.created_at || p.timestamp;
+  const platform = report.platform || p.platform || 'unknown';
+  const appVersion = report.app_version || report.appVersion || p.appVersion || 'unknown';
+
+  const sanitizedPayload = sanitizePayload(p);
+
+  const safeEvents = sanitizedPayload.safeRecentEvents || p.safeRecentEvents || p.events || [];
+  const structEvents = sanitizedPayload.structuredEvents || p.structuredEvents || classification.events || [];
+  const errorsList = sanitizedPayload.errors || p.errors || [];
+  const techSummary = sanitizedPayload.technicalSummary || p.technicalSummary || classification.technicalSummary || {};
+  const contextData = sanitizedPayload.context || sanitizedPayload.playbackContext || p.context || p.playbackContext || {};
 
   return {
-    reportId: report.report_id || report.reportId,
+    reportId,
     installationId,
-    createdAt: report.created_at || report.createdAt,
-    platform: report.platform || 'unknown',
-    appVersion: report.app_version || report.appVersion || 'unknown',
+    createdAt,
+    platform,
+    appVersion,
     device: {
-      family: report.device_family || '',
-      manufacturer: p.manufacturer || '',
-      model: p.model || '',
-      tier: p.deviceTier || '',
-      sdkInt: p.sdkInt || null,
-      osVersion: p.osVersion || '',
+      family: report.device_family || p.deviceFamily || (typeof p.device === 'object' ? p.device.family : '') || '',
+      manufacturer: p.manufacturer || (typeof p.device === 'object' ? p.device.manufacturer : '') || report.manufacturer || '',
+      model: p.model || (typeof p.device === 'object' ? p.device.model : '') || report.device_family || '',
+      tier: p.deviceTier || (typeof p.device === 'object' ? p.device.tier : '') || p.tier || '',
+      sdkInt: p.sdkInt || (typeof p.device === 'object' ? p.device.sdkInt : null) || null,
+      osVersion: p.osVersion || (typeof p.device === 'object' ? p.device.osVersion : '') || '',
     },
     errorCategory,
     errorSignature,
     status,
     developerNotes,
-    safeRecentEvents: p.safeRecentEvents || [],
+    context: contextData,
+    errors: errorsList,
+    technicalSummary: techSummary,
+    structuredEvents: structEvents,
+    safeRecentEvents: safeEvents,
     payload: sanitizedPayload,
   };
 }
@@ -830,6 +856,9 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const device = url.searchParams.get('device') || undefined;
     const signature = url.searchParams.get('signature') || undefined;
     const cursor = url.searchParams.get('cursor') || undefined;
+    const part = url.searchParams.get('part') ? parseInt(url.searchParams.get('part'), 10) : undefined;
+    const until = url.searchParams.get('until') ? parseInt(url.searchParams.get('until'), 10) : undefined;
+    const limit = url.searchParams.get('limit') ? parseInt(url.searchParams.get('limit'), 10) : undefined;
 
     try {
       const result = await buildDiagnosticsZip(storage, {
@@ -841,6 +870,9 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         device,
         signature,
         cursor,
+        part,
+        until,
+        maxReports: limit,
       });
 
       const headers = {
@@ -850,6 +882,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         'X-Content-Type-Options': 'nosniff',
         'X-Total-Reports': String(result.totalReports),
         'X-Export-Truncated': String(Boolean(result.isTruncated)),
+        'X-Export-Part': String(result.part || part || 1),
       };
       if (result.isTruncated && result.nextCursor) {
         headers['X-Export-Next-Cursor'] = result.nextCursor;
