@@ -112,19 +112,23 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     }
 
     public boolean isDownloadedSectionMigrated() {
-        return getBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), false);
+        return getBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), false)
+                || getBoolean(DOWNLOADED_SECTION_MIGRATED, false);
     }
 
     public void setDownloadedSectionMigrated(boolean migrated) {
         putBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), migrated);
+        putBoolean(DOWNLOADED_SECTION_MIGRATED, migrated);
     }
 
     public boolean isDownloadedSectionExplicitlyHidden() {
-        return getBoolean(getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true), false);
+        return getBoolean(getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true), false)
+                || getBoolean(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, false);
     }
 
     public void setDownloadedSectionExplicitlyHidden(boolean hidden) {
         putBoolean(getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true), hidden);
+        putBoolean(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, hidden);
     }
 
     public String getProfileData(String key) {

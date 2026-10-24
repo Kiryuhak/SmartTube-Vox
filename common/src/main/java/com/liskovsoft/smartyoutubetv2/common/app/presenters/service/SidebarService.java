@@ -49,6 +49,9 @@ public class SidebarService implements ProfileChangeListener {
     }
 
     public Collection<Video> getPinnedItems() {
+        if (mPrefs.isDownloadedSectionExplicitlyHidden()) {
+            Helpers.removeIf(mPinnedItems, item -> item == null || getSectionId(item) == com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED);
+        }
         return Collections.unmodifiableList(mPinnedItems);
     }
 
@@ -138,6 +141,10 @@ public class SidebarService implements ProfileChangeListener {
      * Contains sections and pinned items!
      */
     public boolean isSectionPinned(int sectionId) {
+        if (sectionId == com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED
+                && mPrefs.isDownloadedSectionExplicitlyHidden()) {
+            return false;
+        }
         Video section = Helpers.findFirst(mPinnedItems, item -> getSectionId(item) == sectionId);
         return section != null; // by default enable all pinned items
     }
@@ -269,18 +276,25 @@ public class SidebarService implements ProfileChangeListener {
     }
 
     private void initPinnedItems() {
+        boolean downloadsExplicitlyHidden = mPrefs.isDownloadedSectionExplicitlyHidden();
         for (int sectionId : mDefaultSections.values()) {
             // Hidden sections
-            enableSection(sectionId, !Helpers.equalsAny(sectionId, new int[] {
+            boolean isDefaultEnabled = !Helpers.equalsAny(sectionId, new int[] {
                     MediaGroup.TYPE_NOTIFICATIONS,
                     MediaGroup.TYPE_PLAYBACK_QUEUE,
                     MediaGroup.TYPE_TRENDING,
                     MediaGroup.TYPE_BLOCKED_CHANNELS
-            }));
+            });
+            if (sectionId == com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED && downloadsExplicitlyHidden) {
+                isDefaultEnabled = false;
+            }
+            enableSection(sectionId, isDefaultEnabled);
         }
         if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
             mPrefs.setDownloadedSectionMigrated(true);
-            mPrefs.setDownloadedSectionExplicitlyHidden(false);
+            if (!downloadsExplicitlyHidden) {
+                mPrefs.setDownloadedSectionExplicitlyHidden(false);
+            }
         }
     }
 
@@ -308,6 +322,10 @@ public class SidebarService implements ProfileChangeListener {
 
             return !item.hasPlaylist() && item.channelId == null && item.sectionId == -1 && item.channelGroupId == null && !item.hasReloadPageKey();
         });
+
+        if (mPrefs.isDownloadedSectionExplicitlyHidden()) {
+            Helpers.removeIf(mPinnedItems, item -> item == null || getSectionId(item) == com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED);
+        }
     }
 
     private void restoreState() {
@@ -331,7 +349,9 @@ public class SidebarService implements ProfileChangeListener {
         // One-time migration for existing users upgrading to VOX:
         // ensure Downloads section is added on first upgrade, but respect user choice if they hide it subsequently.
         if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
-            if (!mPrefs.isDownloadedSectionExplicitlyHidden() && !mPrefs.isDownloadedSectionMigrated()) {
+            if (mPrefs.isDownloadedSectionExplicitlyHidden()) {
+                Helpers.removeIf(mPinnedItems, item -> item == null || getSectionId(item) == com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED);
+            } else if (!mPrefs.isDownloadedSectionMigrated()) {
                 if (!isSectionPinned(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED)) {
                     enableSection(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED, true);
                 }
