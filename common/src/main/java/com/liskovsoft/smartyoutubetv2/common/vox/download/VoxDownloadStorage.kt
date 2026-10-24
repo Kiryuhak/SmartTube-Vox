@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets
 /**
  * Безопасное хранилище временных файлов и состояния заданий скачивания VOX 5.
  */
-class VoxDownloadStorage(val context: Context) {
+open class VoxDownloadStorage(val context: Context) {
 
     companion object {
         private const val DOWNLOADS_DIR = "vox-downloads"
@@ -245,6 +245,9 @@ class VoxDownloadStorage(val context: Context) {
         FileOutputStream(tempFile).use { out ->
             out.write(json.toString(2).toByteArray(StandardCharsets.UTF_8))
             out.flush()
+            try {
+                out.fd.sync()
+            } catch (ignored: Exception) {}
         }
         // На Android rename атомарно заменяет существующий файл. Файловые системы,
         // запрещающие замену, используют резервную копию с восстановлением при сбое.
@@ -423,6 +426,46 @@ class VoxDownloadStorage(val context: Context) {
     }
 
     /**
+     * Очищает внутренние временные .part файлы треков после успешного мультиплексирования и валидации MKV.
+     * Это освобождает место на диске перед этапом публикации в MediaStore, снижая пиковое потребление
+     * дискового пространства с ~3.0x до <= 2.0x. Итоговый файл output.mkv и job.json сохраняются.
+     */
+    fun cleanTrackSourcesAfterMux(downloadId: String) {
+        try {
+            for (track in VoxDownloadTrack.values()) {
+                val file = getTrackFile(downloadId, track)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+            val tmpMkv = getTmpOutputFile(downloadId)
+            if (tmpMkv.exists()) {
+                tmpMkv.delete()
+            }
+        } catch (e: Exception) {
+            // Игнорируем ошибки очистки промежуточных треков
+        }
+    }
+
+    /**
+     * Очищает локальную копию output.mkv после успешной публикации в MediaStore.
+     */
+    fun cleanOutputFileAfterPublication(downloadId: String) {
+        try {
+            val outputMkv = getOutputFile(downloadId)
+            if (outputMkv.exists()) {
+                outputMkv.delete()
+            }
+            val tmpMkv = getTmpOutputFile(downloadId)
+            if (tmpMkv.exists()) {
+                tmpMkv.delete()
+            }
+        } catch (e: Exception) {
+            // Игнорируем ошибки очистки
+        }
+    }
+
+    /**
      * Очищает внутренние временные .part файлы и локальную копию output.mkv после успешной публикации.
      * Сохраняет job.json с метаданными и publishedUri.
      */
@@ -462,7 +505,7 @@ class VoxDownloadStorage(val context: Context) {
      * @param safetyMarginBytes Запас свободного места (по умолчанию 25 МБ)
      * @return true если места достаточно
      */
-    fun hasEnoughSpace(requiredBytes: Long, safetyMarginBytes: Long = MIN_SAFETY_MARGIN_BYTES): Boolean {
+    open fun hasEnoughSpace(requiredBytes: Long, safetyMarginBytes: Long = MIN_SAFETY_MARGIN_BYTES): Boolean {
         if (requiredBytes < 0L) return false
         val needed = if (Long.MAX_VALUE - safetyMarginBytes < requiredBytes) Long.MAX_VALUE else (requiredBytes + safetyMarginBytes)
         val available = getAvailableBytes()
@@ -477,7 +520,7 @@ class VoxDownloadStorage(val context: Context) {
     /**
      * Возвращает доступный объем свободного места в байтах.
      */
-    fun getAvailableBytes(): Long {
+    open fun getAvailableBytes(): Long {
         return try {
             val stat = StatFs(baseDir.absolutePath)
             val bytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {

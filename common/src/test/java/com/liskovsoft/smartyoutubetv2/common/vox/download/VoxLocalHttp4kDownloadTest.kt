@@ -14,6 +14,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -22,9 +23,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import android.net.Uri
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(RobolectricTestRunner::class)
 class VoxLocalHttp4kDownloadTest {
@@ -425,5 +428,236 @@ class VoxLocalHttp4kDownloadTest {
             ))
         }
         return samples
+    }
+
+    @Test
+    fun testStorageOptimizationPeakDiskReductionAndPartCleanup() {
+        val downloadId = "test-storage-opt-4k"
+        val videoPart = storage.getTrackFile(downloadId, VoxDownloadTrack.VIDEO)
+        val audioPart = storage.getTrackFile(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO)
+        val outputFile = storage.getOutputFile(downloadId)
+
+        videoPart.parentFile?.mkdirs()
+        videoPart.writeBytes(ByteArray(100_000) { 0x11 })
+        audioPart.writeBytes(ByteArray(20_000) { 0x22 })
+        outputFile.writeBytes(ByteArray(120_000) { 0x33 })
+
+        assertTrue("video.part must exist before cleanup", videoPart.exists())
+        assertTrue("audio.part must exist before cleanup", audioPart.exists())
+        assertTrue("output.mkv must exist", outputFile.exists())
+
+        // Вызываем оптимизацию диска после муксинга
+        storage.cleanTrackSourcesAfterMux(downloadId)
+
+        // .part файлы должны быть удалены для освобождения дискового пространства до MediaStore publish
+        assertFalse("video.part must be deleted after mux", videoPart.exists())
+        assertFalse("audio.part must be deleted after mux", audioPart.exists())
+
+        // output.mkv ДОЛЖЕН сохраняться в целости для публикации и восстановления
+        assertTrue("output.mkv must remain intact", outputFile.exists())
+        assertEquals(120_000L, outputFile.length())
+
+        // После успешной публикации output.mkv очищается
+        storage.cleanOutputFileAfterPublication(downloadId)
+        assertFalse("output.mkv must be cleaned after publication", outputFile.exists())
+    }
+
+    @Test
+    fun testMediaStorePublishFailurePreservesMuxedFileForRecovery() {
+        val downloadId = "test-publish-failure-recovery-4k"
+        val outputFile = storage.getOutputFile(downloadId)
+        outputFile.parentFile?.mkdirs()
+        outputFile.writeBytes(ByteArray(150_000) { 0x44 })
+
+        val request = VoxDownloadRequest(
+            downloadId = downloadId,
+            videoId = "testVideo",
+            videoTitle = "Test 4K Video",
+            qualityPreference = VoxQualityPreference.QUALITY_2160P,
+            translationMode = VoxTranslationMode.NONE
+        )
+        val job = VoxDownloadJob(
+            request = request,
+            initialState = VoxDownloadState.MUXED
+        ).apply {
+            finalFileBytes = 150_000L
+            durationMs = 5000L
+            packagingCompleted = true
+        }
+        repository.persistJob(job)
+
+        // Мок издателя с ошибкой STORAGE_FULL
+        val failingPublisher = object : VoxDownloadPublisher {
+            override fun publish(
+                outputFile: File,
+                videoTitle: String,
+                isCancelled: AtomicBoolean,
+                onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
+            ): Uri {
+                throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_FULL, "No space left on device")
+            }
+            override fun isPublishedFileAvailable(uriString: String?): Boolean = false
+            override fun deletePublishedFile(uriString: String?): Boolean = false
+        }
+
+        val coordinator = VoxDownloadCoordinator(
+            storage = storage,
+            repository = repository,
+            publisher = failingPublisher
+        )
+
+        try {
+            val method = VoxDownloadCoordinator::class.java.getDeclaredMethod(
+                "publishCompletedFile",
+                VoxDownloadJob::class.java,
+                Long::class.javaPrimitiveType,
+                File::class.java
+            )
+            method.isAccessible = true
+            method.invoke(coordinator, job, job.generation.get(), outputFile)
+            fail("Expected VoxDownloadException for STORAGE_FULL")
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            val target = e.targetException
+            assertTrue("Target exception must be VoxDownloadException", target is VoxDownloadException)
+            assertEquals(VoxDownloadErrorCode.STORAGE_FULL, (target as VoxDownloadException).code)
+        }
+
+        // Ключевой инвариант: output.mkv НЕ должен быть удален при ошибке публикации!
+        assertTrue("output.mkv must be preserved for recovery after publish failure", outputFile.exists())
+        assertEquals(150_000L, outputFile.length())
+    }
+
+    @Test
+    fun testIdempotentPublishDoesNotDuplicateFile() {
+        val downloadId = "test-idempotent-publish-4k"
+        val outputFile = storage.getOutputFile(downloadId)
+        outputFile.parentFile?.mkdirs()
+        outputFile.writeBytes(ByteArray(80_000) { 0x55 })
+
+        var publishCallCount = 0
+        val mockPublisher = object : VoxDownloadPublisher {
+            override fun publish(
+                outputFile: File,
+                videoTitle: String,
+                isCancelled: AtomicBoolean,
+                onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
+            ): Uri {
+                publishCallCount++
+                return Uri.parse("content://media/external/video/media/9999")
+            }
+            override fun isPublishedFileAvailable(uriString: String?): Boolean {
+                return uriString == "content://media/external/video/media/9999"
+            }
+            override fun deletePublishedFile(uriString: String?): Boolean = true
+        }
+
+        val request = VoxDownloadRequest(
+            downloadId = downloadId,
+            videoId = "testVideo",
+            videoTitle = "Test 4K Video",
+            qualityPreference = VoxQualityPreference.QUALITY_2160P,
+            translationMode = VoxTranslationMode.NONE
+        )
+        val job = VoxDownloadJob(
+            request = request,
+            initialState = VoxDownloadState.MUXED
+        ).apply {
+            updateTrackProgress(VoxDownloadTrack.VIDEO, 70_000L, 70_000L, VoxTrackState.COMPLETED)
+            updateTrackProgress(VoxDownloadTrack.ORIGINAL_AUDIO, 10_000L, 10_000L, VoxTrackState.COMPLETED)
+            finalFileBytes = 80_000L
+            durationMs = 2000L
+            packagingCompleted = true
+            publishedUri = "content://media/external/video/media/9999"
+        }
+        repository.persistJob(job)
+
+        val coordinator = VoxDownloadCoordinator(
+            storage = storage,
+            repository = repository,
+            publisher = mockPublisher
+        )
+
+        val method = VoxDownloadCoordinator::class.java.getDeclaredMethod(
+            "publishCompletedFile",
+            VoxDownloadJob::class.java,
+            Long::class.javaPrimitiveType,
+            File::class.java
+        )
+        method.isAccessible = true
+        method.invoke(coordinator, job, job.generation.get(), outputFile)
+
+        // Издатель НЕ должен вызываться повторно, если файл уже опубликован и доступен
+        assertEquals(0, publishCallCount)
+        assertEquals(VoxDownloadState.COMPLETED, job.state)
+    }
+
+    @Test
+    fun testMediaStorePublishPreflightStorageCheckThrowsStorageFull() {
+        val downloadId = "test-preflight-storage-full-4k"
+        val outputFile = storage.getOutputFile(downloadId)
+        outputFile.parentFile?.mkdirs()
+        outputFile.writeBytes(ByteArray(50_000) { 0x55 })
+
+        val context = RuntimeEnvironment.getApplication()
+        val mockStorage = object : VoxDownloadStorage(context) {
+            override fun hasEnoughSpace(requiredBytes: Long, safetyMarginBytes: Long): Boolean = false
+        }
+
+        var publishCalled = false
+        val mockPublisher = object : VoxDownloadPublisher {
+            override fun publish(
+                outputFile: File,
+                videoTitle: String,
+                isCancelled: AtomicBoolean,
+                onProgress: ((bytesCopied: Long, totalBytes: Long, percent: Int) -> Unit)?
+            ): Uri {
+                publishCalled = true
+                return Uri.parse("content://dummy")
+            }
+            override fun isPublishedFileAvailable(uriString: String?): Boolean = false
+            override fun deletePublishedFile(uriString: String?): Boolean = false
+        }
+
+        val request = VoxDownloadRequest(
+            downloadId = downloadId,
+            videoId = "testVideo",
+            videoTitle = "Test 4K Video",
+            qualityPreference = VoxQualityPreference.QUALITY_2160P,
+            translationMode = VoxTranslationMode.NONE
+        )
+        val job = VoxDownloadJob(
+            request = request,
+            initialState = VoxDownloadState.MUXED
+        ).apply {
+            finalFileBytes = 50_000L
+            durationMs = 1000L
+            packagingCompleted = true
+        }
+
+        val coordinator = VoxDownloadCoordinator(
+            storage = mockStorage,
+            repository = repository,
+            publisher = mockPublisher
+        )
+
+        try {
+            val method = VoxDownloadCoordinator::class.java.getDeclaredMethod(
+                "publishCompletedFile",
+                VoxDownloadJob::class.java,
+                Long::class.javaPrimitiveType,
+                File::class.java
+            )
+            method.isAccessible = true
+            method.invoke(coordinator, job, job.generation.get(), outputFile)
+            fail("Expected VoxDownloadException for STORAGE_FULL during preflight check")
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            val target = e.targetException
+            assertTrue(target is VoxDownloadException)
+            assertEquals(VoxDownloadErrorCode.STORAGE_FULL, (target as VoxDownloadException).code)
+            assertTrue(target.message?.contains("Недостаточно свободного места") == true)
+        }
+
+        // Издатель НЕ должен вызываться, если места недостаточно!
+        assertFalse("Publisher must NOT be called when preflight space check fails", publishCalled)
     }
 }

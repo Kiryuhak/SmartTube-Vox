@@ -535,6 +535,7 @@ class VoxDownloadCoordinator(
                 if (output.length() != job.finalFileBytes) {
                     throw VoxDownloadException(VoxDownloadErrorCode.STORAGE_ERROR, "Final file size changed")
                 }
+                storage.cleanTrackSourcesAfterMux(downloadId)
                 publishCompletedFile(job, expectedGen, output)
                 return
             }
@@ -1160,6 +1161,11 @@ class VoxDownloadCoordinator(
             notifyStateChange(job)
             VoxLog.d(TAG, "Download job $downloadId successfully multiplexed into MKV: ${outputFile.absolutePath} (${result.totalBytesWritten} bytes, duration=${result.durationMs}ms)")
 
+            // Checkpoint: MKV успешно смуксирован, проверен и зафиксирован в job.json.
+            // Удаляем .part файлы треков ДО этапа публикации в MediaStore,
+            // освобождая дисковое пространство и снижая пиковое потребление с ~3.0x до <= 2.0x.
+            storage.cleanTrackSourcesAfterMux(downloadId)
+
             publishCompletedFile(job, expectedGen, outputFile)
         } catch (e: com.liskovsoft.smartyoutubetv2.common.vox.mux.VoxProcessingStalledException) {
             throw VoxDownloadException(VoxDownloadErrorCode.PROCESSING_STALLED, "Обработка остановилась. Повторите упаковку файла.", e)
@@ -1178,8 +1184,35 @@ class VoxDownloadCoordinator(
         val downloadId = job.downloadId
         val finalizeStart = System.currentTimeMillis()
         job.lastOperation = "PUBLISH"
+
+        // Предварительная проверка свободного места перед публикацией в MediaStore
+        val requiredPublishBytes = outputFile.length() + 25 * 1024 * 1024L
+        if (!storage.hasEnoughSpace(requiredPublishBytes)) {
+            throw VoxDownloadException(
+                VoxDownloadErrorCode.STORAGE_FULL,
+                "Недостаточно свободного места для сохранения в загрузки (требуется: ${requiredPublishBytes / (1024 * 1024)} МБ, доступно: ${storage.getAvailableBytes() / (1024 * 1024)} МБ)"
+            )
+        }
+
         // Публикация в MediaStore
         if (publisher != null) {
+            // Идемпотентность: если файл уже был опубликован и доступен, пропускаем повторное копирование
+            if (!job.publishedUri.isNullOrBlank() && publisher.isPublishedFileAvailable(job.publishedUri)) {
+                val publishedSize = storage.getPublishedFileSize(job.publishedUri)
+                val effectiveSize = if (publishedSize > 0L) publishedSize else outputFile.length()
+                job.finalizeElapsedMs = Math.max(1L, System.currentTimeMillis() - finalizeStart)
+                emitRouteSummary(job, effectiveSize, moveUsed = false)
+                job.finalizeCompleted = true
+                VoxDownloadCompletionValidator.check(job, effectiveSize)
+                repository.persistJob(job, VoxDownloadState.COMPLETED)
+                job.updateState(VoxDownloadState.COMPLETED)
+                storage.cleanOutputFileAfterPublication(downloadId)
+                repository.pruneOldHistory()
+                notifyStateChange(job)
+                VoxLog.d(TAG, "Download job $downloadId already published: ${job.publishedUri}")
+                return
+            }
+
             if (isStale(job, expectedGen)) return
             job.updateState(VoxDownloadState.PUBLISHING)
             repository.persistJob(job)
@@ -1220,8 +1253,8 @@ class VoxDownloadCoordinator(
             job.updateState(VoxDownloadState.COMPLETED)
             VoxSafeLogger.i(VoxLogCategory.DOWNLOAD, VoxLogCode.DOWNLOAD_COMPLETED, "Загрузка и сохранение видео успешно завершены", mapOf("downloadId" to downloadId))
 
-            // Очищаем внутренние временные .part файлы и копию MKV для экономии диска
-            storage.cleanInternalSourcesAfterPublication(downloadId)
+            // Очищаем локальную копию output.mkv после успешной публикации
+            storage.cleanOutputFileAfterPublication(downloadId)
             repository.pruneOldHistory()
 
             notifyStateChange(job)
