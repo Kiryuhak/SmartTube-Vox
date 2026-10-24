@@ -1066,4 +1066,13 @@
     <string name="vox_analytics_heartbeat_toggle_desc">Оценка активных установок (каждые 30 мин при просмотре, без личных данных)</string>
     <string name="vox_analytics_mode_enabled">Включена (раз в 30 мин)</string>
     <string name="vox_analytics_mode_disabled">Выключена пользователем</string>
+
+    <!-- Video Transport Preference -->
+    <string name="vox_video_transport_preference">Протокол передачи видео</string>
+    <string name="vox_video_transport_auto">Авто (рекомендуется)</string>
+    <string name="vox_video_transport_auto_desc">DASH по умолчанию, безопасный откат на SABR при недоступности</string>
+    <string name="vox_video_transport_dash">DASH</string>
+    <string name="vox_video_transport_dash_desc">Классический протокол передачи DASH (по умолчанию в SmartTube)</string>
+    <string name="vox_video_transport_sabr">SABR (экспериментально)</string>
+    <string name="vox_video_transport_sabr_desc">UMP-протокол SABR для VOD с автоматическим безопасным откатом на DASH при сбое</string>
 </resources>

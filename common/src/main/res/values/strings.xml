@@ -1143,4 +1143,13 @@
     <string name="vox_analytics_heartbeat_toggle_desc">Active fleet estimation (every 30 min during playback, zero personal data)</string>
     <string name="vox_analytics_mode_enabled">Enabled (every 30 min)</string>
     <string name="vox_analytics_mode_disabled">Disabled by user</string>
+
+    <!-- Video Transport Preference -->
+    <string name="vox_video_transport_preference">Video Transport Protocol</string>
+    <string name="vox_video_transport_auto">Auto (recommended)</string>
+    <string name="vox_video_transport_auto_desc">DASH by default, safe automatic fallback to SABR on failure</string>
+    <string name="vox_video_transport_dash">DASH</string>
+    <string name="vox_video_transport_dash_desc">Standard ExoPlayer DASH streaming (SmartTube default)</string>
+    <string name="vox_video_transport_sabr">SABR (experimental)</string>
+    <string name="vox_video_transport_sabr_desc">UMP-framed SABR protocol for VOD with safe DASH fallback on error</string>
 </resources>

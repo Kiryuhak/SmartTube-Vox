@@ -4,9 +4,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.junit.Before;
 import org.junit.Test;
 
 public class SabrCdnSelectorTest {
+    @Before
+    public void setUp() {
+        SabrCdnSelector.clearFailedNetworks();
+    }
     private static final String PRIMARY_URL =
             "https://rr1---sn-primary.googlevideo.com/videoplayback?"
                     + "mn=sn-primary%2Csn-secondary&sig=signed";

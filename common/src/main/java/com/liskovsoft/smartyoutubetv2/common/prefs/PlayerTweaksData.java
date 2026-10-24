@@ -16,6 +16,9 @@ public class PlayerTweaksData implements ProfileChangeListener {
     public static final int PLAYER_DATA_SOURCE_DEFAULT = 0;
     public static final int PLAYER_DATA_SOURCE_OKHTTP = 1;
     public static final int PLAYER_DATA_SOURCE_CRONET = 2;
+    public static final int VIDEO_TRANSPORT_AUTO = 0;
+    public static final int VIDEO_TRANSPORT_DASH = 1;
+    public static final int VIDEO_TRANSPORT_SABR = 2;
     public static final int PLAYER_BUTTON_VIDEO_ZOOM = 1;
     public static final int PLAYER_BUTTON_SEARCH = 1 << 1;
     public static final int PLAYER_BUTTON_PIP = 1 << 2;
@@ -88,6 +91,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
     private boolean mIsLongSpeedListEnabled;
     private boolean mIsExtraLongSpeedListEnabled;
     private int mPlayerDataSource;
+    private int mVideoTransportPreference = VIDEO_TRANSPORT_AUTO;
     private int mRuntimeFallbackEngine = -1;
     private boolean mUnlockAllFormats;
     private boolean mIsBufferOnStreamsDisabled;
@@ -312,6 +316,15 @@ public class PlayerTweaksData implements ProfileChangeListener {
             mPrefs.putBoolean("vox_download_button_configured", true);
         }
         mPlayerButtons &= ~playerButtons;
+        persistData();
+    }
+
+    public int getVideoTransportPreference() {
+        return mVideoTransportPreference;
+    }
+
+    public void setVideoTransportPreference(int preference) {
+        mVideoTransportPreference = preference;
         persistData();
     }
 
@@ -815,6 +828,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
         mIsQuickSkipVideosAltEnabled = Helpers.parseBoolean(split, 58, false);
         mIsAudioTimeStretchingEnabled = Helpers.parseBoolean(split, 59, true);
         mIsQueueRespectsPlaybackMode = Helpers.parseBoolean(split, 60, false);
+        mVideoTransportPreference = Helpers.parseInt(split, 61, VIDEO_TRANSPORT_AUTO);
 
         updateDefaultValues();
     }
@@ -842,7 +856,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
                 mIsUnsafeAudioFormatsEnabled, null, mIsLoopShortsEnabled, mIsQuickSkipShortsEnabled, mIsRememberPositionOfLiveVideosEnabled,
                 mIsOculusQuestFixEnabled, null, mIsExtraLongSpeedListEnabled, mIsQuickSkipVideosEnabled, mIsNetworkErrorFixingDisabled, mIsCommentsPlacedLeft,
                 null, mIsAudioFocusEnabled, mIsDontResizeVideoToFitDialogEnabled, mIsSuggestionsHorizontallyScrolled,
-                mIsQuickSkipShortsAltEnabled, mIsQuickSkipVideosAltEnabled, mIsAudioTimeStretchingEnabled, mIsQueueRespectsPlaybackMode
+                mIsQuickSkipShortsAltEnabled, mIsQuickSkipVideosAltEnabled, mIsAudioTimeStretchingEnabled, mIsQueueRespectsPlaybackMode, mVideoTransportPreference
                 ));
     }
 

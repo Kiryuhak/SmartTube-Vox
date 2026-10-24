@@ -3,25 +3,51 @@ package com.google.android.exoplayer2.source.sabr.parser.ump;
 import androidx.annotation.NonNull;
 
 import com.google.android.exoplayer2.extractor.ExtractorInput;
-import com.liskovsoft.sharedutils.helpers.Helpers;
 
 import java.io.ByteArrayInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 
 public class UMPDecoder {
+    public static final int DEFAULT_MAX_PART_BYTES = 32 * 1024 * 1024; // 32 MB maximum part size
+    public static final int MAX_CONTROL_PART_BYTES = 1024 * 1024;      // 1 MB maximum control part size
+
+    private final int mMaxPartBytes;
+
+    public UMPDecoder() {
+        this(DEFAULT_MAX_PART_BYTES);
+    }
+
+    public UMPDecoder(int maxPartBytes) {
+        if (maxPartBytes <= 0) {
+            throw new IllegalArgumentException("Invalid part limit: " + maxPartBytes);
+        }
+        this.mMaxPartBytes = maxPartBytes;
+    }
+
+    public int getMaxPartBytes() {
+        return mMaxPartBytes;
+    }
+
     public UMPPart decode(@NonNull ExtractorInput extractorInput) {
         try {
-            int partType = (int) readVarInt(extractorInput);
+            long partType = readVarInt(extractorInput);
             if (partType == -1) {
                 return null;
             }
-
-            int partSize = (int) readVarInt(extractorInput);
-            if (partSize == -1) {
-                throw new IllegalStateException("Unexpected EOF while reading part size");
+            if (partType < 0 || partType > Integer.MAX_VALUE) {
+                throw new IllegalStateException("Invalid UMP part type: " + partType);
             }
 
-            return new UMPPart(partType, partSize, extractorInput);
+            long partSize = readVarInt(extractorInput);
+            if (partSize == -1) {
+                throw new IllegalStateException("Unexpected EOF while reading part size for part " + partType);
+            }
+            if (partSize < 0 || partSize > mMaxPartBytes) {
+                throw new IllegalStateException("UMP part size out of bounds: " + partSize + " (max=" + mMaxPartBytes + ") for part " + partType);
+            }
+
+            return new UMPPart((int) partType, (int) partSize, extractorInput);
         } catch (IOException | InterruptedException e) {
             throw new IllegalStateException(e);
         }
@@ -33,12 +59,16 @@ public class UMPDecoder {
         byte[] buffer = new byte[1];
         boolean success = input.readFully(buffer, 0, 1, true);
         if (!success) {
-            // Expected EOF
+            // Expected EOF at start of VarInt
             return -1;
         }
 
         long byteInt = buffer[0] & 0xFF; // convert to unsigned (0..255)
         int size = varIntSize(byteInt);
+        if (size < 1 || size > 5) {
+            throw new IOException("Invalid VarInt size prefix: " + size);
+        }
+
         long result = 0;
         int shift = 0;
 
@@ -48,10 +78,10 @@ public class UMPDecoder {
             result |= byteInt & mask;
         }
 
-        for (int i : Helpers.range(1, size - 1, 1)) {
+        for (int i = 1; i < size; i++) {
             success = input.readFully(buffer, 0, 1, true);
             if (!success) {
-                return -1;
+                throw new EOFException("Unexpected EOF while reading multi-byte VarInt (byte " + i + " of " + size + ")");
             }
             byteInt = buffer[0] & 0xFF; // convert to unsigned (0..255)
             result |= byteInt << shift;
@@ -60,37 +90,6 @@ public class UMPDecoder {
 
         return result;
     }
-
-    //private long readVarInt(StreamWrapper input) throws IOException, InterruptedException {
-    //    // https://web.archive.org/web/20250430054327/https://github.com/gsuberland/UMP_Format/blob/main/UMP_Format.md
-    //    // https://web.archive.org/web/20250429151021/https://github.com/davidzeng0/innertube/blob/main/googlevideo/ump.md
-    //    byte[] buffer = new byte[1];
-    //    if (!input.readFully(buffer, 0, 1, true)) {
-    //        return -1; // clean EOF before reading anything
-    //    }
-    //
-    //    long first = buffer[0] & 0xFF;
-    //    int size = varIntSize(first);
-    //
-    //    if (size < 1 || size > 5) {
-    //        throw new IOException("Invalid VarInt size: " + size);
-    //    }
-    //
-    //    int payloadBits = 8 - (size + 1);
-    //    long result = first & ((1L << payloadBits) - 1);
-    //    int shift = payloadBits;
-    //
-    //    for (int i = 1; i < size; i++) {
-    //        if (!input.readFully(buffer, 0, 1, true)) {
-    //            throw new EOFException("Unexpected EOF in VarInt");
-    //        }
-    //        long b = buffer[0] & 0xFF;
-    //        result |= b << shift;
-    //        shift += 8;
-    //    }
-    //
-    //    return result;
-    //}
 
     public long readVarInt(ExtractorInput input) throws IOException, InterruptedException {
         return readVarInt(input::readFully);
@@ -103,7 +102,7 @@ public class UMPDecoder {
         });
     }
 
-    private int varIntSize(long byteInt) {
+    public static int varIntSize(long byteInt) {
         return byteInt < 128 ? 1 : byteInt < 192 ? 2 : byteInt < 224 ? 3 : byteInt < 240 ? 4 : 5;
     }
 

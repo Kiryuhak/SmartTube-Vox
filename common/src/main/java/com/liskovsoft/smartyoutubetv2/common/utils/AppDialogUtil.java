@@ -66,6 +66,7 @@ import io.reactivex.disposables.Disposable;
 public class AppDialogUtil {
     private static final String TAG = AppDialogUtil.class.getSimpleName();
     private static final int VIDEO_BUFFER_ID = 134;
+    private static final int VIDEO_TRANSPORT_ID = 152;
     private static final int BACKGROUND_PLAYBACK_ID = 135;
     private static final int VIDEO_PRESETS_ID = 136;
     private static final int AUDIO_DELAY_ID = 137;
@@ -310,6 +311,59 @@ public class AppDialogUtil {
                 !isPresetSelection));
 
         return result;
+    }
+
+    public static OptionCategory createVideoTransportCategory(Context context) {
+        return createVideoTransportCategory(context, () -> {});
+    }
+
+    public static OptionCategory createVideoTransportCategory(Context context, Runnable onSelected) {
+        PlayerTweaksData tweaksData = PlayerTweaksData.instance(context);
+        List<OptionItem> options = new ArrayList<>();
+        int current = tweaksData.getVideoTransportPreference();
+
+        options.add(UiOptionItem.from(
+                context.getString(R.string.vox_video_transport_auto),
+                context.getString(R.string.vox_video_transport_auto_desc),
+                item -> {
+                    tweaksData.setVideoTransportPreference(PlayerTweaksData.VIDEO_TRANSPORT_AUTO);
+                    if (onSelected != null) {
+                        onSelected.run();
+                    }
+                },
+                current == PlayerTweaksData.VIDEO_TRANSPORT_AUTO
+        ));
+
+        options.add(UiOptionItem.from(
+                context.getString(R.string.vox_video_transport_dash),
+                context.getString(R.string.vox_video_transport_dash_desc),
+                item -> {
+                    tweaksData.setVideoTransportPreference(PlayerTweaksData.VIDEO_TRANSPORT_DASH);
+                    if (onSelected != null) {
+                        onSelected.run();
+                    }
+                },
+                current == PlayerTweaksData.VIDEO_TRANSPORT_DASH
+        ));
+
+        options.add(UiOptionItem.from(
+                context.getString(R.string.vox_video_transport_sabr),
+                context.getString(R.string.vox_video_transport_sabr_desc),
+                item -> {
+                    tweaksData.setVideoTransportPreference(PlayerTweaksData.VIDEO_TRANSPORT_SABR);
+                    if (onSelected != null) {
+                        onSelected.run();
+                    }
+                },
+                current == PlayerTweaksData.VIDEO_TRANSPORT_SABR
+        ));
+
+        return OptionCategory.from(
+                VIDEO_TRANSPORT_ID,
+                OptionCategory.TYPE_RADIO_LIST,
+                context.getString(R.string.vox_video_transport_preference),
+                options
+        );
     }
 
     public static OptionCategory createVideoBufferCategory(Context context) {

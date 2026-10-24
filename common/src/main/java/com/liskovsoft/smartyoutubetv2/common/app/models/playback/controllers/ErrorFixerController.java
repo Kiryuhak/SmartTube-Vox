@@ -353,6 +353,30 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             return;
         }
 
+        if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+            Log.w(TAG, "Playback error during SABR transport. Initiating safe fallback to DASH.");
+            mVideoLoaderController.activateSabrCooldown();
+            long posMs = getPlayer() != null ? getPlayer().getPositionMs() : 0L;
+            Video video = getVideo();
+            if (video != null && posMs > 0) {
+                video.pendingPosMs = posMs;
+            }
+            if (getPlayer() != null) {
+                getPlayer().setPositionMs(posMs);
+            }
+            Map<String, String> ctx = new HashMap<>();
+            ctx.put("preservedPositionMs", String.valueOf(posMs));
+            ctx.put("errorType", String.valueOf(type));
+            VoxSafeLogger.warn(
+                VoxLogCategory.PLAYER,
+                VoxLogCode.SABR_FALLBACK,
+                "SABR transport error, fallback to DASH with preserved position",
+                ctx
+            );
+            mVideoLoaderController.reloadVideo();
+            return;
+        }
+
         long posMs = getPlayer() != null ? getPlayer().getPositionMs() : 0L;
         boolean playWhenReady = getPlayer() == null || getPlayer().getPlayWhenReady();
         if (mRecoveryController != null && mRecoveryController.handlePlayerError(error, posMs, playWhenReady)) {
