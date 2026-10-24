@@ -62,6 +62,18 @@ object VoxOtaHudPresenter {
                     return browseCtx
                 }
             } catch (_: Throwable) {}
+            try {
+                val browseAct = (BrowsePresenter.instance(context).view as? androidx.fragment.app.Fragment)?.activity
+                if (browseAct != null && Utils.checkActivity(browseAct)) {
+                    return browseAct
+                }
+            } catch (_: Throwable) {}
+            try {
+                val browseLegacyAct = (BrowsePresenter.instance(context).view as? android.app.Fragment)?.activity
+                if (browseLegacyAct != null && Utils.checkActivity(browseLegacyAct)) {
+                    return browseLegacyAct
+                }
+            } catch (_: Throwable) {}
         }
         return null
     }
@@ -95,6 +107,7 @@ object VoxOtaHudPresenter {
         val activity = findActivity(context)
         if (activity == null || activity.isFinishing || activity.isDestroyed) {
             Log.w(TAG, "Cannot show update offer: Activity not available")
+            MessageHelpers.showMessage(context, "Обновление готово: ${release.versionName}")
             return
         }
 

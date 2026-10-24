@@ -901,6 +901,7 @@
     <string name="card_preview_full">Видео со звуком</string>
     <string name="card_preview">Предпросмотр карточки</string>
     <string name="card_unlocalized_titles">Не переводить названия видео</string>
+    <string name="card_quality_badges">Метки качества (4K, 1080p, HDR)</string>
     <string name="dont_resize_video_to_fit_dialog">Не изменять размер видео в соответствии с диалогом</string>
     <string name="oculus_quest_fix">Исправлять Oculus Quest</string>
     <string name="playback_buffering_fix">Исправлять воспроизведение буферизации</string>

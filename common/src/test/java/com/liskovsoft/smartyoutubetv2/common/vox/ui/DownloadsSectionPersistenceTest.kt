@@ -28,6 +28,7 @@ class DownloadsSectionPersistenceTest {
         prefs = AppPrefs.instance(context)
         prefs.setSidebarData(null)
         prefs.setDownloadedSectionMigrated(false)
+        prefs.setDownloadedSectionExplicitlyHidden(false)
         SidebarService.resetInstance()
     }
 
@@ -36,6 +37,7 @@ class DownloadsSectionPersistenceTest {
         SidebarService.resetInstance()
         prefs.setSidebarData(null)
         prefs.setDownloadedSectionMigrated(false)
+        prefs.setDownloadedSectionExplicitlyHidden(false)
     }
 
     @Test
@@ -125,6 +127,7 @@ class DownloadsSectionPersistenceTest {
             service.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED)
         )
         assertTrue(prefs.isDownloadedSectionMigrated)
+        assertFalse(prefs.isDownloadedSectionExplicitlyHidden)
 
         // Verify it persists after restart
         SidebarService.resetInstance()
@@ -132,6 +135,36 @@ class DownloadsSectionPersistenceTest {
         assertTrue(
             "Downloaded section should remain pinned after restart following reset",
             restartedService.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED)
+        )
+    }
+
+    @Test
+    fun testExplicitlyHiddenDownloadsSectionNeverRestoredOnColdBootOrProfileChange() {
+        val service = SidebarService.instance(context)
+        assertTrue(service.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED))
+
+        // Explicitly disable Downloaded section
+        service.enableSection(BrowsePresenter.TYPE_DOWNLOADED, false)
+        assertFalse(service.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED))
+        assertTrue("Disabling must mark explicitly hidden", prefs.isDownloadedSectionExplicitlyHidden)
+        assertTrue("Disabling must mark migrated", prefs.isDownloadedSectionMigrated)
+
+        // Simulate multiple cold boots / profile changes
+        SidebarService.resetInstance()
+        service.onProfileChanged()
+        val reloadedService = SidebarService.instance(context)
+        assertFalse(
+            "Downloaded section must never reappear after profile change or cold boot",
+            reloadedService.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED)
+        )
+
+        // Even if migrated flag is corrupted/cleared, explicitly hidden flag must block re-adding
+        prefs.setDownloadedSectionMigrated(false)
+        SidebarService.resetInstance()
+        val guardedService = SidebarService.instance(context)
+        assertFalse(
+            "Explicitly hidden guard must prevent migration from re-adding section",
+            guardedService.isSectionPinned(BrowsePresenter.TYPE_DOWNLOADED)
         )
     }
 }

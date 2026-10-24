@@ -175,8 +175,14 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         BrowsePresenter.instance(getContext()).pinItem(getContext().getString(R.string.update_found), R.drawable.action_info, new ErrorFragmentData() {
             @Override
             public void onAction() {
-                GeneralData.instance(getContext()).setChangelog(release.getChangelog());
-                com.liskovsoft.smartyoutubetv2.common.vox.ota.hud.VoxOtaHudPresenter.showUpdateAvailable(getContext(), release, asset);
+                onAction(getContext());
+            }
+
+            @Override
+            public void onAction(Context context) {
+                Context target = context != null ? context : getContext();
+                GeneralData.instance(target).setChangelog(release.getChangelog());
+                com.liskovsoft.smartyoutubetv2.common.vox.ota.hud.VoxOtaHudPresenter.showUpdateAvailable(target, release, asset);
             }
 
             @Override
@@ -217,7 +223,13 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         BrowsePresenter.instance(getContext()).pinItem(getContext().getString(R.string.update_found), R.drawable.action_info, new ErrorFragmentData() {
             @Override
             public void onAction() {
-                GeneralData.instance(getContext()).setChangelog(changelog);
+                onAction(getContext());
+            }
+
+            @Override
+            public void onAction(Context context) {
+                Context target = context != null ? context : getContext();
+                GeneralData.instance(target).setChangelog(changelog);
                 mUpdateChecker.installUpdate();
             }
 

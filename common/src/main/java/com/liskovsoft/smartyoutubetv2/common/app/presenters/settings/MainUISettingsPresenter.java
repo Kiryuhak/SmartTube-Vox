@@ -157,8 +157,12 @@ public class MainUISettingsPresenter extends BasePresenter<Void> {
         if (Build.VERSION.SDK_INT > 19) {
             options.add(autoScrolledTitle);
         }
+        OptionItem qualityBadges = UiOptionItem.from(getContext().getString(R.string.card_quality_badges),
+                option -> mMainUIData.enableQualityBadges(option.isSelected()), mMainUIData.isQualityBadgesEnabled());
+
         options.add(unlocalizedTitle);
         options.add(roundedCardCorners);
+        options.add(qualityBadges);
 
         settingsPresenter.appendCheckedCategory(getContext().getString(R.string.cards_style), options);
     }

@@ -118,6 +118,7 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
     private final Runnable mPersistStateInt = this::persistStateInt;
     private boolean mIsUnlocalizedTitlesEnabled;
     private long mUiTweaks;
+    private boolean mIsQualityBadgesEnabled = true;
 
     private MainUIData(Context context) {
         mContext = context;
@@ -137,6 +138,15 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
 
     public static MainUIData instance() {
         return sInstance;
+    }
+
+    public boolean isQualityBadgesEnabled() {
+        return mIsQualityBadgesEnabled;
+    }
+
+    public void enableQualityBadges(boolean enable) {
+        mIsQualityBadgesEnabled = enable;
+        persistState();
     }
 
     public boolean isCardMultilineTitleEnabled() {
@@ -456,6 +466,7 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
         mCardPreviewType = Helpers.parseInt(split, 21, CARD_PREVIEW_DISABLED);
         mIsUnlocalizedTitlesEnabled = Helpers.parseBoolean(split, 22, false);
         mUiTweaks = Helpers.parseLong(split, 23, UI_TWEAK_DEFAULT);
+        mIsQualityBadgesEnabled = Helpers.parseBoolean(split, 24, true);
 
         int idx = -1;
         for (Long menuItem : MENU_ITEM_DEFAULT_ORDER) {
@@ -503,7 +514,7 @@ public class MainUIData extends DataChangeBase implements ProfileChangeListener 
                 mIsUploadsOldLookEnabled, mIsUploadsAutoLoadEnabled, mCardTextScrollSpeed, mMenuItems, mTopButtons,
                 null, mThumbQuality, mIsCardMultilineSubtitleEnabled, Helpers.mergeList(mMenuItemsOrdered),
                 mIsChannelsFilterEnabled, mIsChannelSearchBarEnabled, mIsPinnedChannelRowsEnabled, mCardPreviewType,
-                mIsUnlocalizedTitlesEnabled, mUiTweaks));
+                mIsUnlocalizedTitlesEnabled, mUiTweaks, mIsQualityBadgesEnabled));
     }
 
     public static class ColorScheme {

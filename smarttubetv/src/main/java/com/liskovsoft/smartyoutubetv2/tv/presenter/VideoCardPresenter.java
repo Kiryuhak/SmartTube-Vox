@@ -138,21 +138,27 @@ public class VideoCardPresenter extends LongClickPresenter {
         cardView.setContentText(video.getSecondTitle());
         // Count progress that very close to zero. E.g. when user closed video immediately.
         cardView.setProgress(video.percentWatched > 0 && video.percentWatched < 1 ? 1 : Math.round(video.percentWatched));
-        String qualityBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video);
-        VoxFeedQualityResolver resolver = VoxFeedQualityResolver.get(context);
-        if (qualityBadge != null && video.videoId != null) {
-            resolver.rememberBadge(video.videoId, qualityBadge,
-                    video.isLocal ? VoxFeedQualityResolver.Source.DOWNLOAD : VoxFeedQualityResolver.Source.FEED);
-        }
-        if (qualityBadge == null && !video.isLocal && video.videoId != null) {
-            qualityBadge = resolver.cached(video.videoId);
-        }
-        cardView.setQualityBadge(qualityBadge);
-        if (qualityBadge == null && canResolveQuality(video)) {
-            QualityBinding binding = new QualityBinding(cardView, video.videoId, resolver);
-            cardView.addOnAttachStateChangeListener(binding);
-            mQualityBindings.put(viewHolder, binding);
-            binding.schedule();
+        boolean qualityBadgesEnabled = com.liskovsoft.smartyoutubetv2.common.prefs.MainUIData.instance(context).isQualityBadgesEnabled();
+        String qualityBadge = null;
+        if (qualityBadgesEnabled) {
+            qualityBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getQualityBadge(video);
+            VoxFeedQualityResolver resolver = VoxFeedQualityResolver.get(context);
+            if (qualityBadge != null && video.videoId != null) {
+                resolver.rememberBadge(video.videoId, qualityBadge,
+                        video.isLocal ? VoxFeedQualityResolver.Source.DOWNLOAD : VoxFeedQualityResolver.Source.FEED);
+            }
+            if (qualityBadge == null && !video.isLocal && video.videoId != null) {
+                qualityBadge = resolver.cached(video.videoId);
+            }
+            cardView.setQualityBadge(qualityBadge);
+            if (qualityBadge == null && canResolveQuality(video)) {
+                QualityBinding binding = new QualityBinding(cardView, video.videoId, resolver);
+                cardView.addOnAttachStateChangeListener(binding);
+                mQualityBindings.put(viewHolder, binding);
+                binding.schedule();
+            }
+        } else {
+            cardView.setQualityBadge(null);
         }
 
         String ageBadge = com.liskovsoft.smartyoutubetv2.common.vox.badge.VoxBadgeHelper.getAgeBadge(video);

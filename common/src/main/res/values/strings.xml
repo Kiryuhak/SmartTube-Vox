@@ -894,6 +894,7 @@
     <string name="card_preview_full">Video with sound</string>
     <string name="card_preview">Card preview</string>
     <string name="card_unlocalized_titles">Unlocalized video titles</string>
+    <string name="card_quality_badges">Quality badges (4K, 1080p, HDR)</string>
     <string name="dont_resize_video_to_fit_dialog">Don\'t resize video to fit dialog</string>
     <string name="typing_corrections">Disable auto-correction while typing text</string>
     <string name="suggestions_horizontally_scrolled">Horizontally scrolled Suggestions</string>

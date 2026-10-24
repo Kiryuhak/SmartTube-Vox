@@ -22,6 +22,7 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
     private static final String CHANNEL_GROUP_DATA = "channel_group_data";
     private static final String SIDEBAR_DATA = "sidebar_data";
     private static final String DOWNLOADED_SECTION_MIGRATED = "downloaded_section_migrated";
+    private static final String DOWNLOADED_SECTION_EXPLICITLY_HIDDEN = "downloaded_section_explicitly_hidden";
     private static final String VIEW_MANAGER_DATA = "view_manager_data";
     private static final String WEB_PROXY_URI = "web_proxy_uri";
     private static final String WEB_PROXY_ENABLED = "web_proxy_enabled";
@@ -116,6 +117,14 @@ public class AppPrefs extends SharedPreferencesBase implements AccountChangeList
 
     public void setDownloadedSectionMigrated(boolean migrated) {
         putBoolean(getProfileKey(DOWNLOADED_SECTION_MIGRATED, true), migrated);
+    }
+
+    public boolean isDownloadedSectionExplicitlyHidden() {
+        return getBoolean(getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true), false);
+    }
+
+    public void setDownloadedSectionExplicitlyHidden(boolean hidden) {
+        putBoolean(getProfileKey(DOWNLOADED_SECTION_EXPLICITLY_HIDDEN, true), hidden);
     }
 
     public String getProfileData(String key) {

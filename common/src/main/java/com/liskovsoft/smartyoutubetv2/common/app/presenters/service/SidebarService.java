@@ -107,6 +107,11 @@ public class SidebarService implements ProfileChangeListener {
             Helpers.removeIf(mPinnedItems, item -> item == null || item.sectionId == sectionId);
         }
 
+        if (sectionId == com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED) {
+            mPrefs.setDownloadedSectionMigrated(true);
+            mPrefs.setDownloadedSectionExplicitlyHidden(!enabled);
+        }
+
         persistState();
     }
 
@@ -275,11 +280,13 @@ public class SidebarService implements ProfileChangeListener {
         }
         if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
             mPrefs.setDownloadedSectionMigrated(true);
+            mPrefs.setDownloadedSectionExplicitlyHidden(false);
         }
     }
 
     public void resetSidebar() {
         mPinnedItems.clear();
+        mPrefs.setDownloadedSectionExplicitlyHidden(false);
         initPinnedItems();
         persistState();
     }
@@ -324,7 +331,7 @@ public class SidebarService implements ProfileChangeListener {
         // One-time migration for existing users upgrading to VOX:
         // ensure Downloads section is added on first upgrade, but respect user choice if they hide it subsequently.
         if (com.liskovsoft.smartyoutubetv2.common.utils.VotOnboardingHelper.isStvot(mContext)) {
-            if (!mPrefs.isDownloadedSectionMigrated()) {
+            if (!mPrefs.isDownloadedSectionExplicitlyHidden() && !mPrefs.isDownloadedSectionMigrated()) {
                 if (!isSectionPinned(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED)) {
                     enableSection(com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter.TYPE_DOWNLOADED, true);
                 }

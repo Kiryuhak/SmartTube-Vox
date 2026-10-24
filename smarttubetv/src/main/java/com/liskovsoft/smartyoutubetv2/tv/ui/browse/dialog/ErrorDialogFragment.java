@@ -74,7 +74,10 @@ public class ErrorDialogFragment extends ErrorSupportFragment implements BrowseS
 
         if (mDialogData.getActionText() != null) {
             setButtonText(mDialogData.getActionText());
-            setButtonClickListener(v -> mDialogData.onAction());
+            setButtonClickListener(v -> {
+                android.content.Context ctx = v != null ? v.getContext() : (getActivity() != null ? getActivity() : getContext());
+                mDialogData.onAction(ctx);
+            });
         } else {
             Button mButton = (Button) Helpers.getField(this, "mButton");
 
