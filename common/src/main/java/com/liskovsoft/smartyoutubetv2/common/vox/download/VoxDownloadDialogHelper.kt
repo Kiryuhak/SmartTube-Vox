@@ -106,7 +106,7 @@ object VoxDownloadDialogHelper {
         val votData = VotData.instance(context)
 
         var selectedQuality = VoxQualityPreference.QUALITY_AUTO
-        var selectedMode = VoxTranslationMode.STANDARD
+        var selectedMode = VoxTranslationMode.NONE
 
         // Категория качества видео
         val qualityOptions = mutableListOf<OptionItem>()

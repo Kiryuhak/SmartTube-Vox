@@ -31,6 +31,11 @@ class VoxLiveStallRecoveryControllerTest {
         var networkFallbackEngine = -1
         var returnToLiveCallCount = 0
         var lastMessage: String? = null
+        var hideSpinnerCallCount = 0
+        var recoveryExhaustedCallCount = 0
+        var lastExhaustedTargetPos = -1L
+        var lastReturnToLiveAction: Runnable? = null
+        var lastRetryAction: Runnable? = null
 
         override fun onRefreshManifestRequested() {
             refreshManifestCallCount++
@@ -56,6 +61,21 @@ class VoxLiveStallRecoveryControllerTest {
 
         override fun showMessage(message: String) {
             lastMessage = message
+        }
+
+        override fun hideBufferingSpinner() {
+            hideSpinnerCallCount++
+        }
+
+        override fun onRecoveryExhausted(
+            targetPositionMs: Long,
+            onReturnToLive: Runnable,
+            onRetry: Runnable
+        ) {
+            recoveryExhaustedCallCount++
+            lastExhaustedTargetPos = targetPositionMs
+            lastReturnToLiveAction = onReturnToLive
+            lastRetryAction = onRetry
         }
     }
 
@@ -105,24 +125,69 @@ class VoxLiveStallRecoveryControllerTest {
     fun testStagedRecoveryStepsOnPersistentStall() {
         controller.onPlaybackStart(isLive = true)
 
-        // Trigger step 1
+        // Single buffering event triggers auto-advancing stages
         controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
+        // Advance 6.1s to trigger step 1 (REFRESHING_MANIFEST)
         shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
         assertEquals(1, actionHandler.refreshManifestCallCount)
         assertEquals(VoxLiveStallState.REFRESHING_MANIFEST, controller.getState())
 
-        // Re-buffer for step 2 (Reseek)
-        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
-        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        // Automatically advances to step 2 (Reseek) after 5.0s
+        shadowOf(Looper.getMainLooper()).idleFor(5_100L, TimeUnit.MILLISECONDS)
         assertEquals(1, actionHandler.reseekCallCount)
         assertEquals(120_000L - VoxLiveStallRecoveryController.SAFE_LIVE_OFFSET_MS, actionHandler.reseekTargetPos)
         assertEquals(VoxLiveStallState.RESEEKING, controller.getState())
 
-        // Re-buffer for step 3 (Recreate source)
-        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
-        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        // Automatically advances to step 3 (Recreate source) after 5.0s
+        shadowOf(Looper.getMainLooper()).idleFor(5_100L, TimeUnit.MILLISECONDS)
         assertEquals(1, actionHandler.recreateSourceCallCount)
         assertEquals(VoxLiveStallState.RECREATING_SOURCE, controller.getState())
+
+        // Automatically advances to step 4 (Failed/Exhausted) after 4.0s
+        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        assertEquals(VoxLiveStallState.FAILED, controller.getState())
+        assertEquals(1, actionHandler.hideSpinnerCallCount)
+        assertEquals(1, actionHandler.recoveryExhaustedCallCount)
+    }
+
+    @Test
+    fun testPreservedSeekTargetInStage2Reseek() {
+        controller.onPlaybackStart(isLive = true)
+        // User seeks backward ~10m (to 50_000 within a 120_000 window)
+        val clampedSeek = controller.onSeekRequested(50_000L, 120_000L, 10_000L, true)
+        assertEquals(50_000L, clampedSeek)
+
+        // Buffering occurs after seek
+        controller.onBufferingStarted(true, 50_000L, 120_000L, 70_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
+        assertEquals(1, actionHandler.refreshManifestCallCount)
+
+        // Stage 2 must reseek to the user's preserved target 50_000L, NOT blindly to live edge!
+        shadowOf(Looper.getMainLooper()).idleFor(5_100L, TimeUnit.MILLISECONDS)
+        assertEquals(1, actionHandler.reseekCallCount)
+        assertEquals(50_000L, actionHandler.reseekTargetPos)
+    }
+
+    @Test
+    fun testRecoveryExhaustedOffersOptions() {
+        controller.onPlaybackStart(isLive = true)
+        controller.onSeekRequested(45_000L, 120_000L, 10_000L, true)
+        controller.onBufferingStarted(true, 45_000L, 120_000L, 75_000L)
+
+        // Run until exhaustion
+        shadowOf(Looper.getMainLooper()).idleFor(21_000L, TimeUnit.MILLISECONDS)
+        assertEquals(VoxLiveStallState.FAILED, controller.getState())
+        assertEquals(1, actionHandler.recoveryExhaustedCallCount)
+        assertEquals(45_000L, actionHandler.lastExhaustedTargetPos)
+
+        // Verify retry runnable reseeks to target position
+        actionHandler.lastRetryAction?.run()
+        assertEquals(2, actionHandler.reseekCallCount)
+        assertEquals(45_000L, actionHandler.reseekTargetPos)
+
+        // Verify return to live runnable invokes returnToLiveRequested
+        actionHandler.lastReturnToLiveAction?.run()
+        assertTrue(actionHandler.returnToLiveCallCount >= 1)
     }
 
     @Test
@@ -202,27 +267,14 @@ class VoxLiveStallRecoveryControllerTest {
     fun testMaxRecoveryAttemptsExceededTransitionsToFailed() {
         controller.onPlaybackStart(isLive = true)
 
-        // Attempt 1 -> REFRESHING_MANIFEST
         controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
-        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
-        assertEquals(1, controller.getRecoveryAttempts())
+        // Advance looper through all stages: 6.1s + 5.1s + 5.1s + 4.1s = 20.4s
+        shadowOf(Looper.getMainLooper()).idleFor(20_500L, TimeUnit.MILLISECONDS)
 
-        // Attempt 2 -> RESEEKING
-        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
-        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
-        assertEquals(2, controller.getRecoveryAttempts())
-
-        // Attempt 3 -> RECREATING_SOURCE
-        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
-        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
-        assertEquals(3, controller.getRecoveryAttempts())
-
-        // Attempt 4 -> FAILED (bounded retry)
-        controller.onBufferingStarted(true, 100_000L, 120_000L, 20_000L)
-        shadowOf(Looper.getMainLooper()).idleFor(6_100L, TimeUnit.MILLISECONDS)
         assertEquals(VoxLiveStallState.FAILED, controller.getState())
         assertEquals(4, controller.getRecoveryAttempts())
-        assertEquals(2, actionHandler.recreateSourceCallCount) // called again as final fallback
+        assertEquals(1, actionHandler.hideSpinnerCallCount)
+        assertEquals(1, actionHandler.recoveryExhaustedCallCount)
     }
 
     @Test

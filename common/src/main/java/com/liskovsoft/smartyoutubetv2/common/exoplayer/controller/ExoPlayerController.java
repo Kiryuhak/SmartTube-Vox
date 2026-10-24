@@ -42,6 +42,12 @@ import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerTracker;
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.video.VideoListener;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
+import com.liskovsoft.smartyoutubetv2.common.R;
+import java.util.ArrayList;
 import com.liskovsoft.smartyoutubetv2.common.vox.download.VoxOfflinePlaybackProbe;
 import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxLiveStallRecoveryController;
 
@@ -60,6 +66,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private final TrackErrorFixer mTrackErrorFixer;
     private final VoxOfflinePlaybackProbe mOfflineProbe = new VoxOfflinePlaybackProbe();
     private final VoxLiveStallRecoveryController mStallRecoveryController;
+    private MediaSource mCurrentMediaSource;
     private boolean mOnSourceChanged;
     private WeakReference<Video> mVideo;
     private final PlayerEventListener mEventListener;
@@ -89,7 +96,11 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             @Override
             public void onRefreshManifestRequested() {
                 if (mPlayer != null) {
-                    mPlayer.retry();
+                    if (mCurrentMediaSource != null) {
+                        mPlayer.prepare(mCurrentMediaSource, false, false);
+                    } else {
+                        mPlayer.retry();
+                    }
                 }
             }
 
@@ -129,6 +140,59 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             @Override
             public void showMessage(String message) {
                 com.liskovsoft.sharedutils.helpers.MessageHelpers.showMessage(mContext, message);
+            }
+
+            @Override
+            public void hideBufferingSpinner() {
+                PlaybackPresenter presenter = PlaybackPresenter.instance(mContext);
+                if (presenter != null && presenter.getPlayer() != null) {
+                    presenter.getPlayer().showProgressBar(false);
+                }
+            }
+
+            @Override
+            public void onRecoveryExhausted(long targetPositionMs, Runnable onReturnToLive, Runnable onRetry) {
+                PlaybackPresenter presenter = PlaybackPresenter.instance(mContext);
+                if (presenter != null && presenter.getPlayer() != null) {
+                    presenter.getPlayer().showProgressBar(false);
+                    presenter.getPlayer().setTitle(mContext.getString(R.string.vox_live_recovery_failed));
+                }
+                if (mPlayer != null) {
+                    mPlayer.setPlayWhenReady(false);
+                }
+                AppDialogPresenter dialog = AppDialogPresenter.instance(mContext);
+                if (dialog != null) {
+                    List<OptionItem> options = new ArrayList<>();
+                    options.add(UiOptionItem.from(mContext.getString(R.string.vox_live_action_return_to_live), item -> {
+                        dialog.closeDialog();
+                        if (presenter != null && presenter.getPlayer() != null) {
+                            presenter.getPlayer().showProgressBar(true);
+                        }
+                        if (mPlayer != null) {
+                            mPlayer.setPlayWhenReady(true);
+                        }
+                        onReturnToLive.run();
+                    }));
+                    options.add(UiOptionItem.from(mContext.getString(R.string.vox_player_recovery_retry), item -> {
+                        dialog.closeDialog();
+                        if (presenter != null && presenter.getPlayer() != null) {
+                            presenter.getPlayer().showProgressBar(true);
+                        }
+                        if (mPlayer != null) {
+                            mPlayer.setPlayWhenReady(true);
+                        }
+                        onRetry.run();
+                    }));
+                    options.add(UiOptionItem.from(mContext.getString(R.string.vox_player_recovery_back), item -> {
+                        dialog.closeDialog();
+                        if (presenter != null && presenter.getPlayer() != null) {
+                            presenter.getPlayer().finish();
+                        }
+                    }));
+                    String title = mContext.getString(R.string.vox_live_recovery_failed);
+                    dialog.appendStringsCategory(title, options);
+                    dialog.showDialog(title);
+                }
             }
         });
 
@@ -197,6 +261,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     }
 
     private void openMediaSource(MediaSource mediaSource) {
+        mCurrentMediaSource = mediaSource;
         resetPlayerState(); // fixes occasional video artifacts and problems with quality switching
         setQualityInfo("");
 
@@ -684,7 +749,11 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mStallRecoveryController.handleBehindLiveWindow(mContext, () -> {
                 if (mPlayer != null) {
                     mPlayer.seekToDefaultPosition();
-                    mPlayer.retry();
+                    if (mCurrentMediaSource != null) {
+                        mPlayer.prepare(mCurrentMediaSource, false, false);
+                    } else {
+                        mPlayer.retry();
+                    }
                 }
             });
             return;
@@ -1005,6 +1074,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             e.printStackTrace();
         } finally {
             mPlayer = null;
+            mCurrentMediaSource = null;
             VoxPlayerTracker.onPlayerReleased();
         }
     }

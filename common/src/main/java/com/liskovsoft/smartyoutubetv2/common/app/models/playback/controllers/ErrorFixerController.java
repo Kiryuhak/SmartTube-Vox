@@ -183,16 +183,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         }
 
         if (getVideo() != null && getVideo().isLive) {
-            mLiveBufferingRecoveryCount++;
-            if (mLiveBufferingRecoveryCount > 3) {
-                Log.e(TAG, "Live long buffering recovery exceeded limit; returning to live edge");
-                mLiveBufferingRecoveryCount = 0;
-                if (getPlayer() != null) {
-                    getPlayer().setPositionMs(Math.max(0, getPlayer().getDurationMs() - 15_000L));
-                    getPlayer().setPlayWhenReady(true);
-                }
-                return;
-            }
+            Log.w(TAG, "onLongBuffering: Live stream buffering is managed by VoxLiveStallRecoveryController. Skipping ErrorFixer intervention.");
+            return;
         }
 
         if (isStreamEnded()) {

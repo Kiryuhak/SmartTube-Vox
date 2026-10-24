@@ -784,6 +784,7 @@
     <string name="vox_live_recovery_failed">Failed to recover live stream</string>
     <string name="vox_live_stale_position">This part of the live stream is no longer available</string>
     <string name="vox_live_refreshing">Refreshing live stream…</string>
+    <string name="vox_live_action_return_to_live">To live edge</string>
     <string name="vox_player_recovery_failed">Could not restore connection</string>
     <string name="vox_player_recovery_retry">Retry</string>
     <string name="vox_player_recovery_exhausted_message">Could not restore video. Check connection or try another quality.</string>
