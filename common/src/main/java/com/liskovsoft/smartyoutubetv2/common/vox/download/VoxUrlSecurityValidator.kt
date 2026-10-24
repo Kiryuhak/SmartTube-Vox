@@ -8,6 +8,9 @@ import java.util.Locale
  */
 object VoxUrlSecurityValidator {
 
+    @Volatile
+    var allowLocalFixtures: Boolean = false
+
     private val ALLOWED_SCHEMES = setOf("https")
 
     private val ALLOWED_HOST_SUFFIXES = listOf(
@@ -48,6 +51,12 @@ object VoxUrlSecurityValidator {
         }
 
         val scheme = uri.scheme?.lowercase(Locale.US)
+        val host = uri.host?.lowercase(Locale.US)
+
+        if (allowLocalFixtures && (scheme == "http" || scheme == "https") && host != null && isPrivateOrLocalHost(host)) {
+            return
+        }
+
         if (scheme !in ALLOWED_SCHEMES) {
             throw VoxDownloadException(
                 VoxDownloadErrorCode.INVALID_URL,
@@ -55,7 +64,6 @@ object VoxUrlSecurityValidator {
             )
         }
 
-        val host = uri.host?.lowercase(Locale.US)
         if (host.isNullOrBlank()) {
             throw VoxDownloadException(VoxDownloadErrorCode.INVALID_URL, "URL missing valid host")
         }
