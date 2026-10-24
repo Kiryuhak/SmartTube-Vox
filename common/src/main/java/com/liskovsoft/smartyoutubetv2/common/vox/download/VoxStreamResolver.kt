@@ -58,12 +58,29 @@ class DefaultVoxStreamResolver(
             )
         }
 
-        // Выбираем формат с наилучшим совпадением по разрешению и безопасным откатом
+        // Выбираем формат с наилучшим совпадением по разрешению и защитой от тихого занижения
         val fallbackResult = VoxDownloadFallbackPolicy.selectVideoFormat(videoCandidates, qualityPreference)
-            ?: throw VoxDownloadException(
+        if (fallbackResult == null) {
+            if (qualityPreference != VoxQualityPreference.QUALITY_AUTO) {
+                val label = when (qualityPreference) {
+                    VoxQualityPreference.QUALITY_2160P -> "2160p"
+                    VoxQualityPreference.QUALITY_1440P -> "1440p"
+                    VoxQualityPreference.QUALITY_1080P -> "1080p"
+                    VoxQualityPreference.QUALITY_720P -> "720p"
+                    VoxQualityPreference.QUALITY_480P -> "480p"
+                    VoxQualityPreference.QUALITY_360P -> "360p"
+                    else -> qualityPreference.label
+                }
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.QUALITY_UNAVAILABLE,
+                    "Качество $label недоступно для этого видео"
+                )
+            }
+            throw VoxDownloadException(
                 VoxDownloadErrorCode.STREAM_UNAVAILABLE,
                 "No compatible video streams found for videoId=$videoId"
             )
+        }
         val selectedFormat = fallbackResult.selected
 
         val url = selectedFormat.url

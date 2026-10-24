@@ -582,12 +582,14 @@ class VoxDownloadCoordinator(
             val videoStream = if (job.videoProgress.state != VoxTrackState.COMPLETED) {
                 streamResolver.resolveVideoStream(job.request.videoId, job.request.qualityPreference)
             } else null
-            if (videoStream != null && videoStream.height > 0) {
-                job.actualVideoHeight = videoStream.height
-                job.actualQuality = "${videoStream.height}p"
-                if (job.request.qualityPreference != VoxQualityPreference.QUALITY_AUTO &&
-                    videoStream.height < job.request.qualityPreference.maxResolution) {
-                    job.fallbackReason = "Качество снижено до ${videoStream.height}p (запрошено ${job.request.qualityPreference.label})"
+            if (videoStream != null && (videoStream.height > 0 || videoStream.width > 0)) {
+                val effRes = VoxDownloadFallbackPolicy.getEffectiveResolution(videoStream.width, videoStream.height)
+                job.actualVideoHeight = if (effRes > 0) effRes else videoStream.height
+                job.actualQuality = if (effRes > 0) "${effRes}p" else "${videoStream.height}p"
+                if (job.request.qualityPreference == VoxQualityPreference.QUALITY_AUTO) {
+                    job.fallbackReason = "Выбрано наилучшее доступное: ${job.actualQuality}"
+                } else {
+                    job.fallbackReason = null
                 }
                 repository.persistJob(job)
             }

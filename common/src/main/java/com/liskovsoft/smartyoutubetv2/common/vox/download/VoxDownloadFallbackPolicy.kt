@@ -15,24 +15,83 @@ data class VoxFormatFallbackResult<T>(
 
 /**
  * Политика резервных вариантов форматов для скачивания видео и аудио.
- * Гарантирует выбор наиболее стабильного и совместимого потока без превышения запрошенного разрешения.
+ * Гарантирует выбор наиболее стабильного и совместимого потока с защитой от тихого занижения качества.
  */
 object VoxDownloadFallbackPolicy {
 
     /**
-     * Подбирает оптимальный видеопоток с безопасным откатом:
-     * 1. Для Ultra-HD (> 1080p: 2160p 4K, 1440p 2K, Auto) проверяет потоки > 1080p в VP9/AV1.
-     * 2. Для стандартных разрешений (<= 1080p) приоритет: AVC/H.264 -> VP9 -> AV1.
-     * 3. При недоступности запрошенного разрешения выбирает наивысшее доступное разрешение <= запрошенного.
+     * Оценивает эффективное разрешение потока с учетом различных соотношений сторон:
+     * - 16:9 Standard: 3840x2160 (4K), 2560x1440 (2K), 1920x1080 (FHD), 1280x720 (HD).
+     * - Portrait / Shorts: 2160x3840 (4K portrait), 1440x2560 (2K portrait), 1080x1920 (FHD portrait), 720x1280.
+     * - Ultrawide / Cinematic: 3840x1600 (4K widescreen 2.4:1), 3840x1620, 2560x1080, 1920x800, 1280x540.
+     * - DCI 4K: 4096x2160.
+     * - Потоки только с указанием высоты: height in 2160..4320 -> 2160, 1400..2159 -> 1440, etc.
+     */
+    @JvmStatic
+    fun getEffectiveResolution(width: Int, height: Int): Int {
+        if (width <= 0 || height <= 0) {
+            val h = if (height > 0) height else width
+            return when {
+                h >= 2160 -> 2160
+                h >= 1400 -> 1440
+                h >= 1000 -> 1080
+                h >= 700 -> 720
+                h >= 450 -> 480
+                h >= 300 -> 360
+                h > 0 -> h
+                else -> 0
+            }
+        }
+
+        val longDim = maxOf(width, height)
+        val shortDim = minOf(width, height)
+
+        return when {
+            // 4K (2160p): 16:9 (3840x2160), portrait (2160x3840), ultrawide (3840x1600), DCI 4K (4096x2160)
+            longDim >= 3840 || shortDim >= 2160 -> 2160
+            // 2K (1440p): 16:9 (2560x1440), portrait (1440x2560), ultrawide (2560x1080)
+            longDim >= 2560 || shortDim >= 1440 -> 1440
+            // 1080p (FHD): 16:9 (1920x1080), portrait (1080x1920), ultrawide (1920x800)
+            longDim >= 1920 || shortDim >= 1080 -> 1080
+            // 720p (HD): 16:9 (1280x720), portrait (720x1280), ultrawide (1280x540)
+            longDim >= 1280 || shortDim >= 720 -> 720
+            // 480p: 854x480, 480x854
+            longDim >= 848 || shortDim >= 480 -> 480
+            // 360p: 640x360, 360x640
+            longDim >= 640 || shortDim >= 360 -> 360
+            shortDim > 0 -> shortDim
+            else -> 0
+        }
+    }
+
+    /**
+     * Проверяет, удовлетворяет ли формат запрошенному качеству.
+     */
+    @JvmStatic
+    fun matchesQuality(format: MediaFormat, preference: VoxQualityPreference): Boolean {
+        if (preference == VoxQualityPreference.QUALITY_AUTO) return true
+        val eff = getEffectiveResolution(format.width, format.height)
+        return eff == preference.maxResolution
+    }
+
+    /**
+     * Подбирает оптимальный видеопоток:
+     * 1. При явном выборе разрешения (2160p, 1440p, 1080p, 720p и т.д.):
+     *    - Ищет форматы, соответствующие запрошенному инварианту разрешения.
+     *    - Для Ultra-HD (> 1080p): приоритет кодеков VP9 -> AV1 -> AVC.
+     *    - Для стандартных (<= 1080p): приоритет AVC (H.264) -> VP9 -> AV1.
+     *    - Если формат запрошенного качества отсутствует: ВОЗВРАЩАЕТ NULL (тихий даунгрейд исключен).
+     * 2. При выборе QUALITY_AUTO:
+     *    - Выбирает наивысшее доступное разрешение среди всех кандидатов.
+     *    - Формирует явную отметку "Выбрано наилучшее доступное: [разрешение]p".
      */
     @JvmStatic
     fun selectVideoFormat(
         candidates: List<MediaFormat>,
         preference: VoxQualityPreference
     ): VoxFormatFallbackResult<MediaFormat>? {
-        if (candidates.isEmpty()) return null
-
-        val maxRes = preference.maxResolution
+        val validCandidates = candidates.filter { !it.url.isNullOrBlank() }
+        if (validCandidates.isEmpty()) return null
 
         fun isAvc(f: MediaFormat): Boolean {
             val mime = f.mimeType?.lowercase(Locale.US) ?: ""
@@ -52,101 +111,72 @@ object VoxDownloadFallbackPolicy {
             return mime.contains("av01") || mime.contains("av1")
         }
 
-        // 1. Для Ultra-HD (> 1080p: 2160p 4K, 1440p 2K, или Auto) проверяем потоки с разрешением > 1080p
-        // YouTube не отдаёт AVC выше 1080p, поэтому 2K и 4K доступны только в VP9 и AV1
-        if (maxRes > 1080) {
-            val uhdMatching = candidates
-                .filter { it.height in 1081..maxRes && !it.url.isNullOrBlank() }
-
-            if (uhdMatching.isNotEmpty()) {
-                val highestUhd = uhdMatching.maxOf { it.height }
-                val atHighest = uhdMatching.filter { it.height == highestUhd }
-                val chosen = atHighest.firstOrNull { isVp9(it) }
-                    ?: atHighest.firstOrNull { isAv1(it) }
-                    ?: atHighest.first()
-
-                val isFallback = preference != VoxQualityPreference.QUALITY_AUTO && chosen.height < preference.maxResolution
-                return VoxFormatFallbackResult(
-                    selected = chosen,
-                    fallbackApplied = isFallback,
-                    note = if (isFallback) "Качество снижено до ${chosen.height}p" else null
-                )
+        fun codecPriority(f: MediaFormat, isUhd: Boolean): Int {
+            if (VoxCodecTestOverrides.forceVp9Video) {
+                return when {
+                    isVp9(f) -> 0
+                    isAvc(f) -> 1
+                    isAv1(f) -> 2
+                    else -> 3
+                }
+            }
+            return if (isUhd) {
+                // Для 4K/2K YouTube почти исключительно отдаёт VP9/AV1
+                when {
+                    isVp9(f) -> 0
+                    isAv1(f) -> 1
+                    isAvc(f) -> 2
+                    else -> 3
+                }
+            } else {
+                // Для <= 1080p AVC обеспечивает максимальную аппаратную совместимость
+                when {
+                    isAvc(f) -> 0
+                    isVp9(f) -> 1
+                    isAv1(f) -> 2
+                    else -> 3
+                }
             }
         }
 
-        // 2. Предпочитаем AVC/H.264 потоки, чья высота <= maxRes (по убыванию высоты)
-        val avcMatching = candidates
-            .filter { isAvc(it) && it.height in 1..maxRes && !it.url.isNullOrBlank() }
-            .sortedByDescending { it.height }
+        // Явный выбор разрешения пользователем: строгая проверка инварианта
+        if (preference != VoxQualityPreference.QUALITY_AUTO) {
+            val targetRes = preference.maxResolution
+            val matching = validCandidates.filter { getEffectiveResolution(it.width, it.height) == targetRes }
 
-        if (avcMatching.isNotEmpty()) {
-            val chosen = avcMatching.first()
-            val isFallback = preference != VoxQualityPreference.QUALITY_AUTO && chosen.height < preference.maxResolution
+            if (matching.isEmpty()) {
+                // Строго: никогда не занижать разрешение молча!
+                return null
+            }
+
+            val isUhd = targetRes > 1080
+            val chosen = matching.minWithOrNull(
+                compareBy<MediaFormat> { codecPriority(it, isUhd) }
+                    .thenByDescending { VotMediaFormatSelector.parseBitrate(it.bitrate).let { b -> if (b == 999_999_999) 0 else b } }
+            ) ?: matching.first()
+
             return VoxFormatFallbackResult(
                 selected = chosen,
-                fallbackApplied = isFallback,
-                note = if (isFallback) "Качество снижено до ${chosen.height}p" else null
+                fallbackApplied = false,
+                note = null
             )
         }
 
-        // 3. VP9 потоки <= maxRes
-        val vp9Matching = candidates
-            .filter { isVp9(it) && it.height in 1..maxRes && !it.url.isNullOrBlank() }
-            .sortedByDescending { it.height }
+        // QUALITY_AUTO: выбор наивысшего доступного разрешения среди всех форматов
+        val sortedByResAndCodec = validCandidates.sortedWith(
+            compareByDescending<MediaFormat> { getEffectiveResolution(it.width, it.height) }
+                .thenBy { codecPriority(it, getEffectiveResolution(it.width, it.height) > 1080) }
+                .thenByDescending { VotMediaFormatSelector.parseBitrate(it.bitrate).let { b -> if (b == 999_999_999) 0 else b } }
+        )
 
-        if (vp9Matching.isNotEmpty()) {
-            val chosen = vp9Matching.first()
-            return VoxFormatFallbackResult(
-                selected = chosen,
-                fallbackApplied = true,
-                note = "Используется VP9 ${chosen.height}p"
-            )
-        }
+        val best = sortedByResAndCodec.firstOrNull() ?: return null
+        val effRes = getEffectiveResolution(best.width, best.height)
+        val note = "Выбрано наилучшее доступное: ${if (effRes > 0) "${effRes}p" else "Auto"}"
 
-        // 4. Любые другие видеоформаты <= maxRes
-        val anyMatching = candidates
-            .filter { it.height in 1..maxRes && !it.url.isNullOrBlank() }
-            .sortedByDescending { it.height }
-
-        if (anyMatching.isNotEmpty()) {
-            val chosen = anyMatching.first()
-            return VoxFormatFallbackResult(
-                selected = chosen,
-                fallbackApplied = true,
-                note = "Используется поток ${chosen.height}p"
-            )
-        }
-
-        // 5. Если нет форматов <= maxRes, выбираем наименьший доступный формат выше maxRes
-        val higherAvc = candidates
-            .filter { isAvc(it) && it.height > maxRes && !it.url.isNullOrBlank() }
-            .sortedBy { it.height }
-
-        if (higherAvc.isNotEmpty()) {
-            return VoxFormatFallbackResult(
-                selected = higherAvc.first(),
-                fallbackApplied = true,
-                note = "Выбран минимальный доступный поток ${higherAvc.first().height}p"
-            )
-        }
-
-        val higherAny = candidates
-            .filter { it.height > maxRes && !it.url.isNullOrBlank() }
-            .sortedBy { it.height }
-
-        if (higherAny.isNotEmpty()) {
-            return VoxFormatFallbackResult(
-                selected = higherAny.first(),
-                fallbackApplied = true,
-                note = "Выбран минимальный доступный поток ${higherAny.first().height}p"
-            )
-        }
-
-        // 6. Форматы без явной высоты (progressive)
-        val firstAvailable = candidates.firstOrNull { !it.url.isNullOrBlank() } ?: return null
         return VoxFormatFallbackResult(
-            selected = firstAvailable,
-            fallbackApplied = false
+            selected = best,
+            fallbackApplied = false,
+            note = note
         )
     }
 

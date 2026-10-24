@@ -34,6 +34,7 @@ enum class VoxDownloadFailureCategory(val userMessageRu: String, val isRecoverab
     HTTP_FORBIDDEN("Доступ ограничен сервером", false),
     URL_EXPIRED("Ссылка на видео устарела. Повторяем загрузку…", true),
     STREAM_UNAVAILABLE("Видео недоступно для скачивания", false),
+    QUALITY_UNAVAILABLE("Запрошенное качество недоступно для этого видео", false),
     AUDIO_UNAVAILABLE("Не удалось получить аудиодорожку", false),
     TRANSLATION_UNAVAILABLE("Перевод для этого видео недоступен", false),
     VIDEO_UNAVAILABLE("Это видео пока нельзя скачать", false),
@@ -105,6 +106,7 @@ object VoxDownloadFailureClassifier {
                 VoxDownloadErrorCode.AUTH_REQUIRED -> VoxDownloadFailureCategory.HTTP_FORBIDDEN
                 VoxDownloadErrorCode.STREAM_UNAVAILABLE,
                 VoxDownloadErrorCode.RESOLVE_FAILED -> VoxDownloadFailureCategory.RESOLVE_FAILED
+                VoxDownloadErrorCode.QUALITY_UNAVAILABLE -> VoxDownloadFailureCategory.QUALITY_UNAVAILABLE
                 VoxDownloadErrorCode.VIDEO_DOWNLOAD_FAILED -> VoxDownloadFailureCategory.VIDEO_DOWNLOAD_FAILED
                 VoxDownloadErrorCode.AUDIO_DOWNLOAD_FAILED -> VoxDownloadFailureCategory.AUDIO_DOWNLOAD_FAILED
                 VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,
@@ -174,6 +176,8 @@ object VoxDownloadFailureClassifier {
                         Pair(VoxDownloadFailureCategory.VIDEO_DOWNLOAD_FAILED, "VIDEO_STREAM_MISSING")
                     msg.contains("live") ->
                         Pair(VoxDownloadFailureCategory.LIVE_NOT_SUPPORTED, "LIVE_STREAM_UNSUPPORTED")
+                    msg.contains("quality_unavailable") || msg.contains("качество недоступно") || msg.contains("quality unavailable") ->
+                        Pair(VoxDownloadFailureCategory.QUALITY_UNAVAILABLE, "QUALITY_UNAVAILABLE")
                     msg.contains("unsupported") && (msg.contains("codec") || msg.contains("format")) ->
                         Pair(VoxDownloadFailureCategory.UNSUPPORTED_FORMAT, "CODEC_NOT_SUPPORTED")
                     msg.contains("checksum") || msg.contains("integrity") || msg.contains("hash") ->
@@ -212,6 +216,7 @@ object VoxDownloadFailureClassifier {
             VoxDownloadErrorCode.TIMEOUT -> "Превышено время ожидания ответа"
             VoxDownloadErrorCode.STREAM_UNAVAILABLE,
             VoxDownloadErrorCode.RESOLVE_FAILED -> "Видео недоступно для скачивания"
+            VoxDownloadErrorCode.QUALITY_UNAVAILABLE -> "Запрошенное качество недоступно для этого видео"
             VoxDownloadErrorCode.VIDEO_DOWNLOAD_FAILED -> "Ошибка загрузки видеопотока"
             VoxDownloadErrorCode.AUDIO_DOWNLOAD_FAILED -> "Ошибка загрузки аудиодорожки"
             VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,

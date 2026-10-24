@@ -105,7 +105,7 @@ object VoxDownloadDialogHelper {
         val presenter = AppDialogPresenter.instance(context)
         val votData = VotData.instance(context)
 
-        var selectedQuality = VoxQualityPreference.QUALITY_720P
+        var selectedQuality = VoxQualityPreference.QUALITY_AUTO
         var selectedMode = VoxTranslationMode.STANDARD
 
         // Категория качества видео
@@ -427,6 +427,7 @@ object VoxDownloadDialogHelper {
             VoxDownloadErrorCode.AUTH_REQUIRED -> context.getString(R.string.vox_download_error_auth)
             VoxDownloadErrorCode.INSUFFICIENT_STORAGE -> context.getString(R.string.vox_download_error_storage)
             VoxDownloadErrorCode.STREAM_UNAVAILABLE -> context.getString(R.string.vox_download_error_stream)
+            VoxDownloadErrorCode.QUALITY_UNAVAILABLE -> context.getString(R.string.vox_download_error_quality)
             VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE -> context.getString(R.string.vox_download_error_trans)
             VoxDownloadErrorCode.UNSUPPORTED_CODEC -> context.getString(R.string.vox_download_error_codec)
             VoxDownloadErrorCode.MEDIA_PARSE_ERROR -> context.getString(R.string.vox_download_error_parse)

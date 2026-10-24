@@ -370,6 +370,7 @@
     <string name="vox_download_error_auth">Sign-in with Yandex required</string>
     <string name="vox_download_error_storage">Insufficient disk space</string>
     <string name="vox_download_error_stream">Failed to resolve video stream</string>
+    <string name="vox_download_error_quality">Requested quality is unavailable for this video</string>
     <string name="vox_download_error_trans">Translation unavailable for this video</string>
     <string name="vox_download_error_codec">Unsupported format</string>
     <string name="vox_download_error_parse">Failed to prepare video file</string>

@@ -135,16 +135,25 @@ class VoxStreamResolverTest {
     }
 
     @Test
-    fun testResolveVideoStreamFallbackWhenHighResMissing() {
+    fun testResolveVideoStreamThrowsQualityUnavailableWhenExplicitQualityMissing() {
         val f1080 = MockFormat(height = 1080, width = 1920, itag = "137")
         val f720 = MockFormat(height = 720, width = 1280, itag = "136")
         val service = createMockService(createMockFormatInfo(listOf(f1080, f720)))
         val resolver = DefaultVoxStreamResolver { service }
 
-        // Request 4K (2160p), but best available is 1080p
-        val resolved = resolver.resolveVideoStream("vid4", VoxQualityPreference.QUALITY_2160P)
-        assertNotNull(resolved)
-        assertEquals(1080, resolved.height)
+        // Request 4K (2160p) when best is 1080p -> must throw QUALITY_UNAVAILABLE (no silent downgrade!)
+        try {
+            resolver.resolveVideoStream("vid4", VoxQualityPreference.QUALITY_2160P)
+            org.junit.Assert.fail("Expected VoxDownloadException for QUALITY_UNAVAILABLE")
+        } catch (e: VoxDownloadException) {
+            assertEquals(VoxDownloadErrorCode.QUALITY_UNAVAILABLE, e.code)
+            assertTrue(e.message?.contains("2160p") == true)
+        }
+
+        // Auto request on same video resolves to best available (1080p)
+        val autoResolved = resolver.resolveVideoStream("vid4", VoxQualityPreference.QUALITY_AUTO)
+        assertNotNull(autoResolved)
+        assertEquals(1080, autoResolved.height)
     }
 
     @Test(expected = VoxDownloadException::class)

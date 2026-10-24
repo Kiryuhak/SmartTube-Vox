@@ -366,6 +366,7 @@
     <string name="vox_download_error_auth">Требуется вход в Яндекс</string>
     <string name="vox_download_error_storage">Недостаточно свободного места</string>
     <string name="vox_download_error_stream">Не удалось получить видеопоток</string>
+    <string name="vox_download_error_quality">Запрошенное качество недоступно для этого видео</string>
     <string name="vox_download_error_trans">Перевод для этого видео недоступен</string>
     <string name="vox_download_error_codec">Этот формат пока не поддерживается</string>
     <string name="vox_download_error_parse">Не удалось подготовить видеофайл</string>
