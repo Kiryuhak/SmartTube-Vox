@@ -112,6 +112,8 @@ object VoxDownloadDialogHelper {
         val qualityOptions = mutableListOf<OptionItem>()
         val qualities = listOf(
             VoxQualityPreference.QUALITY_AUTO,
+            VoxQualityPreference.QUALITY_2160P,
+            VoxQualityPreference.QUALITY_1440P,
             VoxQualityPreference.QUALITY_1080P,
             VoxQualityPreference.QUALITY_720P,
             VoxQualityPreference.QUALITY_360P

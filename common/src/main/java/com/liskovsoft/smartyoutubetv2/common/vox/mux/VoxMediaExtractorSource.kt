@@ -181,6 +181,9 @@ class VoxMediaExtractorSource(
                 VoxMuxCodec.AAC -> {
                     getCsdBytes(format, "csd-0")
                 }
+                VoxMuxCodec.VP9, VoxMuxCodec.AV1 -> {
+                    getCsdBytes(format, "csd-0")
+                }
                 VoxMuxCodec.OPUS -> {
                     val csd0 = getCsdBytes(format, "csd-0")
                     if (csd0 != null && csd0.size >= 19 && String(csd0, 0, 8, Charsets.US_ASCII) == "OpusHead") {

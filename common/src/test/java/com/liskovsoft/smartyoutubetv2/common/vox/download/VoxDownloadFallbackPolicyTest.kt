@@ -143,4 +143,55 @@ class VoxDownloadFallbackPolicyTest {
         assertTrue(res!!.selected.mimeType!!.contains("opus"))
         assertTrue(res.fallbackApplied)
     }
+
+    @Test
+    fun testSelectVideoFormat4KSelection() {
+        val formats = listOf(
+            TestMediaFormat(mimeType = "video/webm; codecs=\"vp9\"", height = 2160),
+            TestMediaFormat(mimeType = "video/webm; codecs=\"vp9\"", height = 1440),
+            TestMediaFormat(mimeType = "video/mp4; codecs=\"avc1.640028\"", height = 1080),
+            TestMediaFormat(mimeType = "video/mp4; codecs=\"avc1.4d401f\"", height = 720)
+        )
+
+        // 2160p requested -> should select 2160p VP9 without fallback
+        val res4k = VoxDownloadFallbackPolicy.selectVideoFormat(formats, VoxQualityPreference.QUALITY_2160P)
+        assertNotNull(res4k)
+        assertEquals(2160, res4k!!.selected.height)
+        assertTrue(res4k.selected.mimeType!!.contains("vp9"))
+        assertFalse(res4k.fallbackApplied)
+
+        // Auto requested -> should pick best available (2160p VP9)
+        val resAuto = VoxDownloadFallbackPolicy.selectVideoFormat(formats, VoxQualityPreference.QUALITY_AUTO)
+        assertNotNull(resAuto)
+        assertEquals(2160, resAuto!!.selected.height)
+        assertFalse(resAuto.fallbackApplied)
+
+        // 1440p requested -> should select 1440p VP9
+        val res1440 = VoxDownloadFallbackPolicy.selectVideoFormat(formats, VoxQualityPreference.QUALITY_1440P)
+        assertNotNull(res1440)
+        assertEquals(1440, res1440!!.selected.height)
+        assertFalse(res1440.fallbackApplied)
+
+        // 1080p requested -> should select 1080p AVC (compatibility preference at 1080p)
+        val res1080 = VoxDownloadFallbackPolicy.selectVideoFormat(formats, VoxQualityPreference.QUALITY_1080P)
+        assertNotNull(res1080)
+        assertEquals(1080, res1080!!.selected.height)
+        assertTrue(res1080.selected.mimeType!!.contains("avc"))
+        assertFalse(res1080.fallbackApplied)
+    }
+
+    @Test
+    fun testSelectVideoFormat4KFallbackTo1080pAvcWhenUhdUnavailable() {
+        val formats = listOf(
+            TestMediaFormat(mimeType = "video/mp4; codecs=\"avc1.640028\"", height = 1080),
+            TestMediaFormat(mimeType = "video/mp4; codecs=\"avc1.4d401f\"", height = 720)
+        )
+
+        val res4k = VoxDownloadFallbackPolicy.selectVideoFormat(formats, VoxQualityPreference.QUALITY_2160P)
+        assertNotNull(res4k)
+        assertEquals(1080, res4k!!.selected.height)
+        assertTrue(res4k.selected.mimeType!!.contains("avc"))
+        assertTrue(res4k.fallbackApplied)
+        assertEquals("Качество снижено до 1080p", res4k.note)
+    }
 }

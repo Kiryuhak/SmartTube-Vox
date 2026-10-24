@@ -21,8 +21,8 @@ object VoxDownloadFallbackPolicy {
 
     /**
      * Подбирает оптимальный видеопоток с безопасным откатом:
-     * 1. Ищет потоки с высотой <= preference.maxResolution.
-     * 2. Приоритет кодеков: AVC/H.264 (максимальная совместимость с Matroska/MediaExtractor) -> VP9 -> AV1.
+     * 1. Для Ultra-HD (> 1080p: 2160p 4K, 1440p 2K, Auto) проверяет потоки > 1080p в VP9/AV1.
+     * 2. Для стандартных разрешений (<= 1080p) приоритет: AVC/H.264 -> VP9 -> AV1.
      * 3. При недоступности запрошенного разрешения выбирает наивысшее доступное разрешение <= запрошенного.
      */
     @JvmStatic
@@ -47,7 +47,34 @@ object VoxDownloadFallbackPolicy {
             return mime.contains("vp9") || mime.contains("vp09")
         }
 
-        // 1. Предпочитаем AVC/H.264 потоки, чья высота <= maxRes (по убыванию высоты)
+        fun isAv1(f: MediaFormat): Boolean {
+            val mime = f.mimeType?.lowercase(Locale.US) ?: ""
+            return mime.contains("av01") || mime.contains("av1")
+        }
+
+        // 1. Для Ultra-HD (> 1080p: 2160p 4K, 1440p 2K, или Auto) проверяем потоки с разрешением > 1080p
+        // YouTube не отдаёт AVC выше 1080p, поэтому 2K и 4K доступны только в VP9 и AV1
+        if (maxRes > 1080) {
+            val uhdMatching = candidates
+                .filter { it.height in 1081..maxRes && !it.url.isNullOrBlank() }
+
+            if (uhdMatching.isNotEmpty()) {
+                val highestUhd = uhdMatching.maxOf { it.height }
+                val atHighest = uhdMatching.filter { it.height == highestUhd }
+                val chosen = atHighest.firstOrNull { isVp9(it) }
+                    ?: atHighest.firstOrNull { isAv1(it) }
+                    ?: atHighest.first()
+
+                val isFallback = preference != VoxQualityPreference.QUALITY_AUTO && chosen.height < preference.maxResolution
+                return VoxFormatFallbackResult(
+                    selected = chosen,
+                    fallbackApplied = isFallback,
+                    note = if (isFallback) "Качество снижено до ${chosen.height}p" else null
+                )
+            }
+        }
+
+        // 2. Предпочитаем AVC/H.264 потоки, чья высота <= maxRes (по убыванию высоты)
         val avcMatching = candidates
             .filter { isAvc(it) && it.height in 1..maxRes && !it.url.isNullOrBlank() }
             .sortedByDescending { it.height }
@@ -62,7 +89,7 @@ object VoxDownloadFallbackPolicy {
             )
         }
 
-        // 2. VP9 потоки <= maxRes
+        // 3. VP9 потоки <= maxRes
         val vp9Matching = candidates
             .filter { isVp9(it) && it.height in 1..maxRes && !it.url.isNullOrBlank() }
             .sortedByDescending { it.height }
@@ -76,7 +103,7 @@ object VoxDownloadFallbackPolicy {
             )
         }
 
-        // 3. Любые другие видеоформаты <= maxRes
+        // 4. Любые другие видеоформаты <= maxRes
         val anyMatching = candidates
             .filter { it.height in 1..maxRes && !it.url.isNullOrBlank() }
             .sortedByDescending { it.height }
@@ -90,7 +117,7 @@ object VoxDownloadFallbackPolicy {
             )
         }
 
-        // 4. Если нет форматов <= maxRes, выбираем наименьший доступный формат выше maxRes
+        // 5. Если нет форматов <= maxRes, выбираем наименьший доступный формат выше maxRes
         val higherAvc = candidates
             .filter { isAvc(it) && it.height > maxRes && !it.url.isNullOrBlank() }
             .sortedBy { it.height }
@@ -115,7 +142,7 @@ object VoxDownloadFallbackPolicy {
             )
         }
 
-        // 5. Форматы без явной высоты (progressive)
+        // 6. Форматы без явной высоты (progressive)
         val firstAvailable = candidates.firstOrNull { !it.url.isNullOrBlank() } ?: return null
         return VoxFormatFallbackResult(
             selected = firstAvailable,
@@ -139,7 +166,11 @@ object VoxDownloadFallbackPolicy {
 
         val aacCandidates = candidates.filter { isAac(it) }
         if (aacCandidates.isNotEmpty()) {
-            val nonRussian = aacCandidates.filter { !VotMediaFormatSelector.isRussianFormat(it) && !VotMediaFormatSelector.isDubbedFormat(it) }
+            val nonRussian = aacCandidates.filter {
+                !VotMediaFormatSelector.isRussianFormat(it) &&
+                !VotMediaFormatSelector.isDubbedFormat(it) &&
+                !VotMediaFormatSelector.isAutoDubbedFormat(it)
+            }
             val pool = if (nonRussian.isNotEmpty()) nonRussian else aacCandidates
             val best = pool.maxByOrNull { VotMediaFormatSelector.parseBitrate(it.bitrate).let { b -> if (b == 999_999_999) 0 else b } }
                 ?: pool.first()
@@ -155,7 +186,11 @@ object VoxDownloadFallbackPolicy {
             mime.startsWith("audio/") && !it.url.isNullOrBlank()
         }
         if (anyAudio.isNotEmpty()) {
-            val nonRussian = anyAudio.filter { !VotMediaFormatSelector.isRussianFormat(it) && !VotMediaFormatSelector.isDubbedFormat(it) }
+            val nonRussian = anyAudio.filter {
+                !VotMediaFormatSelector.isRussianFormat(it) &&
+                !VotMediaFormatSelector.isDubbedFormat(it) &&
+                !VotMediaFormatSelector.isAutoDubbedFormat(it)
+            }
             val pool = if (nonRussian.isNotEmpty()) nonRussian else anyAudio
             val best = pool.maxByOrNull { VotMediaFormatSelector.parseBitrate(it.bitrate).let { b -> if (b == 999_999_999) 0 else b } }
                 ?: pool.first()

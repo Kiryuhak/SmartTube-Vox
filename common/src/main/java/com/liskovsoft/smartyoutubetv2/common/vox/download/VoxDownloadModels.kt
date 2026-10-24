@@ -32,6 +32,8 @@ enum class VoxDownloadTranslationState {
  * Предпочтительное качество видео для скачивания.
  */
 enum class VoxQualityPreference(val label: String, val maxResolution: Int) {
+    QUALITY_2160P("2160p (4K)", 2160),
+    QUALITY_1440P("1440p (2K)", 1440),
     QUALITY_1080P("1080p", 1080),
     QUALITY_720P("720p", 720),
     QUALITY_480P("480p", 480),
