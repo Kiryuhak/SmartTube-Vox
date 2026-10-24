@@ -43,11 +43,18 @@ class VoxOtaSecurityVerifierTest {
         context = RuntimeEnvironment.getApplication()
 
         // Поиск официального подписанного релизного APK в локальном репозитории
+        val releaseDir = File("../smarttubetv/build/outputs/apk/stvot/release")
+        val releaseApks = if (releaseDir.exists()) {
+            releaseDir.listFiles { _, name -> name.endsWith(".apk") && !name.contains("-unaligned") }
+                ?.sortedByDescending { it.length() }?.toList() ?: emptyList()
+        } else emptyList()
+
         val candidates = listOf(
+            File("../smarttubetv/build/outputs/apk/stvot/release/SmartTube_vot_32.56-vox.9.2-rc.1_universal.apk"),
+            File("../smarttubetv/build/outputs/apk/stvot/release/SmartTube_vot_32.56-vox.9.1_universal.apk"),
             File("../build/release-candidate/vox-9.1/SmartTube_vot_32.56-vox.9.1_armeabi-v7a.apk"),
-            File("../build/release-candidate/vox-9.1/SmartTube_vot_32.56-vox.9.1_universal.apk"),
-            File("../smarttubetv/build/outputs/apk/stvot/release/SmartTube_vot_32.56-vox.9.1_universal.apk")
-        )
+            File("../build/release-candidate/vox-9.1/SmartTube_vot_32.56-vox.9.1_universal.apk")
+        ) + releaseApks
         val apk = candidates.map { it.canonicalFile }.firstOrNull { it.exists() }
         org.junit.Assume.assumeTrue("Official release APK not found for security verification testing", apk != null)
         officialReleaseApk = apk!!
