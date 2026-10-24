@@ -225,6 +225,10 @@
   let kpiInProgress = null;
   let kpiFixedAwaiting = null;
   let kpiTriaged = null;
+  let kpiClosed = null;
+  let kpiNewStrip = null;
+  let kpiInProgressStrip = null;
+  let kpiResolvedStrip = null;
   let kpiResolved = null;
   let kpiKnownIssue = null;
   let kpiIgnoredTest = null;
@@ -302,6 +306,10 @@
     kpiInProgress = document.getElementById('kpiInProgress');
     kpiFixedAwaiting = document.getElementById('kpiFixedAwaiting');
     kpiTriaged = document.getElementById('kpiTriaged');
+    kpiClosed = document.getElementById('kpiClosed');
+    kpiNewStrip = document.getElementById('kpiNewStrip');
+    kpiInProgressStrip = document.getElementById('kpiInProgressStrip');
+    kpiResolvedStrip = document.getElementById('kpiResolvedStrip');
     kpiResolved = document.getElementById('kpiResolved');
     kpiKnownIssue = document.getElementById('kpiKnownIssue');
     kpiIgnoredTest = document.getElementById('kpiIgnoredTest');
@@ -587,6 +595,10 @@
     if (kpiInProgress) kpiInProgress.textContent = stats.inProgressCount ?? 0;
     if (kpiFixedAwaiting) kpiFixedAwaiting.textContent = stats.fixedAwaitingCount ?? 0;
     if (kpiTriaged) kpiTriaged.textContent = stats.triagedCount ?? 0;
+    if (kpiClosed) kpiClosed.textContent = stats.closedCount ?? 0;
+    if (kpiNewStrip) kpiNewStrip.textContent = stats.newCount ?? 0;
+    if (kpiInProgressStrip) kpiInProgressStrip.textContent = stats.inProgressCount ?? 0;
+    if (kpiResolvedStrip) kpiResolvedStrip.textContent = stats.resolvedCount ?? 0;
     if (kpiResolved) kpiResolved.textContent = stats.resolvedCount ?? 0;
     if (kpiKnownIssue) kpiKnownIssue.textContent = stats.knownIssueCount ?? 0;
     if (kpiIgnoredTest) kpiIgnoredTest.textContent = stats.ignoredTestCount ?? 0;

@@ -122,6 +122,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
   const triagedCount = stats.triagedCount ?? 0;
   const inProgressCount = stats.inProgressCount ?? 0;
   const fixedAwaitingCount = stats.fixedAwaitingCount ?? 0;
+  const closedCount = stats.closedCount ?? 0;
   const resolvedCount = stats.resolvedCount ?? 0;
   const knownIssueCount = stats.knownIssueCount ?? 0;
   const ignoredTestCount = stats.ignoredTestCount ?? 0;
@@ -1111,6 +1112,9 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       </div>
       <div class="strip-item" data-metric="FIXED_AWAITING_VERIFICATION" title="Исправлено — ждёт проверки в релизе">
         <span>Ждёт проверки:</span> <strong id="kpiFixedAwaiting">${fixedAwaitingCount}</strong>
+      </div>
+      <div class="strip-item" data-metric="CLOSED" title="Окончательно закрытые инциденты">
+        <span>Закрыто:</span> <strong id="kpiClosed">${closedCount}</strong>
       </div>
       <div class="strip-item" data-metric="TRIAGED" title="Разобраны и стоят в очереди бэклога">
         <span>В очереди:</span> <strong id="kpiTriaged">${triagedCount}</strong>

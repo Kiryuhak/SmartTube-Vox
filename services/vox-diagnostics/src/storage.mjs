@@ -109,6 +109,7 @@ export const ALLOWED_STATUS_TRANSITIONS = {
 };
 
 export function isValidStatusTransition(fromStatus, toStatus) {
+  if (!fromStatus || !toStatus) return false;
   const from = normalizeStatus(fromStatus);
   const to = normalizeStatus(toStatus);
   if (!from || !to) return false;
@@ -1029,11 +1030,12 @@ export class ReportStorage {
           SELECT 
             SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
             SUM(CASE WHEN UPPER(status) = 'TRIAGED' THEN 1 ELSE 0 END) as count_triaged,
-            SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
+            SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
             SUM(CASE WHEN UPPER(status) IN ('FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED') THEN 1 ELSE 0 END) as count_fixed_awaiting,
-            SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'CLOSED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
+            SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
+            SUM(CASE WHEN UPPER(status) = 'CLOSED' THEN 1 ELSE 0 END) as count_closed,
             SUM(CASE WHEN UPPER(status) IN ('KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
-            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST') THEN 1 ELSE 0 END) as count_ignored_test
+            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_ignored_test
           FROM reports
         `).first(),
         this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
@@ -1050,6 +1052,7 @@ export class ReportStorage {
       const inProgressCount = Number(countsRes?.count_in_progress) || 0;
       const fixedAwaitingCount = Number(countsRes?.count_fixed_awaiting) || 0;
       const resolvedCount = Number(countsRes?.count_resolved) || 0;
+      const closedCount = Number(countsRes?.count_closed) || 0;
       const knownIssueCount = Number(countsRes?.count_known_issue) || 0;
       const ignoredTestCount = Number(countsRes?.count_ignored_test) || 0;
       const activeIssuesCount = newCount + inProgressCount + knownIssueCount;
@@ -1087,6 +1090,7 @@ export class ReportStorage {
         inProgressCount,
         fixedAwaitingCount,
         resolvedCount,
+        closedCount,
         knownIssueCount,
         knownCount: knownIssueCount,
         ignoredTestCount,
@@ -1102,6 +1106,7 @@ export class ReportStorage {
           count_in_progress: inProgressCount,
           count_fixed_awaiting: fixedAwaitingCount,
           count_resolved: resolvedCount,
+          count_closed: closedCount,
           count_known: knownIssueCount,
           count_ignored_test: ignoredTestCount,
         },
@@ -1112,6 +1117,7 @@ export class ReportStorage {
           INVESTIGATING: inProgressCount,
           FIXED_AWAITING_VERIFICATION: fixedAwaitingCount,
           RESOLVED: resolvedCount,
+          CLOSED: closedCount,
           KNOWN_LIMITATION: knownIssueCount,
           KNOWN_ISSUE: knownIssueCount,
           IGNORED_TEST: ignoredTestCount,
@@ -1139,6 +1145,7 @@ export class ReportStorage {
       let inProgressCount = 0;
       let fixedAwaitingCount = 0;
       let resolvedCount = 0;
+      let closedCount = 0;
       let knownIssueCount = 0;
       let ignoredTestCount = 0;
 
@@ -1159,9 +1166,10 @@ export class ReportStorage {
         else if (normStatus === 'TRIAGED') triagedCount++;
         else if (normStatus === 'IN_PROGRESS' || normStatus === 'INVESTIGATING' || normStatus === 'TESTING' || normStatus === 'FIX_IMPLEMENTED' || normStatus === 'ROOT_CAUSE_FOUND') inProgressCount++;
         else if (normStatus === 'FIXED_AWAITING_VERIFICATION' || normStatus === 'FIXED_PENDING_VERIFICATION') fixedAwaitingCount++;
-        else if (normStatus === 'RESOLVED' || normStatus === 'VERIFIED' || normStatus === 'CLOSED') resolvedCount++;
+        else if (normStatus === 'RESOLVED' || normStatus === 'VERIFIED') resolvedCount++;
+        else if (normStatus === 'CLOSED') closedCount++;
         else if (normStatus === 'KNOWN_LIMITATION' || normStatus === 'KNOWN_ISSUE') knownIssueCount++;
-        else if (normStatus === 'IGNORED_TEST' || normStatus === 'IGNORED') ignoredTestCount++;
+        else if (normStatus === 'IGNORED_TEST' || normStatus === 'IGNORED' || normStatus === 'WONT_FIX' || normStatus === 'DUPLICATE') ignoredTestCount++;
 
         const c = String(r.error_category || '').toUpperCase();
         if (c === 'LIVE' || c === 'PLAYBACK') liveCount++;
@@ -1205,6 +1213,7 @@ export class ReportStorage {
         inProgressCount,
         fixedAwaitingCount,
         resolvedCount,
+        closedCount,
         knownIssueCount,
         knownCount: knownIssueCount,
         ignoredTestCount,
@@ -1220,6 +1229,7 @@ export class ReportStorage {
           count_in_progress: inProgressCount,
           count_fixed_awaiting: fixedAwaitingCount,
           count_resolved: resolvedCount,
+          count_closed: closedCount,
           count_known: knownIssueCount,
           count_ignored_test: ignoredTestCount,
         },
@@ -1230,6 +1240,7 @@ export class ReportStorage {
           INVESTIGATING: inProgressCount,
           FIXED_AWAITING_VERIFICATION: fixedAwaitingCount,
           RESOLVED: resolvedCount,
+          CLOSED: closedCount,
           KNOWN_LIMITATION: knownIssueCount,
           KNOWN_ISSUE: knownIssueCount,
           IGNORED_TEST: ignoredTestCount,
@@ -1662,3 +1673,5 @@ export class ReportStorage {
   }
 
 }
+
+export { ReportStorage as DiagnosticsStorage };
