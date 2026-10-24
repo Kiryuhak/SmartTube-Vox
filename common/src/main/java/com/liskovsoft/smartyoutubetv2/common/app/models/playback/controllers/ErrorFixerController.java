@@ -5,6 +5,7 @@ import android.annotation.SuppressLint;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.BasePlayerController;
@@ -373,6 +374,12 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 "SABR transport error, fallback to DASH with preserved position",
                 ctx
             );
+            MediaItemFormatInfo formatInfo = mVideoLoaderController.getFormatInfo();
+            if (formatInfo != null && !formatInfo.containsDashFormats()) {
+                Log.w(TAG, "SABR error and formatInfo has no DASH formats. Invalidating cache and switching client.");
+                YouTubeServiceManager.instance().invalidateCache();
+                YouTubeServiceManager.instance().switchNextClientNow();
+            }
             mVideoLoaderController.reloadVideo();
             return;
         }

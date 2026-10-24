@@ -715,13 +715,37 @@ public class SabrManifestParser {
 
     private ClientInfo createClientInfo(MediaItemFormatInfo formatInfo) {
         MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
+        if (clientInfo == null) {
+            return ClientInfo.newBuilder().setClientName(ClientName.TVHTML5).build();
+        }
 
-        return ClientInfo.newBuilder()
-                .setClientName(ClientName.valueOf(clientInfo.getClientName().toUpperCase()))
-                .setClientVersion(clientInfo.getClientVersion())
-                .setOsName(clientInfo.getOsName())
-                .setOsVersion(clientInfo.getOsVersion())
-                .build();
+        ClientName clientName = ClientName.TVHTML5;
+        String nameStr = clientInfo.getClientName();
+        if (nameStr != null && !nameStr.isEmpty()) {
+            try {
+                clientName = ClientName.valueOf(nameStr.toUpperCase());
+            } catch (Exception e) {
+                if ("TV".equalsIgnoreCase(nameStr) || "TVHTML5_SIMPLY_EMBEDDED_PLAYER".equalsIgnoreCase(nameStr)) {
+                    clientName = ClientName.TVHTML5;
+                } else if ("ANDROID_TESTSUITE".equalsIgnoreCase(nameStr)) {
+                    clientName = ClientName.ANDROID_TESTSUITE;
+                } else {
+                    clientName = ClientName.UNKNOWN_INTERFACE;
+                }
+            }
+        }
+
+        ClientInfo.Builder builder = ClientInfo.newBuilder().setClientName(clientName);
+        if (clientInfo.getClientVersion() != null) {
+            builder.setClientVersion(clientInfo.getClientVersion());
+        }
+        if (clientInfo.getOsName() != null) {
+            builder.setOsName(clientInfo.getOsName());
+        }
+        if (clientInfo.getOsVersion() != null) {
+            builder.setOsVersion(clientInfo.getOsVersion());
+        }
+        return builder.build();
     }
 
     /** A parsed Representation element. */

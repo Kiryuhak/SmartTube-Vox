@@ -49,6 +49,8 @@ public class VideoLoaderController extends BasePlayerController {
     private ErrorFixerController mErrorFixerController;
     private boolean mSabrCooldownActive = false;
     private boolean mIsSabrPlaying = false;
+    private int mEmptyFormatRetryCount = 0;
+    private String mLastVideoId;
     private Disposable mFormatInfoAction;
     private MediaItemFormatInfo mFormatInfo;
     private int mMetadataSyncRetryCount;
@@ -99,8 +101,14 @@ public class VideoLoaderController extends BasePlayerController {
             return;
         }
 
+        boolean isSameVideo = mLastVideoId != null && mLastVideoId.equals(item.videoId);
+        mLastVideoId = item.videoId;
+
         mMetadataSyncRetryCount = 0;
-        mSabrCooldownActive = false;
+        if (!isSameVideo) {
+            mSabrCooldownActive = false;
+            mEmptyFormatRetryCount = 0;
+        }
         mIsSabrPlaying = false;
         if (VoxShortsAutoNextController.getINSTANCE().isShort(item)) {
             VoxShortsAutoNextController.getINSTANCE().onNewShort(item);
@@ -501,13 +509,34 @@ public class VideoLoaderController extends BasePlayerController {
                 player.openUrlList(formatInfo.createUrlList());
             } else {
                 mIsSabrPlaying = false;
-                Log.d(TAG, "Empty format info received. Seems future live translation. No video data to pass to the player.");
-                player.setTitle(formatInfo.getPlayabilityReason());
-                player.showProgressBar(false);
-                mSuggestionsController.loadSuggestions(getVideo());
-                bgImageUrl = getVideo().getBackgroundUrl();
-                player.showOverlay(true);
-                reloadVideo(30 * 1_000);
+                Log.d(TAG, "Empty or unsupported format info received.");
+                if (formatInfo.isLive() || formatInfo.isLiveContent() || (getVideo() != null && getVideo().isLive)) {
+                    Log.d(TAG, "Seems future live translation. Scheduling 30s reload.");
+                    player.setTitle(formatInfo.getPlayabilityReason());
+                    player.showProgressBar(false);
+                    mSuggestionsController.loadSuggestions(getVideo());
+                    bgImageUrl = getVideo().getBackgroundUrl();
+                    player.showOverlay(true);
+                    reloadVideo(30 * 1_000);
+                } else if (mEmptyFormatRetryCount < 2) {
+                    mEmptyFormatRetryCount++;
+                    Log.w(TAG, "No playable formats for VOD. Attempting client switch & reload (attempt " + mEmptyFormatRetryCount + "/2)...");
+                    YouTubeServiceManager.instance().invalidateCache();
+                    YouTubeServiceManager.instance().switchNextClientNow();
+                    reloadVideo(1_000);
+                } else {
+                    Log.e(TAG, "Playable formats exhausted for VOD after retries. Stopping reload loop.");
+                    String reason = formatInfo.getPlayabilityReason();
+                    if (reason == null || reason.isEmpty()) {
+                        reason = getContext() != null ? getContext().getString(R.string.vox_player_recovery_exhausted_message) : "Format unavailable";
+                    }
+                    player.setTitle(reason);
+                    player.showProgressBar(false);
+                    player.setPlayWhenReady(false);
+                    mSuggestionsController.loadSuggestions(getVideo());
+                    bgImageUrl = getVideo().getBackgroundUrl();
+                    player.showOverlay(true);
+                }
             }
         }
 

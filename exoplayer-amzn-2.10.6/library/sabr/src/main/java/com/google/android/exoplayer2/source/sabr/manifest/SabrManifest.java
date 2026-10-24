@@ -176,6 +176,14 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
         return videoId;
     }
 
+    public ClientInfo getClientInfo() {
+        return clientInfo;
+    }
+
+    public String getClientName() {
+        return clientInfo != null && clientInfo.getClientName() != null ? clientInfo.getClientName().name() : null;
+    }
+
     public synchronized SabrStream getSabrStream(int trackType) {
         SabrStream sabrStream = sabrStreams.get(trackType);
 
