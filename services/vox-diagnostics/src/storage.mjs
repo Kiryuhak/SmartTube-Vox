@@ -1035,7 +1035,8 @@ export class ReportStorage {
             SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
             SUM(CASE WHEN UPPER(status) = 'CLOSED' THEN 1 ELSE 0 END) as count_closed,
             SUM(CASE WHEN UPPER(status) IN ('KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
-            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_ignored_test
+            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_ignored_test,
+            SUM(CASE WHEN UPPER(COALESCE(status, '')) NOT IN ('NEW', 'TRIAGED', 'IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED', 'RESOLVED', 'VERIFIED', 'CLOSED', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN', 'IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_other
           FROM reports
         `).first(),
         this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
@@ -1055,6 +1056,7 @@ export class ReportStorage {
       const closedCount = Number(countsRes?.count_closed) || 0;
       const knownIssueCount = Number(countsRes?.count_known_issue) || 0;
       const ignoredTestCount = Number(countsRes?.count_ignored_test) || 0;
+      const otherCount = Number(countsRes?.count_other) || 0;
       const activeIssuesCount = newCount + inProgressCount + knownIssueCount;
 
       let liveCount = 0;
@@ -1094,6 +1096,8 @@ export class ReportStorage {
         knownIssueCount,
         knownCount: knownIssueCount,
         ignoredTestCount,
+        otherCount,
+        unknownCount: otherCount,
         activeIssuesCount,
         attentionCount,
         liveCount,
@@ -1109,6 +1113,7 @@ export class ReportStorage {
           count_closed: closedCount,
           count_known: knownIssueCount,
           count_ignored_test: ignoredTestCount,
+          count_other: otherCount,
         },
         statusCounts: {
           NEW: newCount,
@@ -1121,6 +1126,7 @@ export class ReportStorage {
           KNOWN_LIMITATION: knownIssueCount,
           KNOWN_ISSUE: knownIssueCount,
           IGNORED_TEST: ignoredTestCount,
+          OTHER: otherCount,
         },
         statusBreakdown: [
           { status: 'NEW', label: 'Новый', count: newCount },
@@ -1148,6 +1154,7 @@ export class ReportStorage {
       let closedCount = 0;
       let knownIssueCount = 0;
       let ignoredTestCount = 0;
+      let otherCount = 0;
 
       const platformsMap = new Map();
       const versionsMap = new Map();
@@ -1170,6 +1177,7 @@ export class ReportStorage {
         else if (normStatus === 'CLOSED') closedCount++;
         else if (normStatus === 'KNOWN_LIMITATION' || normStatus === 'KNOWN_ISSUE') knownIssueCount++;
         else if (normStatus === 'IGNORED_TEST' || normStatus === 'IGNORED' || normStatus === 'WONT_FIX' || normStatus === 'DUPLICATE') ignoredTestCount++;
+        else otherCount++;
 
         const c = String(r.error_category || '').toUpperCase();
         if (c === 'LIVE' || c === 'PLAYBACK') liveCount++;
@@ -1217,6 +1225,8 @@ export class ReportStorage {
         knownIssueCount,
         knownCount: knownIssueCount,
         ignoredTestCount,
+        otherCount,
+        unknownCount: otherCount,
         activeIssuesCount,
         attentionCount,
         liveCount,
@@ -1232,6 +1242,7 @@ export class ReportStorage {
           count_closed: closedCount,
           count_known: knownIssueCount,
           count_ignored_test: ignoredTestCount,
+          count_other: otherCount,
         },
         statusCounts: {
           NEW: newCount,
@@ -1244,6 +1255,7 @@ export class ReportStorage {
           KNOWN_LIMITATION: knownIssueCount,
           KNOWN_ISSUE: knownIssueCount,
           IGNORED_TEST: ignoredTestCount,
+          OTHER: otherCount,
         },
         statusBreakdown: [
           { status: 'NEW', label: 'Новый', count: newCount },

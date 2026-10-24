@@ -126,6 +126,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
   const resolvedCount = stats.resolvedCount ?? 0;
   const knownIssueCount = stats.knownIssueCount ?? 0;
   const ignoredTestCount = stats.ignoredTestCount ?? 0;
+  const otherCount = stats.otherCount ?? stats.unknownCount ?? 0;
   const attentionCount = stats.attentionCount ?? 0;
 
   return `<!DOCTYPE html>
@@ -1125,6 +1126,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       <div class="strip-item" data-metric="IGNORED_TEST" title="Тестовые и проигнорированные">
         <span>Тест / игнор:</span> <strong id="kpiIgnoredTest">${ignoredTestCount}</strong>
       </div>
+      ${otherCount > 0 ? `<div class="strip-item" data-metric="OTHER" title="Нестандартные статусы"><span>Прочие:</span> <strong id="kpiOther">${otherCount}</strong></div>` : ""}
       <div class="strip-item" data-metric="all" title="Всего отчётов в базе">
         <span>Всего в базе:</span> <strong id="kpiTotal">${totalReports}</strong>
       </div>

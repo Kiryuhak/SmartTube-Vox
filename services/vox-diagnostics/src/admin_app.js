@@ -233,6 +233,7 @@
   let kpiKnownIssue = null;
   let kpiIgnoredTest = null;
   let kpiTotal = null;
+  let kpiOther = null;
 
   /**
    * Escape HTML special characters for safe insertion into innerHTML.
@@ -314,6 +315,7 @@
     kpiKnownIssue = document.getElementById('kpiKnownIssue');
     kpiIgnoredTest = document.getElementById('kpiIgnoredTest');
     kpiTotal = document.getElementById('kpiTotal');
+    kpiOther = document.getElementById('kpiOther');
   }
 
   /**
@@ -603,6 +605,7 @@
     if (kpiKnownIssue) kpiKnownIssue.textContent = stats.knownIssueCount ?? 0;
     if (kpiIgnoredTest) kpiIgnoredTest.textContent = stats.ignoredTestCount ?? 0;
     if (kpiTotal) kpiTotal.textContent = stats.totalReports ?? 0;
+    if (kpiOther) kpiOther.textContent = stats.otherCount ?? stats.unknownCount ?? 0;
     const kpiAtt = document.getElementById('kpiAttention');
     if (kpiAtt) kpiAtt.textContent = stats.attentionCount ?? 0;
     const kpiLive = document.getElementById('kpiLive');
