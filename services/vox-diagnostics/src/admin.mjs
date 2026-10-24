@@ -119,7 +119,9 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
   const reports7d = stats.reports7d || 0;
   const activeIssues = stats.activeIssuesCount || 0;
   const newCount = stats.newCount ?? 0;
+  const triagedCount = stats.triagedCount ?? 0;
   const inProgressCount = stats.inProgressCount ?? 0;
+  const fixedAwaitingCount = stats.fixedAwaitingCount ?? 0;
   const resolvedCount = stats.resolvedCount ?? 0;
   const knownIssueCount = stats.knownIssueCount ?? 0;
   const ignoredTestCount = stats.ignoredTestCount ?? 0;
@@ -1107,6 +1109,12 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
       <div class="strip-item" data-metric="7d" title="Отчёты за последние 7 дней">
         <span>За 7 дней:</span> <strong id="kpi7d">${reports7d}</strong>
       </div>
+      <div class="strip-item" data-metric="FIXED_AWAITING_VERIFICATION" title="Исправлено — ждёт проверки в релизе">
+        <span>Ждёт проверки:</span> <strong id="kpiFixedAwaiting">${fixedAwaitingCount}</strong>
+      </div>
+      <div class="strip-item" data-metric="TRIAGED" title="Разобраны и стоят в очереди бэклога">
+        <span>В очереди:</span> <strong id="kpiTriaged">${triagedCount}</strong>
+      </div>
       <div class="strip-item" data-metric="KNOWN_ISSUE" title="Известные проблемы">
         <span>Известные:</span> <strong id="kpiKnownIssue">${knownIssueCount}</strong>
       </div>
@@ -1205,6 +1213,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
           <option value="">Все статусы</option>
           <option value="NEW">Новый</option>
           <option value="INVESTIGATING">В работе</option>
+          <option value="TRIAGED">В очереди / Разобран</option>
           <option value="FIXED_AWAITING_VERIFICATION">Исправлено — ждёт проверки</option>
           <option value="KNOWN_LIMITATION">Известное ограничение</option>
           <option value="IGNORED">Игнорируется</option>

@@ -223,6 +223,8 @@
   let kpi7d = null;
   let kpiNew = null;
   let kpiInProgress = null;
+  let kpiFixedAwaiting = null;
+  let kpiTriaged = null;
   let kpiResolved = null;
   let kpiKnownIssue = null;
   let kpiIgnoredTest = null;
@@ -298,6 +300,8 @@
     kpi7d = document.getElementById('kpi7d');
     kpiNew = document.getElementById('kpiNew');
     kpiInProgress = document.getElementById('kpiInProgress');
+    kpiFixedAwaiting = document.getElementById('kpiFixedAwaiting');
+    kpiTriaged = document.getElementById('kpiTriaged');
     kpiResolved = document.getElementById('kpiResolved');
     kpiKnownIssue = document.getElementById('kpiKnownIssue');
     kpiIgnoredTest = document.getElementById('kpiIgnoredTest');
@@ -581,6 +585,8 @@
     if (kpi7d) kpi7d.textContent = stats.reports7d ?? 0;
     if (kpiNew) kpiNew.textContent = stats.newCount ?? 0;
     if (kpiInProgress) kpiInProgress.textContent = stats.inProgressCount ?? 0;
+    if (kpiFixedAwaiting) kpiFixedAwaiting.textContent = stats.fixedAwaitingCount ?? 0;
+    if (kpiTriaged) kpiTriaged.textContent = stats.triagedCount ?? 0;
     if (kpiResolved) kpiResolved.textContent = stats.resolvedCount ?? 0;
     if (kpiKnownIssue) kpiKnownIssue.textContent = stats.knownIssueCount ?? 0;
     if (kpiIgnoredTest) kpiIgnoredTest.textContent = stats.ignoredTestCount ?? 0;

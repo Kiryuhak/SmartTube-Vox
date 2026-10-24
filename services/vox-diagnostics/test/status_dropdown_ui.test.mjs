@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { STATUS_LABELS, CANONICAL_STATUSES, PRIMARY_STATUSES } from '../src/storage.mjs';
+import { STATUS_LABELS, CANONICAL_STATUSES, PRIMARY_STATUSES, isValidStatusTransition } from '../src/storage.mjs';
 import { ADMIN_APP_JS } from '../src/admin_client.mjs';
 
 test('Status UI Matrix: Canonical Russian labels match specification', () => {
@@ -122,4 +122,21 @@ test('Status UI Matrix: CSS stylesheet contains dedicated color tokens for all c
     const selector = `.status-select[data-status="${st}"]`;
     assert.ok(adminMjs.includes(selector), `admin.mjs stylesheet must contain CSS selector ${selector}`);
   }
+});
+
+test("Prompt 013 Semantic Reconciliation: Transitions and KPI elements integrity", () => {
+  
+  const adminMjs = fs.readFileSync(path.resolve(__dirname, "../src/admin.mjs"), "utf8");
+
+  // Transitions
+  assert.ok(isValidStatusTransition("INVESTIGATING", "TRIAGED"), "INVESTIGATING -> TRIAGED must be valid");
+  assert.ok(isValidStatusTransition("INVESTIGATING", "NEW"), "INVESTIGATING -> NEW must be valid");
+  assert.ok(isValidStatusTransition("TRIAGED", "NEW"), "TRIAGED -> NEW must be valid");
+  assert.ok(isValidStatusTransition("TRIAGED", "INVESTIGATING"), "TRIAGED -> INVESTIGATING must be valid");
+  assert.ok(isValidStatusTransition("FIXED_AWAITING_VERIFICATION", "INVESTIGATING"), "FIXED_AWAITING_VERIFICATION -> INVESTIGATING must be valid");
+
+  // UI Elements
+  assert.ok(adminMjs.includes("<option value=\"TRIAGED\">В очереди / Разобран</option>"), "admin.mjs must include TRIAGED option in status filter");
+  assert.ok(adminMjs.includes("data-metric=\"FIXED_AWAITING_VERIFICATION\""), "admin.mjs must include KPI strip item for FIXED_AWAITING_VERIFICATION");
+  assert.ok(adminMjs.includes("data-metric=\"TRIAGED\""), "admin.mjs must include KPI strip item for TRIAGED");
 });

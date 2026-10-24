@@ -85,8 +85,8 @@ export const STATUS_COLORS = {
 
 export const ALLOWED_STATUS_TRANSITIONS = {
   NEW: new Set(['NEW', 'INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TRIAGED', 'DUPLICATE', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'RESOLVED', 'VERIFIED', 'CLOSED', 'IGNORED', 'IGNORED_TEST', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'NEEDS_INFO', 'WONT_FIX']),
-  INVESTIGATING: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW']),
-  IN_PROGRESS: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW']),
+  INVESTIGATING: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW', 'TRIAGED']),
+  IN_PROGRESS: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW', 'TRIAGED']),
   ROOT_CAUSE_FOUND: new Set(['ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'INVESTIGATING', 'IN_PROGRESS', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'IGNORED', 'IGNORED_TEST']),
   FIX_IMPLEMENTED: new Set(['FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'INVESTIGATING', 'IN_PROGRESS', 'REGRESSION']),
   TESTING: new Set(['TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'VERIFIED', 'RESOLVED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'FIX_IMPLEMENTED']),
@@ -98,7 +98,7 @@ export const ALLOWED_STATUS_TRANSITIONS = {
   RESOLVED: new Set(['VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
   CLOSED: new Set(['VERIFIED', 'RESOLVED', 'CLOSED', 'REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST']),
   REGRESSION: new Set(['REGRESSION', 'INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING']),
-  TRIAGED: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX']),
+  TRIAGED: new Set(['INVESTIGATING', 'IN_PROGRESS', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'VERIFIED', 'RESOLVED', 'CLOSED', 'DUPLICATE', 'IGNORED', 'IGNORED_TEST', 'NEEDS_INFO', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'WONT_FIX', 'NEW']),
   DUPLICATE: new Set(['DUPLICATE', 'INVESTIGATING', 'IN_PROGRESS', 'IGNORED', 'IGNORED_TEST', 'NEW', 'VERIFIED', 'RESOLVED']),
   IGNORED: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX', 'KNOWN_LIMITATION']),
   IGNORED_TEST: new Set(['IGNORED', 'IGNORED_TEST', 'INVESTIGATING', 'IN_PROGRESS', 'NEW', 'WONT_FIX', 'KNOWN_LIMITATION']),
@@ -1028,6 +1028,7 @@ export class ReportStorage {
         this.db.prepare(`
           SELECT 
             SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
+            SUM(CASE WHEN UPPER(status) = 'TRIAGED' THEN 1 ELSE 0 END) as count_triaged,
             SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
             SUM(CASE WHEN UPPER(status) IN ('FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED') THEN 1 ELSE 0 END) as count_fixed_awaiting,
             SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'CLOSED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
@@ -1045,6 +1046,7 @@ export class ReportStorage {
       const reports24h = dayRow?.count || 0;
       const reports7d = weekRow?.count || 0;
       const newCount = Number(countsRes?.count_new) || 0;
+      const triagedCount = Number(countsRes?.count_triaged) || 0;
       const inProgressCount = Number(countsRes?.count_in_progress) || 0;
       const fixedAwaitingCount = Number(countsRes?.count_fixed_awaiting) || 0;
       const resolvedCount = Number(countsRes?.count_resolved) || 0;
@@ -1081,6 +1083,7 @@ export class ReportStorage {
         reports7d,
         last7Days: reports7d,
         newCount,
+        triagedCount,
         inProgressCount,
         fixedAwaitingCount,
         resolvedCount,
@@ -1095,6 +1098,7 @@ export class ReportStorage {
         networkCount,
         counts: {
           count_new: newCount,
+          count_triaged: triagedCount,
           count_in_progress: inProgressCount,
           count_fixed_awaiting: fixedAwaitingCount,
           count_resolved: resolvedCount,
@@ -1104,6 +1108,7 @@ export class ReportStorage {
         statusCounts: {
           NEW: newCount,
           IN_PROGRESS: inProgressCount,
+          TRIAGED: triagedCount,
           INVESTIGATING: inProgressCount,
           FIXED_AWAITING_VERIFICATION: fixedAwaitingCount,
           RESOLVED: resolvedCount,
@@ -1130,6 +1135,7 @@ export class ReportStorage {
       const reports7d = all.filter((r) => r.created_at >= sevenDaysAgo).length;
 
       let newCount = 0;
+      let triagedCount = 0;
       let inProgressCount = 0;
       let fixedAwaitingCount = 0;
       let resolvedCount = 0;
@@ -1150,7 +1156,8 @@ export class ReportStorage {
       for (const r of all) {
         const normStatus = normalizeStatus(r.status);
         if (normStatus === 'NEW') newCount++;
-        else if (normStatus === 'IN_PROGRESS' || normStatus === 'INVESTIGATING' || normStatus === 'TRIAGED' || normStatus === 'TESTING' || normStatus === 'FIX_IMPLEMENTED' || normStatus === 'ROOT_CAUSE_FOUND') inProgressCount++;
+        else if (normStatus === 'TRIAGED') triagedCount++;
+        else if (normStatus === 'IN_PROGRESS' || normStatus === 'INVESTIGATING' || normStatus === 'TESTING' || normStatus === 'FIX_IMPLEMENTED' || normStatus === 'ROOT_CAUSE_FOUND') inProgressCount++;
         else if (normStatus === 'FIXED_AWAITING_VERIFICATION' || normStatus === 'FIXED_PENDING_VERIFICATION') fixedAwaitingCount++;
         else if (normStatus === 'RESOLVED' || normStatus === 'VERIFIED' || normStatus === 'CLOSED') resolvedCount++;
         else if (normStatus === 'KNOWN_LIMITATION' || normStatus === 'KNOWN_ISSUE') knownIssueCount++;
@@ -1194,6 +1201,7 @@ export class ReportStorage {
         reports7d,
         last7Days: reports7d,
         newCount,
+        triagedCount,
         inProgressCount,
         fixedAwaitingCount,
         resolvedCount,
@@ -1208,6 +1216,7 @@ export class ReportStorage {
         networkCount,
         counts: {
           count_new: newCount,
+          count_triaged: triagedCount,
           count_in_progress: inProgressCount,
           count_fixed_awaiting: fixedAwaitingCount,
           count_resolved: resolvedCount,
@@ -1217,6 +1226,7 @@ export class ReportStorage {
         statusCounts: {
           NEW: newCount,
           IN_PROGRESS: inProgressCount,
+          TRIAGED: triagedCount,
           INVESTIGATING: inProgressCount,
           FIXED_AWAITING_VERIFICATION: fixedAwaitingCount,
           RESOLVED: resolvedCount,
