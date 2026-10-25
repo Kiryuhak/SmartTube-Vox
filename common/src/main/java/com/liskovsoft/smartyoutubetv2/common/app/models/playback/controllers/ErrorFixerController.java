@@ -182,9 +182,25 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             return;
         }
 
-        if (getVideo() != null && getVideo().isLive) {
-            Log.w(TAG, "onLongBuffering: Live stream buffering is managed by VoxLiveStallRecoveryController. Skipping ErrorFixer intervention.");
+        MediaItemFormatInfo formatInfo = mVideoLoaderController != null ? mVideoLoaderController.getFormatInfo() : null;
+        boolean isLiveOrDvr = (getVideo() != null && getVideo().isLive)
+                || isPlayerLiveOrDynamic()
+                || (formatInfo != null && (formatInfo.isLive() || formatInfo.isLiveContent()));
+
+        if (isLiveOrDvr) {
+            Log.w(TAG, "onLongBuffering: Live/DVR stream buffering is managed by VoxLiveStallRecoveryController. Skipping ErrorFixer intervention.");
             return;
+        }
+
+        if (com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPendingSeekCoordinator.instance().hasActivePendingSeek()) {
+            Log.w(TAG, "onLongBuffering: User seek is currently active and buffering. Skipping ErrorFixer reload to protect seek target.");
+            return;
+        }
+
+        long currentPos = getPlayer() != null ? getPlayer().getPositionMs() : -1;
+        Video currentVideo = getVideo();
+        if (currentVideo != null && currentVideo.pendingPosMs <= 0 && currentPos > 0) {
+            currentVideo.pendingPosMs = currentPos;
         }
 
         if (isStreamEnded()) {
@@ -789,6 +805,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 return true;
             }
             curr = curr.getCause();
+        }
+        return false;
+    }
+
+    private boolean isPlayerLiveOrDynamic() {
+        if (getPlayer() instanceof com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController) {
+            return ((com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController) getPlayer()).isLiveOrDynamic();
         }
         return false;
     }

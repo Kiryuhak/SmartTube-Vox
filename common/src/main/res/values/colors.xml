@@ -56,4 +56,18 @@
     <color name="vot_hud_secondary_text">#B0BEC5</color>
     <color name="vot_hud_ring_track">#22334A</color>
     <color name="vot_hud_stroke">#331E90FF</color>
+
+    <!-- VOT Download Badge Mockup Specification Palette (Prompt #028 Golden Reference) -->
+    <color name="vox_dl_player_bg">#CC0B1622</color>
+    <color name="vox_dl_panel_bg">#CC0F1C2C</color>
+    <color name="vox_dl_accent">#1890FF</color>
+    <color name="vox_dl_success">#00C853</color>
+    <color name="vox_dl_info">#4FC3F7</color>
+    <color name="vox_dl_text_primary">#FFFFFF</color>
+    <color name="vox_dl_text_secondary">#B0BEC5</color>
+    <color name="vox_dl_stroke">#331890FF</color>
+    <color name="vox_dl_ring_track">#22334A</color>
+    <color name="vox_dl_pill_bg">#1A293D</color>
+    <color name="vox_dl_pill_stroke">#384E6E</color>
+    <color name="vox_dl_danger">#FF5252</color>
 </resources>

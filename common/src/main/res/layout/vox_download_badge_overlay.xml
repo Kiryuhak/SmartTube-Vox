@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_download_badge_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom|end"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:focusable="false">
+
+    <!-- 1. STAGE CONTEXT MENU (Etap 5 - Long Press Menu, positioned above compact ring) -->
+    <LinearLayout
+        android:id="@+id/vox_stage_context_menu"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="72dp"
+        android:background="@drawable/bg_vox_download_context_menu"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:elevation="18dp"
+        android:visibility="gone">
+
+        <!-- Action: Продолжить / Пауза -->
+        <TextView
+            android:id="@+id/vox_menu_btn_resume_pause"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_vox_download_button_secondary"
+            android:gravity="center_vertical"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="▶  Продолжить"
+            android:textColor="@color/vox_dl_text_primary"
+            android:textSize="13sp"
+            android:fontFamily="sans-serif-medium"
+            android:focusable="true" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="6dp"
+            android:background="@color/vox_dl_ring_track" />
+
+        <!-- Action: Отменить скачивание -->
+        <TextView
+            android:id="@+id/vox_menu_btn_cancel"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_vox_download_button_secondary"
+            android:gravity="center_vertical"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:drawableStart="@drawable/ic_vox_download_delete"
+            android:drawablePadding="8dp"
+            android:text="Отменить скачивание"
+            android:textColor="@color/vox_dl_danger"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- 2. STAGE EXPANDED (Etap 2 & 4 - 96dp panel, 320dp width) -->
+    <LinearLayout
+        android:id="@+id/vox_stage_expanded"
+        android:layout_width="320dp"
+        android:layout_height="96dp"
+        android:background="@drawable/bg_vox_download_panel"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:gravity="center_vertical"
+        android:elevation="14dp"
+        android:visibility="visible">
+
+        <!-- Left: Thumbnail 56x56 dp -->
+        <ImageView
+            android:id="@+id/vox_expanded_thumb"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center_vertical"
+            android:scaleType="centerCrop"
+            android:background="@drawable/bg_vox_download_pill_unselected"
+            android:contentDescription="@null" />
+
+        <!-- Right: Info column -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
+
+            <!-- Title & Top Action Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/vox_expanded_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="@color/vox_dl_text_primary"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <!-- Action Button: Pause/Resume -->
+                <ImageView
+                    android:id="@+id/vox_expanded_btn_pause"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_marginStart="4dp"
+                    android:padding="2dp"
+                    android:background="@drawable/bg_vox_download_compact"
+                    android:src="@drawable/ic_vox_download_pause"
+                    android:contentDescription="Pause"
+                    android:focusable="true" />
+
+                <!-- Action Button: Collapse to Compact -->
+                <ImageView
+                    android:id="@+id/vox_expanded_btn_collapse"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_marginStart="4dp"
+                    android:padding="2dp"
+                    android:background="@drawable/bg_vox_download_compact"
+                    android:src="@drawable/ic_vox_download_collapse"
+                    android:contentDescription="Collapse"
+                    android:focusable="true" />
+            </LinearLayout>
+
+            <!-- Pills Row: Quality & Translation mode -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="2dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/vox_expanded_pill_quality"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_vox_download_pill_unselected"
+                    android:paddingStart="5dp"
+                    android:paddingEnd="5dp"
+                    android:paddingTop="1dp"
+                    android:paddingBottom="1dp"
+                    android:text="1080p"
+                    android:textColor="@color/vox_dl_info"
+                    android:textSize="9sp"
+                    android:fontFamily="sans-serif-medium" />
+
+                <TextView
+                    android:id="@+id/vox_expanded_pill_audio"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/bg_vox_download_pill_unselected"
+                    android:paddingStart="5dp"
+                    android:paddingEnd="5dp"
+                    android:paddingTop="1dp"
+                    android:paddingBottom="1dp"
+                    android:text="VOT перевод"
+                    android:textColor="@color/vox_dl_info"
+                    android:textSize="9sp"
+                    android:fontFamily="sans-serif-medium" />
+            </LinearLayout>
+
+            <!-- Metrics Line 1: Скорость / Скачано -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="3dp">
+
+                <TextView
+                    android:id="@+id/vox_expanded_speed"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Скорость: Расчёт…"
+                    android:textColor="@color/vox_dl_text_secondary"
+                    android:textSize="10sp"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:id="@+id/vox_expanded_downloaded"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Скачано: 0 МБ"
+                    android:textColor="@color/vox_dl_text_secondary"
+                    android:textSize="10sp"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <!-- Metrics Line 2: Размер / Осталось (ETA) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/vox_expanded_total_size"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Размер: Расчёт…"
+                    android:textColor="@color/vox_dl_text_secondary"
+                    android:textSize="10sp"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:id="@+id/vox_expanded_eta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Осталось: ~…"
+                    android:textColor="@color/vox_dl_text_secondary"
+                    android:textSize="10sp"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <!-- Progress Bar + Percent Line -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
+
+                <ProgressBar
+                    android:id="@+id/vox_expanded_progress_bar"
+                    style="@android:style/Widget.ProgressBar.Horizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="4dp"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressTint="@color/vox_dl_accent"
+                    android:progressBackgroundTint="@color/vox_dl_ring_track" />
+
+                <TextView
+                    android:id="@+id/vox_expanded_percent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="0%"
+                    android:textColor="@color/vox_dl_text_primary"
+                    android:textSize="10sp"
+                    android:fontFamily="sans-serif-medium" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 3. STAGE COMPACT (Etap 3 - 64x64 dp circular widget) -->
+    <FrameLayout
+        android:id="@+id/vox_stage_compact"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom|end"
+        android:background="@drawable/bg_vox_download_compact"
+        android:elevation="14dp"
+        android:focusable="true"
+        android:clickable="true"
+        android:visibility="gone">
+
+        <!-- Circular Progress Ring (3.5dp stroke, #1890FF) -->
+        <com.liskovsoft.smartyoutubetv2.common.vox.download.VoxCircularProgressView
+            android:id="@+id/vox_compact_ring"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Centered Download Glyph + Percent Text -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <ImageView
+                android:id="@+id/vox_compact_icon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_vox_download_arrow"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:id="@+id/vox_compact_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="0%"
+                android:textColor="@color/vox_dl_text_primary"
+                android:textSize="11sp"
+                android:fontFamily="sans-serif-bold" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- 4. STAGE COMPLETED (Green checkmark, auto-dismissing) -->
+    <LinearLayout
+        android:id="@+id/vox_stage_completed"
+        android:layout_width="300dp"
+        android:layout_height="80dp"
+        android:layout_gravity="bottom|end"
+        android:background="@drawable/bg_vox_download_panel"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:gravity="center_vertical"
+        android:elevation="16dp"
+        android:visibility="gone">
+
+        <!-- Green circular checkmark #00C853 -->
+        <ImageView
+            android:id="@+id/vox_completed_icon"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:src="@drawable/ic_vox_download_success"
+            android:contentDescription="@null" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="14dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Скачано"
+                android:textColor="@color/vox_dl_text_primary"
+                android:textSize="15sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/vox_completed_details"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="1.8 ГБ • 1080p • VOT перевод"
+                android:textColor="@color/vox_dl_text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>

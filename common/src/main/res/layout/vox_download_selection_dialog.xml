@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vox_selection_dialog_root"
+    android:layout_width="480dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_vox_download_dialog"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="20dp"
+    android:elevation="16dp"
+    android:focusable="true">
+
+    <!-- Header: Скачать видео -->
+    <TextView
+        android:id="@+id/vox_selection_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/vox_download_title"
+        android:textColor="@color/vox_dl_text_primary"
+        android:textSize="20sp"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Section 1: Качество видео: -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Качество видео:"
+        android:textColor="@color/vox_dl_text_secondary"
+        android:textSize="13sp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Quality Pills Row -->
+    <LinearLayout
+        android:id="@+id/vox_quality_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/vox_quality_720"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_vox_download_pill_unselected"
+            android:text="720p"
+            android:textColor="@color/vox_dl_text_secondary"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAllCaps="false"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/vox_quality_1080"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="3dp"
+            android:background="@drawable/bg_vox_download_pill_selected"
+            android:text="1080p"
+            android:textColor="@color/vox_dl_text_primary"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAllCaps="false"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/vox_quality_1440"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginStart="3dp"
+            android:layout_marginEnd="3dp"
+            android:background="@drawable/bg_vox_download_pill_unselected"
+            android:text="1440p"
+            android:textColor="@color/vox_dl_text_secondary"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAllCaps="false"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/vox_quality_2160"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1.2"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_vox_download_pill_unselected"
+            android:text="2160p / 4K"
+            android:textColor="@color/vox_dl_text_secondary"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAllCaps="false"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- Section 2: Озвучка Container (Hidden if Russian original) -->
+    <LinearLayout
+        android:id="@+id/vox_audio_section_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/vox_audio_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Озвучка:"
+            android:textColor="@color/vox_dl_text_secondary"
+            android:textSize="13sp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Audio Track Pills Row -->
+        <LinearLayout
+            android:id="@+id/vox_audio_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/vox_audio_original"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_vox_download_pill_unselected"
+                android:text="Оригинал"
+                android:textColor="@color/vox_dl_text_secondary"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:textAllCaps="false"
+                android:focusable="true" />
+
+            <Button
+                android:id="@+id/vox_audio_vot"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:background="@drawable/bg_vox_download_pill_selected"
+                android:text="VOT перевод"
+                android:textColor="@color/vox_dl_text_primary"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:textAllCaps="false"
+                android:focusable="true" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Hint text -->
+    <TextView
+        android:id="@+id/vox_audio_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Если видео уже на русском — блок выбора озвучки скрыт."
+        android:textColor="@color/vox_dl_text_secondary"
+        android:textSize="11sp"
+        android:layout_marginBottom="20dp" />
+
+    <!-- Action Buttons Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/vox_btn_confirm_download"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_vox_download_button_primary"
+            android:drawableStart="@drawable/ic_vox_download_arrow"
+            android:drawableTint="@color/vox_dl_text_primary"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:text="  Скачать"
+            android:textColor="@color/vox_dl_text_primary"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAllCaps="false"
+            android:focusable="true" />
+
+        <Button
+            android:id="@+id/vox_btn_cancel_download"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="@drawable/bg_vox_download_button_secondary"
+            android:text="Отмена"
+            android:textColor="@color/vox_dl_text_primary"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:textAllCaps="false"
+            android:focusable="true" />
+    </LinearLayout>
+
+</LinearLayout>

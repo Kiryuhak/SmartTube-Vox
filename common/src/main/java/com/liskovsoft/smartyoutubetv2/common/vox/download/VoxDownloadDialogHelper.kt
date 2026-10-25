@@ -102,77 +102,9 @@ object VoxDownloadDialogHelper {
 
     @JvmStatic
     fun showDownloadOptionsDialog(context: Context, video: Video) {
-        val presenter = AppDialogPresenter.instance(context)
-        val votData = VotData.instance(context)
-
-        var selectedQuality = VoxQualityPreference.QUALITY_AUTO
-        var selectedMode = VoxTranslationMode.NONE
-
-        // Категория качества видео
-        val qualityOptions = mutableListOf<OptionItem>()
-        val qualities = listOf(
-            VoxQualityPreference.QUALITY_AUTO,
-            VoxQualityPreference.QUALITY_2160P,
-            VoxQualityPreference.QUALITY_1440P,
-            VoxQualityPreference.QUALITY_1080P,
-            VoxQualityPreference.QUALITY_720P,
-            VoxQualityPreference.QUALITY_360P
-        )
-
-        for (q in qualities) {
-            qualityOptions.add(UiOptionItem.from(
-                q.label,
-                { opt -> if (opt.isSelected) selectedQuality = q },
-                q == selectedQuality
-            ))
+        VoxDownloadSelectionDialog.show(context, video) { quality, mode ->
+            startDownloadAndShowProgress(context, video, quality, mode)
         }
-
-        // Категория режима перевода
-        val transOptions = mutableListOf<OptionItem>()
-        transOptions.add(UiOptionItem.from(
-            "Без перевода",
-            { opt -> if (opt.isSelected) selectedMode = VoxTranslationMode.NONE },
-            selectedMode == VoxTranslationMode.NONE
-        ))
-        transOptions.add(UiOptionItem.from(
-            context.getString(R.string.vox_download_translation_standard),
-            { opt -> if (opt.isSelected) selectedMode = VoxTranslationMode.STANDARD },
-            selectedMode == VoxTranslationMode.STANDARD
-        ))
-
-        val hasAuth = votData.hasOAuthToken()
-        val livelyTitle = if (hasAuth) {
-            context.getString(R.string.vox_download_translation_lively)
-        } else {
-            "${context.getString(R.string.vox_download_translation_lively)} (${context.getString(R.string.vox_download_auth_required)})"
-        }
-
-        transOptions.add(UiOptionItem.from(
-            livelyTitle,
-            { opt ->
-                if (hasAuth) {
-                    if (opt.isSelected) selectedMode = VoxTranslationMode.LIVELY
-                } else {
-                    MessageHelpers.showMessage(context, R.string.vox_download_auth_required)
-                }
-            },
-            selectedMode == VoxTranslationMode.LIVELY
-        ))
-
-        val title = context.getString(R.string.vox_download_title)
-
-        presenter.appendRadioCategory(context.getString(R.string.vox_download_quality_category), qualityOptions)
-        presenter.appendRadioCategory(context.getString(R.string.vox_download_translation_category), transOptions)
-        presenter.appendSingleButton(
-            UiOptionItem.from(
-                context.getString(R.string.vox_download_start_button),
-                { _ ->
-                    presenter.closeDialog()
-                    startDownloadAndShowProgress(context, video, selectedQuality, selectedMode)
-                }
-            )
-        )
-        presenter.showDialog(title)
     }
 
     private fun startDownloadAndShowProgress(

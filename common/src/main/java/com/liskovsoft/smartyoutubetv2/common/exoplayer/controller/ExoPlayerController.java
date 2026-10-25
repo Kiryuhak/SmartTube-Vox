@@ -37,6 +37,9 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPendingSeekCoordinator;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxMediaKind;
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPendingSeek;
 import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerTracker;
 
 import androidx.annotation.Nullable;
@@ -310,13 +313,16 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         if (mPlayer == null || positionMs < 0) {
             return;
         }
-        boolean isLive = (getVideo() != null && getVideo().isLive) || (mPlayer != null && mPlayer.isCurrentWindowDynamic());
+        boolean isLive = isLiveOrDynamic();
+        if (isLive && getVideo() != null && !getVideo().isLive) {
+            getVideo().isLive = true;
+        }
         long duration = getDurationMs();
         if (duration <= 0 && getVideo() != null && getVideo().getDurationMs() > 0) {
             duration = getVideo().getDurationMs();
         }
+        long windowStartMs = 0L;
         if (isLive) {
-            long windowStartMs = 0L;
             if (mPlayer != null) {
                 Timeline timeline = mPlayer.getCurrentTimeline();
                 if (timeline != null && !timeline.isEmpty()) {
@@ -331,12 +337,41 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             }
             positionMs = mStallRecoveryController.onSeekRequested(positionMs, duration, windowStartMs, true);
         }
+
+        long fromPos = getPositionMs();
+        VoxMediaKind mediaKind = isLive ? VoxMediaKind.LIVE_DVR : VoxMediaKind.STANDARD_VOD;
+        VoxPendingSeekCoordinator.instance().startSeek(positionMs, fromPos, mediaKind, windowStartMs, duration);
+
+        Video video = getVideo();
+        if (video != null) {
+            video.pendingPosMs = positionMs;
+        }
+
         if (duration <= 0 || positionMs <= duration) {
-            long fromPos = getPositionMs();
             mOfflineProbe.onSeekRequested(fromPos, positionMs);
             mPlayer.seekTo(positionMs);
             mOfflineProbe.onSeekCompleted(positionMs);
         }
+    }
+
+    public boolean isLiveOrDynamic() {
+        if (getVideo() != null && getVideo().isLive) {
+            return true;
+        }
+        if (mPlayer != null) {
+            if (mPlayer.isCurrentWindowDynamic()) {
+                return true;
+            }
+            Timeline timeline = mPlayer.getCurrentTimeline();
+            if (timeline != null && !timeline.isEmpty()) {
+                Timeline.Window window = new Timeline.Window();
+                timeline.getWindow(mPlayer.getCurrentWindowIndex(), window);
+                if (window.isDynamic) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public long getDurationMs() {
@@ -746,7 +781,28 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
 
         if (isBehindLiveWindow) {
-            mStallRecoveryController.handleBehindLiveWindow(mContext, () -> {
+            long windowStartMs = 0L;
+            long windowDurationMs = getDurationMs();
+            if (mPlayer != null) {
+                Timeline timeline = mPlayer.getCurrentTimeline();
+                if (timeline != null && !timeline.isEmpty()) {
+                    Timeline.Window window = new Timeline.Window();
+                    timeline.getWindow(mPlayer.getCurrentWindowIndex(), window);
+                    if (window.durationUs != C.TIME_UNSET) {
+                        windowDurationMs = C.usToMs(window.durationUs);
+                    }
+                }
+            }
+            mStallRecoveryController.handleBehindLiveWindow(mContext, windowStartMs, windowDurationMs, (targetPos) -> {
+                if (mPlayer != null) {
+                    mPlayer.seekTo(targetPos);
+                    if (mCurrentMediaSource != null) {
+                        mPlayer.prepare(mCurrentMediaSource, false, false);
+                    } else {
+                        mPlayer.retry();
+                    }
+                }
+            }, () -> {
                 if (mPlayer != null) {
                     mPlayer.seekToDefaultPosition();
                     if (mCurrentMediaSource != null) {
@@ -759,7 +815,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             return;
         }
 
-        if (getVideo() != null && getVideo().isLive) {
+        if (isLiveOrDynamic()) {
             int httpCode = 0;
             if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) {
                 httpCode = ((com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) nested).responseCode;
@@ -796,10 +852,23 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             return;
         }
 
-        boolean isLive = (getVideo() != null && getVideo().isLive) || (mPlayer != null && mPlayer.isCurrentWindowDynamic());
+        boolean isLive = isLiveOrDynamic();
+
+        if (isBuffering) {
+            VoxPendingSeek active = VoxPendingSeekCoordinator.instance().getActiveSeek();
+            if (active != null) {
+                VoxPendingSeekCoordinator.instance().onBuffering(active.getGeneration());
+            }
+        }
 
         if (isPlayPressed) {
             mStallRecoveryController.onBufferingEnded();
+            if (mPlayer != null) {
+                VoxPendingSeek active = VoxPendingSeekCoordinator.instance().getActiveSeek();
+                if (active != null) {
+                    VoxPendingSeekCoordinator.instance().onPlaybackProgress(mPlayer.getCurrentPosition(), active.getGeneration());
+                }
+            }
             if (isLive) {
                 long pos = getPositionMs();
                 long dur = getDurationMs();

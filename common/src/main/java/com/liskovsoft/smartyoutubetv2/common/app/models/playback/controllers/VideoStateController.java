@@ -562,6 +562,19 @@ public class VideoStateController extends BasePlayerController {
             return;
         }
 
+        // Prioritize explicit user seek target over stale database state
+        if (item.pendingPosMs > 0) {
+            getPlayer().setPositionMs(item.pendingPosMs);
+            if (!mIsPlayBlocked) {
+                boolean playEnabled = getPlayEnabled();
+                getPlayer().setPlayWhenReady(playEnabled);
+                if (!getPlayer().isOverlayShown()) {
+                    getPlayer().showOverlay(!playEnabled);
+                }
+            }
+            return;
+        }
+
         State state = getStateService().getByVideoId(item.videoId);
 
         boolean stateIsOutdated = isStateOutdated(state, item);

@@ -220,9 +220,62 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
     }
 
     @Synchronized
+    fun getPendingSeekTarget(windowStartMs: Long, windowDurationMs: Long): Long {
+        val coordinator = VoxPendingSeekCoordinator.instance()
+        val active = coordinator.getActiveSeek()
+        val gen = active?.generation ?: currentGeneration
+        val target = coordinator.onBehindLiveWindow(windowStartMs, windowDurationMs, gen)
+        if (target > 0L) {
+            lastRequestedSeekPosMs = target
+            return target
+        }
+        if (lastRequestedSeekPosMs > 0L && windowDurationMs > 0L) {
+            val minSafePos = if (windowStartMs > 0L) windowStartMs + MIN_LIVE_WINDOW_CLAMP_BUFFER_MS else 0L
+            val maxSafePos = Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+            if (lastRequestedSeekPosMs in minSafePos..maxSafePos) {
+                return lastRequestedSeekPosMs
+            } else if (lastRequestedSeekPosMs < minSafePos && minSafePos > 0L) {
+                return minSafePos
+            }
+        }
+        return -1L
+    }
+
+    fun interface ReseekCallback {
+        fun onReseek(targetPos: Long)
+    }
+
+    @Synchronized
     fun handleBehindLiveWindow(context: Context?, onReturnToLive: Runnable) {
+        handleBehindLiveWindow(context, lastObservedWindowStartMs, lastObservedDurationMs, null, onReturnToLive)
+    }
+
+    @Synchronized
+    fun handleBehindLiveWindow(
+        context: Context?,
+        windowStartMs: Long,
+        windowDurationMs: Long,
+        onReseek: ReseekCallback?,
+        onReturnToLive: Runnable
+    ) {
         currentGeneration++
         handler.removeCallbacksAndMessages(null)
+
+        val pendingTarget = getPendingSeekTarget(windowStartMs, windowDurationMs)
+        if (pendingTarget > 0L && onReseek != null) {
+            VoxSafeLogger.w(
+                VoxLogCategory.PLAYER,
+                VoxLogCode.LIVE_DVR_SEEK_CLAMP,
+                "BehindLiveWindow detected; reseeking to safe DVR position: $pendingTarget"
+            )
+            context?.let {
+                actionHandler.showMessage(STALE_POSITION_MESSAGE)
+            }
+            actionHandler.onReseekRequested(pendingTarget)
+            onReseek.onReseek(pendingTarget)
+            return
+        }
+
         VoxSafeLogger.w(
             VoxLogCategory.PLAYER,
             VoxLogCode.LIVE_BEHIND_WINDOW_RECOVERED,
