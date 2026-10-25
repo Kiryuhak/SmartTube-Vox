@@ -241,7 +241,22 @@ public class VotProgressOverlay {
                         "VOT UI expanded to ready pill",
                         null
                 );
-                Utils.postDelayed(mAutoDismissRunnable, BUBBLE_READY_AUTO_HIDE_DELAY_MS);
+                // State 5: Auto-transition to "Переключаем на русский" after 1500ms
+                Utils.postDelayed(() -> {
+                    if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
+                    mMotionState = MotionState.SWITCHING;
+                    showExpandedContent(getStringSafe(R.string.vot_progress_switching), R.drawable.ic_vot_sync, false);
+                    animateWidth(wideWidthPx(), () -> {
+                        if (generation != mCallbackGeneration || mCurrentState != STATE_READY) return;
+                        VoxSafeLogger.d(
+                                VoxLogCategory.UI,
+                                VoxLogCode.VOT_UI_READY,
+                                "VOT UI showing switching to Russian pill",
+                                null
+                        );
+                        Utils.postDelayed(mAutoDismissRunnable, 1500L);
+                    });
+                }, 1500L);
             });
         }, SHOW_100_DURATION_MS);
     }
@@ -259,7 +274,7 @@ public class VotProgressOverlay {
         mMotionState = MotionState.SWITCHING;
         showExpandedContent(getStringSafe(R.string.vot_progress_switching), R.drawable.ic_vot_sync, false);
         animateWidth(wideWidthPx(), () -> {
-            Utils.postDelayed(mAutoDismissRunnable, BUBBLE_READY_AUTO_HIDE_DELAY_MS);
+            Utils.postDelayed(mAutoDismissRunnable, 1500L);
         });
         reveal();
         VoxSafeLogger.d(
@@ -268,6 +283,36 @@ public class VotProgressOverlay {
                 "VOT UI switched to Russian audio track",
                 null
         );
+    }
+
+    /**
+     * Diagnostic test harness: runs the canonical 5-stage UI demonstration
+     * directly on the real Android View overlay for visual verification and video recording.
+     */
+    public void runDemoSequence(@Nullable Activity activity, @Nullable Runnable onComplete) {
+        if (!ensureAttached(activity)) return;
+        cancelPendingCallbacks();
+
+        // 1. PREPARING (wide pill)
+        showPreparing(activity);
+
+        // 2. PROGRESS 37% after 1500ms
+        Utils.postDelayed(() -> {
+            showProcessing(activity, 37);
+
+            // 3. PROGRESS 99% after 1500ms
+            Utils.postDelayed(() -> {
+                showProcessing(activity, 99);
+
+                // 4. ACTIVATED: 100% (circle) -> Перевод готов (wide) -> Переключаем на русский -> dismiss
+                Utils.postDelayed(() -> {
+                    showActivated(activity);
+                    if (onComplete != null) {
+                        Utils.postDelayed(onComplete, SHOW_100_DURATION_MS + SHAPE_ANIMATION_MS + 1500L + SHAPE_ANIMATION_MS + 1500L + 500L);
+                    }
+                }, 1500L);
+            }, 1500L);
+        }, 1500L);
     }
 
     public void showError(@Nullable Activity activity) { showError(activity, null); }
@@ -407,6 +452,9 @@ public class VotProgressOverlay {
             return;
         }
         mOverlayView.bringToFront();
+        if (mParentView != null) {
+            mParentView.bringChildToFront(mOverlayView);
+        }
         mOverlayView.animate().cancel();
         if (mOverlayView.getVisibility() != View.VISIBLE) {
             mOverlayView.setAlpha(0f);
@@ -485,17 +533,39 @@ public class VotProgressOverlay {
         Utils.postDelayed(mSafetyWatchdogRunnable, WATCHDOG_MS);
     }
 
+    @Nullable
+    private Activity resolveActivity(@Nullable Context context) {
+        Context current = context;
+        while (current instanceof android.content.ContextWrapper) {
+            if (current instanceof Activity) {
+                Activity a = (Activity) current;
+                if (!a.isFinishing()) return a;
+            }
+            current = ((android.content.ContextWrapper) current).getBaseContext();
+        }
+        return null;
+    }
+
     private boolean ensureAttached(@Nullable Activity activity) {
+        if (activity == null || activity.isFinishing()) {
+            activity = resolveActivity(mContext);
+        }
         if (activity == null || activity.isFinishing()) return false;
         ViewGroup target = findTargetContainer(activity);
         if (target == null) return false;
         if (mOverlayView != null && mOverlayView.getParent() != target) destroy();
-        if (mOverlayView != null && mOverlayView.getParent() != null) return true;
+        if (mOverlayView != null && mOverlayView.getParent() != null) {
+            mOverlayView.bringToFront();
+            if (mParentView != null) mParentView.bringChildToFront(mOverlayView);
+            return true;
+        }
         try {
             View existing = target.findViewById(R.id.vot_progress_root);
             if (existing != null) {
                 bindViews(existing);
                 mParentView = target;
+                existing.bringToFront();
+                if (target != null) target.bringChildToFront(existing);
                 return true;
             }
             View root = LayoutInflater.from(mContext).inflate(R.layout.vot_progress_overlay, target, false);
@@ -503,6 +573,8 @@ public class VotProgressOverlay {
             root.setFocusable(false);
             root.setFocusableInTouchMode(false);
             root.setClickable(false);
+            root.setElevation(dpToPx(32));
+            root.setTranslationZ(dpToPx(16));
             int endMargin = dpToPx(VoxTranslationOverlayLayoutPolicy.fixedVotEndMarginDp());
             int bottomMargin = dpToPx(VoxTranslationOverlayLayoutPolicy.fixedVotBottomMarginDp());
             if (target instanceof FrameLayout) {
@@ -527,6 +599,7 @@ public class VotProgressOverlay {
             root.setAlpha(0f);
             target.addView(root);
             root.bringToFront();
+            target.bringChildToFront(root);
             mParentView = target;
             return true;
         } catch (Exception e) {
@@ -558,7 +631,10 @@ public class VotProgressOverlay {
             if (root instanceof ViewGroup) return (ViewGroup) root;
         }
         View content = activity.findViewById(android.R.id.content);
-        return content instanceof ViewGroup ? (ViewGroup) content : null;
+        if (content instanceof ViewGroup) return (ViewGroup) content;
+        View decor = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
+        if (decor instanceof ViewGroup) return (ViewGroup) decor;
+        return null;
     }
 
     private int wideWidthPx() { return mContext.getResources().getDimensionPixelSize(R.dimen.vot_overlay_wide_width); }

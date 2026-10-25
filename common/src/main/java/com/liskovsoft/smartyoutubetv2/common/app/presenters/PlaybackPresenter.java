@@ -241,7 +241,17 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
     }
 
     public Activity getActivity() {
-        return getContext() instanceof Activity ? (Activity) getContext() : null;
+        Context ctx = getContext();
+        if (ctx instanceof Activity) {
+            return (Activity) ctx;
+        }
+        while (ctx instanceof android.content.ContextWrapper) {
+            if (ctx instanceof Activity) {
+                return (Activity) ctx;
+            }
+            ctx = ((android.content.ContextWrapper) ctx).getBaseContext();
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

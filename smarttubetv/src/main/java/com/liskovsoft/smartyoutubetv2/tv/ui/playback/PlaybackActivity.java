@@ -63,6 +63,64 @@ public class PlaybackActivity extends LeanbackActivity {
         if (fragment instanceof PlaybackFragment) {
             mPlaybackFragment = (PlaybackFragment) fragment;
         }
+        registerTestReceiver();
+        handlePlaybackTestIntent(getIntent());
+    }
+
+    private final android.content.BroadcastReceiver mTestReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context context, android.content.Intent intent) {
+            handlePlaybackTestIntent(intent);
+        }
+    };
+
+    private void registerTestReceiver() {
+        try {
+            androidx.core.content.ContextCompat.registerReceiver(
+                    this,
+                    mTestReceiver,
+                    new android.content.IntentFilter("com.liskovsoft.smartyoutubetv2.TEST_VOT_BADGE"),
+                    androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            );
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handlePlaybackTestIntent(intent);
+    }
+
+    private void handlePlaybackTestIntent(android.content.Intent intent) {
+        if (intent == null) return;
+        String action = intent.getStringExtra("action");
+        if (action == null) {
+            action = intent.getAction();
+        }
+        if ("startTranslationDemo".equalsIgnoreCase(action) ||
+                intent.getBooleanExtra("startTranslationDemo", false)) {
+            com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController controller =
+                    com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController.instance();
+            com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay overlay =
+                    (controller != null && controller.getProgressOverlay() != null)
+                            ? controller.getProgressOverlay()
+                            : new com.liskovsoft.smartyoutubetv2.common.vot.VotProgressOverlay(this);
+            com.liskovsoft.smartyoutubetv2.common.utils.Utils.postDelayed(() -> {
+                overlay.runDemoSequence(PlaybackActivity.this, null);
+            }, 500L);
+        } else if ("startTranslation".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController controller =
+                    com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController.instance();
+            if (controller != null) {
+                com.liskovsoft.smartyoutubetv2.common.utils.Utils.postDelayed(() -> {
+                    controller.onButtonClicked(com.liskovsoft.smartyoutubetv2.common.R.id.action_voice_translate,
+                            com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController.BTN_OFF);
+                }, 500L);
+            }
+        }
     }
 
     @Override
@@ -288,6 +346,9 @@ public class PlaybackActivity extends LeanbackActivity {
 
     @Override
     protected void onDestroy() {
+        try {
+            unregisterReceiver(mTestReceiver);
+        } catch (Throwable ignored) {}
         if (mIsBackgroundAudioOnlyActive) {
             exitBackgroundAudioOnly();
         }

@@ -38,6 +38,10 @@ public class SplashActivity extends MotherActivity implements SplashView {
     }
 
     private void forwardTestIntentIfNeeded(Intent intent) {
+        if (intent != null && "com.liskovsoft.smartyoutubetv2.TEST_VOT_BADGE".equals(intent.getAction())) {
+            Intent bcast = new Intent(intent);
+            sendBroadcast(bcast);
+        }
         if (com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG && intent != null &&
                 (YandexVotTestReceiver.ACTION_TEST_YANDEX_VOT.equals(intent.getAction()) ||
                  YandexVotTestReceiver.ACTION_TEST_OTA.equals(intent.getAction()))) {

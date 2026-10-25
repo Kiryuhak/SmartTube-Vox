@@ -972,25 +972,28 @@
     <string name="vot_error_access_denied">The translation service denied this request</string>
     <string name="vot_error_playback">Failed to play translation</string>
     <string name="vot_unknown_lang_manual" translatable="false"></string>
-    <string name="vot_progress_preparing" translatable="false"></string>
-    <string name="vot_progress_starting" translatable="false"></string>
-    <string name="vot_progress_waiting_eta" translatable="false"></string>
-    <string name="vot_progress_still_waiting" translatable="false"></string>
-    <string name="vot_progress_ready" translatable="false"></string>
-    <string name="vot_progress_switching" translatable="false"></string>
-    <string name="vot_progress_error" translatable="false"></string>
-    <string name="vot_progress_timeout" translatable="false"></string>
-    <string name="vot_progress_waiting_title" translatable="false"></string>
-    <string name="vot_progress_subtitle_default" translatable="false"></string>
-    <string name="vot_progress_subtitle_ready" translatable="false"></string>
-    <string name="vot_progress_retry_title" translatable="false"></string>
-    <string name="vot_progress_retry_countdown" translatable="false"></string>
+    <string name="vot_progress_looking_up">Ищем готовый перевод…</string>
+    <string name="vot_progress_lookup_ready">Найден готовый перевод</string>
+    <string name="vot_progress_preparing">Подготовка перевода</string>
+    <string name="vot_progress_starting">Запуск перевода…</string>
+    <string name="vot_progress_waiting_eta">~ %s</string>
+    <string name="vot_progress_waiting_eta_format">Перевод будет готов примерно через %s</string>
+    <string name="vot_progress_still_waiting">Перевод задерживается…</string>
+    <string name="vot_progress_ready">Перевод готов</string>
+    <string name="vot_progress_switching">Переключаем на русский</string>
+    <string name="vot_progress_error">Не удалось перевести</string>
+    <string name="vot_progress_timeout">Не удалось перевести</string>
+    <string name="vot_progress_waiting_title">Подготовка перевода</string>
+    <string name="vot_progress_subtitle_default">Индикатор остаётся до завершения</string>
+    <string name="vot_progress_subtitle_ready">Нажмите кнопку перевода для включения</string>
+    <string name="vot_progress_retry_title">Повторная попытка %1$d/%2$d</string>
+    <string name="vot_progress_retry_countdown">через %d с</string>
     <string name="vot_auto_activate_ready" translatable="false"></string>
     <string name="vot_auto_activate_ready_desc" translatable="false"></string>
     <string name="vot_translation_activated" translatable="false"></string>
-    <string name="vot_progress_delayed" translatable="false"></string>
-    <string name="vot_progress_attaching" translatable="false"></string>
-    <string name="vot_progress_subtitle_press_to_enable" translatable="false"></string>
+    <string name="vot_progress_delayed">Перевод задерживается…</string>
+    <string name="vot_progress_attaching">Подключаем перевод…</string>
+    <string name="vot_progress_subtitle_press_to_enable">Нажмите кнопку перевода для включения</string>
     <!-- Device Code Flow placeholders — overridden in stvot flavor -->
     <string name="vot_device_auth_title" translatable="false"></string>
     <string name="vot_device_auth_step1" translatable="false"></string>
