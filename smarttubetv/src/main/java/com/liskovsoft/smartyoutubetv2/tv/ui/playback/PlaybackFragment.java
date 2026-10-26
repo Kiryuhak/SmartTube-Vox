@@ -268,21 +268,18 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         if (root != null && getActivity() != null) {
             VerticalGridView gridView = getVerticalGridView();
             if (gridView != null) {
-                gridView.setFocusable(true);
-                gridView.requestFocus();
-                com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onFocusRestored("VerticalGridView");
+                if (!gridView.hasFocus()) {
+                    gridView.setFocusable(true);
+                    gridView.requestFocus();
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onFocusRestored("VerticalGridView", "PlaybackFragment", "GRID_NOT_FOCUSED");
+                }
             } else {
                 View currentFocus = getActivity().getCurrentFocus();
                 if (currentFocus == null || !root.hasFocus()) {
                     root.requestFocus();
-                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onFocusRestored("PlaybackRootView");
+                    com.liskovsoft.smartyoutubetv2.common.vox.ui.VoxUiStateTracer.onFocusRestored("PlaybackRootView", "PlaybackFragment", "ROOT_NOT_FOCUSED");
                 }
             }
-            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.info(
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.UI,
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.HUD_FOCUS_RESTORED,
-                    "Фокус ввода восстановлен на PlaybackFragment"
-            );
         }
     }
 
@@ -298,7 +295,13 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
     }
 
     public void onDispatchKeyEvent(KeyEvent event) {
-        ensureFocus();
+        View root = getView();
+        if (root != null && getActivity() != null) {
+            View currentFocus = getActivity().getCurrentFocus();
+            if (currentFocus == null || !root.hasFocus()) {
+                ensureFocus();
+            }
+        }
     }
 
     public void onDispatchTouchEvent(MotionEvent event) {

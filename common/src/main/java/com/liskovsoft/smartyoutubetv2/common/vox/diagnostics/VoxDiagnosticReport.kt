@@ -51,7 +51,11 @@ data class VoxDiagnosticReport(
     val errorCategory: String? = null,
     val errorSignature: String? = null,
     val isSynthetic: Boolean = false,
-    val installationId: String? = null
+    val installationId: String? = null,
+    val autoSubmissionPolicy: Map<String, Any>? = null,
+    val userJourneyTimeline: List<Map<String, Any>>? = null,
+    val buildChannel: String? = null,
+    val updateChannel: String? = null
 ) {
     fun withCanonicalClassification(): VoxDiagnosticReport {
         val effectiveTrigger = triggerEvent ?: incidentSummary?.get("triggerCode")?.toString()
@@ -253,6 +257,55 @@ data class VoxDiagnosticReport(
             } catch (e: Exception) {
                 null
             }
+            val buildChan = try {
+                com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getBuildChannel().id
+            } catch (e: Throwable) { null }
+            val updateChan = try {
+                com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getUpdateChannel().id
+            } catch (e: Throwable) { null }
+            val autoSubPolicy = try {
+                VoxDiagnosticsPolicy.createAutoSubmissionPolicy(context, reportPurpose, System.currentTimeMillis())
+            } catch (e: Throwable) { null }
+            val journeyTimeline = try {
+                val jRecorder = VoxUserJourneyRecorder.instance(context)
+                if (jRecorder.getMode() != VoxUserJourneyMode.OFF) {
+                    val events = jRecorder.getRecentEvents(30)
+                    events.map { ev ->
+                        val m = mutableMapOf<String, Any>()
+                        m["eventId"] = ev.eventId
+                        m["sequence"] = ev.sequence
+                        m["wallTimeUtc"] = ev.wallTimeUtc
+                        m["elapsedMs"] = ev.elapsedMs
+                        m["category"] = ev.category
+                        m["event"] = ev.event
+                        ev.cause?.let { m["cause"] = it }
+                        ev.screen?.let { m["screen"] = it }
+                        ev.viewRole?.let { m["viewRole"] = it }
+                        ev.positionBeforeMs?.let { m["positionBeforeMs"] = it }
+                        ev.positionRequestedMs?.let { m["positionRequestedMs"] = it }
+                        m["videoRef"] = "redacted"
+                        m["privacyLevel"] = ev.privacyLevel
+                        ev.parentEventId?.let { m["parentEventId"] = it }
+                        ev.operationId?.let { m["operationId"] = it }
+                        ev.status?.let { m["status"] = it }
+                        ev.durationMs?.let { m["durationMs"] = it }
+                        ev.action?.let { m["action"] = it }
+                        ev.outcome?.let { m["outcome"] = it }
+                        ev.positionBucketMs?.let { m["positionBucketMs"] = it }
+                        ev.selectedQuality?.let { m["selectedQuality"] = it }
+                        ev.resolvedQuality?.let { m["resolvedQuality"] = it }
+                        ev.details?.let { d ->
+                            val safeD = mutableMapOf<String, Any>()
+                            d.forEach { (k, v) ->
+                                if (v is String) safeD[k] = VoxDiagnosticSanitizer.sanitize(v)
+                                else safeD[k] = v
+                            }
+                            m["details"] = safeD
+                        }
+                        m
+                    }
+                } else null
+            } catch (e: Throwable) { null }
             val stableReportId = reportId ?: ("VOX-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).uppercase(Locale.ROOT))
             val safePlatform = if (profile.platform == com.liskovsoft.smartyoutubetv2.common.vox.capability.VoxPlatform.UNKNOWN) {
                 "UNKNOWN_PLATFORM"
@@ -291,11 +344,15 @@ data class VoxDiagnosticReport(
                 reportPurpose = reportPurpose,
                 autoSubmitted = autoSubmitted,
                 triggerEvent = triggerEvent,
-                channel = com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(context).getBuildChannel().id,
+                channel = buildChan,
                 aggregationWindowMs = aggregationWindowMs,
                 incidentSummary = incidentSummary,
                 isSynthetic = syntheticFlag,
-                installationId = installId
+                installationId = installId,
+                autoSubmissionPolicy = autoSubPolicy,
+                userJourneyTimeline = journeyTimeline,
+                buildChannel = buildChan,
+                updateChannel = updateChan
             ).withCanonicalClassification()
         }
 
@@ -410,6 +467,12 @@ data class VoxDiagnosticReport(
                 val errorSignature = if (root.has("errorSignature") && !root.isNull("errorSignature")) root.optString("errorSignature") else null
                 val isSynthetic = root.optBoolean("isSynthetic", false)
                 val installationId = if (root.has("installationId") && !root.isNull("installationId")) root.optString("installationId") else null
+                val autoSubmissionPolicy = jsonToMap(root.optJSONObject("autoSubmissionPolicy"))
+                val userJourneyTimeline = jsonToList(root.optJSONArray("userJourneyTimeline"))
+                    .filterIsInstance<Map<String, Any>>()
+                    .takeIf { it.isNotEmpty() }
+                val buildChannel = if (root.has("buildChannel") && !root.isNull("buildChannel")) root.optString("buildChannel") else null
+                val updateChannel = if (root.has("updateChannel") && !root.isNull("updateChannel")) root.optString("updateChannel") else null
 
                 VoxDiagnosticReport(
                     schema = schema,
@@ -445,7 +508,11 @@ data class VoxDiagnosticReport(
                     errorCategory = errorCategory,
                     errorSignature = errorSignature,
                     isSynthetic = isSynthetic,
-                    installationId = installationId
+                    installationId = installationId,
+                    autoSubmissionPolicy = autoSubmissionPolicy,
+                    userJourneyTimeline = userJourneyTimeline,
+                    buildChannel = buildChannel,
+                    updateChannel = updateChannel
                 )
             } catch (e: Exception) {
                 null
@@ -466,9 +533,17 @@ data class VoxDiagnosticReport(
         if (!errorSignature.isNullOrEmpty()) root.put("errorSignature", errorSignature)
         if (isSynthetic) root.put("isSynthetic", true)
         if (channel != null) root.put("channel", channel)
+        if (buildChannel != null) root.put("buildChannel", buildChannel)
+        if (updateChannel != null) root.put("updateChannel", updateChannel)
         if (aggregationWindowMs > 0) root.put("aggregationWindowMs", aggregationWindowMs)
+        if (autoSubmissionPolicy != null && autoSubmissionPolicy.isNotEmpty()) {
+            root.put("autoSubmissionPolicy", wrapJsonValue(autoSubmissionPolicy))
+        }
         if (incidentSummary != null && incidentSummary.isNotEmpty()) {
             root.put("incidentSummary", wrapJsonValue(incidentSummary))
+        }
+        if (userJourneyTimeline != null && userJourneyTimeline.isNotEmpty()) {
+            root.put("userJourneyTimeline", wrapJsonValue(userJourneyTimeline))
         }
         root.put("appVersion", appVersion)
         root.put("appVersionCode", appVersionCode)

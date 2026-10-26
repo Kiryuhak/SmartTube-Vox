@@ -75,6 +75,9 @@ object VoxDiagnosticsPolicy {
     @JvmStatic
     @JvmOverloads
     fun canSendPeriodicDiagnostics(context: Context, now: Long = System.currentTimeMillis()): Boolean {
+        val journeyMode = try { VoxUserJourneyRecorder.instance(context).getMode() } catch (e: Throwable) { VoxUserJourneyMode.STANDARD }
+        if (journeyMode == VoxUserJourneyMode.OFF) return false
+
         val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
         if (lifecycle.getCycleStartedAt() > 0L || lifecycle.isUserOptedOut()) {
             return lifecycle.canSendPeriodic(now)
@@ -98,6 +101,9 @@ object VoxDiagnosticsPolicy {
     @JvmStatic
     @JvmOverloads
     fun canSendIncidentDiagnostics(context: Context, now: Long = System.currentTimeMillis()): Boolean {
+        val journeyMode = try { VoxUserJourneyRecorder.instance(context).getMode() } catch (e: Throwable) { VoxUserJourneyMode.STANDARD }
+        if (journeyMode == VoxUserJourneyMode.OFF) return false
+
         val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
         if (lifecycle.isUserOptedOut()) return false
         if (lifecycle.getCycleStartedAt() > 0L && !lifecycle.isAutoDiagnosticsPermitted(now)) return false
@@ -113,6 +119,36 @@ object VoxDiagnosticsPolicy {
     /**
      * Проверяет, является ли код ошибки критическим / фатальным.
      */
+    @JvmStatic
+    @JvmOverloads
+    fun createAutoSubmissionPolicy(
+        context: Context,
+        reportPurpose: String,
+        reportTimestamp: Long,
+        submissionTimestamp: Long = System.currentTimeMillis()
+    ): Map<String, Any> {
+        val manager = VoxUpdateChannelManager.instance(context)
+        val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
+        val journeyMode = try { VoxUserJourneyRecorder.instance(context).getMode() } catch (e: Throwable) { VoxUserJourneyMode.STANDARD }
+        val isOptedOut = lifecycle.isUserOptedOut() || !manager.isDiagnosticsActive() || journeyMode == VoxUserJourneyMode.OFF
+        val consentGiven = !isOptedOut && (manager.isDiagnosticsActive() || !manager.isAutoDiagnosticsAllowedByDefault())
+        val queueLagMs = Math.max(0L, submissionTimestamp - reportTimestamp)
+        val isRetroactive = queueLagMs > 60_000L
+
+        return mapOf(
+            "mode" to (if (isOptedOut) "OFF" else journeyMode.name),
+            "consentGiven" to consentGiven,
+            "channel" to manager.getUpdateChannel().id,
+            "buildChannel" to manager.getBuildChannel().id,
+            "source" to if (reportPurpose == VoxDiagnosticReport.PURPOSE_USER_MANUAL) "USER_MANUAL" else "AUTO_TELEMETRY",
+            "rateLimit" to if (manager.isBetaChannel()) "6h" else "72h",
+            "queueLagMs" to queueLagMs,
+            "isRetroactive" to isRetroactive,
+            "eventTimeMs" to reportTimestamp,
+            "submittedAtMs" to submissionTimestamp
+        )
+    }
+
     @JvmStatic
     fun isFatalOrCriticalError(code: String): Boolean {
         return code == VoxLogCode.PLAYER_INIT_FAILED ||

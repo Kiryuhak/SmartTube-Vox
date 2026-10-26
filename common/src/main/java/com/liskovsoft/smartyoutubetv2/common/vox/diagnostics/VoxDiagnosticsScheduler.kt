@@ -322,6 +322,15 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
             return
         }
 
+        val journeyMode = try { VoxUserJourneyRecorder.instance(context).getMode() } catch (e: Throwable) { VoxUserJourneyMode.STANDARD }
+        if (journeyMode == VoxUserJourneyMode.OFF || VoxDiagnosticsLifecycleManager.instance(context).isUserOptedOut()) {
+            synchronized(queueLock) {
+                saveToDiskLocked()
+            }
+            flushOfflineQueueInternal(forceBypassBackoff, onComplete)
+            return
+        }
+
         entry.retryCount++
         val retryCtx = mapOf(
             "retryCount" to entry.retryCount.toString(),
@@ -336,7 +345,15 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
             retryCtx
         )
 
-        VoxDiagnosticsClient.instance().submitReportAsync(entry.report, object : VoxDiagnosticsClient.Callback {
+        val updatedAutoPolicy = VoxDiagnosticsPolicy.createAutoSubmissionPolicy(
+            context = context,
+            reportPurpose = entry.report.reportPurpose,
+            reportTimestamp = entry.report.timestamp,
+            submissionTimestamp = System.currentTimeMillis()
+        )
+        val reportToSubmit = entry.report.copy(autoSubmissionPolicy = updatedAutoPolicy)
+
+        VoxDiagnosticsClient.instance().submitReportAsync(reportToSubmit, object : VoxDiagnosticsClient.Callback {
             override fun onSuccess(reportId: String) {
                 val sentCtx = mapOf(
                     "reportId" to reportId,

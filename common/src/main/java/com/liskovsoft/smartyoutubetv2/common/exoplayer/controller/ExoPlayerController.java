@@ -86,6 +86,9 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private static final java.util.concurrent.atomic.AtomicInteger sSessionSeq = new java.util.concurrent.atomic.AtomicInteger(0);
     private int mPlaybackSessionId = 0;
     private boolean mLastIsDecoderError = false;
+    private Integer mLastHttpStatus = null;
+    private String mLastErrorClass = null;
+    private com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident mCurrentRebufferIncident = null;
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -736,7 +739,22 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
         if (nested instanceof com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) {
             int httpCode = ((com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) nested).responseCode;
+            mLastHttpStatus = httpCode;
             errorCtx.put("responseCode", String.valueOf(httpCode));
+        } else {
+            mLastHttpStatus = null;
+        }
+        mLastErrorClass = nested.getClass().getSimpleName();
+
+        if (mCurrentRebufferIncident != null) {
+            long now = System.currentTimeMillis();
+            long dur = now - mCurrentRebufferIncident.getStartTimeMs();
+            mCurrentRebufferIncident.setEndTimeMs(now);
+            mCurrentRebufferIncident.setRebufferDurationMs(dur);
+            mCurrentRebufferIncident.setOutcome("FAILED");
+            Map<String, String> endCtx = new HashMap<>(mCurrentRebufferIncident.toMap());
+            VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, "Буферизация завершена со сбоем", endCtx);
+            mCurrentRebufferIncident = null;
         }
 
         Throwable cause = error;
@@ -938,6 +956,25 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             }
             mEventListener.onPlay();
             mLastIsDecoderError = false;
+
+            if (mCurrentRebufferIncident != null) {
+                long now = System.currentTimeMillis();
+                long duration = now - mCurrentRebufferIncident.getStartTimeMs();
+                mCurrentRebufferIncident.setEndTimeMs(now);
+                mCurrentRebufferIncident.setRebufferDurationMs(duration);
+                mCurrentRebufferIncident.setOutcome("RECOVERED");
+
+                Map<String, String> endCtx = new HashMap<>(mCurrentRebufferIncident.toMap());
+                endCtx.put("rebufferDurationMs", String.valueOf(duration));
+                endCtx.put("outcome", "RECOVERED");
+                VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, "Буферизация завершена (восстановлено)", endCtx);
+
+                try {
+                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.instance(mContext)
+                            .recordPlayback("REBUFFER_RECOVERED", null, null, getPositionMs(), endCtx, mCurrentRebufferIncident.getRootCause().name(), mCurrentRebufferIncident.getOperationId(), null, "RECOVERED", duration);
+                } catch (Throwable ignored) {}
+                mCurrentRebufferIncident = null;
+            }
             if (com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
                 com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onFirstFrame(getVideo(), 0);
                 com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onAudioStart(getVideo(), 0);
@@ -965,44 +1002,93 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             }
             if (mHasStartedPlayback) {
                 mRebufferCount++;
-                if (mRebufferCount <= 3) {
-                    Map<String, String> ctx = new HashMap<>();
-                    ctx.put("playbackSessionId", String.valueOf(mPlaybackSessionId));
-                    ctx.put("rebufferCount", String.valueOf(mRebufferCount));
-                    long bitrate = 0;
-                    int height = 0;
-                    FormatItem vf = getVideoFormat();
-                    if (vf != null) {
-                        height = vf.getHeight();
-                        ctx.put("selectedHeight", String.valueOf(height));
-                        MediaTrack tr = vf.getTrack();
-                        if (tr != null && tr.format != null) {
-                            if (tr.format.codecs != null) {
-                                ctx.put("selectedCodec", tr.format.codecs);
-                            }
-                            if (tr.format.bitrate > 0) {
-                                bitrate = tr.format.bitrate;
-                                ctx.put("bitrate", String.valueOf(bitrate));
-                            }
+                long pos = getPositionMs();
+                long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
+                long bitrate = 0;
+                int height = 0;
+                String codec = null;
+                FormatItem vf = getVideoFormat();
+                if (vf != null) {
+                    height = vf.getHeight();
+                    MediaTrack tr = vf.getTrack();
+                    if (tr != null && tr.format != null) {
+                        codec = tr.format.codecs;
+                        if (tr.format.bitrate > 0) {
+                            bitrate = tr.format.bitrate;
                         }
                     }
-                    long pos = getPositionMs();
-                    long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
-                    ctx.put("bufferedMs", String.valueOf(buffered));
-                    ctx.put("bufferAheadMs", String.valueOf(buffered));
-                    try {
-                        int currentEngine = PlayerTweaksData.instance(mContext).getPlayerDataSource();
-                        ctx.put("networkEngine", String.valueOf(currentEngine));
-                    } catch (Throwable ignored) {}
-                    ctx.put("isLive", String.valueOf(isLive));
+                }
 
-                    com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxBufferRootCause rootCause =
-                            com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.classifyRebuffer(
-                                    bitrate, buffered, 0L, 0, height >= 2160, 0, mLastIsDecoderError);
-                    if (mLastIsDecoderError) ctx.put("isDecoderError", "true");
-                    ctx.put("rootCause", rootCause.name());
+                // Query real throughput from ExoMediaSourceFactory.getBandwidthMeter()
+                long throughput = 0L;
+                try {
+                    throughput = com.liskovsoft.smartyoutubetv2.common.exoplayer.ExoMediaSourceFactory.getBandwidthMeter().getBitrateEstimate();
+                } catch (Throwable ignored) {}
 
+                // Query real dropped frames from video decoder
+                int droppedFrames = 0;
+                try {
+                    if (mPlayer != null && mPlayer.getVideoDecoderCounters() != null) {
+                        mPlayer.getVideoDecoderCounters().ensureUpdated();
+                        droppedFrames = mPlayer.getVideoDecoderCounters().droppedBufferCount;
+                    }
+                } catch (Throwable ignored) {}
+
+                String safeNetType = com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.getSafeNetworkType(mContext);
+                String engineName = "DefaultHttp";
+                try {
+                    int currentEngine = PlayerTweaksData.instance(mContext).getPlayerDataSource();
+                    engineName = currentEngine == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP ? "OkHttp" : currentEngine == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET ? "Cronet" : "DefaultHttp";
+                } catch (Throwable ignored) {}
+
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferClassification classification =
+                        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.classifyRebufferDetailed(
+                                bitrate, buffered, throughput, droppedFrames, height >= 2160, 0, mLastIsDecoderError, mLastHttpStatus, mLastErrorClass, false);
+
+                String opId = java.util.UUID.randomUUID().toString().substring(0, 8);
+                com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident incident =
+                        new com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident(
+                                opId,
+                                System.currentTimeMillis(),
+                                null,
+                                pos,
+                                buffered,
+                                0L,
+                                height,
+                                codec,
+                                bitrate,
+                                engineName,
+                                isLive ? "LIVE" : "VOD",
+                                isLive,
+                                String.valueOf(mPlaybackSessionId),
+                                opId,
+                                safeNetType,
+                                mLastIsDecoderError ? "ERROR" : "NORMAL",
+                                mLastHttpStatus,
+                                mLastErrorClass,
+                                null,
+                                null,
+                                throughput > 0 ? throughput : null,
+                                classification.getRootCause(),
+                                classification.getEvidenceMissing(),
+                                "IN_PROGRESS"
+                        );
+                mCurrentRebufferIncident = incident;
+
+                if (mRebufferCount <= 3) {
+                    Map<String, String> ctx = new HashMap<>(incident.toMap());
+                    ctx.put("rebufferCount", String.valueOf(mRebufferCount));
+                    if (classification.getDetail() != null) {
+                        ctx.put("classificationDetail", classification.getDetail());
+                    }
+
+                    VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_STARTED, "Начало буферизации потока", ctx);
                     VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.PLAYER_REBUFFER, "Буферизация потока", ctx);
+
+                    try {
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.instance(mContext)
+                                .recordPlayback("REBUFFER_STARTED", null, null, pos, ctx, classification.getRootCause().name(), opId, null, "BUFFERING", null);
+                    } catch (Throwable ignored) {}
                 }
             }
             mEventListener.onBuffering();
@@ -1149,6 +1235,14 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         } catch (ArrayIndexOutOfBoundsException e) { // thrown on stop()
             e.printStackTrace();
         } finally {
+            if (mCurrentRebufferIncident != null) {
+                long now = System.currentTimeMillis();
+                long dur = now - mCurrentRebufferIncident.getStartTimeMs();
+                mCurrentRebufferIncident.setEndTimeMs(now);
+                mCurrentRebufferIncident.setRebufferDurationMs(dur);
+                mCurrentRebufferIncident.setOutcome("CANCELLED");
+                mCurrentRebufferIncident = null;
+            }
             mPlayer = null;
             mCurrentMediaSource = null;
             VoxPlayerTracker.onPlayerReleased();

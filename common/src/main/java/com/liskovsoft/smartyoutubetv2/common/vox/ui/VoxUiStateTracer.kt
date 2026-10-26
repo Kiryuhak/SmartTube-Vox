@@ -39,19 +39,42 @@ object VoxUiStateTracer {
         }
     }
 
+    @Volatile
+    private var lastFocusTarget: String? = null
+    @Volatile
+    private var lastFocusRestoredTimeMs: Long = 0L
+
     @JvmStatic
     fun onOverlayState(shown: Boolean, reason: String = "") {
         trace(if (shown) "OVERLAY_SHOWN" else "OVERLAY_HIDDEN", reason)
     }
 
     @JvmStatic
-    fun onFocusRestored(target: String) {
-        trace("FOCUS_RESTORED", target)
+    @JvmOverloads
+    fun onFocusRestored(
+        target: String,
+        eventSource: String = "PlaybackFragment",
+        reason: String = "FOCUS_LOST_RECOVERY"
+    ) {
+        val now = System.currentTimeMillis()
+        if (target == lastFocusTarget && (now - lastFocusRestoredTimeMs) < 500L) {
+            // Deduplicate rapid duplicate focus restorations within 500ms window
+            return
+        }
+        lastFocusTarget = target
+        lastFocusRestoredTimeMs = now
+
+        trace("FOCUS_RESTORED", "$target (from=$eventSource, reason=$reason)")
         try {
             VoxSafeLogger.info(
                 VoxLogCategory.UI,
                 VoxLogCode.HUD_FOCUS_RESTORED,
-                "Фокус ввода восстановлен: $target"
+                "Фокус ввода восстановлен: $target",
+                mapOf(
+                    "focusTarget" to target,
+                    "eventSource" to eventSource,
+                    "reason" to reason
+                )
             )
         } catch (_: Throwable) {
             // Safe in unit test environments
@@ -79,5 +102,7 @@ object VoxUiStateTracer {
     @JvmStatic
     fun resetForTesting() {
         entries.clear()
+        lastFocusTarget = null
+        lastFocusRestoredTimeMs = 0L
     }
 }

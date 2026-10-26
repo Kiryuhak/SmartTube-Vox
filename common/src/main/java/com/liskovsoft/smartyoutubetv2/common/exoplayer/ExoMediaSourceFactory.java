@@ -66,7 +66,11 @@ public class ExoMediaSourceFactory {
     private static final Uri DASH_MANIFEST_URI = Uri.parse("https://example.com/test.mpd");
     private static final String DASH_MANIFEST_EXTENSION = "mpd";
     private static final String HLS_PLAYLIST_EXTENSION = "m3u8";
-    private static final boolean USE_BANDWIDTH_METER = false;
+    private static final boolean USE_BANDWIDTH_METER = true;
+
+    public static DefaultBandwidthMeter getBandwidthMeter() {
+        return BANDWIDTH_METER;
+    }
     // CronetDataSourceFactory doesn't own or shut down the supplied executor.
     // Keep one process-scoped callback thread instead of leaking one per player restart.
     private static final Executor CRONET_EXECUTOR = Util.newSingleThreadExecutor("ExoPlayer:Cronet");

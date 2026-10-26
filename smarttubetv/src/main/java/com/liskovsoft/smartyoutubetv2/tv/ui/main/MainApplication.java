@@ -195,24 +195,40 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
         return e;
     }
 
+    private long mLastGlideTrimTimeMs = 0L;
+    private static final long GLIDE_TRIM_COOLDOWN_MS = 5_000L;
+
+    private void safeTrimGlideMemory() {
+        long now = System.currentTimeMillis();
+        if (now - mLastGlideTrimTimeMs < GLIDE_TRIM_COOLDOWN_MS) {
+            return;
+        }
+        mLastGlideTrimTimeMs = now;
+        Runnable trimAction = () -> {
+            try {
+                com.bumptech.glide.Glide.get(MainApplication.this).clearMemory();
+            } catch (Throwable ignored) {
+            }
+        };
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            trimAction.run();
+        } else {
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(trimAction);
+        }
+    }
+
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
         if (level >= TRIM_MEMORY_RUNNING_LOW) {
-            try {
-                com.bumptech.glide.Glide.get(this).clearMemory();
-            } catch (Throwable ignored) {
-            }
+            safeTrimGlideMemory();
         }
     }
 
     @Override
     public void onLowMemory() {
         super.onLowMemory();
-        try {
-            com.bumptech.glide.Glide.get(this).clearMemory();
-        } catch (Throwable ignored) {
-        }
+        safeTrimGlideMemory();
     }
 
     private void applyCrashFixes(Throwable e) {

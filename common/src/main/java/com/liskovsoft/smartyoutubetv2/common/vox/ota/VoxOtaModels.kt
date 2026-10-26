@@ -87,9 +87,11 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     TIMEOUT("Превышено время ожидания ответа сервера обновлений"),
     TLS_ERROR("Ошибка защищенного соединения (TLS/SSL)"),
     HTTP_ERROR("Ошибка HTTP-сервера обновлений"),
+    FORBIDDEN("Доступ к серверу обновлений ограничен (403 Forbidden)"),
     RATE_LIMIT("Сервер временно ограничил частоту проверок. Попробуйте позже."),
     RATE_LIMITED("Сервер временно ограничил частоту проверок. Попробуйте позже."),
     RELEASE_NOT_FOUND("Данные обновления не найдены на сервере"),
+    MANIFEST_MISSING("Манифест обновлений отсутствует на сервере"),
     INVALID_RELEASE("Некорректный формат данных обновления"),
     INVALID_METADATA("Некорректный формат данных обновления"),
     VERSION_NOT_NEWER("У вас установлена последняя версия"),
@@ -133,6 +135,8 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
         val OTA_VERIFY_ERROR get() = VERIFY_ERROR
         val OTA_INSTALL_ERROR get() = INSTALL_ERROR
         val OTA_HTTP_ERROR get() = HTTP_ERROR
+        val OTA_FORBIDDEN get() = FORBIDDEN
+        val OTA_MANIFEST_MISSING get() = MANIFEST_MISSING
         val OTA_DOWNLOAD_INCOMPLETE get() = DOWNLOAD_INCOMPLETE
         val OTA_INVALID_CONTENT get() = INVALID_CONTENT
         val OTA_APK_INVALID get() = APK_INVALID

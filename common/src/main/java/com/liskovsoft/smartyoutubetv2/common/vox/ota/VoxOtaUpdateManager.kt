@@ -89,6 +89,13 @@ class VoxOtaUpdateManager(private val context: Context) {
                     val m = throwable.message?.lowercase() ?: ""
                     when {
                         m.contains("rate limit") || m.contains("429") -> Triple(VoxOtaErrorCode.RATE_LIMIT, VoxOtaStage.HTTP, true)
+                        m.contains("401") || m.contains("403") || m.contains("forbidden") || m.contains("unauthorized") -> {
+                            if (m.contains("rate limit") || m.contains("rate_limit")) {
+                                Triple(VoxOtaErrorCode.RATE_LIMIT, VoxOtaStage.HTTP, true)
+                            } else {
+                                Triple(VoxOtaErrorCode.FORBIDDEN, VoxOtaStage.HTTP, false)
+                            }
+                        }
                         m.contains("404") || m.contains("not found") -> Triple(VoxOtaErrorCode.RELEASE_NOT_FOUND, VoxOtaStage.HTTP, false)
                         m.contains("dns") || m.contains("unknown host") -> Triple(VoxOtaErrorCode.DNS_ERROR, VoxOtaStage.DNS, true)
                         m.contains("timeout") || m.contains("timed out") -> Triple(VoxOtaErrorCode.TIMEOUT, VoxOtaStage.CONNECT, true)
@@ -608,6 +615,15 @@ class VoxOtaUpdateManager(private val context: Context) {
                     val parsed = VoxOtaReleaseParser.parseRelease(content, channel, currentVersion, installedVersionCode)
                     return parsed
                 } catch (e: Exception) {
+                    val is404 = (e as? VoxOtaException)?.httpStatus == 404 || (e as? VoxOtaException)?.code == VoxOtaErrorCode.RELEASE_NOT_FOUND || (e as? VoxOtaException)?.code == VoxOtaErrorCode.MANIFEST_MISSING
+                    if (is404) {
+                        VoxSafeLogger.warn(
+                            VoxLogCategory.OTA,
+                            VoxLogCode.OTA_MANIFEST_MISSING,
+                            "Манифест обновления не найден на сервере (404)",
+                            mapOf("endpoint" to safeUrl, "httpStatus" to "404")
+                        )
+                    }
                     Log.w(TAG, "Failed to fetch/parse manifest from $url: ${e.message}")
                 }
             }
@@ -668,18 +684,19 @@ class VoxOtaUpdateManager(private val context: Context) {
 
             if (code !in 200..299) {
                 val remainingHeader = conn.getHeaderField("X-RateLimit-Remaining")
-                val isRateLimited = code == 429 || (code == 403 && (remainingHeader == "0" || conn.getHeaderField("Retry-After") != null))
+                val retryAfterHeader = conn.getHeaderField("Retry-After")
+                val isRateLimited = code == 429 || (code == 403 && (remainingHeader == "0" || retryAfterHeader != null))
 
                 val errorCode = when {
                     isRateLimited -> VoxOtaErrorCode.RATE_LIMIT
                     code == 404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
                     code in 500..599 -> VoxOtaErrorCode.HTTP_ERROR
-                    code == 403 -> {
+                    code == 401 || code == 403 -> {
                         val errBody = try { conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "" } catch (e: Exception) { "" }
-                        if (errBody.contains("rate limit", ignoreCase = true)) {
+                        if (errBody.contains("rate limit", ignoreCase = true) || errBody.contains("API rate limit exceeded", ignoreCase = true)) {
                             VoxOtaErrorCode.RATE_LIMIT
                         } else {
-                            VoxOtaErrorCode.HTTP_ERROR
+                            VoxOtaErrorCode.FORBIDDEN
                         }
                     }
                     else -> VoxOtaErrorCode.HTTP_ERROR
@@ -726,9 +743,13 @@ class VoxOtaUpdateManager(private val context: Context) {
 
             val code = conn.responseCode
             if (code !in 200..299) {
-                val errorCode = when (code) {
-                    429 -> VoxOtaErrorCode.RATE_LIMIT
-                    404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
+                val remainingHeader = conn.getHeaderField("X-RateLimit-Remaining")
+                val retryAfterHeader = conn.getHeaderField("Retry-After")
+                val isRateLimited = code == 429 || (code == 403 && (remainingHeader == "0" || retryAfterHeader != null))
+                val errorCode = when {
+                    isRateLimited -> VoxOtaErrorCode.RATE_LIMIT
+                    code == 404 -> VoxOtaErrorCode.RELEASE_NOT_FOUND
+                    code == 401 || code == 403 -> VoxOtaErrorCode.FORBIDDEN
                     else -> VoxOtaErrorCode.ASSET_DOWNLOAD_FAILED
                 }
                 throw VoxOtaException(
@@ -848,6 +869,8 @@ class VoxOtaUpdateManager(private val context: Context) {
 
         val eventCode = when (otaError.code) {
             VoxOtaErrorCode.RATE_LIMIT -> VoxLogCode.OTA_RATE_LIMIT
+            VoxOtaErrorCode.FORBIDDEN -> VoxLogCode.OTA_FORBIDDEN
+            VoxOtaErrorCode.MANIFEST_MISSING -> VoxLogCode.OTA_MANIFEST_MISSING
             VoxOtaErrorCode.DNS_ERROR -> VoxLogCode.OTA_DNS_ERROR
             VoxOtaErrorCode.TIMEOUT -> VoxLogCode.OTA_TIMEOUT
             VoxOtaErrorCode.TLS_ERROR -> VoxLogCode.OTA_TLS_ERROR
