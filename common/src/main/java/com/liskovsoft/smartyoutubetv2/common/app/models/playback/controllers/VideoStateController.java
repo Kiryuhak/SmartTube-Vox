@@ -66,11 +66,12 @@ public class VideoStateController extends BasePlayerController {
 
         if (!item.equals(getVideo())) {
             mNewVideoTimeMs = System.currentTimeMillis();
+            getPlayerData().setTempVideoFormat(null);
+            getPlayerData().setTempAudioFormat(null);
+            getPlayerData().setTempSubtitleFormat(null);
         }
 
         setPlayEnabled(true); // video just added
-
-        getPlayerData().setTempVideoFormat(null);
 
         enableIncognitoIfNeeded(item);
 
@@ -470,11 +471,20 @@ public class VideoStateController extends BasePlayerController {
             return;
         }
 
-        getPlayer().setFormat(getPlayerData().getFormat(FormatItem.TYPE_AUDIO));
+        if (getPlayerData().getTempAudioFormat() != null) {
+            getPlayer().setFormat(getPlayerData().getTempAudioFormat());
+        } else {
+            getPlayer().setFormat(getPlayerData().getFormat(FormatItem.TYPE_AUDIO));
+        }
     }
 
     private void restoreSubtitleFormat() {
         if (getPlayer() == null) {
+            return;
+        }
+
+        if (getPlayerData().getTempSubtitleFormat() != null) {
+            getPlayer().setFormat(getPlayerData().getTempSubtitleFormat());
             return;
         }
 

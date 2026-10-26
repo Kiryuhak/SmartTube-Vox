@@ -537,14 +537,37 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             disableSubtitles();
             restartEngine = false;
         } else if (type == PlayerEventListener.ERROR_TYPE_RENDERER && rendererIndex == PlayerEventListener.RENDERER_INDEX_VIDEO) {
-            getPlayerData().setFormat(FormatItem.VIDEO_FHD_AVC_30);
+            FormatItem savedVideoFormat = getPlayerData().getFormat(FormatItem.TYPE_VIDEO);
+            FormatItem fallbackFormat = FormatItem.VIDEO_FHD_AVC_30;
+            getPlayerData().setTempVideoFormat(fallbackFormat);
+            if (getPlayer() != null) {
+                getPlayer().setFormat(fallbackFormat);
+            }
+            Map<String, String> ctx = new HashMap<>();
+            ctx.put("reason", "RENDERER_ERROR_VIDEO_DECODER");
+            ctx.put("rendererIndex", String.valueOf(rendererIndex));
+            ctx.put("originalPreference", savedVideoFormat != null && savedVideoFormat.getTitle() != null ? savedVideoFormat.getTitle().toString() : "default");
+            ctx.put("appliedFallback", fallbackFormat.getTitle() != null ? fallbackFormat.getTitle().toString() : "FHD_AVC_30");
+            ctx.put("scope", "SESSION_ONLY");
+            ctx.put("videoId", getVideo() != null ? getVideo().videoId : "unknown");
+            VoxSafeLogger.warn(
+                    VoxLogCategory.PLAYER,
+                    VoxLogCode.PLAYER_DECODER_FALLBACK,
+                    "Сбой декодера видео: качество временно снижено до 1080p AVC только для текущего видео",
+                    ctx
+            );
+            MessageHelpers.showMessage(getContext(), R.string.vox_decoder_fallback_session_toast);
             if (getPlayerTweaksData().isSWDecoderForced()) {
                 getPlayerTweaksData().setSWDecoderForced(false);
             } else {
                 restartEngine = false;
             }
         } else if (type == PlayerEventListener.ERROR_TYPE_RENDERER && rendererIndex == PlayerEventListener.RENDERER_INDEX_AUDIO) {
-            getPlayerData().setFormat(FormatItem.AUDIO_HQ_MP4A);
+            FormatItem fallbackFormat = FormatItem.AUDIO_HQ_MP4A;
+            getPlayerData().setTempAudioFormat(fallbackFormat);
+            if (getPlayer() != null) {
+                getPlayer().setFormat(fallbackFormat);
+            }
             restartEngine = false;
         } else if (type == PlayerEventListener.ERROR_TYPE_UNEXPECTED) {
             // IllegalStateException: Buffer too small (5242880 < 7208383)
@@ -704,8 +727,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     }
 
     private void disableSubtitles() {
-        getPlayerData().setSubtitlesPerChannelEnabled(false); // Important!
-        getPlayerData().setFormat(FormatItem.SUBTITLE_NONE);
+        getPlayerData().setTempSubtitleFormat(FormatItem.SUBTITLE_NONE);
+        if (getPlayer() != null) {
+            getPlayer().setFormat(FormatItem.SUBTITLE_NONE);
+        }
     }
 
     private boolean isStreamEnded() {

@@ -702,4 +702,42 @@ public class YandexVotPlaybackAdapterTest {
         assertFalse(adapter.getAdaptiveVolumeController().isActive());
         assertFalse(fakeDucking.ducked);
     }
+
+    @Test
+    public void test21_onPlayResyncsWhenDriftExceedsThreshold() {
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/trans.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        assertTrue(adapter.isPlaying());
+
+        // Simulate stall during buffer: main video moves to 5000ms while audio stopped at 3000ms (drift = 2000ms > 250ms)
+        fakeDucking.currentVideoPositionMs = 5000L;
+        fakePlayer.positionMs = 3000L;
+
+        adapter.onPlay();
+        assertEquals(5000L, fakePlayer.positionMs);
+        assertTrue(fakePlayer.isPlaying());
+    }
+
+    @Test
+    public void test22_onPlayPreservesPositionWhenInSync() {
+        YandexVotState readyState = YandexVotState.ready(
+                1L, "v123", "https://youtube.com/watch?v=v123", "t456",
+                "https://vtrans.yandex.net/audio/trans.mp3", false, false
+        );
+        adapter.onStateChanged(readyState);
+        fakePlayer.callback.onPrepared();
+        assertTrue(adapter.isPlaying());
+
+        // Small drift within tolerance (100ms <= 250ms)
+        fakeDucking.currentVideoPositionMs = 5100L;
+        fakePlayer.positionMs = 5000L;
+
+        adapter.onPlay();
+        assertEquals(5000L, fakePlayer.positionMs);
+        assertTrue(fakePlayer.isPlaying());
+    }
 }

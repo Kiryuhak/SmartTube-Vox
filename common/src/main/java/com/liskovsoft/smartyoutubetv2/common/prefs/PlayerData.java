@@ -51,7 +51,9 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     private FormatItem mVideoFormat;
     private FormatItem mTempVideoFormat;
     private FormatItem mAudioFormat;
+    private FormatItem mTempAudioFormat;
     private FormatItem mSubtitleFormat;
+    private FormatItem mTempSubtitleFormat;
     private int mVideoBufferType;
     private final List<SubtitleStyle> mSubtitleStyles = new ArrayList<>();
     private final Map<String, FormatItem> mDefaultVideoFormats = new HashMap<>();
@@ -423,6 +425,22 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
 
     public FormatItem getTempVideoFormat() {
         return mTempVideoFormat;
+    }
+
+    public void setTempAudioFormat(FormatItem format) {
+        mTempAudioFormat = format;
+    }
+
+    public FormatItem getTempAudioFormat() {
+        return mTempAudioFormat;
+    }
+
+    public void setTempSubtitleFormat(FormatItem format) {
+        mTempSubtitleFormat = format;
+    }
+
+    public FormatItem getTempSubtitleFormat() {
+        return mTempSubtitleFormat;
     }
 
     public FormatItem getLastSubtitleFormat() {

@@ -494,6 +494,14 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         synchronized (lock) {
             isMainBuffering = false;
             if (activePlayer != null && isPlaying) {
+                long mainPos = duckingBridge.getCurrentVideoPositionMs();
+                long transPos = activePlayer.getPositionMs();
+                if (Math.abs(mainPos - transPos) > 250) {
+                    long clampedPos = syncPolicy.clampPosition(mainPos, duckingBridge.getVideoDurationMs());
+                    activePlayer.seekTo(clampedPos);
+                    lastSyncSeekTimestamp = System.currentTimeMillis();
+                    YandexVotLog.i(TAG, "generation=" + currentGeneration + " onPlay resync target_ms=" + clampedPos + " (delta=" + (mainPos - transPos) + ")");
+                }
                 activePlayer.resume();
                 duckOriginalAudioLocked();
                 YandexVotLog.i(TAG, "generation=" + currentGeneration + " resume");

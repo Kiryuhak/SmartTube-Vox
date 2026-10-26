@@ -660,6 +660,19 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onNewVideo(Video item) {
+        String newVideoId = item != null ? item.videoId : null;
+        boolean isSameVideo = newVideoId != null && newVideoId.equals(mCurrentVideoId);
+        if (isSameVideo) {
+            Log.d(TAG, "VOT: same video reloaded (%s), preserving translation state", newVideoId);
+            mIsMainPlayerBuffering = false;
+            if (mYandexPlaybackAdapter != null) {
+                mYandexPlaybackAdapter.onPause();
+            } else if (mTranslationPlayer != null) {
+                mTranslationPlayer.pause();
+            }
+            return;
+        }
+
         Log.d(TAG, "VOT reset reason: new video (%s)", item != null ? item.videoId : "null");
         mIsMainPlayerBuffering = false;
         mOverlayProgress.reset();
@@ -879,20 +892,13 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @Override
     public void onEngineReleased() {
-        Log.d(TAG, "VOT reset reason: engine released");
-        mTranslationSessionId++;
+        Log.d(TAG, "VOT engine released: holding audio session during engine restart");
         Utils.removeCallbacks(mSyncRunnable);
-        resetTrackSwitch();
-        mSavedAudioFormat = null;
-        if (mProgressOverlay != null) {
-            mProgressOverlay.destroy();
-            mProgressOverlay = null;
-        }
         if (mYandexPlaybackAdapter != null) {
-            mYandexPlaybackAdapter.release();
-            mYandexPlaybackAdapter = null;
+            mYandexPlaybackAdapter.onPause();
+        } else if (mTranslationPlayer != null) {
+            mTranslationPlayer.pause();
         }
-        disarm();
     }
 
     @Override

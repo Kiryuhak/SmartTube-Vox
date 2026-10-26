@@ -824,6 +824,7 @@
     <string name="vox_player_recovery_exhausted_message">Не удалось восстановить видео. Проверьте соединение или попробуйте другое качество.</string>
     <string name="vox_player_dns_error_message">Не удалось подключиться к серверу видео. Проверьте подключение и настройки DNS.</string>
     <string name="vox_player_recovery_back">Назад</string>
+    <string name="vox_decoder_fallback_session_toast">Сбой декодера: качество снижено только для этого видео</string>
     <string name="vox_fixing_connection">Восстанавливаем соединение…</string>
     <string name="vox_fixing_dns">Восстанавливаем соединение…</string>
     <string name="vox_fixing_playback">Восстанавливаем воспроизведение…</string>

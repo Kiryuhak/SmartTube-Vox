@@ -792,6 +792,7 @@
     <string name="vox_player_recovery_exhausted_message">Could not restore video. Check connection or try another quality.</string>
     <string name="vox_player_dns_error_message">Could not connect to video server. Check connection and DNS settings.</string>
     <string name="vox_player_recovery_back">Back</string>
+    <string name="vox_decoder_fallback_session_toast">Decoder failure: quality lowered for this video only</string>
     <string name="vox_fixing_connection">Restoring connection…</string>
     <string name="vox_fixing_dns">Restoring connection…</string>
     <string name="vox_fixing_playback">Restoring playback…</string>
