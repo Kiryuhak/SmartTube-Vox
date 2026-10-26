@@ -138,7 +138,20 @@ public class VoxAdaptiveVolumeController {
     }
 
     public synchronized void setMode(AutoVolumeMode mode) {
+        AutoVolumeMode oldMode = mMode;
         mMode = mode != null ? mode : AutoVolumeMode.ADAPTIVE;
+        if (mMode == AutoVolumeMode.OFF && oldMode != AutoVolumeMode.OFF && mIsActive) {
+            float baselineVol = mDuckingState.getBaseline();
+            final float restoreVolume = (baselineVol <= 0.001f && mInitialVolumeOnStart > 0.001f)
+                    ? mInitialVolumeOnStart
+                    : baselineVol;
+            mVolumeLinkCoordinator.withProgrammaticGuard(() -> {
+                mBridge.setOriginalVideoVolume(restoreVolume);
+                return null;
+            });
+            mDuckingState = mPolicy.initState(restoreVolume);
+            mLastReportedState = VoxSmartDuckingPolicy.DuckingState.IDLE;
+        }
     }
 
     public synchronized AutoVolumeMode getMode() {

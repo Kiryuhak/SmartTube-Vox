@@ -190,6 +190,21 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
         return adaptiveVolumeController;
     }
 
+    public void syncMixLevels() {
+        synchronized (lock) {
+            boolean enabled = duckingBridge.isAutoVolumeEnabled() && duckingBridge.isSmartDuckingEnabled();
+            VoxAdaptiveVolumeController.AutoVolumeMode mode = enabled
+                    ? VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE
+                    : VoxAdaptiveVolumeController.AutoVolumeMode.OFF;
+            adaptiveVolumeController.setMode(mode);
+            adaptiveVolumeController.setFixedTarget(duckingBridge.getOriginalVolumeMultiplier());
+            adaptiveVolumeController.setSyncVolumeEnabled(duckingBridge.isSyncVolumeEnabled());
+            if (!enabled && isDucked) {
+                restoreOriginalAudioLocked();
+            }
+        }
+    }
+
     public static AudioPlayerFactory createDefaultPlayerFactory(@NonNull final Context context) {
         final Context appContext = context.getApplicationContext();
         return new AudioPlayerFactory() {
@@ -693,6 +708,9 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
     }
 
     private void duckOriginalAudioLocked() {
+        if (!duckingBridge.isAutoVolumeEnabled() || !duckingBridge.isSmartDuckingEnabled()) {
+            return;
+        }
         if (!isDucked) {
             adaptiveVolumeController.start(duckingBridge.getOriginalVideoVolume(), duckingBridge.isOriginalVideoMuted());
             duckingBridge.duckOriginalAudio();

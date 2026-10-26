@@ -318,4 +318,65 @@ class VoxAdaptiveVolumeIntegrationTest {
         assertFalse(controller.isActive)
         assertEquals(0.85f, bridge.videoVolume, 0.001f)
     }
+
+    @Test
+    fun testScenarioO_runtimeToggleFromAdaptiveToOff_immediatelyRestoresBaselineVolume() {
+        controller.start(0.85f, false)
+        levelProcessor.currentRms = 0.05f
+        // Duck down to target (0.15f)
+        for (i in 1..25) {
+            controller.performTick()
+        }
+        assertEquals(0.15f, bridge.videoVolume, 0.02f)
+
+        // User switches Adaptive Audio to OFF during active playback
+        controller.setMode(VoxAdaptiveVolumeController.AutoVolumeMode.OFF)
+
+        // Baseline volume must be immediately restored without requiring video reload
+        assertEquals(0.85f, bridge.videoVolume, 0.001f)
+        assertEquals(VoxSmartDuckingPolicy.DuckingState.IDLE, controller.duckingState.duckingState)
+
+        // Subsequent ticks in OFF mode must NOT change the volume
+        for (i in 1..10) {
+            controller.performTick()
+        }
+        assertEquals(0.85f, bridge.videoVolume, 0.001f)
+    }
+
+    @Test
+    fun testScenarioP_runtimeToggleFromOffToAdaptive_resumesSpeechDucking() {
+        controller.start(0.85f, false)
+        controller.setMode(VoxAdaptiveVolumeController.AutoVolumeMode.OFF)
+        levelProcessor.currentRms = 0.05f
+
+        // When OFF, ticks do not duck
+        for (i in 1..10) {
+            controller.performTick()
+        }
+        assertEquals(0.85f, bridge.videoVolume, 0.001f)
+
+        // Switch back to ADAPTIVE
+        controller.setMode(VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE)
+
+        // Now speech causes ducking to target
+        for (i in 1..25) {
+            controller.performTick()
+        }
+        assertEquals(0.15f, bridge.videoVolume, 0.02f)
+    }
+
+    @Test
+    fun testScenarioQ_stopOnError_preservesAndRestoresBaseline() {
+        controller.start(0.85f, false)
+        levelProcessor.currentRms = 0.05f
+        for (i in 1..25) {
+            controller.performTick()
+        }
+        assertEquals(0.15f, bridge.videoVolume, 0.02f)
+
+        // Error stops controller
+        controller.stop()
+        assertFalse(controller.isActive)
+        assertEquals(0.85f, bridge.videoVolume, 0.001f)
+    }
 }

@@ -2985,18 +2985,10 @@ public class VoiceTranslateController extends BasePlayerController {
         if (mYandexPlaybackAdapter != null) {
             mYandexPlaybackAdapter.setVolume(votData().getTranslationVolumeMultiplier());
             mYandexPlaybackAdapter.configureBooster(votData().isAudioBoosterEnabled(), votData().getAudioBoosterPercent());
-            VoxAdaptiveVolumeController controller = mYandexPlaybackAdapter.getAdaptiveVolumeController();
-            boolean autoVolEnabled = votData().isAutoVolumeEnabled();
-            boolean smartDucking = votData().isSmartDuckingEnabled();
-            VoxAdaptiveVolumeController.AutoVolumeMode mode;
-            if (!autoVolEnabled || !smartDucking) {
-                mode = VoxAdaptiveVolumeController.AutoVolumeMode.OFF;
-            } else {
-                mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
-            }
-            controller.setMode(mode);
-            controller.setFixedTarget(votData().getOriginalVolumeMultiplier());
-            controller.setSyncVolumeEnabled(votData().isSyncVolumeEnabled());
+            mYandexPlaybackAdapter.syncMixLevels();
+        }
+        if (!votData().isSmartDuckingEnabled() || !votData().isAutoVolumeEnabled()) {
+            restoreMainVolume();
         }
     }
 
