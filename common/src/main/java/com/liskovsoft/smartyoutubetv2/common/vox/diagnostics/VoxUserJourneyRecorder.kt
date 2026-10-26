@@ -487,6 +487,41 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         }
     }
 
+    private fun getExternalMirrorFile(filename: String): File? {
+        return try {
+            val dir = appContext.getExternalFilesDir(null) ?: return null
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            File(dir, filename)
+        } catch (ignored: Throwable) {
+            null
+        }
+    }
+
+    private fun writeSafely(targetFile: File, bytes: ByteArray) {
+        val parent = targetFile.parentFile ?: return
+        if (!parent.exists()) {
+            parent.mkdirs()
+        }
+        val tmpFile = File(parent, "${targetFile.name}.tmp")
+        try {
+            FileOutputStream(tmpFile).use { fos ->
+                fos.write(bytes)
+                fos.flush()
+                try {
+                    fos.fd.sync()
+                } catch (ignored: Throwable) {}
+            }
+            if (!tmpFile.renameTo(targetFile)) {
+                FileOutputStream(targetFile).use { it.write(bytes) }
+                tmpFile.delete()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed safe write to ${targetFile.name}", e)
+        }
+    }
+
     fun clearEvents() {
         synchronized(lock) {
             memoryEvents.clear()
@@ -497,6 +532,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
                     if (journeyFile.exists()) {
                         journeyFile.delete()
                     }
+                    getExternalMirrorFile(JOURNEY_FILE_NAME)?.delete()
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to delete journey file", e)
                 }
@@ -514,6 +550,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
                 if (journeyFile.exists()) {
                     journeyFile.delete()
                 }
+                getExternalMirrorFile(JOURNEY_FILE_NAME)?.delete()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to delete journey file on purgeAll", e)
             }
@@ -521,6 +558,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
                 if (crashSnapshotFile.exists()) {
                     crashSnapshotFile.delete()
                 }
+                getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.delete()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to delete crash snapshot on purgeAll", e)
             }
@@ -544,7 +582,10 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             pinnedBookmarks.forEach { pinnedArray.put(it.toJson()) }
             root.put("pinnedBookmarks", pinnedArray)
 
-            return root.toString(2)
+            val result = root.toString(2)
+            val bytes = result.toByteArray(StandardCharsets.UTF_8)
+            getExternalMirrorFile("vox_user_journey_export.json")?.let { writeSafely(it, bytes) }
+            return result
         }
     }
 
@@ -582,18 +623,8 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             snapshot.put("recentJourneyTimeline", recentEventsArray)
 
             val bytes = snapshot.toString(2).toByteArray(StandardCharsets.UTF_8)
-            val tmpFile = File(appContext.filesDir, "$CRASH_SNAPSHOT_FILE_NAME.tmp")
-            FileOutputStream(tmpFile).use { fos ->
-                fos.write(bytes)
-                fos.flush()
-                try {
-                    fos.fd.sync()
-                } catch (ignored: Exception) {}
-            }
-            if (!tmpFile.renameTo(crashSnapshotFile)) {
-                FileOutputStream(crashSnapshotFile).use { it.write(bytes) }
-                tmpFile.delete()
-            }
+            writeSafely(crashSnapshotFile, bytes)
+            getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.let { writeSafely(it, bytes) }
             Log.i(TAG, "Saved crash snapshot with ${recentEventsArray.length()} journey events")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save crash snapshot", e)
@@ -615,6 +646,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             if (crashSnapshotFile.exists()) {
                 crashSnapshotFile.delete()
             }
+            getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.delete()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete crash snapshot", e)
         }
@@ -647,19 +679,9 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         }
 
         try {
-            val tmpFile = File(appContext.filesDir, "$JOURNEY_FILE_NAME.tmp")
             val bytes = jsonString.toByteArray(StandardCharsets.UTF_8)
-            FileOutputStream(tmpFile).use { fos ->
-                fos.write(bytes)
-                fos.flush()
-                try {
-                    fos.fd.sync()
-                } catch (ignored: Exception) {}
-            }
-            if (!tmpFile.renameTo(journeyFile)) {
-                FileOutputStream(journeyFile).use { it.write(bytes) }
-                tmpFile.delete()
-            }
+            writeSafely(journeyFile, bytes)
+            getExternalMirrorFile(JOURNEY_FILE_NAME)?.let { writeSafely(it, bytes) }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save user journey to disk", e)
         }
