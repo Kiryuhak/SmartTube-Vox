@@ -95,7 +95,7 @@ class VoxPendingSeekCoordinator {
             if (prev.state == VoxSeekState.PENDING || prev.state == VoxSeekState.BUFFERING || prev.state == VoxSeekState.RECOVERING) {
                 prev.state = VoxSeekState.CANCELLED
                 prev.outcome = VoxSeekOutcome.USER_CANCELLED
-                logDiagnostic("LIVE_DVR_SEEK_CANCELLED", prev, "Отменено новым запросом перемотки")
+                logDiagnostic(VoxLogCode.DVR_SEEK_REPLACED, prev, "Отменено новым запросом перемотки (last-intent-wins)")
             }
         }
 
@@ -143,7 +143,7 @@ class VoxPendingSeekCoordinator {
 
         activeSeek = seek
 
-        val logCode = if (isClamped) VoxLogCode.LIVE_DVR_SEEK_CLAMP else "LIVE_DVR_SEEK_REQUESTED"
+        val logCode = if (isClamped) VoxLogCode.DVR_SEEK_CLAMPED else VoxLogCode.DVR_SEEK_REQUEST
         logDiagnostic(logCode, seek, if (isClamped) "Смещение скорректировано под границы окна эфира" else "Запрос перемотки принят")
 
         return seek
@@ -185,7 +185,7 @@ class VoxPendingSeekCoordinator {
                 VoxSeekOutcome.SUCCESS_CLAMPED
             }
             val durationMs = System.currentTimeMillis() - current.requestedAtMs
-            logDiagnostic("LIVE_DVR_SEEK_SETTLED", current, "Перемотка успешно зафиксирована (${durationMs}мс)")
+            logDiagnostic(VoxLogCode.DVR_SEEK_SETTLED, current, "Перемотка успешно зафиксирована (${durationMs}мс)")
             return true
         }
 
@@ -236,7 +236,7 @@ class VoxPendingSeekCoordinator {
         } else {
             current.state = VoxSeekState.FAILED
             current.outcome = VoxSeekOutcome.FAILED_RECOVERABLE
-            logDiagnostic(VoxLogCode.LIVE_BEHIND_WINDOW_RECOVERED, current, "Окно эфира не позволяет восстановить DVR; возврат к прямому эфиру")
+            logDiagnostic(VoxLogCode.DVR_SEEK_UNAVAILABLE, current, "Окно эфира не позволяет восстановить DVR; возврат к прямому эфиру")
         }
 
         return target
@@ -293,6 +293,15 @@ class VoxPendingSeekCoordinator {
     @Synchronized
     fun reset() {
         activeSeek = null
+    }
+
+    fun logSeekUnavailable(videoId: String?, targetMs: Long, reason: String) {
+        val ctx = mapOf(
+            "video_id" to (videoId ?: "NONE"),
+            "target_ms" to targetMs.toString(),
+            "reason" to reason
+        )
+        VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.DVR_SEEK_UNAVAILABLE, "Перемотка DVR недоступна: $reason", ctx)
     }
 
     private fun logDiagnostic(logCode: String, seek: VoxPendingSeek, message: String) {

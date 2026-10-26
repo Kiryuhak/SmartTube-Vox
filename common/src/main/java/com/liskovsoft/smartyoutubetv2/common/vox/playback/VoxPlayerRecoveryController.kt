@@ -153,11 +153,26 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     }
 
     @Synchronized
+    fun onSeekRequested(targetPositionMs: Long) {
+        lastObservedPositionMs = targetPositionMs
+        lastObservedRenderedPositionMs = targetPositionMs
+        lastObservedProgressTimestampMs = currentTimeMs()
+        handler.removeCallbacksAndMessages(null)
+        if (currentState == VoxPlayerRecoveryState.BUFFERING) {
+            currentState = VoxPlayerRecoveryState.IDLE
+        }
+    }
+
+    @Synchronized
     fun onSeekProcessed(positionMs: Long, bufferedPositionMs: Long) {
         lastObservedPositionMs = positionMs
         lastObservedRenderedPositionMs = positionMs
         lastObservedBufferedMs = bufferedPositionMs
         lastObservedProgressTimestampMs = currentTimeMs()
+        handler.removeCallbacksAndMessages(null)
+        if (currentState == VoxPlayerRecoveryState.BUFFERING) {
+            currentState = VoxPlayerRecoveryState.IDLE
+        }
     }
 
     @Synchronized
@@ -421,6 +436,16 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
             currentState != VoxPlayerRecoveryState.SOURCE_REFRESHED) return
 
         if (VoxPlayerRecoveryTestHooks.slowNetworkWithProgress) {
+            scheduleStallWatchdog(gen, currentSessionId, playWhenReady)
+            return
+        }
+
+        if (VoxPendingSeekCoordinator.instance().hasActivePendingSeek()) {
+            VoxSafeLogger.i(
+                VoxLogCategory.PLAYER,
+                "BUFFER_STALL_SEEK_WAIT",
+                "Stall watchdog deferred: active seek in progress"
+            )
             scheduleStallWatchdog(gen, currentSessionId, playWhenReady)
             return
         }

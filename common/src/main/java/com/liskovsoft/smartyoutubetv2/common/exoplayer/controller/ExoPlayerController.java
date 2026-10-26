@@ -344,6 +344,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         Video video = getVideo();
         String videoId = video != null ? video.videoId : null;
         VoxPendingSeekCoordinator.instance().startSeek(positionMs, fromPos, mediaKind, windowStartMs, duration, videoId);
+        mEventListener.onSeekPositionChanged(positionMs);
 
         if (video != null) {
             video.pendingPosMs = positionMs;

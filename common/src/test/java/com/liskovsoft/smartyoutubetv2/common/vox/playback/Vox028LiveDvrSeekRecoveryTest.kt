@@ -230,4 +230,43 @@ class Vox028LiveDvrSeekRecoveryTest {
         assertEquals(VoxSeekOutcome.USER_CANCELLED, seek.outcome)
         assertFalse(coordinator.hasActivePendingSeek())
     }
+
+    @Test
+    fun testRapidBurstOfSeeksLastIntentWins() {
+        val seeks = mutableListOf<VoxPendingSeek>()
+        val targets = listOf(1_000_000L, 2_000_000L, 3_000_000L, 4_000_000L, 5_000_000L)
+        for (i in targets.indices) {
+            val s = coordinator.startSeek(
+                requestedTargetMs = targets[i],
+                fromPositionMs = 500_000L,
+                mediaKind = VoxMediaKind.LIVE_DVR,
+                windowStartMs = 0L,
+                windowDurationMs = 10_000_000L
+            )
+            seeks.add(s)
+        }
+
+        for (i in 0..3) {
+            assertEquals("Seek $i must be cancelled", VoxSeekState.CANCELLED, seeks[i].state)
+            assertEquals("Seek $i outcome", VoxSeekOutcome.USER_CANCELLED, seeks[i].outcome)
+        }
+
+        val finalSeek = seeks[4]
+        assertEquals(VoxSeekState.PENDING, finalSeek.state)
+        assertEquals(finalSeek.generation, coordinator.getActiveSeek()?.generation)
+        assertTrue(coordinator.hasActivePendingSeek())
+
+        for (i in 0..3) {
+            assertFalse(coordinator.onPlaybackProgress(targets[i], seeks[i].generation))
+            assertEquals(VoxSeekState.PENDING, finalSeek.state)
+        }
+
+        coordinator.onBuffering(finalSeek.generation)
+        val settled = coordinator.onPlaybackProgress(targets[4], finalSeek.generation)
+        assertTrue(settled)
+        assertEquals(VoxSeekState.SETTLED, finalSeek.state)
+        assertEquals(VoxSeekOutcome.SUCCESS_EXACT, finalSeek.outcome)
+        assertEquals(targets[4], finalSeek.settledPositionMs)
+        assertFalse(coordinator.hasActivePendingSeek())
+    }
 }

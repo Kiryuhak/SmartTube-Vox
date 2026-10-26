@@ -67,8 +67,8 @@ class VoxDownloadBadgeStateMachine {
             VoxBadgeStage.SELECTING -> currentStage == VoxBadgeStage.HIDDEN || currentStage == VoxBadgeStage.COMPLETED || currentStage == VoxBadgeStage.ERROR || currentStage == VoxBadgeStage.CANCELLED
             VoxBadgeStage.DOWNLOADING_EXPANDED -> currentStage == VoxBadgeStage.SELECTING || currentStage == VoxBadgeStage.HIDDEN || currentStage == VoxBadgeStage.DOWNLOADING_COMPACT || currentStage == VoxBadgeStage.REOPENED || currentStage == VoxBadgeStage.PAUSED
             VoxBadgeStage.DOWNLOADING_COMPACT -> currentStage == VoxBadgeStage.DOWNLOADING_EXPANDED || currentStage == VoxBadgeStage.REOPENED || currentStage == VoxBadgeStage.LONG_PRESS_MENU || currentStage == VoxBadgeStage.PAUSED
-            VoxBadgeStage.REOPENED -> currentStage == VoxBadgeStage.DOWNLOADING_COMPACT || currentStage == VoxBadgeStage.LONG_PRESS_MENU
-            VoxBadgeStage.LONG_PRESS_MENU -> currentStage == VoxBadgeStage.DOWNLOADING_COMPACT || currentStage == VoxBadgeStage.DOWNLOADING_EXPANDED
+            VoxBadgeStage.REOPENED -> currentStage == VoxBadgeStage.DOWNLOADING_COMPACT || currentStage == VoxBadgeStage.LONG_PRESS_MENU || currentStage == VoxBadgeStage.PAUSED
+            VoxBadgeStage.LONG_PRESS_MENU -> currentStage == VoxBadgeStage.DOWNLOADING_COMPACT || currentStage == VoxBadgeStage.DOWNLOADING_EXPANDED || currentStage == VoxBadgeStage.PAUSED
             VoxBadgeStage.PAUSED -> currentStage == VoxBadgeStage.DOWNLOADING_EXPANDED || currentStage == VoxBadgeStage.DOWNLOADING_COMPACT || currentStage == VoxBadgeStage.REOPENED || currentStage == VoxBadgeStage.LONG_PRESS_MENU
             VoxBadgeStage.COMPLETED -> currentStage != VoxBadgeStage.HIDDEN
             VoxBadgeStage.CANCELLED -> true
@@ -89,7 +89,7 @@ class VoxDownloadBadgeStateMachine {
 
         VoxSafeLogger.d(
             VoxLogCategory.UI,
-            "DOWNLOAD_BADGE_STAGE_CHANGED",
+            VoxLogCode.DOWNLOAD_BADGE_STATE,
             "Badge transition: $oldStage -> $newStage (downloadId=$activeDownloadId)"
         )
 

@@ -408,6 +408,16 @@ object VoxLogCode {
     const val LIVE_BEHIND_WINDOW_RECOVERED = "LIVE_BEHIND_WINDOW_RECOVERED"
     const val LIVE_NETWORK_ENGINE_SWITCH = "LIVE_NETWORK_ENGINE_SWITCH"
 
+    // DVR Seek Orchestration (Prompt #031 Last-Intent-Wins)
+    const val DVR_SEEK_REQUEST = "DVR_SEEK_REQUEST"
+    const val DVR_SEEK_REPLACED = "DVR_SEEK_REPLACED"
+    const val DVR_SEEK_SETTLED = "DVR_SEEK_SETTLED"
+    const val DVR_SEEK_CLAMPED = "DVR_SEEK_CLAMPED"
+    const val DVR_SEEK_UNAVAILABLE = "DVR_SEEK_UNAVAILABLE"
+
+    // Download Badge Lifecycle (Prompt #031)
+    const val DOWNLOAD_BADGE_STATE = "DOWNLOAD_BADGE_STATE"
+
     // Shorts Navigation & Auto-Next
     const val SHORTS_TRANSITION_START = "SHORTS_TRANSITION_START"
     const val SHORTS_END = "SHORTS_END"

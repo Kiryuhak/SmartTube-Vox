@@ -769,4 +769,36 @@ class VoxPlayerRecoveryControllerTest {
         assertEquals(1, controller.getSourceRecoveryCount())
         assertEquals(1, mockActionHandler.sourceRefreshCount)
     }
+
+    // 32. Rapid user seeks reset stall watchdog and prevent false recovery triggers
+    @Test
+    fun test32_RapidSeeksPreventFalseStallWatchdogRecovery() {
+        controller.onPlaybackStart(sessionId = 500L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "rapid_seek_test")
+        controller.onBufferingStarted(positionMs = 10_000L, bufferedPositionMs = 11_000L, playWhenReady = true)
+        assertEquals(VoxPlayerRecoveryState.BUFFERING, controller.getState())
+
+        // 2 seconds into buffering, user seeks to 20_000L
+        shadowOf(Looper.getMainLooper()).idleFor(2_000L, TimeUnit.MILLISECONDS)
+        controller.onSeekRequested(20_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        // ExoPlayer reports buffering on new position
+        controller.onBufferingStarted(positionMs = 20_000L, bufferedPositionMs = 20_500L, playWhenReady = true)
+        assertEquals(VoxPlayerRecoveryState.BUFFERING, controller.getState())
+
+        // Another rapid seek after 2.5 seconds
+        shadowOf(Looper.getMainLooper()).idleFor(2_500L, TimeUnit.MILLISECONDS)
+        controller.onSeekRequested(30_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        // Buffer starts on 30_000L and progresses
+        controller.onBufferingStarted(positionMs = 30_000L, bufferedPositionMs = 30_200L, playWhenReady = true)
+        shadowOf(Looper.getMainLooper()).idleFor(1_000L, TimeUnit.MILLISECONDS)
+        controller.onPlaybackProgress(30_100L, 35_000L)
+
+        // Zero false recoveries triggered!
+        assertEquals(0, controller.getSourceRecoveryCount())
+        assertEquals(0, mockActionHandler.sourceRefreshCount)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+    }
 }

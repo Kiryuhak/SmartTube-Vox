@@ -258,6 +258,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     }
 
     @Override
+    public void onSeekPositionChanged(long positionMs) {
+        if (mRecoveryController != null) {
+            mRecoveryController.onSeekRequested(positionMs);
+        }
+    }
+
+    @Override
     public void onSeekEnd() {
         mBufferingDetector.reset();
         if (mRecoveryController != null && getPlayer() != null) {
