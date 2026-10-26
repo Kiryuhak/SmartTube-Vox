@@ -333,4 +333,95 @@ class VoxUserJourneyRecorderTest {
         recorder.recordKeyAction("DPAD_UP", "ignored")
         assertEquals(0, recorder.getEventCount())
     }
+
+    @Test
+    fun testScenario14DpadRepeatAggregation() {
+        recorder.setMode(VoxUserJourneyMode.STANDARD)
+
+        // Rapidly press DPAD_DOWN 3 times
+        recorder.recordKeyAction("KEYCODE_DPAD_DOWN", "nav_down")
+        recorder.recordKeyAction("KEYCODE_DPAD_DOWN", "nav_down")
+        recorder.recordKeyAction("KEYCODE_DPAD_DOWN", "nav_down")
+
+        // Should aggregate into a single event with repeatCount = 3
+        assertEquals(1, recorder.getEventCount())
+        val ev = recorder.getEvents()[0]
+        assertEquals("nav_down", ev.cause)
+        val details = ev.details
+        assertNotNull(details)
+        assertEquals(3, details!!["repeatCount"])
+
+        // Press a different key: DPAD_CENTER
+        recorder.recordKeyAction("KEYCODE_DPAD_CENTER", "select")
+        assertEquals(2, recorder.getEventCount())
+        val ev2 = recorder.getEvents()[1]
+        assertEquals("select", ev2.cause)
+        assertEquals(1, ev2.details!!["repeatCount"])
+    }
+
+    @Test
+    fun testScenario15ExternalStorageIsolationAndExplicitExport() {
+        recorder.setMode(VoxUserJourneyMode.STANDARD)
+        recorder.recordPlayback("PLAYBACK_START", "Title", "vid1", 0L)
+
+        val extDir = context.getExternalFilesDir(null)
+        val bgJourneyFile = File(extDir, "vox_user_journey.json")
+        // Background writes must NOT leak to external storage
+        assertFalse("Continuous recording must not write to external storage", bgJourneyFile.exists())
+
+        // Explicit export must write export file to external storage
+        val exportedJson = recorder.exportTimelineJson()
+        val exportFile = File(extDir, "vox_user_journey_export.json")
+        assertTrue("Explicit export must create external export file", exportFile.exists())
+
+        val root = JSONObject(exportedJson)
+        assertTrue(root.has("incidentSummary"))
+        val summary = root.getJSONObject("incidentSummary")
+        assertNotNull(summary)
+        assertEquals("32.56-vox.9.2-rc.7", summary.getString("appVersion"))
+        assertEquals("HEALTHY", summary.getString("finalStatus"))
+    }
+
+    @Test
+    fun testScenario16PurgeDeletesBothInternalAndExternalFiles() {
+        recorder.setMode(VoxUserJourneyMode.STANDARD)
+        recorder.recordPlayback("PLAYBACK_START", "Title", "vid1", 0L)
+        recorder.exportTimelineJson()
+
+        val extDir = context.getExternalFilesDir(null)
+        val exportFile = File(extDir, "vox_user_journey_export.json")
+        assertTrue(exportFile.exists())
+
+        recorder.purgeAll()
+
+        assertFalse("PurgeAll must delete external export files", exportFile.exists())
+        assertEquals(0, recorder.getEventCount())
+    }
+
+    @Test
+    fun testScenario17BackwardsClockJumpRevertsDetailedToStandard() {
+        val now = System.currentTimeMillis()
+        val prefs = context.getSharedPreferences("vox_user_journey_prefs", Context.MODE_PRIVATE)
+
+        recorder.setMode(VoxUserJourneyMode.DETAILED)
+        // Simulate backwards clock jump (startedAt in future by 10 hours)
+        val futureTime = now + (10 * 3600 * 1000L)
+        prefs.edit().putLong("user_journey_detailed_started_at", futureTime).commit()
+
+        val mode = recorder.getMode()
+        assertEquals(VoxUserJourneyMode.STANDARD, mode)
+    }
+
+    @Test
+    fun testScenario18StaleOrDeadUrlClassification() {
+        val err403 = com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException(403, null, null, null)
+        val err404 = com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException(404, null, null, null)
+        val err410 = com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException(410, null, null, null)
+        val err500 = com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException(500, null, null, null)
+
+        assertTrue(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isStaleOrDeadUrl(err403))
+        assertTrue(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isStaleOrDeadUrl(err404))
+        assertTrue(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isStaleOrDeadUrl(err410))
+        assertFalse(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryPolicy.isStaleOrDeadUrl(err500))
+    }
 }

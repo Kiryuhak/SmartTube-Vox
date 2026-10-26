@@ -163,13 +163,15 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         val startedAt = prefs.getLong(KEY_DETAILED_STARTED_AT, 0L)
         val now = System.currentTimeMillis()
         if (modeStr == VoxUserJourneyMode.DETAILED.name) {
-            if (startedAt > 0L && (now - startedAt) > DEFAULT_TTL_MS) {
-                Log.w(TAG, "Detailed mode TTL expired (24h). Automatically reverting to STANDARD mode.")
+            // Guard against 24h expiration OR backwards system clock jump (e.g. TV boot without NTP)
+            if (startedAt > 0L && ((now - startedAt) > DEFAULT_TTL_MS || now < startedAt)) {
+                Log.w(TAG, "Detailed mode TTL expired or clock anomaly detected. Automatically reverting to STANDARD mode.")
                 prefs.edit()
                     .putString(KEY_MODE, VoxUserJourneyMode.STANDARD.name)
                     .remove(KEY_DETAILED_STARTED_AT)
                     .putBoolean(KEY_INCLUDE_CONTENT, false)
                     .commit()
+                deleteExternalExportFiles()
                 return true
             }
         }
@@ -252,32 +254,69 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         if (mode == VoxUserJourneyMode.OFF) return
 
         val nowElapsed = SystemClock.elapsedRealtime()
-        // Rate limit DPAD repeats within 100ms
-        if (key == lastRecordedKey && (nowElapsed - lastKeyTimestamp) < 100) {
-            return
+
+        synchronized(lock) {
+            val lastEvent = memoryEvents.lastOrNull()
+            if (lastEvent != null &&
+                lastEvent.category == "USER_INPUT" &&
+                lastEvent.event == "KEY_ACTION" &&
+                lastEvent.cause == (cause ?: key) &&
+                lastRecordedKey == key &&
+                (nowElapsed - lastKeyTimestamp) < 500L
+            ) {
+                val prevCount = (lastEvent.details?.get("repeatCount") as? Number)?.toInt() ?: 1
+                val firstAt = (lastEvent.details?.get("firstAtElapsedMs") as? Number)?.toLong() ?: lastEvent.elapsedMs
+                val newCount = prevCount + 1
+
+                val updatedDetails = mutableMapOf<String, Any>()
+                if (lastEvent.details != null) {
+                    updatedDetails.putAll(lastEvent.details)
+                }
+                updatedDetails["repeatCount"] = newCount
+                updatedDetails["firstAtElapsedMs"] = firstAt
+                updatedDetails["lastAtElapsedMs"] = nowElapsed
+
+                val updatedEvent = lastEvent.copy(
+                    durationMs = nowElapsed - firstAt,
+                    details = updatedDetails
+                )
+                memoryEvents[memoryEvents.size - 1] = updatedEvent
+                lastKeyTimestamp = nowElapsed
+                scheduleSaveToDiskLocked()
+                return
+            }
+
+            lastRecordedKey = key
+            lastKeyTimestamp = nowElapsed
+
+            val detailsMap = mutableMapOf<String, Any>(
+                "repeatCount" to 1,
+                "firstAtElapsedMs" to nowElapsed,
+                "lastAtElapsedMs" to nowElapsed
+            )
+            if (!outcome.isNullOrBlank()) {
+                detailsMap["outcome"] = outcome
+            }
+
+            val event = VoxUserJourneyEvent(
+                eventId = UUID.randomUUID().toString(),
+                sessionId = currentSessionId,
+                playbackSessionId = currentPlaybackSessionId,
+                sequence = sequenceCounter.getAndIncrement(),
+                wallTimeUtc = VoxUserJourneyEvent.currentUtcTimestamp(),
+                elapsedMs = nowElapsed,
+                category = "USER_INPUT",
+                event = "KEY_ACTION",
+                cause = cause ?: key,
+                screen = screen,
+                viewRole = viewRole,
+                privacyLevel = mode.name,
+                status = outcome ?: "FINISHED",
+                durationMs = 0L,
+                details = detailsMap
+            )
+            recordEvent(event)
         }
-        lastRecordedKey = key
-        lastKeyTimestamp = nowElapsed
-
-        val details = if (!outcome.isNullOrBlank()) mapOf("outcome" to outcome) else null
-
-        val event = VoxUserJourneyEvent(
-            eventId = UUID.randomUUID().toString(),
-            sessionId = currentSessionId,
-            playbackSessionId = currentPlaybackSessionId,
-            sequence = sequenceCounter.getAndIncrement(),
-            wallTimeUtc = VoxUserJourneyEvent.currentUtcTimestamp(),
-            elapsedMs = nowElapsed,
-            category = "USER_INPUT",
-            event = "KEY_ACTION",
-            cause = cause ?: key,
-            screen = screen,
-            viewRole = viewRole,
-            privacyLevel = mode.name,
-            status = outcome ?: "FINISHED",
-            details = details
-        )
-        recordEvent(event)
     }
 
     @JvmOverloads
@@ -499,6 +538,29 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         }
     }
 
+    private fun deleteExternalExportFiles() {
+        try {
+            val dir = appContext.getExternalFilesDir(null) ?: return
+            val exportFileNames = listOf(
+                JOURNEY_FILE_NAME,
+                CRASH_SNAPSHOT_FILE_NAME,
+                "vox_user_journey_export.json",
+                "vox_user_journey_detailed_export.json",
+                "vox_crash_snapshot_export.json",
+                "${JOURNEY_FILE_NAME}.tmp",
+                "${CRASH_SNAPSHOT_FILE_NAME}.tmp"
+            )
+            for (name in exportFileNames) {
+                val f = File(dir, name)
+                if (f.exists()) {
+                    f.delete()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to delete external export files", e)
+        }
+    }
+
     private fun writeSafely(targetFile: File, bytes: ByteArray) {
         val parent = targetFile.parentFile ?: return
         if (!parent.exists()) {
@@ -527,12 +589,16 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             memoryEvents.clear()
             pinnedBookmarks.clear()
             sequenceCounter.set(1L)
+            lastRecordedKey = null
+            lastKeyTimestamp = 0L
             ioExecutor.execute {
                 try {
                     if (journeyFile.exists()) {
                         journeyFile.delete()
                     }
-                    getExternalMirrorFile(JOURNEY_FILE_NAME)?.delete()
+                    val tmp = File(journeyFile.parentFile, "${journeyFile.name}.tmp")
+                    if (tmp.exists()) tmp.delete()
+                    deleteExternalExportFiles()
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to delete journey file", e)
                 }
@@ -545,12 +611,15 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             memoryEvents.clear()
             pinnedBookmarks.clear()
             sequenceCounter.set(1L)
+            lastRecordedKey = null
+            lastKeyTimestamp = 0L
             hadAbnormalExitFlag = false
             try {
                 if (journeyFile.exists()) {
                     journeyFile.delete()
                 }
-                getExternalMirrorFile(JOURNEY_FILE_NAME)?.delete()
+                val tmpJourney = File(journeyFile.parentFile, "${journeyFile.name}.tmp")
+                if (tmpJourney.exists()) tmpJourney.delete()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to delete journey file on purgeAll", e)
             }
@@ -558,21 +627,64 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
                 if (crashSnapshotFile.exists()) {
                     crashSnapshotFile.delete()
                 }
-                getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.delete()
+                val tmpCrash = File(crashSnapshotFile.parentFile, "${crashSnapshotFile.name}.tmp")
+                if (tmpCrash.exists()) tmpCrash.delete()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to delete crash snapshot on purgeAll", e)
             }
+            deleteExternalExportFiles()
         }
+    }
+
+    private fun buildIncidentSummaryLocked(): JSONObject {
+        val summary = JSONObject()
+        val trigger = memoryEvents.lastOrNull { ev ->
+            ev.category.uppercase() == "CRASH" ||
+            ev.status?.uppercase() in listOf("FAILED", "ERROR") ||
+            ev.event.uppercase().contains("ERROR") ||
+            ev.event.uppercase().contains("CRASH") ||
+            ev.event.uppercase().contains("FAIL")
+        }
+
+        summary.put("hasIncident", trigger != null || hadAbnormalExitFlag)
+        if (trigger != null) {
+            val trigObj = JSONObject()
+            trigObj.put("category", trigger.category)
+            trigObj.put("event", trigger.event)
+            trigObj.put("cause", trigger.cause ?: "")
+            trigObj.put("status", trigger.status ?: "")
+            trigObj.put("elapsedMs", trigger.elapsedMs)
+            trigObj.put("wallTimeUtc", trigger.wallTimeUtc)
+            trigObj.put("operationId", trigger.operationId ?: "")
+            summary.put("triggerEvent", trigObj)
+        } else {
+            summary.put("triggerEvent", JSONObject.NULL)
+        }
+
+        val finalStatus = when {
+            hadAbnormalExitFlag -> "UNCAUGHT_EXCEPTION_CRASH"
+            trigger != null -> "ERROR_TRIGGERED"
+            else -> "HEALTHY"
+        }
+        summary.put("finalStatus", finalStatus)
+        summary.put("appVersion", "32.56-vox.9.2-rc.7")
+        summary.put("eventCount", memoryEvents.size)
+        summary.put("pinnedCount", pinnedBookmarks.size)
+        return summary
     }
 
     fun exportTimelineJson(): String {
         synchronized(lock) {
             val root = JSONObject()
             root.put("schemaVersion", 2)
-            root.put("mode", getMode().name)
+            val mode = getMode()
+            root.put("mode", mode.name)
             root.put("contentDetailsEnabled", isContentDetailsEnabled())
             root.put("totalEvents", memoryEvents.size)
             root.put("pinnedBookmarksCount", pinnedBookmarks.size)
+
+            val incidentSummary = buildIncidentSummaryLocked()
+            root.put("incidentSummary", incidentSummary)
 
             val array = JSONArray()
             memoryEvents.forEach { array.put(it.toJson()) }
@@ -584,9 +696,27 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
 
             val result = root.toString(2)
             val bytes = result.toByteArray(StandardCharsets.UTF_8)
+            val exportFileName = if (mode == VoxUserJourneyMode.DETAILED) {
+                "vox_user_journey_detailed_export.json"
+            } else {
+                "vox_user_journey_export.json"
+            }
+            getExternalMirrorFile(exportFileName)?.let { writeSafely(it, bytes) }
             getExternalMirrorFile("vox_user_journey_export.json")?.let { writeSafely(it, bytes) }
             return result
         }
+    }
+
+    fun exportCrashSnapshotJson(): String? {
+        val snapshotText = getCrashSnapshot() ?: return null
+        try {
+            val bytes = snapshotText.toByteArray(StandardCharsets.UTF_8)
+            getExternalMirrorFile("vox_crash_snapshot_export.json")?.let { writeSafely(it, bytes) }
+            getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.let { writeSafely(it, bytes) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to export crash snapshot", e)
+        }
+        return snapshotText
     }
 
     fun saveCrashSnapshot(throwable: Throwable?) {
@@ -623,8 +753,8 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             snapshot.put("recentJourneyTimeline", recentEventsArray)
 
             val bytes = snapshot.toString(2).toByteArray(StandardCharsets.UTF_8)
+            // Continuous background crash snapshot stays strictly in internal storage
             writeSafely(crashSnapshotFile, bytes)
-            getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.let { writeSafely(it, bytes) }
             Log.i(TAG, "Saved crash snapshot with ${recentEventsArray.length()} journey events")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save crash snapshot", e)
@@ -646,6 +776,9 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             if (crashSnapshotFile.exists()) {
                 crashSnapshotFile.delete()
             }
+            val tmp = File(crashSnapshotFile.parentFile, "${crashSnapshotFile.name}.tmp")
+            if (tmp.exists()) tmp.delete()
+            getExternalMirrorFile("vox_crash_snapshot_export.json")?.delete()
             getExternalMirrorFile(CRASH_SNAPSHOT_FILE_NAME)?.delete()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete crash snapshot", e)
@@ -680,8 +813,8 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
 
         try {
             val bytes = jsonString.toByteArray(StandardCharsets.UTF_8)
+            // Continuous background recording stays strictly in internal storage
             writeSafely(journeyFile, bytes)
-            getExternalMirrorFile(JOURNEY_FILE_NAME)?.let { writeSafely(it, bytes) }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save user journey to disk", e)
         }

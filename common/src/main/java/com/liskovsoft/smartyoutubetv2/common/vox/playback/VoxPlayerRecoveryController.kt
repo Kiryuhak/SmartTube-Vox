@@ -389,11 +389,12 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     fun handlePlayerError(error: Throwable?, currentPositionMs: Long, playWhenReady: Boolean): Boolean {
         if (isTerminalFailed()) return false
 
-        val is403 = VoxPlayerRecoveryTestHooks.http403 || VoxPlayerRecoveryPolicy.isStaleOrForbiddenSource(error)
+        val isDeadOrStale = VoxPlayerRecoveryTestHooks.http403 || VoxPlayerRecoveryPolicy.isStaleOrDeadUrl(error)
         val isDns = VoxPlayerRecoveryTestHooks.dnsFailure || VoxPlayerRecoveryPolicy.isDnsFailure(error)
 
-        if (is403) {
-            escalateRecovery(currentPositionMs, playWhenReady, "HTTP_403_FORBIDDEN")
+        if (isDeadOrStale) {
+            val failureType = VoxPlayerRecoveryPolicy.classifyNetworkFailureType(error)
+            escalateRecovery(currentPositionMs, playWhenReady, if (failureType != "UNKNOWN") failureType else "HTTP_403_FORBIDDEN")
             return true
         }
 

@@ -67,6 +67,28 @@ object VoxPlayerRecoveryPolicy {
     }
 
     @JvmStatic
+    fun isStaleOrDeadUrl(error: Throwable?): Boolean {
+        if (error == null) return false
+        var curr: Throwable? = error
+        while (curr != null) {
+            if (curr is HttpDataSource.InvalidResponseCodeException) {
+                val code = curr.responseCode
+                if (code == 403 || code == 404 || code == 410) {
+                    return true
+                }
+            }
+            val msg = curr.message?.lowercase() ?: ""
+            if (msg.contains("code: 403") || msg.contains("403 forbidden") ||
+                msg.contains("code: 404") || msg.contains("404 not found") ||
+                msg.contains("code: 410") || msg.contains("410 gone")) {
+                return true
+            }
+            curr = curr.cause
+        }
+        return false
+    }
+
+    @JvmStatic
     fun isDnsFailure(error: Throwable?): Boolean {
         if (error == null) return false
         var curr: Throwable? = error

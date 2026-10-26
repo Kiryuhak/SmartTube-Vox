@@ -195,6 +195,26 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
         return e;
     }
 
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+            try {
+                com.bumptech.glide.Glide.get(this).clearMemory();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        try {
+            com.bumptech.glide.Glide.get(this).clearMemory();
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void applyCrashFixes(Throwable e) {
         if (e instanceof OutOfMemoryError || e.getCause() instanceof OutOfMemoryError) {
             Class<?> view = ViewManager.instance(getApplicationContext()).getTopView();

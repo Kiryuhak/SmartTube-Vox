@@ -565,6 +565,7 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
         } else {
             options.add(UiOptionItem.from("🧪 " + context.getString(R.string.vox_user_journey_crash_snapshot) + " (QA)", opt -> {
                 recorder.saveCrashSnapshot(new RuntimeException("QA Synthetic Test Crash: Simulated NPE in ExoPlayer"));
+                recorder.exportCrashSnapshotJson();
                 MessageHelpers.showMessage(context, "QA Crash Snapshot Generated");
                 showUserJourneyDialog();
             }));
@@ -687,6 +688,7 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
             }
 
             options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_copy), opt -> {
+                recorder.exportCrashSnapshotJson();
                 copyToClipboard(context, snapshotJson);
                 MessageHelpers.showMessage(context, R.string.vox_logs_copied);
             }));

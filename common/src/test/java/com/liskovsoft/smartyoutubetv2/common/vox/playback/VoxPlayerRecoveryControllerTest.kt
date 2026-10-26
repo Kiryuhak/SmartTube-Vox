@@ -801,4 +801,25 @@ class VoxPlayerRecoveryControllerTest {
         assertEquals(0, mockActionHandler.sourceRefreshCount)
         assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
     }
+
+    // 33. HTTP 404 or 410 dead stream URL triggers bounded source refresh
+    @Test
+    fun test33_Http404Or410TriggersBoundedSourceRefresh() {
+        controller.onPlaybackStart(sessionId = 600L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "dead_url_video")
+        val http404Err = java.io.IOException("Response code: 404 Not Found")
+        val handled404 = controller.handlePlayerError(http404Err, 15_000L, true)
+        assertTrue(handled404)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, controller.getSourceRecoveryCount())
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+
+        // Reset and test HTTP 410 Gone
+        controller.onPlaybackStart(sessionId = 601L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "gone_url_video")
+        val http410Err = java.io.IOException("Response code: 410 Gone")
+        val handled410 = controller.handlePlayerError(http410Err, 25_000L, true)
+        assertTrue(handled410)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+        assertEquals(1, controller.getSourceRecoveryCount())
+        assertEquals(2, mockActionHandler.sourceRefreshCount)
+    }
 }
