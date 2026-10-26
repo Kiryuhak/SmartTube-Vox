@@ -134,7 +134,7 @@ class VoxDownloadSelectionDialog(
         } else {
             audioContainer.visibility = View.VISIBLE
             audioHint.visibility = View.GONE
-            selectedMode = VoxTranslationMode.STANDARD
+            selectedMode = VoxTranslationMode.NONE
 
             val updateAudioPills = {
                 stylePill(btnOriginal, selectedMode == VoxTranslationMode.NONE)
@@ -170,10 +170,9 @@ class VoxDownloadSelectionDialog(
         }
     }
 
-    private fun detectAvailableQualities(video: Video): Set<VoxQualityPreference> {
+    internal fun detectAvailableQualities(video: Video): Set<VoxQualityPreference> {
         val result = mutableSetOf<VoxQualityPreference>()
         result.add(VoxQualityPreference.QUALITY_720P)
-        result.add(VoxQualityPreference.QUALITY_1080P)
 
         // Проверяем метаданные воспроизводимого видео из PlaybackPresenter
         val presenter = PlaybackPresenter.instance(context)
@@ -181,8 +180,10 @@ class VoxDownloadSelectionDialog(
             // Если воспроизводится, проверяем реальную доступность высоких разрешений
             val videoTrackFormats = presenter.player?.videoFormats
             if (!videoTrackFormats.isNullOrEmpty()) {
+                val has1080 = videoTrackFormats.any { it.height in 1080..1439 }
                 val has1440 = videoTrackFormats.any { it.height in 1440..2159 }
                 val has2160 = videoTrackFormats.any { it.height >= 2160 }
+                if (has1080) result.add(VoxQualityPreference.QUALITY_1080P)
                 if (has1440) result.add(VoxQualityPreference.QUALITY_1440P)
                 if (has2160) result.add(VoxQualityPreference.QUALITY_2160P)
                 return result
@@ -190,17 +191,18 @@ class VoxDownloadSelectionDialog(
         }
 
         // Если прямо сейчас нет инфы о форматах плеера, проверяем поля video.height / video.badge
-        val badgeStr = (video.badge ?: "").lowercase()
-        if (video.height >= 2160 || badgeStr.contains("4k") || badgeStr.contains("2160")) {
-            result.add(VoxQualityPreference.QUALITY_1440P)
-            result.add(VoxQualityPreference.QUALITY_2160P)
-        } else if (video.height in 1440..2159 || badgeStr.contains("1440") || badgeStr.contains("2k")) {
-            result.add(VoxQualityPreference.QUALITY_1440P)
-        } else {
-            // Стандартный набор для HD видео
-            result.add(VoxQualityPreference.QUALITY_1440P)
-            result.add(VoxQualityPreference.QUALITY_2160P)
+        val badgeStr = (video.badge ?: "").lowercase(java.util.Locale.ROOT)
+        val height = video.height
+        if (height >= 1080 || badgeStr.contains("hd") || badgeStr.contains("fhd") || badgeStr.contains("1080") || badgeStr.contains("2k") || badgeStr.contains("4k") || height <= 0) {
+            result.add(VoxQualityPreference.QUALITY_1080P)
         }
+        if (height >= 2160 || badgeStr.contains("4k") || badgeStr.contains("2160")) {
+            result.add(VoxQualityPreference.QUALITY_1440P)
+            result.add(VoxQualityPreference.QUALITY_2160P)
+        } else if (height in 1440..2159 || badgeStr.contains("1440") || badgeStr.contains("2k")) {
+            result.add(VoxQualityPreference.QUALITY_1440P)
+        }
+        // In fallback, only truly available qualities are returned - no phantom 1440p/2160p
 
         return result
     }

@@ -616,6 +616,15 @@ public class AppDialogUtil {
                     callback.run();
                 },
                 votData.isPreferYoutubeAutoDub()));
+        toggles.add(UiOptionItem.from(
+                context.getString(R.string.vox_adaptive_audio_title),
+                context.getString(R.string.vox_adaptive_audio_desc),
+                optionItem -> {
+                    votData.setSmartDuckingEnabled(optionItem.isSelected());
+                    votData.setAutoVolumeEnabled(optionItem.isSelected());
+                    callback.run();
+                },
+                votData.isSmartDuckingEnabled()));
         if (votData.hasOAuthToken()) {
             toggles.add(UiOptionItem.from(
                     context.getString(R.string.vot_lively_voice),

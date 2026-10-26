@@ -67,198 +67,147 @@
         android:layout_width="320dp"
         android:layout_height="96dp"
         android:background="@drawable/bg_vox_download_panel"
-        android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
+        android:orientation="vertical"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
         android:gravity="center_vertical"
         android:elevation="14dp"
         android:visibility="visible">
 
-        <!-- Left: Thumbnail 56x56 dp -->
-        <ImageView
-            android:id="@+id/vox_expanded_thumb"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:layout_gravity="center_vertical"
-            android:scaleType="centerCrop"
-            android:background="@drawable/bg_vox_download_pill_unselected"
-            android:contentDescription="@null" />
+        <!-- Title: Full width, ellipsize at end -->
+        <TextView
+            android:id="@+id/vox_expanded_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@color/vox_dl_text_primary"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
 
-        <!-- Right: Info column -->
+        <!-- Pills Row: Quality & Translation mode -->
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginStart="10dp"
-            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="2dp"
             android:gravity="center_vertical">
 
-            <!-- Title & Top Action Buttons -->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/vox_expanded_pill_quality"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:background="@drawable/bg_vox_download_pill_unselected"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="1dp"
+                android:text="1080p"
+                android:textColor="@color/vox_dl_info"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif-medium" />
 
-                <TextView
-                    android:id="@+id/vox_expanded_title"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:textColor="@color/vox_dl_text_primary"
-                    android:textSize="12sp"
-                    android:fontFamily="sans-serif-medium" />
-
-                <!-- Action Button: Pause/Resume -->
-                <ImageView
-                    android:id="@+id/vox_expanded_btn_pause"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
-                    android:layout_marginStart="4dp"
-                    android:padding="2dp"
-                    android:background="@drawable/bg_vox_download_compact"
-                    android:src="@drawable/ic_vox_download_pause"
-                    android:contentDescription="Pause"
-                    android:focusable="true" />
-
-                <!-- Action Button: Collapse to Compact -->
-                <ImageView
-                    android:id="@+id/vox_expanded_btn_collapse"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
-                    android:layout_marginStart="4dp"
-                    android:padding="2dp"
-                    android:background="@drawable/bg_vox_download_compact"
-                    android:src="@drawable/ic_vox_download_collapse"
-                    android:contentDescription="Collapse"
-                    android:focusable="true" />
-            </LinearLayout>
-
-            <!-- Pills Row: Quality & Translation mode -->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/vox_expanded_pill_audio"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="2dp"
-                android:gravity="center_vertical">
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_vox_download_pill_unselected"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
+                android:paddingTop="1dp"
+                android:paddingBottom="1dp"
+                android:text="VOT перевод"
+                android:textColor="@color/vox_dl_info"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
 
-                <TextView
-                    android:id="@+id/vox_expanded_pill_quality"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_vox_download_pill_unselected"
-                    android:paddingStart="5dp"
-                    android:paddingEnd="5dp"
-                    android:paddingTop="1dp"
-                    android:paddingBottom="1dp"
-                    android:text="1080p"
-                    android:textColor="@color/vox_dl_info"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium" />
+        <!-- Metrics Line 1: Скорость / Скачано -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="3dp">
 
-                <TextView
-                    android:id="@+id/vox_expanded_pill_audio"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:background="@drawable/bg_vox_download_pill_unselected"
-                    android:paddingStart="5dp"
-                    android:paddingEnd="5dp"
-                    android:paddingTop="1dp"
-                    android:paddingBottom="1dp"
-                    android:text="VOT перевод"
-                    android:textColor="@color/vox_dl_info"
-                    android:textSize="9sp"
-                    android:fontFamily="sans-serif-medium" />
-            </LinearLayout>
-
-            <!-- Metrics Line 1: Скорость / Скачано -->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/vox_expanded_speed"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="3dp">
+                android:layout_weight="1"
+                android:text="Скорость: Расчёт…"
+                android:textColor="@color/vox_dl_text_secondary"
+                android:textSize="10sp"
+                android:singleLine="true" />
 
-                <TextView
-                    android:id="@+id/vox_expanded_speed"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Скорость: Расчёт…"
-                    android:textColor="@color/vox_dl_text_secondary"
-                    android:textSize="10sp"
-                    android:singleLine="true" />
-
-                <TextView
-                    android:id="@+id/vox_expanded_downloaded"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Скачано: 0 МБ"
-                    android:textColor="@color/vox_dl_text_secondary"
-                    android:textSize="10sp"
-                    android:singleLine="true" />
-            </LinearLayout>
-
-            <!-- Metrics Line 2: Размер / Осталось (ETA) -->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/vox_expanded_downloaded"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:text="Скачано: 0 МБ"
+                android:textColor="@color/vox_dl_text_secondary"
+                android:textSize="10sp"
+                android:singleLine="true" />
+        </LinearLayout>
 
-                <TextView
-                    android:id="@+id/vox_expanded_total_size"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Размер: Расчёт…"
-                    android:textColor="@color/vox_dl_text_secondary"
-                    android:textSize="10sp"
-                    android:singleLine="true" />
+        <!-- Metrics Line 2: Размер / Осталось (ETA) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/vox_expanded_eta"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Осталось: ~…"
-                    android:textColor="@color/vox_dl_text_secondary"
-                    android:textSize="10sp"
-                    android:singleLine="true" />
-            </LinearLayout>
-
-            <!-- Progress Bar + Percent Line -->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/vox_expanded_total_size"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="2dp">
+                android:layout_weight="1"
+                android:text="Размер: Расчёт…"
+                android:textColor="@color/vox_dl_text_secondary"
+                android:textSize="10sp"
+                android:singleLine="true" />
 
-                <ProgressBar
-                    android:id="@+id/vox_expanded_progress_bar"
-                    style="@android:style/Widget.ProgressBar.Horizontal"
-                    android:layout_width="0dp"
-                    android:layout_height="4dp"
-                    android:layout_weight="1"
-                    android:max="100"
-                    android:progress="0"
-                    android:progressTint="@color/vox_dl_accent"
-                    android:progressBackgroundTint="@color/vox_dl_ring_track" />
+            <TextView
+                android:id="@+id/vox_expanded_eta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Осталось: ~…"
+                android:textColor="@color/vox_dl_text_secondary"
+                android:textSize="10sp"
+                android:singleLine="true" />
+        </LinearLayout>
 
-                <TextView
-                    android:id="@+id/vox_expanded_percent"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:text="0%"
-                    android:textColor="@color/vox_dl_text_primary"
-                    android:textSize="10sp"
-                    android:fontFamily="sans-serif-medium" />
-            </LinearLayout>
+        <!-- Progress Bar + Percent Line (Dedicated 38dp width prevents clipping) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="3dp">
 
+            <ProgressBar
+                android:id="@+id/vox_expanded_progress_bar"
+                style="@android:style/Widget.ProgressBar.Horizontal"
+                android:layout_width="0dp"
+                android:layout_height="4dp"
+                android:layout_weight="1"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="@color/vox_dl_accent"
+                android:progressBackgroundTint="@color/vox_dl_ring_track" />
+
+            <TextView
+                android:id="@+id/vox_expanded_percent"
+                android:layout_width="38dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:gravity="end"
+                android:text="0%"
+                android:textColor="@color/vox_dl_text_primary"
+                android:textSize="10sp"
+                android:fontFamily="sans-serif-medium"
+                android:singleLine="true" />
         </LinearLayout>
     </LinearLayout>
 

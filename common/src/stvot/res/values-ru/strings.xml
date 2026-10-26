@@ -111,7 +111,7 @@
     <string name="action_download_with_translation">Скачать с переводом</string>
     <string name="vox_download_action">Скачать с переводом</string>
     <string name="vox_download_retry">Повторить</string>
-    <string name="vox_download_title">Скачать с переводом</string>
+    <string name="vox_download_title">Скачать видео</string>
     <string name="vox_download_quality_category">Качество видео</string>
     <string name="vox_download_translation_category">Режим перевода</string>
     <string name="vox_download_translation_standard">Обычный перевод</string>

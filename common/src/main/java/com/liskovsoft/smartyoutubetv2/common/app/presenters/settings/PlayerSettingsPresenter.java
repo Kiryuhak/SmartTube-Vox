@@ -290,6 +290,24 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
                 AppDialogUtil.createVotOriginalVolumeCategory(getContext()).options);
 
         settingsPresenter.appendSingleSwitch(UiOptionItem.from(
+                getContext().getString(R.string.vox_adaptive_audio_title),
+                getContext().getString(R.string.vox_adaptive_audio_desc),
+                optionItem -> {
+                    mVotData.setSmartDuckingEnabled(optionItem.isSelected());
+                    mVotData.setAutoVolumeEnabled(optionItem.isSelected());
+                    com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter presenter =
+                            com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter.instance(getContext());
+                    if (presenter != null) {
+                        com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController ctrl =
+                                presenter.getController(com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController.class);
+                        if (ctrl != null) {
+                            ctrl.applyCurrentMix();
+                        }
+                    }
+                },
+                mVotData.isSmartDuckingEnabled()));
+
+        settingsPresenter.appendSingleSwitch(UiOptionItem.from(
                 getContext().getString(R.string.vot_lively_voice),
                 getContext().getString(R.string.vot_lively_voice_desc),
                 optionItem -> {

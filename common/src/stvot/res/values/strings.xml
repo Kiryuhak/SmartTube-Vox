@@ -110,7 +110,7 @@
     <string name="action_download_with_translation">Download with translation</string>
     <string name="vox_download_action">Download with translation</string>
     <string name="vox_download_retry">Retry</string>
-    <string name="vox_download_title">Download with translation</string>
+    <string name="vox_download_title">Download video</string>
     <string name="vox_download_quality_category">Video quality</string>
     <string name="vox_download_translation_category">Translation mode</string>
     <string name="vox_download_translation_standard">Standard translation</string>

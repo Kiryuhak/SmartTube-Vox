@@ -42,6 +42,9 @@ public class VoxDownloadPlayerController extends BasePlayerController implements
     @Override
     public void onVideoLoaded(Video video) {
         updateDownloadButtonState();
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadOverlay.get(getContext()).hideContextMenu();
+        }
     }
 
     @Override
@@ -56,6 +59,9 @@ public class VoxDownloadPlayerController extends BasePlayerController implements
     @Override
     public void onFinish() {
         unregisterCoordinatorListener();
+        if (getContext() != null) {
+            com.liskovsoft.smartyoutubetv2.common.vox.download.VoxDownloadOverlay.get(getContext()).hideContextMenu();
+        }
     }
 
     @Override

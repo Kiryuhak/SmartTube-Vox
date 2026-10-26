@@ -434,12 +434,10 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
 
         adaptiveVolumeController.setLevelProcessor(player.getAudioLevelProcessor());
         VoxAdaptiveVolumeController.AutoVolumeMode mode;
-        if (!duckingBridge.isAutoVolumeEnabled()) {
+        if (!duckingBridge.isAutoVolumeEnabled() || !duckingBridge.isSmartDuckingEnabled()) {
             mode = VoxAdaptiveVolumeController.AutoVolumeMode.OFF;
-        } else if (duckingBridge.isSmartDuckingEnabled()) {
-            mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
         } else {
-            mode = VoxAdaptiveVolumeController.AutoVolumeMode.FIXED;
+            mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
         }
         adaptiveVolumeController.setMode(mode);
         adaptiveVolumeController.setFixedTarget(duckingBridge.getOriginalVolumeMultiplier());

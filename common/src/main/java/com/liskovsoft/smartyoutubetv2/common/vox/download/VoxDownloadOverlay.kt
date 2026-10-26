@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -46,10 +47,7 @@ class VoxDownloadOverlay(private val context: Context) {
     private var stageCompletedContainer: LinearLayout? = null
 
     // Expanded Views
-    private var expandedThumb: ImageView? = null
     private var expandedTitle: TextView? = null
-    private var expandedBtnPause: ImageView? = null
-    private var expandedBtnCollapse: ImageView? = null
     private var expandedPillQuality: TextView? = null
     private var expandedPillAudio: TextView? = null
     private var expandedSpeed: TextView? = null
@@ -89,6 +87,26 @@ class VoxDownloadOverlay(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoDismissRunnable = Runnable { hide() }
     private val autoCompactRunnable = Runnable { collapseToCompact() }
+    private val contextMenuIdleRunnable = Runnable {
+        if (stateMachine.getStage() == VoxBadgeStage.LONG_PRESS_MENU) {
+            hideContextMenu()
+        }
+    }
+
+    private fun scheduleContextMenuIdleTimer() {
+        mainHandler.removeCallbacks(contextMenuIdleRunnable)
+        mainHandler.postDelayed(contextMenuIdleRunnable, CONTEXT_MENU_IDLE_TIMEOUT_MS)
+    }
+
+    fun resetContextMenuIdleTimer() {
+        if (stateMachine.getStage() == VoxBadgeStage.LONG_PRESS_MENU) {
+            scheduleContextMenuIdleTimer()
+        }
+    }
+
+    private fun cancelContextMenuIdleTimer() {
+        mainHandler.removeCallbacks(contextMenuIdleRunnable)
+    }
 
     companion object {
         private const val TAG = "VoxDownloadOverlay"
@@ -97,6 +115,7 @@ class VoxDownloadOverlay(private val context: Context) {
         private const val DISMISS_DELAY_COMPLETED_MS = 3500L
         private const val DISMISS_DELAY_FAILED_MS = 5000L
         private const val DISMISS_DELAY_CANCELLED_MS = 2000L
+        const val CONTEXT_MENU_IDLE_TIMEOUT_MS = 8000L
 
         // Фиксированные параметры из макета (Golden Reference)
         const val COMPACT_SIZE_DP = 64f
@@ -271,10 +290,8 @@ class VoxDownloadOverlay(private val context: Context) {
         // Обновление состояния паузы
         val isPaused = progress.state == VoxDownloadState.PAUSED
         if (isPaused) {
-            expandedBtnPause?.setImageResource(R.drawable.ic_vox_download_resume)
             menuBtnResumePause?.text = "▶  Продолжить"
         } else {
-            expandedBtnPause?.setImageResource(R.drawable.ic_vox_download_pause)
             menuBtnResumePause?.text = "⏸  Пауза"
         }
 
@@ -394,11 +411,21 @@ class VoxDownloadOverlay(private val context: Context) {
         mainHandler.removeCallbacks(autoCompactRunnable)
         stateMachine.transitionTo(VoxBadgeStage.LONG_PRESS_MENU)
         showContextMenuStage()
+        scheduleContextMenuIdleTimer()
     }
 
     fun hideContextMenu() {
+        cancelContextMenuIdleTimer()
         if (stateMachine.getStage() == VoxBadgeStage.LONG_PRESS_MENU) {
-            collapseToCompact()
+            val isPaused = currentDownloadId?.let { id ->
+                VoxDownloadCoordinator.instance(context).getJob(id)?.state == VoxDownloadState.PAUSED
+            } ?: false
+            if (isPaused) {
+                stateMachine.transitionTo(VoxBadgeStage.PAUSED)
+            } else {
+                stateMachine.transitionTo(VoxBadgeStage.DOWNLOADING_COMPACT)
+            }
+            showCompactStage()
         }
     }
 
@@ -423,6 +450,7 @@ class VoxDownloadOverlay(private val context: Context) {
     }
 
     fun hide() {
+        cancelContextMenuIdleTimer()
         mainHandler.removeCallbacks(autoDismissRunnable)
         mainHandler.removeCallbacks(autoCompactRunnable)
         stateMachine.transitionTo(VoxBadgeStage.HIDDEN)
@@ -443,6 +471,7 @@ class VoxDownloadOverlay(private val context: Context) {
     }
 
     fun dismissImmediately() {
+        cancelContextMenuIdleTimer()
         mainHandler.removeCallbacks(autoDismissRunnable)
         mainHandler.removeCallbacks(autoCompactRunnable)
         stateMachine.transitionTo(VoxBadgeStage.HIDDEN)
@@ -532,10 +561,7 @@ class VoxDownloadOverlay(private val context: Context) {
         stageContextMenuContainer = root.findViewById(R.id.vox_stage_context_menu)
         stageCompletedContainer = root.findViewById(R.id.vox_stage_completed)
 
-        expandedThumb = root.findViewById(R.id.vox_expanded_thumb)
         expandedTitle = root.findViewById(R.id.vox_expanded_title)
-        expandedBtnPause = root.findViewById(R.id.vox_expanded_btn_pause)
-        expandedBtnCollapse = root.findViewById(R.id.vox_expanded_btn_collapse)
         expandedPillQuality = root.findViewById(R.id.vox_expanded_pill_quality)
         expandedPillAudio = root.findViewById(R.id.vox_expanded_pill_audio)
         expandedSpeed = root.findViewById(R.id.vox_expanded_speed)
@@ -559,16 +585,6 @@ class VoxDownloadOverlay(private val context: Context) {
     }
 
     private fun setupListeners() {
-        // Кнопка сворачивания на развернутой панели
-        expandedBtnCollapse?.setOnClickListener {
-            collapseToCompact()
-        }
-
-        // Кнопка паузы / возобновления на развернутой панели
-        expandedBtnPause?.setOnClickListener {
-            togglePauseResume()
-        }
-
         // Обычный клик на компактный виджет -> Раскрывает панель БЕЗ паузы плеера (Этап 4)
         stageCompactContainer?.setOnClickListener {
             expandToReopened()
@@ -580,13 +596,41 @@ class VoxDownloadOverlay(private val context: Context) {
             true
         }
 
+        // 8000ms idle timer reset & Back navigation for Context Menu
+        val interactionFocusListener = View.OnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) resetContextMenuIdleTimer()
+        }
+        menuBtnResumePause?.onFocusChangeListener = interactionFocusListener
+        menuBtnCancel?.onFocusChangeListener = interactionFocusListener
+
+        val keyListener = View.OnKeyListener { _, keyCode, event ->
+            resetContextMenuIdleTimer()
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                if (stateMachine.getStage() == VoxBadgeStage.LONG_PRESS_MENU) {
+                    hideContextMenu()
+                    return@OnKeyListener true
+                }
+            }
+            false
+        }
+        menuBtnResumePause?.setOnKeyListener(keyListener)
+        menuBtnCancel?.setOnKeyListener(keyListener)
+        stageContextMenuContainer?.setOnKeyListener(keyListener)
+
+        stageContextMenuContainer?.setOnTouchListener { _, _ ->
+            resetContextMenuIdleTimer()
+            false
+        }
+
         // Действия контекстного меню
         menuBtnResumePause?.setOnClickListener {
+            resetContextMenuIdleTimer()
             togglePauseResume()
             hideContextMenu()
         }
 
         menuBtnCancel?.setOnClickListener {
+            cancelContextMenuIdleTimer()
             val id = currentDownloadId
             if (id != null) {
                 VoxDownloadCoordinator.instance(context).cancelDownload(id)
@@ -634,4 +678,5 @@ class VoxDownloadOverlay(private val context: Context) {
     fun getQueueBadgeText(): String = ""
     fun isProgressBarIndeterminate(): Boolean = expandedProgressBar?.isIndeterminate == true
     fun getProgressBarProgress(): Int = expandedProgressBar?.progress ?: 0
+    fun getContextMenuIdleRunnable(): Runnable = contextMenuIdleRunnable
 }

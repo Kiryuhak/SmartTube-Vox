@@ -2973,11 +2973,11 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     }
 
-	private void applyCurrentMix() {
+	public void applyCurrentMix() {
 		if (getPlayer() != null && mState == STATE_ACTIVE) {
 			getPlayer().setVolume(votData().getOriginalVolumeMultiplier());
 		}
-		
+
 		if (mTranslationPlayer != null) {
 			mTranslationPlayer.setVolume(votData().getTranslationVolumeMultiplier());
             mTranslationPlayer.configureBooster(votData().isAudioBoosterEnabled(), votData().getAudioBoosterPercent());
@@ -2989,12 +2989,10 @@ public class VoiceTranslateController extends BasePlayerController {
             boolean autoVolEnabled = votData().isAutoVolumeEnabled();
             boolean smartDucking = votData().isSmartDuckingEnabled();
             VoxAdaptiveVolumeController.AutoVolumeMode mode;
-            if (!autoVolEnabled) {
+            if (!autoVolEnabled || !smartDucking) {
                 mode = VoxAdaptiveVolumeController.AutoVolumeMode.OFF;
-            } else if (smartDucking) {
-                mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
             } else {
-                mode = VoxAdaptiveVolumeController.AutoVolumeMode.FIXED;
+                mode = VoxAdaptiveVolumeController.AutoVolumeMode.ADAPTIVE;
             }
             controller.setMode(mode);
             controller.setFixedTarget(votData().getOriginalVolumeMultiplier());
@@ -3004,6 +3002,9 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void duckMainAudio() {
         if (getPlayer() == null || mIsAudioDucked) {
+            return;
+        }
+        if (!votData().isSmartDuckingEnabled() || !votData().isAutoVolumeEnabled()) {
             return;
         }
         mSavedMainVolume = getPlayer().getVolume();
