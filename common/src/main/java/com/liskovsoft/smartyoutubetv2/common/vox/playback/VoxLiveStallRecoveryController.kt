@@ -175,8 +175,8 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
         windowStartMs: Long,
         isLive: Boolean
     ): Long {
-        if (!isLive || windowDurationMs <= 0L) {
-            return requestedPosMs
+        if (!isLive) {
+            return Math.max(0L, requestedPosMs)
         }
 
         currentGeneration++
@@ -184,10 +184,15 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
 
         currentState = VoxLiveStallState.CLAMPING_LIVE_WINDOW
         val minSafePos = if (windowStartMs > 0L) windowStartMs + 1_000L else 0L
-        val maxSafePos = Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+        val maxSafePos = if (windowDurationMs > 0L) {
+            Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+        } else {
+            Long.MAX_VALUE
+        }
 
+        val safeRequested = Math.max(0L, requestedPosMs)
         val clamped = when {
-            requestedPosMs < minSafePos -> {
+            safeRequested < minSafePos -> {
                 VoxSafeLogger.w(
                     VoxLogCategory.PLAYER,
                     VoxLogCode.LIVE_DVR_SEEK_CLAMP,
@@ -199,7 +204,7 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
                 actionHandler.onPositionClamped(minSafePos)
                 minSafePos
             }
-            requestedPosMs > maxSafePos -> {
+            safeRequested > maxSafePos && maxSafePos < Long.MAX_VALUE -> {
                 VoxSafeLogger.w(
                     VoxLogCategory.PLAYER,
                     VoxLogCode.LIVE_DVR_SEEK_CLAMP,
@@ -208,7 +213,7 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
                 actionHandler.onPositionClamped(maxSafePos)
                 maxSafePos
             }
-            else -> requestedPosMs
+            else -> safeRequested
         }
 
         lastRequestedSeekPosMs = clamped
@@ -229,13 +234,19 @@ class VoxLiveStallRecoveryController @JvmOverloads constructor(
             lastRequestedSeekPosMs = target
             return target
         }
-        if (lastRequestedSeekPosMs > 0L && windowDurationMs > 0L) {
+        if (lastRequestedSeekPosMs > 0L) {
             val minSafePos = if (windowStartMs > 0L) windowStartMs + MIN_LIVE_WINDOW_CLAMP_BUFFER_MS else 0L
-            val maxSafePos = Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+            val maxSafePos = if (windowDurationMs > 0L) {
+                Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+            } else {
+                Long.MAX_VALUE
+            }
             if (lastRequestedSeekPosMs in minSafePos..maxSafePos) {
                 return lastRequestedSeekPosMs
             } else if (lastRequestedSeekPosMs < minSafePos && minSafePos > 0L) {
                 return minSafePos
+            } else if (lastRequestedSeekPosMs > maxSafePos && maxSafePos < Long.MAX_VALUE) {
+                return maxSafePos
             }
         }
         return -1L

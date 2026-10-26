@@ -38,6 +38,7 @@ data class VoxPendingSeek(
     var clampedTargetMs: Long,
     val fromPositionMs: Long,
     val requestedAtMs: Long,
+    val videoId: String? = null,
     var windowStartMs: Long = 0L,
     var windowDurationMs: Long = 0L,
     var state: VoxSeekState = VoxSeekState.PENDING,
@@ -86,7 +87,8 @@ class VoxPendingSeekCoordinator {
         fromPositionMs: Long,
         mediaKind: VoxMediaKind,
         windowStartMs: Long = 0L,
-        windowDurationMs: Long = 0L
+        windowDurationMs: Long = 0L,
+        videoId: String? = null
     ): VoxPendingSeek {
         // Отменяем предыдущую незавершенную операцию
         activeSeek?.let { prev ->
@@ -103,9 +105,13 @@ class VoxPendingSeekCoordinator {
         var clampedTarget = requestedTargetMs
         var isClamped = false
 
-        if (mediaKind == VoxMediaKind.LIVE_DVR && windowDurationMs > 0L) {
+        if (mediaKind == VoxMediaKind.LIVE_DVR) {
             val minSafePos = if (windowStartMs > 0L) windowStartMs + MIN_LIVE_WINDOW_CLAMP_BUFFER_MS else 0L
-            val maxSafePos = Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+            val maxSafePos = if (windowDurationMs > 0L) {
+                Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+            } else {
+                Long.MAX_VALUE
+            }
 
             if (requestedTargetMs < minSafePos) {
                 clampedTarget = minSafePos
@@ -116,6 +122,11 @@ class VoxPendingSeekCoordinator {
             }
         }
 
+        if (clampedTarget < 0L) {
+            clampedTarget = 0L
+            isClamped = true
+        }
+
         val seek = VoxPendingSeek(
             seekRequestId = requestId,
             generation = gen,
@@ -124,6 +135,7 @@ class VoxPendingSeekCoordinator {
             clampedTargetMs = clampedTarget,
             fromPositionMs = fromPositionMs,
             requestedAtMs = System.currentTimeMillis(),
+            videoId = videoId,
             windowStartMs = windowStartMs,
             windowDurationMs = windowDurationMs,
             state = if (isClamped) VoxSeekState.CLAMPED else VoxSeekState.PENDING
@@ -204,11 +216,16 @@ class VoxPendingSeekCoordinator {
 
         // Вычисляем допустимый диапазон в новом окне
         val minSafePos = if (windowStartMs > 0L) windowStartMs + MIN_LIVE_WINDOW_CLAMP_BUFFER_MS else 0L
-        val maxSafePos = Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+        val maxSafePos = if (windowDurationMs > 0L) {
+            Math.max(minSafePos, windowDurationMs - MIN_LIVE_WINDOW_CLAMP_BUFFER_MS)
+        } else {
+            Long.MAX_VALUE
+        }
 
         val target = when {
             current.requestedTargetMs in minSafePos..maxSafePos -> current.requestedTargetMs
             current.requestedTargetMs < minSafePos && minSafePos > 0L -> minSafePos
+            current.requestedTargetMs > maxSafePos && maxSafePos < Long.MAX_VALUE -> maxSafePos
             else -> -1L
         }
 
@@ -284,6 +301,7 @@ class VoxPendingSeekCoordinator {
             "seek_request_id" to seek.seekRequestId,
             "generation" to seek.generation.toString(),
             "media_kind" to seek.mediaKind.name,
+            "video_id" to (seek.videoId ?: "NONE"),
             "origin_pos_ms" to seek.fromPositionMs.toString(),
             "requested_target_ms" to seek.requestedTargetMs.toString(),
             "clamped_target_ms" to seek.clampedTargetMs.toString(),

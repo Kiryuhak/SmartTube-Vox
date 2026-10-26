@@ -165,6 +165,7 @@ class VoxDownloadOverlay(private val context: Context) {
         stateMachine.setActiveDownloadId(downloadId)
         speedEstimator.reset()
         stateMachine.transitionTo(VoxBadgeStage.DOWNLOADING_EXPANDED)
+        scheduleAutoCompact()
         updateProgress(activity, job.getSnapshot(), force = true)
     }
 

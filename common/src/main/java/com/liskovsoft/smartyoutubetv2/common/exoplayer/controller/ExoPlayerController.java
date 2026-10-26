@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.exoplayer.controller;
 import android.content.Context;
 import android.os.Build;
 import android.os.Build.VERSION;
+import android.text.TextUtils;
 
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
@@ -340,9 +341,10 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
 
         long fromPos = getPositionMs();
         VoxMediaKind mediaKind = isLive ? VoxMediaKind.LIVE_DVR : VoxMediaKind.STANDARD_VOD;
-        VoxPendingSeekCoordinator.instance().startSeek(positionMs, fromPos, mediaKind, windowStartMs, duration);
-
         Video video = getVideo();
+        String videoId = video != null ? video.videoId : null;
+        VoxPendingSeekCoordinator.instance().startSeek(positionMs, fromPos, mediaKind, windowStartMs, duration, videoId);
+
         if (video != null) {
             video.pendingPosMs = positionMs;
         }
@@ -466,6 +468,10 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     }
 
     public void setVideo(Video video) {
+        Video old = getVideo();
+        if (old != null && video != null && !TextUtils.equals(old.videoId, video.videoId)) {
+            VoxPendingSeekCoordinator.instance().cancel("Video changed");
+        }
         mVideo = new WeakReference<>(video);
         if (video != null) {
             mOfflineProbe.onBeforeOpen(video, video.mediaUrl);

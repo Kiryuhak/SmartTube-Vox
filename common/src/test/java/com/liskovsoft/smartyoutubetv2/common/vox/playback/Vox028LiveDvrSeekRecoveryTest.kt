@@ -166,4 +166,68 @@ class Vox028LiveDvrSeekRecoveryTest {
         assertEquals(targetPos, video.pendingPosMs)
         // Даже если reloadVideo() сработал, pendingPosMs гарантирует восстановление цели перемотки
     }
+
+    @Test
+    fun testNegativeTargetClampedToZero() {
+        // Запрос перемотки назад, уходящий в отрицательные координаты (-10 мин при позиции 2 мин)
+        val requestedTarget = -480_000L
+        val seek = coordinator.startSeek(
+            requestedTargetMs = requestedTarget,
+            fromPositionMs = 120_000L,
+            mediaKind = VoxMediaKind.LIVE_DVR,
+            windowStartMs = 0L,
+            windowDurationMs = 3_600_000L
+        )
+
+        // Позиция должна быть безопасно ограничена 0L
+        assertEquals(0L, seek.clampedTargetMs)
+        assertEquals(VoxSeekState.CLAMPED, seek.state)
+    }
+
+    @Test
+    fun testUnknownDurationDynamicWindowDoesNotPrematurelyFail() {
+        // Прямой эфир с неизвестной длительностью (windowDurationMs = -1L / C.TIME_UNSET)
+        // Окно трансляции начинается с 500_000 мс. Пользователь перематывает на 1_200_000 мс.
+        val target = 1_200_000L
+        val seek = coordinator.startSeek(
+            requestedTargetMs = target,
+            fromPositionMs = 2_000_000L,
+            mediaKind = VoxMediaKind.LIVE_DVR,
+            windowStartMs = 500_000L,
+            windowDurationMs = -1L
+        )
+
+        assertEquals(target, seek.clampedTargetMs)
+        assertEquals(VoxSeekState.PENDING, seek.state)
+
+        // BehindLiveWindow на стриме с неизвестной длительностью
+        val recovered = coordinator.onBehindLiveWindow(
+            windowStartMs = 600_000L,
+            windowDurationMs = 0L,
+            generation = seek.generation
+        )
+        // Не должно аварийно завершаться - позиция 1_200_000 валидна в окне > 600_000
+        assertEquals(target, recovered)
+        assertEquals(VoxSeekState.RECOVERING, seek.state)
+    }
+
+    @Test
+    fun testVideoIdIsolationAndCancellation() {
+        val seek = coordinator.startSeek(
+            requestedTargetMs = 500_000L,
+            fromPositionMs = 1_000_000L,
+            mediaKind = VoxMediaKind.LIVE_DVR,
+            windowStartMs = 0L,
+            windowDurationMs = 5_000_000L,
+            videoId = "video_alpha"
+        )
+        assertEquals("video_alpha", seek.videoId)
+        assertTrue(coordinator.hasActivePendingSeek())
+
+        // Смена видео отменяет операцию
+        coordinator.cancel("Video changed")
+        assertEquals(VoxSeekState.CANCELLED, seek.state)
+        assertEquals(VoxSeekOutcome.USER_CANCELLED, seek.outcome)
+        assertFalse(coordinator.hasActivePendingSeek())
+    }
 }
