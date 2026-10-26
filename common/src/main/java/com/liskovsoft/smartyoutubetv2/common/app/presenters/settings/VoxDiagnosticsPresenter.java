@@ -19,6 +19,9 @@ import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxDiagnosticsSched
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogEvent;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogLevel;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogStore;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyEvent;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyMode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel;
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager;
 
@@ -137,6 +140,27 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
             presenter.closeDialog();
             showClearLogsConfirmDialog();
         }));
+
+        // User Journey Recorder
+        VoxUserJourneyRecorder journeyRecorder = VoxUserJourneyRecorder.Companion.instance(context);
+        String journeyModeStr;
+        if (journeyRecorder.getMode() == VoxUserJourneyMode.DETAILED) {
+            journeyModeStr = context.getString(R.string.vox_user_journey_mode_detailed);
+        } else if (journeyRecorder.getMode() == VoxUserJourneyMode.OFF) {
+            journeyModeStr = context.getString(R.string.vox_user_journey_mode_off);
+        } else {
+            journeyModeStr = context.getString(R.string.vox_user_journey_mode_standard);
+        }
+
+        options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_title) + " (" + journeyModeStr + ")", option -> {
+            showUserJourneyDialog();
+        }));
+
+        if (journeyRecorder.hasCrashSnapshot()) {
+            options.add(UiOptionItem.from("⚠️ " + context.getString(R.string.vox_user_journey_crash_snapshot), option -> {
+                showCrashSnapshotDialog();
+            }));
+        }
 
         // 7. Отмена / Назад
         options.add(UiOptionItem.from(context.getString(R.string.cancel_dialog), option -> {
@@ -463,5 +487,222 @@ public class VoxDiagnosticsPresenter extends BasePresenter<Void> {
                 }
             }
         }
+    }
+    public void showUserJourneyDialog() {
+        Context context = getContext();
+        if (context == null) return;
+
+        AppDialogPresenter presenter = AppDialogPresenter.instance(context);
+        String title = context.getString(R.string.vox_user_journey_title);
+        VoxUserJourneyRecorder recorder = VoxUserJourneyRecorder.Companion.instance(context);
+        VoxUserJourneyMode currentMode = recorder.getMode();
+
+        List<OptionItem> modeItems = new ArrayList<>();
+        modeItems.add(UiOptionItem.from(
+                context.getString(R.string.vox_user_journey_mode_off),
+                opt -> {
+                    recorder.setMode(VoxUserJourneyMode.OFF);
+                    showUserJourneyDialog();
+                },
+                currentMode == VoxUserJourneyMode.OFF
+        ));
+        modeItems.add(UiOptionItem.from(
+                context.getString(R.string.vox_user_journey_mode_standard),
+                opt -> {
+                    recorder.setMode(VoxUserJourneyMode.STANDARD);
+                    showUserJourneyDialog();
+                },
+                currentMode == VoxUserJourneyMode.STANDARD
+        ));
+        modeItems.add(UiOptionItem.from(
+                context.getString(R.string.vox_user_journey_mode_detailed),
+                opt -> {
+                    recorder.setMode(VoxUserJourneyMode.DETAILED);
+                    showUserJourneyDialog();
+                },
+                currentMode == VoxUserJourneyMode.DETAILED
+        ));
+        presenter.appendRadioCategory(context.getString(R.string.vox_user_journey_mode), modeItems);
+
+        presenter.appendSingleSwitch(UiOptionItem.from(
+                context.getString(R.string.vox_user_journey_include_content),
+                context.getString(R.string.vox_user_journey_include_content_desc),
+                opt -> {
+                    if (opt.isSelected()) {
+                        showContentPrivacyWarningDialog(recorder, presenter);
+                    } else {
+                        recorder.setIncludeContentDetails(false);
+                        showUserJourneyDialog();
+                    }
+                },
+                recorder.isIncludeContentDetails()
+        ));
+
+        List<OptionItem> options = new ArrayList<>();
+
+        int count = recorder.getEventCount();
+        String viewTitle = count > 0
+                ? context.getString(R.string.vox_user_journey_view) + " (" + count + ")"
+                : context.getString(R.string.vox_user_journey_view);
+        options.add(UiOptionItem.from(viewTitle, opt -> {
+            showUserJourneyViewDialog();
+        }));
+
+        options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_export), opt -> {
+            exportUserJourneyToClipboard();
+        }));
+
+        options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_clear), opt -> {
+            recorder.clear();
+            MessageHelpers.showMessage(context, R.string.vox_user_journey_cleared);
+            showUserJourneyDialog();
+        }));
+
+        if (recorder.hasCrashSnapshot()) {
+            options.add(UiOptionItem.from("⚠️ " + context.getString(R.string.vox_user_journey_crash_snapshot), opt -> {
+                showCrashSnapshotDialog();
+            }));
+        } else {
+            options.add(UiOptionItem.from("🧪 " + context.getString(R.string.vox_user_journey_crash_snapshot) + " (QA)", opt -> {
+                recorder.saveCrashSnapshot(new RuntimeException("QA Synthetic Test Crash: Simulated NPE in ExoPlayer"));
+                MessageHelpers.showMessage(context, "QA Crash Snapshot Generated");
+                showUserJourneyDialog();
+            }));
+        }
+
+        options.add(UiOptionItem.from(context.getString(android.R.string.cancel), opt -> {
+            show();
+        }));
+
+        presenter.appendStringsCategory(title, options);
+        presenter.showDialog(title);
+    }
+
+    private void showContentPrivacyWarningDialog(VoxUserJourneyRecorder recorder, AppDialogPresenter dialogPresenter) {
+        Context context = getContext();
+        if (!(context instanceof Activity) || !Utils.checkActivity((Activity) context)) {
+            recorder.setIncludeContentDetails(true);
+            return;
+        }
+        Activity activity = (Activity) context;
+        new AlertDialog.Builder(activity, R.style.AppDialog)
+                .setTitle(R.string.vox_user_journey_include_content)
+                .setMessage(activity.getString(R.string.vox_user_journey_include_content_desc))
+                .setPositiveButton(android.R.string.ok, (d, w) -> {
+                    recorder.setIncludeContentDetails(true);
+                    d.dismiss();
+                    showUserJourneyDialog();
+                })
+                .setNegativeButton(android.R.string.cancel, (d, w) -> {
+                    recorder.setIncludeContentDetails(false);
+                    d.dismiss();
+                    showUserJourneyDialog();
+                })
+                .show();
+    }
+
+    public void showUserJourneyViewDialog() {
+        Context context = getContext();
+        if (context == null) return;
+
+        AppDialogPresenter presenter = AppDialogPresenter.instance(context);
+        VoxUserJourneyRecorder recorder = VoxUserJourneyRecorder.Companion.instance(context);
+        List<VoxUserJourneyEvent> events = recorder.getEvents();
+        String title = context.getString(R.string.vox_user_journey_view);
+
+        List<OptionItem> options = new ArrayList<>();
+        if (events.isEmpty()) {
+            options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_view_empty), opt -> {
+                showUserJourneyDialog();
+            }));
+        } else {
+            for (VoxUserJourneyEvent ev : events) {
+                options.add(UiOptionItem.from(ev.toSummaryString(), opt -> {
+                    copyToClipboard(context, ev.toJson().toString());
+                    MessageHelpers.showMessage(context, R.string.vox_logs_copied);
+                }));
+            }
+        }
+
+        options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_export), opt -> {
+            exportUserJourneyToClipboard();
+        }));
+
+        options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_clear), opt -> {
+            recorder.clear();
+            MessageHelpers.showMessage(context, R.string.vox_user_journey_cleared);
+            showUserJourneyDialog();
+        }));
+
+        options.add(UiOptionItem.from(context.getString(android.R.string.cancel), opt -> {
+            showUserJourneyDialog();
+        }));
+
+        presenter.appendStringsCategory(title + " (" + events.size() + ")", options);
+        presenter.showDialog(title);
+    }
+
+    public void exportUserJourneyToClipboard() {
+        Context context = getContext();
+        if (context == null) return;
+        String json = VoxUserJourneyRecorder.Companion.instance(context).exportEventsJson();
+        copyToClipboard(context, json);
+        MessageHelpers.showMessage(context, R.string.vox_user_journey_exported);
+    }
+
+    public void showCrashSnapshotDialog() {
+        Context context = getContext();
+        if (context == null) return;
+
+        AppDialogPresenter presenter = AppDialogPresenter.instance(context);
+        VoxUserJourneyRecorder recorder = VoxUserJourneyRecorder.Companion.instance(context);
+        String snapshotJson = recorder.getCrashSnapshot();
+        String title = context.getString(R.string.vox_user_journey_crash_snapshot);
+
+        List<OptionItem> options = new ArrayList<>();
+        if (snapshotJson == null || snapshotJson.isEmpty()) {
+            options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_view_empty), opt -> {
+                showUserJourneyDialog();
+            }));
+        } else {
+            try {
+                org.json.JSONObject obj = new org.json.JSONObject(snapshotJson);
+                String cause = obj.optString("cause", "Unknown cause");
+                options.add(UiOptionItem.from("⚠️ " + cause, opt -> {
+                    copyToClipboard(context, snapshotJson);
+                    MessageHelpers.showMessage(context, R.string.vox_logs_copied);
+                }));
+                org.json.JSONObject details = obj.optJSONObject("details");
+                if (details != null) {
+                    options.add(UiOptionItem.from(details.optString("exceptionClass", ""), opt -> {
+                        copyToClipboard(context, snapshotJson);
+                        MessageHelpers.showMessage(context, R.string.vox_logs_copied);
+                    }));
+                }
+            } catch (Exception e) {
+                options.add(UiOptionItem.from(snapshotJson, opt -> {
+                    copyToClipboard(context, snapshotJson);
+                    MessageHelpers.showMessage(context, R.string.vox_logs_copied);
+                }));
+            }
+
+            options.add(UiOptionItem.from(context.getString(R.string.vox_diagnostics_copy), opt -> {
+                copyToClipboard(context, snapshotJson);
+                MessageHelpers.showMessage(context, R.string.vox_logs_copied);
+            }));
+
+            options.add(UiOptionItem.from(context.getString(R.string.vox_user_journey_crash_snapshot_clear), opt -> {
+                recorder.clearCrashSnapshot();
+                MessageHelpers.showMessage(context, R.string.vox_user_journey_crash_snapshot_cleared);
+                showUserJourneyDialog();
+            }));
+        }
+
+        options.add(UiOptionItem.from(context.getString(android.R.string.cancel), opt -> {
+            showUserJourneyDialog();
+        }));
+
+        presenter.appendStringsCategory(title, options);
+        presenter.showDialog(title);
     }
 }

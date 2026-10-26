@@ -1160,4 +1160,22 @@
     <string name="vox_video_transport_dash_desc">Standard ExoPlayer DASH streaming (SmartTube default)</string>
     <string name="vox_video_transport_sabr">SABR (experimental)</string>
     <string name="vox_video_transport_sabr_desc">UMP-framed SABR protocol for VOD with safe DASH fallback on error</string>
+
+    <!-- VOX User Journey Recorder -->
+    <string name="vox_user_journey_title">User Journey Recorder</string>
+    <string name="vox_user_journey_mode">User Journey Mode</string>
+    <string name="vox_user_journey_mode_off">Disabled</string>
+    <string name="vox_user_journey_mode_standard">Standard (anonymous, no content data)</string>
+    <string name="vox_user_journey_mode_detailed">Detailed (timeline of actions, 24h)</string>
+    <string name="vox_user_journey_include_content">Include watched video details</string>
+    <string name="vox_user_journey_include_content_desc">Attention: logs video titles and IDs locally on device for playback troubleshooting.</string>
+    <string name="vox_user_journey_view">View recorded user journey</string>
+    <string name="vox_user_journey_view_empty">User journey timeline is empty</string>
+    <string name="vox_user_journey_export">Export user journey (JSON to clipboard)</string>
+    <string name="vox_user_journey_exported">User journey JSON copied to clipboard</string>
+    <string name="vox_user_journey_clear">Clear recorded user journey</string>
+    <string name="vox_user_journey_cleared">Recorded user journey cleared</string>
+    <string name="vox_user_journey_crash_snapshot">Previous crash snapshot</string>
+    <string name="vox_user_journey_crash_snapshot_clear">Clear crash snapshot</string>
+    <string name="vox_user_journey_crash_snapshot_cleared">Crash snapshot cleared</string>
 </resources>

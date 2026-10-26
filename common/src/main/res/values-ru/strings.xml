@@ -1098,4 +1098,22 @@
     <string name="vox_video_transport_dash_desc">Классический протокол передачи DASH (по умолчанию в SmartTube)</string>
     <string name="vox_video_transport_sabr">SABR (экспериментально)</string>
     <string name="vox_video_transport_sabr_desc">UMP-протокол SABR для VOD с автоматическим безопасным откатом на DASH при сбое</string>
+
+    <!-- VOX User Journey Recorder -->
+    <string name="vox_user_journey_title">Запись пути пользователя</string>
+    <string name="vox_user_journey_mode">Режим записи пути (User Journey)</string>
+    <string name="vox_user_journey_mode_off">Отключено</string>
+    <string name="vox_user_journey_mode_standard">Стандартный (анонимно, без данных о видео)</string>
+    <string name="vox_user_journey_mode_detailed">Подробный (шкала действий, 24 ч)</string>
+    <string name="vox_user_journey_include_content">Включать сведения о просмотренных видео</string>
+    <string name="vox_user_journey_include_content_desc">Внимание: фиксирует названия и идентификаторы видео локально для отладки воспроизведения.</string>
+    <string name="vox_user_journey_view">Показать записанный путь</string>
+    <string name="vox_user_journey_view_empty">Журнал пути пользователя пуст</string>
+    <string name="vox_user_journey_export">Экспортировать путь (JSON в буфер)</string>
+    <string name="vox_user_journey_exported">JSON пути пользователя скопирован в буфер обмена</string>
+    <string name="vox_user_journey_clear">Очистить записанный путь</string>
+    <string name="vox_user_journey_cleared">Записанный путь очищен</string>
+    <string name="vox_user_journey_crash_snapshot">Снимок предыдущего сбоя (Crash Snapshot)</string>
+    <string name="vox_user_journey_crash_snapshot_clear">Удалить снимок сбоя</string>
+    <string name="vox_user_journey_crash_snapshot_cleared">Снимок сбоя удален</string>
 </resources>

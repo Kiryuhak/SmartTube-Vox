@@ -137,6 +137,12 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
         }
 
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(this)
+                        .saveCrashSnapshot(e);
+            } catch (Throwable ignored) {
+            }
+
             if (shouldIgnore(e)) {
                 MessageHelpers.showLongMessage(this, e.getMessage());
                 return;

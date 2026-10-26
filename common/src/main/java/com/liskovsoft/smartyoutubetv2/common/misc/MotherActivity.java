@@ -136,6 +136,11 @@ public class MotherActivity extends FragmentActivity {
         }
 
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(this)
+                        .recordKeyAction(event.getKeyCode(), event.getAction(), getClass().getSimpleName(), null, null);
+            } catch (Throwable ignored) {
+            }
             boolean isKeepScreenOff = mScreensaverManager.isScreenOff() && Helpers.equalsAny(event.getKeyCode(),
                     new int[]{KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN});
             if (!isKeepScreenOff) {

@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.smartyoutubetv2.common.R
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 
@@ -360,6 +361,9 @@ class VoxDownloadOverlay(private val context: Context) {
         stageCompactContainer?.visibility = View.GONE
         stageContextMenuContainer?.visibility = View.GONE
         stageCompletedContainer?.visibility = View.GONE
+        try {
+            VoxUserJourneyRecorder.instance(context).recordDownload("DOWNLOAD_UI_STAGE", currentDownloadId, "EXPANDED", 0L, null)
+        } catch (ignored: Throwable) {}
     }
 
     private fun showCompactStage() {
@@ -367,6 +371,9 @@ class VoxDownloadOverlay(private val context: Context) {
         stageCompactContainer?.visibility = View.VISIBLE
         stageContextMenuContainer?.visibility = View.GONE
         stageCompletedContainer?.visibility = View.GONE
+        try {
+            VoxUserJourneyRecorder.instance(context).recordDownload("DOWNLOAD_UI_STAGE", currentDownloadId, "COMPACT", 0L, null)
+        } catch (ignored: Throwable) {}
     }
 
     private fun showContextMenuStage() {
@@ -375,6 +382,9 @@ class VoxDownloadOverlay(private val context: Context) {
         stageContextMenuContainer?.visibility = View.VISIBLE
         stageCompletedContainer?.visibility = View.GONE
         menuBtnResumePause?.requestFocus()
+        try {
+            VoxUserJourneyRecorder.instance(context).recordDownload("DOWNLOAD_UI_STAGE", currentDownloadId, "CONTEXT_MENU", 0L, null)
+        } catch (ignored: Throwable) {}
     }
 
     private fun showCompletedStage(downloadedBytes: Long, quality: String, audio: String) {
@@ -385,6 +395,9 @@ class VoxDownloadOverlay(private val context: Context) {
 
         val sizeStr = VoxDownloadSizeFormatter.formatBytes(downloadedBytes)
         completedDetails?.text = "$sizeStr • $quality • $audio"
+        try {
+            VoxUserJourneyRecorder.instance(context).recordDownload("DOWNLOAD_UI_STAGE", currentDownloadId, "COMPLETED", downloadedBytes, null)
+        } catch (ignored: Throwable) {}
     }
 
     private fun hideContainers() {

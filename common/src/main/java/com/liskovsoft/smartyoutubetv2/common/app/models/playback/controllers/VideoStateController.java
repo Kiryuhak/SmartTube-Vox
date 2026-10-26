@@ -78,6 +78,16 @@ public class VideoStateController extends BasePlayerController {
         // Don't do reset on videoLoaded state because this will influences minimized music videos.
         resetPositionIfNeeded(item);
         resetGlobalSpeedIfNeeded();
+
+        if (getContext() != null) {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(getContext())
+                        .startNewPlaybackSession();
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(getContext())
+                        .recordPlayback("PLAYBACK_OPEN", item != null ? item.getTitle() : null, item != null ? item.videoId : null, 0L);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @Override
@@ -238,6 +248,14 @@ public class VideoStateController extends BasePlayerController {
 
         // In this state video length is not undefined.
         restoreState();
+
+        if (getContext() != null) {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(getContext())
+                        .recordPlayback("PLAYBACK_LOADED", item != null ? item.getTitle() : null, item != null ? item.videoId : null, getPlayer() != null ? getPlayer().getPositionMs() : 0L);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @Override
@@ -250,6 +268,14 @@ public class VideoStateController extends BasePlayerController {
         if (isRestoreActualLive()) {
             seekToActualLivePosition();
         }
+
+        if (getContext() != null) {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(getContext())
+                        .recordPlayback("PLAYBACK_PLAY", getVideo() != null ? getVideo().getTitle() : null, getVideo() != null ? getVideo().videoId : null, getPlayer() != null ? getPlayer().getPositionMs() : 0L);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @Override
@@ -258,6 +284,14 @@ public class VideoStateController extends BasePlayerController {
         showHideScreensaver(true);
         // throttle seeking calls
         Utils.postDelayed(mUpdateHistory, 10_000);
+
+        if (getContext() != null) {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(getContext())
+                        .recordPlayback("PLAYBACK_PAUSE", getVideo() != null ? getVideo().getTitle() : null, getVideo() != null ? getVideo().videoId : null, getPlayer() != null ? getPlayer().getPositionMs() : 0L);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @Override

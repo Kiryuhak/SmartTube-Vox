@@ -85,6 +85,8 @@ public class AppDataSourceManager {
             settingItems.add(new SettingsItem(
                     context.getString(R.string.settings_device_compatibility), () -> com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxCompatibilitySettingsPresenter.instance(context).show(), R.drawable.settings_player));
             settingItems.add(new SettingsItem(
+                    context.getString(R.string.settings_diagnostics_and_logs), () -> com.liskovsoft.smartyoutubetv2.common.app.presenters.settings.VoxDiagnosticsPresenter.instance(context).show(), R.drawable.settings_about));
+            settingItems.add(new SettingsItem(
                     context.getString(R.string.settings_reset), () -> ResetSettingsPresenter.instance(context).show(), R.drawable.settings_reset));
         }
 
