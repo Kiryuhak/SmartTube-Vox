@@ -7,15 +7,21 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Unified Observability 2.0 User Journey Event.
+ * Unified Observability 3.0 User Journey Event — Schema v2.
  *
  * Implements strict privacy controls:
  * - Content identifiers (title/videoId) are omitted or hashed ("redacted") unless explicitly permitted.
  * - Monotonic elapsed time is used for duration calculation and UTC wall time for correlation.
  * - Causal parentEventId and operationId link user inputs to downstream playback/VOT/download transitions.
+ * - positionBucketMs provides privacy-safe 30-second bucket rounding for position telemetry.
+ *
+ * Schema migration: fromJson handles both v1 (schemaVersion=1) and v2 (schemaVersion=2).
+ * All fields added in v2 default to null when loading v1 events.
+ *
+ * Contract version: 3.0
  */
 data class VoxUserJourneyEvent(
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = 2,
     val eventId: String,
     val sessionId: String,
     val playbackSessionId: String? = null,
@@ -37,7 +43,21 @@ data class VoxUserJourneyEvent(
     val operationId: String? = null,
     val status: String? = null,
     val durationMs: Long? = null,
-    val details: Map<String, Any>? = null
+    val details: Map<String, Any>? = null,
+    // --- Schema v2 fields ---
+    val appSessionId: String? = null,
+    val processSessionId: String? = null,
+    val bootId: String? = null,
+    val downloadJobRef: String? = null,
+    val action: String? = null,
+    val outcome: String? = null,
+    /** Position rounded to 30-second bucket for privacy-safe telemetry. */
+    val positionBucketMs: Long? = null,
+    val selectedQuality: String? = null,
+    val resolvedQuality: String? = null,
+    val translationState: String? = null,
+    val networkErrorClass: String? = null,
+    val retryAttempt: Int? = null
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -71,6 +91,19 @@ data class VoxUserJourneyEvent(
             }
             json.put("details", dJson)
         }
+        // Schema v2 fields serialization
+        if (!appSessionId.isNullOrBlank()) json.put("appSessionId", appSessionId)
+        if (!processSessionId.isNullOrBlank()) json.put("processSessionId", processSessionId)
+        if (!bootId.isNullOrBlank()) json.put("bootId", bootId)
+        if (!downloadJobRef.isNullOrBlank()) json.put("downloadJobRef", downloadJobRef)
+        if (!action.isNullOrBlank()) json.put("action", action)
+        if (!outcome.isNullOrBlank()) json.put("outcome", outcome)
+        if (positionBucketMs != null) json.put("positionBucketMs", positionBucketMs)
+        if (!selectedQuality.isNullOrBlank()) json.put("selectedQuality", selectedQuality)
+        if (!resolvedQuality.isNullOrBlank()) json.put("resolvedQuality", resolvedQuality)
+        if (!translationState.isNullOrBlank()) json.put("translationState", translationState)
+        if (!networkErrorClass.isNullOrBlank()) json.put("networkErrorClass", networkErrorClass)
+        if (retryAttempt != null) json.put("retryAttempt", retryAttempt)
         return json
     }
 
@@ -79,8 +112,9 @@ data class VoxUserJourneyEvent(
         val op = if (!operationId.isNullOrBlank()) " [op:$operationId]" else ""
         val stat = if (!status.isNullOrBlank()) " -> $status" else ""
         val dur = if (durationMs != null && durationMs > 0) " (${durationMs}ms)" else ""
+        val q = if (!selectedQuality.isNullOrBlank()) " [q:$selectedQuality]" else ""
         val det = if (!details.isNullOrEmpty()) " det:$details" else ""
-        return "#$sequence [$time] $category.$event$op$stat$dur$det"
+        return "#$sequence [$time] $category.$event$op$stat$dur$q$det"
     }
 
     companion object {
@@ -125,10 +159,27 @@ data class VoxUserJourneyEvent(
                     val keys = detailsObj.keys()
                     while (keys.hasNext()) {
                         val k = keys.next()
-                        map[k] = detailsObj.opt(k)
+                        val v = detailsObj.opt(k)
+                        if (v != null) {
+                            map[k] = v
+                        }
                     }
                     map
                 } else null
+
+                // Schema v2 fields — null when loading v1 events (backwards compatible)
+                val appSessionId = if (schemaVer >= 2 && json.has("appSessionId")) json.optString("appSessionId") else null
+                val processSessionId = if (schemaVer >= 2 && json.has("processSessionId")) json.optString("processSessionId") else null
+                val bootId = if (schemaVer >= 2 && json.has("bootId")) json.optString("bootId") else null
+                val downloadJobRef = if (schemaVer >= 2 && json.has("downloadJobRef")) json.optString("downloadJobRef") else null
+                val action = if (schemaVer >= 2 && json.has("action")) json.optString("action") else null
+                val outcome = if (schemaVer >= 2 && json.has("outcome")) json.optString("outcome") else null
+                val positionBucketMs = if (schemaVer >= 2 && json.has("positionBucketMs")) json.optLong("positionBucketMs") else null
+                val selectedQuality = if (schemaVer >= 2 && json.has("selectedQuality")) json.optString("selectedQuality") else null
+                val resolvedQuality = if (schemaVer >= 2 && json.has("resolvedQuality")) json.optString("resolvedQuality") else null
+                val translationState = if (schemaVer >= 2 && json.has("translationState")) json.optString("translationState") else null
+                val networkErrorClass = if (schemaVer >= 2 && json.has("networkErrorClass")) json.optString("networkErrorClass") else null
+                val retryAttempt = if (schemaVer >= 2 && json.has("retryAttempt")) json.optInt("retryAttempt") else null
 
                 VoxUserJourneyEvent(
                     schemaVersion = schemaVer,
@@ -153,7 +204,19 @@ data class VoxUserJourneyEvent(
                     operationId = opId,
                     status = status,
                     durationMs = durMs,
-                    details = detailsMap
+                    details = detailsMap,
+                    appSessionId = appSessionId,
+                    processSessionId = processSessionId,
+                    bootId = bootId,
+                    downloadJobRef = downloadJobRef,
+                    action = action,
+                    outcome = outcome,
+                    positionBucketMs = positionBucketMs,
+                    selectedQuality = selectedQuality,
+                    resolvedQuality = resolvedQuality,
+                    translationState = translationState,
+                    networkErrorClass = networkErrorClass,
+                    retryAttempt = retryAttempt
                 )
             } catch (e: Exception) {
                 null
