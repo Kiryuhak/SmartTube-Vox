@@ -597,6 +597,10 @@ data class VoxDiagnosticReport(
         return root.toString(2)
     }
 
+    fun toSanitizedJson(): String {
+        return VoxDiagnosticSanitizer.sanitizeJson(toJson())
+    }
+
     fun toFormattedText(): String {
         val sb = StringBuilder()
         sb.append("=== SmartTube VOX — Диагностический отчёт ===\n\n")

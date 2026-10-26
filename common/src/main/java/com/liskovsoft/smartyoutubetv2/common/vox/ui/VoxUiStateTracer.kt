@@ -54,9 +54,10 @@ object VoxUiStateTracer {
     fun onFocusRestored(
         target: String,
         eventSource: String = "PlaybackFragment",
-        reason: String = "FOCUS_LOST_RECOVERY"
+        reason: String = "FOCUS_LOST_RECOVERY",
+        currentTimeMs: Long = System.currentTimeMillis()
     ) {
-        val now = System.currentTimeMillis()
+        val now = currentTimeMs
         if (target == lastFocusTarget && (now - lastFocusRestoredTimeMs) < 500L) {
             // Deduplicate rapid duplicate focus restorations within 500ms window
             return

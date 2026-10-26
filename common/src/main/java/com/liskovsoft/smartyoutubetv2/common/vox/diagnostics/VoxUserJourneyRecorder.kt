@@ -36,6 +36,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         private const val KEY_MODE = "user_journey_mode"
         private const val KEY_INCLUDE_CONTENT = "user_journey_include_content"
         private const val KEY_DETAILED_STARTED_AT = "user_journey_detailed_started_at"
+        private const val KEY_SESSION_ACTIVE = "user_journey_session_active"
 
         const val MAX_EVENTS = 200
         const val MAX_EVENTS_STANDARD = 200
@@ -74,6 +75,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
     private val memoryEvents = ArrayList<VoxUserJourneyEvent>(MAX_EVENTS_DETAILED)
     private val pinnedBookmarks = ArrayList<VoxUserJourneyEvent>(MAX_PINNED_BOOKMARKS)
     private var hadAbnormalExitFlag = false
+    private var hadForceStopFlag = false
     private val sequenceCounter = AtomicLong(1L)
     private var currentSessionId: String = UUID.randomUUID().toString()
     private var currentPlaybackSessionId: String? = null
@@ -100,13 +102,36 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
     }
 
     private fun checkPreviousSessionAbnormalExit() {
-        hadAbnormalExitFlag = crashSnapshotFile.exists() && crashSnapshotFile.length() > 0
-        if (hadAbnormalExitFlag) {
-            Log.w(TAG, "Abnormal exit detected: crash snapshot from previous session is present.")
+        val hasCrash = crashSnapshotFile.exists() && crashSnapshotFile.length() > 0
+        val wasActive = prefs.getBoolean(KEY_SESSION_ACTIVE, false)
+        if (hasCrash) {
+            hadAbnormalExitFlag = true
+            hadForceStopFlag = false
+            Log.w(TAG, "Abnormal exit detected: uncaught exception crash snapshot from previous session is present.")
+        } else if (wasActive) {
+            hadAbnormalExitFlag = false
+            hadForceStopFlag = true
+            Log.w(TAG, "Abnormal exit detected: previous session was terminated abnormally (force-stop or process kill).")
+        } else {
+            hadAbnormalExitFlag = false
+            hadForceStopFlag = false
         }
+        // Mark current session as active
+        prefs.edit().putBoolean(KEY_SESSION_ACTIVE, true).apply()
     }
 
-    fun hadAbnormalExit(): Boolean = hadAbnormalExitFlag
+    fun hadAbnormalExit(): Boolean = hadAbnormalExitFlag || hadForceStopFlag
+    fun hadUncaughtExceptionCrash(): Boolean = hadAbnormalExitFlag
+    fun hadForceStop(): Boolean = hadForceStopFlag
+
+    fun markCleanShutdown() {
+        try {
+            prefs.edit().putBoolean(KEY_SESSION_ACTIVE, false).commit()
+            Log.i(TAG, "Session marked as clean shutdown")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to mark clean shutdown", e)
+        }
+    }
 
     fun getMode(): VoxUserJourneyMode {
         if (checkTtlExpiration()) {
@@ -614,6 +639,8 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             lastRecordedKey = null
             lastKeyTimestamp = 0L
             hadAbnormalExitFlag = false
+            hadForceStopFlag = false
+            prefs.edit().putBoolean(KEY_SESSION_ACTIVE, false).apply()
             try {
                 if (journeyFile.exists()) {
                     journeyFile.delete()
@@ -636,6 +663,12 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
         }
     }
 
+    fun getIncidentSummary(): JSONObject {
+        synchronized(lock) {
+            return buildIncidentSummaryLocked()
+        }
+    }
+
     private fun buildIncidentSummaryLocked(): JSONObject {
         val summary = JSONObject()
         val trigger = memoryEvents.lastOrNull { ev ->
@@ -646,7 +679,9 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             ev.event.uppercase().contains("FAIL")
         }
 
-        summary.put("hasIncident", trigger != null || hadAbnormalExitFlag)
+        summary.put("hasIncident", trigger != null || hadAbnormalExitFlag || hadForceStopFlag)
+        summary.put("hadUncaughtExceptionCrash", hadAbnormalExitFlag)
+        summary.put("hadForceStop", hadForceStopFlag)
         if (trigger != null) {
             val trigObj = JSONObject()
             trigObj.put("category", trigger.category)
@@ -663,6 +698,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
 
         val finalStatus = when {
             hadAbnormalExitFlag -> "UNCAUGHT_EXCEPTION_CRASH"
+            hadForceStopFlag -> "FORCE_STOP_EXIT"
             trigger != null -> "ERROR_TRIGGERED"
             else -> "HEALTHY"
         }

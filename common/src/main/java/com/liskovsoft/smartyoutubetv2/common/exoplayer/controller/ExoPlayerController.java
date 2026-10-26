@@ -89,6 +89,40 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private Integer mLastHttpStatus = null;
     private String mLastErrorClass = null;
     private com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident mCurrentRebufferIncident = null;
+    private String mCurrentOperationId = null;
+
+    private synchronized void finishRebufferIncident(String outcome) {
+        if (mCurrentRebufferIncident == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long duration = Math.max(0L, now - mCurrentRebufferIncident.getStartTimeMs());
+        mCurrentRebufferIncident.setEndTimeMs(now);
+        mCurrentRebufferIncident.setRebufferDurationMs(duration);
+        mCurrentRebufferIncident.setOutcome(outcome);
+
+        Map<String, String> endCtx = new HashMap<>(mCurrentRebufferIncident.toMap());
+        endCtx.put("rebufferDurationMs", String.valueOf(duration));
+        endCtx.put("outcome", outcome);
+
+        String msg = "Буферизация завершена (" + outcome + ")";
+        if ("RECOVERED".equals(outcome)) {
+            VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, "Буферизация завершена (восстановлено)", endCtx);
+        } else if ("FAILED".equals(outcome)) {
+            VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, "Буферизация завершена со сбоем", endCtx);
+        } else {
+            VoxSafeLogger.i(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, msg, endCtx);
+        }
+
+        try {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.instance(mContext)
+                    .recordPlayback("REBUFFER_ENDED", null, null, getPositionMs(), endCtx,
+                            mCurrentRebufferIncident.getRootCause().name(),
+                            mCurrentRebufferIncident.getOperationId(), null, outcome, duration);
+        } catch (Throwable ignored) {}
+
+        mCurrentRebufferIncident = null;
+    }
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
@@ -268,6 +302,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     }
 
     private void openMediaSource(MediaSource mediaSource) {
+        finishRebufferIncident("SOURCE_REPLACED");
         mCurrentMediaSource = mediaSource;
         resetPlayerState(); // fixes occasional video artifacts and problems with quality switching
         setQualityInfo("");
@@ -278,12 +313,17 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         mTrackSelectorManager.invalidate();
         mOnSourceChanged = true;
         mPrepareStartTimeMs = System.currentTimeMillis();
-        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.onUserOpen(mPlaybackSessionId, "EXOPLAYER", mPrepareStartTimeMs);
-        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.startStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_REQUEST, mPrepareStartTimeMs);
         mHasStartedPlayback = false;
         mOfflineReadyLogged = false;
         mRebufferCount = 0;
         mPlaybackSessionId = sSessionSeq.incrementAndGet();
+        mCurrentOperationId = "sess_" + mPlaybackSessionId + "_" + mPrepareStartTimeMs;
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.onUserOpen(mPlaybackSessionId, "EXOPLAYER", mPrepareStartTimeMs);
+        com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.startStage(com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxStartupProfiler.STAGE_REQUEST, mPrepareStartTimeMs);
+        try {
+            com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.instance(mContext)
+                    .recordPlayback("PLAYBACK_START", null, null, 0L, null, null, mCurrentOperationId, null, "STARTING", null);
+        } catch (Throwable ignored) {}
         boolean isLive = getVideo() != null && getVideo().isLive;
         mStallRecoveryController.onPlaybackStart(isLive);
         String marker = getVideo() != null && getVideo().videoId != null
@@ -316,6 +356,9 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     public void setPositionMs(long positionMs) {
         if (mPlayer == null || positionMs < 0) {
             return;
+        }
+        if (mCurrentRebufferIncident != null) {
+            finishRebufferIncident("ABORTED_BY_SEEK");
         }
         boolean isLive = isLiveOrDynamic();
         if (isLive && getVideo() != null && !getVideo().isLive) {
@@ -746,16 +789,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
         mLastErrorClass = nested.getClass().getSimpleName();
 
-        if (mCurrentRebufferIncident != null) {
-            long now = System.currentTimeMillis();
-            long dur = now - mCurrentRebufferIncident.getStartTimeMs();
-            mCurrentRebufferIncident.setEndTimeMs(now);
-            mCurrentRebufferIncident.setRebufferDurationMs(dur);
-            mCurrentRebufferIncident.setOutcome("FAILED");
-            Map<String, String> endCtx = new HashMap<>(mCurrentRebufferIncident.toMap());
-            VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, "Буферизация завершена со сбоем", endCtx);
-            mCurrentRebufferIncident = null;
-        }
+        finishRebufferIncident("FAILED");
 
         Throwable cause = error;
         boolean isOom = false;
@@ -957,32 +991,17 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mEventListener.onPlay();
             mLastIsDecoderError = false;
 
-            if (mCurrentRebufferIncident != null) {
-                long now = System.currentTimeMillis();
-                long duration = now - mCurrentRebufferIncident.getStartTimeMs();
-                mCurrentRebufferIncident.setEndTimeMs(now);
-                mCurrentRebufferIncident.setRebufferDurationMs(duration);
-                mCurrentRebufferIncident.setOutcome("RECOVERED");
-
-                Map<String, String> endCtx = new HashMap<>(mCurrentRebufferIncident.toMap());
-                endCtx.put("rebufferDurationMs", String.valueOf(duration));
-                endCtx.put("outcome", "RECOVERED");
-                VoxSafeLogger.w(VoxLogCategory.PLAYER, VoxLogCode.REBUFFER_ENDED, "Буферизация завершена (восстановлено)", endCtx);
-
-                try {
-                    com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.instance(mContext)
-                            .recordPlayback("REBUFFER_RECOVERED", null, null, getPositionMs(), endCtx, mCurrentRebufferIncident.getRootCause().name(), mCurrentRebufferIncident.getOperationId(), null, "RECOVERED", duration);
-                } catch (Throwable ignored) {}
-                mCurrentRebufferIncident = null;
-            }
+            finishRebufferIncident("RECOVERED");
             if (com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().isShort(getVideo())) {
                 com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onFirstFrame(getVideo(), 0);
                 com.liskovsoft.smartyoutubetv2.common.vox.shorts.VoxShortsAutoNextController.getINSTANCE().onAudioStart(getVideo(), 0);
             }
         } else if (isPausePressed) {
+            finishRebufferIncident("STOPPED_BY_USER");
             mStallRecoveryController.onBufferingEnded();
             mEventListener.onPause();
         } else if (isPlaybackEnded) {
+            finishRebufferIncident("STOPPED_BY_USER");
             mEventListener.onPlayEnd();
             mIsEnded = true;
         } else if (isBuffering) {
@@ -1000,7 +1019,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                         buffered, offset, 0, 0, speed > 0 ? speed : 1.0f);
                 mStallRecoveryController.onBufferingStarted(true, pos, dur, offset);
             }
-            if (mHasStartedPlayback) {
+            if (mHasStartedPlayback && mCurrentRebufferIncident == null) {
                 mRebufferCount++;
                 long pos = getPositionMs();
                 long buffered = mPlayer != null ? Math.max(0, mPlayer.getBufferedPosition() - pos) : 0;
@@ -1041,14 +1060,24 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                     engineName = currentEngine == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP ? "OkHttp" : currentEngine == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET ? "Cronet" : "DefaultHttp";
                 } catch (Throwable ignored) {}
 
+                boolean isBehindLive = false;
+                if (mLastErrorClass != null && mLastErrorClass.toLowerCase(java.util.Locale.ROOT).contains("behindlive")) {
+                    isBehindLive = true;
+                }
+                boolean isSeekPending = com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPendingSeekCoordinator.instance().hasActivePendingSeek();
+                String bandwidthMeterStatus = throughput > 0 ? "SAMPLED" : "UNMEASURED";
+
                 com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferClassification classification =
                         com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlaybackBufferPolicy.classifyRebufferDetailed(
-                                bitrate, buffered, throughput, droppedFrames, height >= 2160, 0, mLastIsDecoderError, mLastHttpStatus, mLastErrorClass, false);
+                                bitrate, buffered, throughput, droppedFrames, height >= 2160, 0, mLastIsDecoderError, mLastHttpStatus, mLastErrorClass, isBehindLive,
+                                safeNetType, isSeekPending, bandwidthMeterStatus);
 
-                String opId = java.util.UUID.randomUUID().toString().substring(0, 8);
+                String opId = mCurrentOperationId != null ? mCurrentOperationId : "sess_" + mPlaybackSessionId;
+                String incidentId = "reb_" + System.currentTimeMillis() + "_" + mPlaybackSessionId;
+
                 com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident incident =
                         new com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident(
-                                opId,
+                                incidentId,
                                 System.currentTimeMillis(),
                                 null,
                                 pos,
@@ -1062,6 +1091,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                                 isLive,
                                 String.valueOf(mPlaybackSessionId),
                                 opId,
+                                "PLAYBACK_START",
                                 safeNetType,
                                 mLastIsDecoderError ? "ERROR" : "NORMAL",
                                 mLastHttpStatus,
@@ -1069,6 +1099,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
                                 null,
                                 null,
                                 throughput > 0 ? throughput : null,
+                                bandwidthMeterStatus,
+                                droppedFrames > 0 ? droppedFrames : null,
                                 classification.getRootCause(),
                                 classification.getEvidenceMissing(),
                                 "IN_PROGRESS"
@@ -1173,6 +1205,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
      * Without this also you'll have problems with track quality switching(??).
      */
     public void resetPlayerState() {
+        finishRebufferIncident("STOPPED_BY_USER");
         mIsEnded = false;
         if (containsMedia()) {
             mPlayer.stop(true);
@@ -1235,14 +1268,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         } catch (ArrayIndexOutOfBoundsException e) { // thrown on stop()
             e.printStackTrace();
         } finally {
-            if (mCurrentRebufferIncident != null) {
-                long now = System.currentTimeMillis();
-                long dur = now - mCurrentRebufferIncident.getStartTimeMs();
-                mCurrentRebufferIncident.setEndTimeMs(now);
-                mCurrentRebufferIncident.setRebufferDurationMs(dur);
-                mCurrentRebufferIncident.setOutcome("CANCELLED");
-                mCurrentRebufferIncident = null;
-            }
+            finishRebufferIncident("APP_CLOSED");
             mPlayer = null;
             mCurrentMediaSource = null;
             VoxPlayerTracker.onPlayerReleased();

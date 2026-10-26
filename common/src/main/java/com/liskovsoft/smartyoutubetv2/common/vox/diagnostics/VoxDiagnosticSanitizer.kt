@@ -28,6 +28,13 @@ object VoxDiagnosticSanitizer {
     private val MAC_PATTERN = Pattern.compile("(?i)\\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\\b")
     private val ANDROID_ID_PATTERN = Pattern.compile("(?i)\\b(android_id|ssaid|serial|deviceId|device_id)\\s*[:=]\\s*[a-zA-Z0-9]{8,}\\b")
 
+    // YouTube short URL: youtu.be/[11-char ID]
+    private val YOUTUBE_SHORT_URL_PATTERN = Pattern.compile("(?i)(https?://)?(?:www\\.)?youtu\\.be/([A-Za-z0-9_-]{11})")
+    // YouTube watch URL parameter: v=[11-char ID]
+    private val YOUTUBE_WATCH_PARAM_PATTERN = Pattern.compile("(?i)(https?://)?(?:www\\.)?youtube\\.com/watch\\?[^\\s\"\'<>]*v=([A-Za-z0-9_-]{11})[^\\s\"\'<>]*")
+    // YouTube embed / v URLs
+    private val YOUTUBE_EMBED_URL_PATTERN = Pattern.compile("(?i)(https?://)?(?:www\\.)?youtube\\.com/(?:embed|v)/([A-Za-z0-9_-]{11})")
+
     // Full URL query stripping pattern: https://domain/path?query... -> https://domain/path
     private val FULL_URL_QUERY_PATTERN = Pattern.compile("(https?://[^\\s?\"'<>]+)\\?[^\\s\"'<>]+")
 
@@ -62,7 +69,22 @@ object VoxDiagnosticSanitizer {
         "android_id",
         "ssaid",
         "serial",
-        "mac"
+        "mac",
+        // Content metadata (privacy-safe: strip from standard remote telemetry)
+        "video_id",
+        "videoid",
+        "video_title",
+        "videotitle",
+        "channel_title",
+        "channeltitle",
+        "channel_name",
+        "channelname",
+        "channel_id",
+        "channelid",
+        "author",
+        "query",
+        "search_query",
+        "searchquery"
     )
 
     @JvmStatic
@@ -77,6 +99,11 @@ object VoxDiagnosticSanitizer {
 
         var result: String = input
         
+        // 0. Redact YouTube short / watch / embed URLs to remove video IDs
+        result = YOUTUBE_SHORT_URL_PATTERN.matcher(result).replaceAll("$1youtu.be/[REDACTED_VIDEO_ID]")
+        result = YOUTUBE_WATCH_PARAM_PATTERN.matcher(result).replaceAll("$1youtube.com/watch?v=[REDACTED_VIDEO_ID]")
+        result = YOUTUBE_EMBED_URL_PATTERN.matcher(result).replaceAll("$1youtube.com/embed/[REDACTED_VIDEO_ID]")
+
         // 1. Strip URL query parameters first (e.g. YouTube media streams with signed signatures/tokens)
         result = FULL_URL_QUERY_PATTERN.matcher(result).replaceAll("$1")
 

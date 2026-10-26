@@ -28,4 +28,15 @@ public class BrowseActivity extends LeanbackActivity {
             setTheme(browseThemeResId);
         }
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (isFinishing()) {
+            try {
+                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxUserJourneyRecorder.Companion.instance(this).markCleanShutdown();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
 }

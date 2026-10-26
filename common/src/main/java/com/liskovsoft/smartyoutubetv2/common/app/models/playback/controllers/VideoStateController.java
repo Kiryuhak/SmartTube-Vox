@@ -693,7 +693,14 @@ public class VideoStateController extends BasePlayerController {
             return;
         }
 
+        if (com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPendingSeekCoordinator.instance().hasActivePendingSeek()) {
+            return;
+        }
+
         Video item = getVideo();
+        if (item.pendingPosMs > 0) {
+            return;
+        }
 
         boolean liveEnd = isLiveEnd();
 
@@ -835,7 +842,22 @@ public class VideoStateController extends BasePlayerController {
             return false;
         }
 
-        return getPlayer().getDurationMs() - getPlayer().getPositionMs() <= 1_000;
+        if (com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPendingSeekCoordinator.instance().hasActivePendingSeek()) {
+            return false;
+        }
+
+        if (getVideo().pendingPosMs > 0) {
+            return false;
+        }
+
+        long duration = getPlayer().getDurationMs();
+        long position = getPlayer().getPositionMs();
+
+        if (duration <= 5_000 || position <= 0) {
+            return false;
+        }
+
+        return duration - position <= 1_000;
     }
 
     private long getLiveThreshold() {

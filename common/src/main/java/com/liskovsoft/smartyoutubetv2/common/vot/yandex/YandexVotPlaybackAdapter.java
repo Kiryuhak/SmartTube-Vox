@@ -476,7 +476,7 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
             notifyActiveLocked(generationId);
         }
 
-        lastSyncSeekTimestamp = System.currentTimeMillis();
+        lastSyncSeekTimestamp = 0;
     }
 
     public void onBuffering() {
@@ -496,15 +496,16 @@ public class YandexVotPlaybackAdapter implements YandexVotOrchestrator.Listener 
             if (activePlayer != null && isPlaying) {
                 long mainPos = duckingBridge.getCurrentVideoPositionMs();
                 long transPos = activePlayer.getPositionMs();
-                if (Math.abs(mainPos - transPos) > 250) {
+                long now = System.currentTimeMillis();
+                if (mainPos >= 0 && Math.abs(mainPos - transPos) > 250 && (lastSyncSeekTimestamp == 0 || now - lastSyncSeekTimestamp > 1000L)) {
                     long clampedPos = syncPolicy.clampPosition(mainPos, duckingBridge.getVideoDurationMs());
                     activePlayer.seekTo(clampedPos);
-                    lastSyncSeekTimestamp = System.currentTimeMillis();
-                    YandexVotLog.i(TAG, "generation=" + currentGeneration + " onPlay resync target_ms=" + clampedPos + " (delta=" + (mainPos - transPos) + ")");
+                    lastSyncSeekTimestamp = now;
+                    YandexVotLog.i(TAG, "generation=" + currentGeneration + " onPlay resync target_ms=" + clampedPos + " (delta=" + (mainPos - transPos) + ", version=1.11.17)");
                 }
                 activePlayer.resume();
                 duckOriginalAudioLocked();
-                YandexVotLog.i(TAG, "generation=" + currentGeneration + " resume");
+                YandexVotLog.i(TAG, "generation=" + currentGeneration + " resume (version=1.11.17)");
                 notifyActiveLocked(currentGeneration);
             }
         }

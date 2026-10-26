@@ -24,19 +24,28 @@ enum class VoxBufferProfile(val id: String, val titleRu: String) {
  */
 enum class VoxBufferRootCause(val id: String, val titleRu: String) {
     HTTP_4XX_STALE_URL("HTTP_4XX_STALE_URL", "Устаревшая ссылка на сегмент потока (HTTP 4xx)"),
+    STALE_SIGNED_URL("STALE_SIGNED_URL", "Истечение срока действия подписанного URL CDN"),
+    HTTP_SOURCE_ERROR("HTTP_SOURCE_ERROR", "Сетевая ошибка источника данных"),
     HTTP_5XX("HTTP_5XX", "Ошибка сервера CDN (HTTP 5xx)"),
     DNS_FAILURE("DNS_FAILURE", "Ошибка разрешения DNS CDN"),
     TLS_FAILURE("TLS_FAILURE", "Ошибка TLS/SSL соединения CDN"),
     TIMEOUT("TIMEOUT", "Таймаут чтения сегмента потока"),
     DECODER_ERROR("DECODER_ERROR", "Сбой аппаратного декодера"),
+    DECODER_STARVATION("DECODER_STARVATION", "Голодание декодера из-за задержки рендеринга"),
     SEEK_OUTSIDE_WINDOW("SEEK_OUTSIDE_WINDOW", "Перемотка за пределы доступного буфера"),
+    SEEK_PENDING("SEEK_PENDING", "Ожидание завершения перемотки"),
+    LIVE_WINDOW_EXPIRED("LIVE_WINDOW_EXPIRED", "Смещение за пределы динамического окна прямого эфира"),
     RESOURCE_PRESSURE("RESOURCE_PRESSURE", "Дефицит системных ресурсов или памяти"),
+    LOW_BUFFER("LOW_BUFFER", "Исчерпание буфера воспроизведения"),
+    THROUGHPUT_BELOW_STREAM_BITRATE("THROUGHPUT_BELOW_STREAM_BITRATE", "Скорость загрузки ниже битрейта потока"),
     INSUFFICIENT_BUFFER_OR_THROUGHPUT("INSUFFICIENT_BUFFER_OR_THROUGHPUT", "Пропускная способность сети недостаточна для битрейта"),
     NETWORK_LIMITED("NETWORK_LIMITED", "Ограничение пропускной способности сети"),
+    NETWORK_DISCONNECTED("NETWORK_DISCONNECTED", "Отсутствие сетевого подключения"),
     BITRATE_TOO_HIGH("BITRATE_TOO_HIGH", "Битрейт потока превышает стабильную скорость соединения"),
     BUFFER_POLICY_TOO_SMALL("BUFFER_POLICY_TOO_SMALL", "Размер буфера недостаточен для битрейта потока"),
     DECODER_LIMITED("DECODER_LIMITED", "Аппаратный декодер устройства не справляется с декодированием"),
     CDN_THROTTLED("CDN_THROTTLED", "Искусственное ограничение скорости со стороны CDN"),
+    INSUFFICIENT_EVIDENCE("INSUFFICIENT_EVIDENCE", "Недостаточно данных для определения причины"),
     UNKNOWN("UNKNOWN", "Неопределенная причина буферизации");
 
     constructor(titleRu: String) : this(titleRu, titleRu)
@@ -78,6 +87,7 @@ data class RebufferIncident(
     val isLive: Boolean = false,
     val playbackSessionId: String? = null,
     val operationId: String? = null,
+    val parentEventId: String? = null,
     val networkType: String = "UNKNOWN",
     val decoderState: String? = null,
     val lastHttpStatus: Int? = null,
@@ -85,6 +95,8 @@ data class RebufferIncident(
     val loadLatencyMs: Long? = null,
     val bytesLoaded: Long? = null,
     val throughputEstimateBps: Long? = null,
+    val bandwidthMeterStatus: String? = null,
+    val droppedFrames: Int? = null,
     var rootCause: VoxBufferRootCause = VoxBufferRootCause.UNKNOWN,
     var evidenceMissing: String? = null,
     var outcome: String = "IN_PROGRESS"
@@ -106,6 +118,7 @@ data class RebufferIncident(
         map["isLive"] = isLive.toString()
         playbackSessionId?.let { map["playbackSessionId"] = it }
         operationId?.let { map["operationId"] = it }
+        parentEventId?.let { map["parentEventId"] = it }
         map["networkType"] = networkType
         decoderState?.let { map["decoderState"] = it }
         lastHttpStatus?.let { map["lastHttpStatus"] = it.toString() }
@@ -113,6 +126,8 @@ data class RebufferIncident(
         loadLatencyMs?.let { map["loadLatencyMs"] = it.toString() }
         bytesLoaded?.let { map["bytesLoaded"] = it.toString() }
         throughputEstimateBps?.let { if (it > 0) map["throughputEstimateBps"] = it.toString() }
+        bandwidthMeterStatus?.let { map["bandwidthMeterStatus"] = it }
+        droppedFrames?.let { if (it > 0) map["droppedFrames"] = it.toString() }
         map["rootCause"] = rootCause.name
         evidenceMissing?.let { map["evidenceMissing"] = it }
         map["outcome"] = outcome
@@ -376,8 +391,29 @@ object VoxPlaybackBufferPolicy {
         isDecoderError: Boolean = false,
         lastHttpStatus: Int? = null,
         lastErrorClass: String? = null,
-        isBehindLiveWindow: Boolean = false
+        isBehindLiveWindow: Boolean = false,
+        networkType: String = "UNKNOWN",
+        isSeekPending: Boolean = false,
+        bandwidthMeterStatus: String? = null
     ): RebufferClassification {
+        // 0. Сеть отсутствует
+        if (networkType == "NONE" || networkType == "DISCONNECTED") {
+            return RebufferClassification(
+                VoxBufferRootCause.NETWORK_DISCONNECTED,
+                null,
+                "No active network connection"
+            )
+        }
+
+        // 0.1 Перемотка в процессе ожидания
+        if (isSeekPending) {
+            return RebufferClassification(
+                VoxBufferRootCause.SEEK_PENDING,
+                null,
+                "Rebuffer occurred during active user seek request"
+            )
+        }
+
         // 1. Аппаратная ошибка декодера
         if (isDecoderError) {
             return RebufferClassification(
@@ -433,6 +469,15 @@ object VoxPlaybackBufferPolicy {
                 VoxBufferRootCause.DECODER_LIMITED,
                 null,
                 "Decoder dropped $droppedFrames frames"
+            )
+        }
+
+        // 5.1 Голодание декодера при достаточном буфере
+        if (droppedFrames > 15 && bufferAheadMs > 3000) {
+            return RebufferClassification(
+                VoxBufferRootCause.DECODER_STARVATION,
+                null,
+                "Decoder starved ($droppedFrames drops) despite healthy buffer ahead (${bufferAheadMs}ms)"
             )
         }
 
