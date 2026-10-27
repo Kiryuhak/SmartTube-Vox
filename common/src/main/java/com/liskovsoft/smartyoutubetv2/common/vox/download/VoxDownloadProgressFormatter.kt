@@ -25,10 +25,12 @@ object VoxDownloadProgressFormatter {
             null -> "Скачать"
             VoxDownloadState.PREPARING_TRANSLATION,
             VoxDownloadState.RESOLVING_STREAMS,
+            VoxDownloadState.CONNECTING,
             VoxDownloadState.DOWNLOADING_MEDIA,
             VoxDownloadState.DOWNLOADING_VIDEO,
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO,
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO,
+            VoxDownloadState.VERIFYING,
             VoxDownloadState.READY_FOR_MUX,
             VoxDownloadState.MUXING,
             VoxDownloadState.FINALIZING, VoxDownloadState.MUXED,

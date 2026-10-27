@@ -365,7 +365,15 @@ object VoxDownloadDialogHelper {
             VoxDownloadErrorCode.MEDIA_PARSE_ERROR -> context.getString(R.string.vox_download_error_parse)
             VoxDownloadErrorCode.NETWORK_ERROR -> context.getString(R.string.vox_download_error_network)
             VoxDownloadErrorCode.CANCELLED -> context.getString(R.string.vox_download_stage_cancelled)
-            else -> context.getString(R.string.vox_download_error_unknown)
+            VoxDownloadErrorCode.NO_FORMAT_2160P,
+            VoxDownloadErrorCode.CDN_CONNECT_TIMEOUT,
+            VoxDownloadErrorCode.CDN_READ_TIMEOUT,
+            VoxDownloadErrorCode.RANGE_MISMATCH,
+            VoxDownloadErrorCode.MANIFEST_EXPIRED,
+            VoxDownloadErrorCode.PARTIAL_FILE,
+            VoxDownloadErrorCode.HTTP_403,
+            VoxDownloadErrorCode.HTTP_429 -> VoxDownloadFailureClassifier.getUserMessage(code)
+            else -> VoxDownloadFailureClassifier.getUserMessage(code)
         }
     }
 }

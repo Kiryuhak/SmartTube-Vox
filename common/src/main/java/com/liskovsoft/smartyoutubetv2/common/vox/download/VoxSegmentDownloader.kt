@@ -156,6 +156,9 @@ class VoxSegmentDownloader(
                 return
             } catch (e: Exception) {
                 if (isCancelled()) {
+                    if (targetFile.exists()) {
+                        targetFile.delete()
+                    }
                     throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Download cancelled", e)
                 }
 
@@ -265,7 +268,17 @@ class VoxSegmentDownloader(
                 206 -> {
                     // Сервер отдал частичный контент
                     val contentRange = response.header("Content-Range")
-                    totalExpectedBytes = parseTotalFromContentRange(contentRange)
+                    val (rangeStart, _, rangeTotal) = parseContentRange(contentRange)
+                    if (rangeStart != null && rangeStart != existingOffset) {
+                        if (targetFile.exists()) {
+                            targetFile.delete()
+                        }
+                        throw VoxDownloadException(
+                            VoxDownloadErrorCode.RANGE_MISMATCH,
+                            "Content-Range mismatch: expected start at $existingOffset, got $rangeStart"
+                        )
+                    }
+                    totalExpectedBytes = rangeTotal ?: parseTotalFromContentRange(contentRange)
                     val bodyLength = response.body()?.contentLength()
 
                     val remainingBytes = if (bodyLength != null && bodyLength > 0) {
@@ -288,10 +301,16 @@ class VoxSegmentDownloader(
                         onProgress = onProgress
                     )
                 }
-                403, 410 -> {
+                403 -> {
                     throw VoxDownloadException(
-                        VoxDownloadErrorCode.URL_EXPIRED,
-                        "HTTP $code received: signed URL expired or access forbidden"
+                        VoxDownloadErrorCode.HTTP_403,
+                        "HTTP 403 Forbidden: access denied by CDN"
+                    )
+                }
+                410 -> {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.MANIFEST_EXPIRED,
+                        "HTTP 410 Gone: media stream URL expired"
                     )
                 }
                 416 -> {
@@ -308,14 +327,14 @@ class VoxSegmentDownloader(
                         targetFile.delete()
                     }
                     throw VoxDownloadException(
-                        VoxDownloadErrorCode.NETWORK_ERROR,
+                        VoxDownloadErrorCode.RANGE_MISMATCH,
                         "HTTP 416 Range Not Satisfiable, restarting stream"
                     )
                 }
                 429 -> {
                     throw VoxDownloadException(
-                        VoxDownloadErrorCode.NETWORK_ERROR,
-                        "HTTP 429 Too Many Requests: rate limited"
+                        VoxDownloadErrorCode.HTTP_429,
+                        "HTTP 429 Too Many Requests: rate limited by CDN"
                     )
                 }
                 in 500..599 -> {
@@ -371,9 +390,44 @@ class VoxSegmentDownloader(
             }
         } catch (e: VoxDownloadException) {
             throw e
+        } catch (e: SocketTimeoutException) {
+            if (isCancelled()) {
+                throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Download cancelled", e)
+            }
+            val msg = e.message?.lowercase() ?: ""
+            if (msg.contains("connect") || (eventListener.connectElapsedMs > 0 && eventListener.ttfbMs == 0L)) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.CDN_CONNECT_TIMEOUT,
+                    "CDN connection timed out: ${e.message}",
+                    e
+                )
+            } else {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.CDN_READ_TIMEOUT,
+                    "CDN read timed out: ${e.message}",
+                    e
+                )
+            }
         } catch (e: Exception) {
             if (isCancelled()) {
                 throw VoxDownloadException(VoxDownloadErrorCode.CANCELLED, "Download cancelled", e)
+            }
+            if (e.cause is SocketTimeoutException) {
+                val st = e.cause as SocketTimeoutException
+                val msg = st.message?.lowercase() ?: ""
+                if (msg.contains("connect")) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.CDN_CONNECT_TIMEOUT,
+                        "CDN connection timed out: ${st.message}",
+                        e
+                    )
+                } else {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.CDN_READ_TIMEOUT,
+                        "CDN read timed out: ${st.message}",
+                        e
+                    )
+                }
             }
             throw VoxDownloadException(
                 VoxDownloadErrorCode.NETWORK_ERROR,
@@ -482,8 +536,20 @@ class VoxSegmentDownloader(
             // Валидация полноты, если totalExpectedBytes был известен
             if (totalExpectedBytes != null && totalExpectedBytes > 0 && bytesWritten < totalExpectedBytes) {
                 throw VoxDownloadException(
-                    VoxDownloadErrorCode.NETWORK_ERROR,
+                    VoxDownloadErrorCode.PARTIAL_FILE,
                     "Premature stream EOF: read $bytesWritten of expected $totalExpectedBytes bytes"
+                )
+            }
+
+            if (bytesWritten == 0L && (totalExpectedBytes == null || totalExpectedBytes > 0L)) {
+                try { outputStream?.close() } catch (ignored: Exception) {}
+                outputStream = null
+                if (targetFile.exists()) {
+                    targetFile.delete()
+                }
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.PARTIAL_FILE,
+                    "Stream completed with 0 bytes downloaded"
                 )
             }
 
@@ -491,10 +557,40 @@ class VoxSegmentDownloader(
                 bytesStreamed = bytesWritten - startOffset,
                 peakMbps = peakMbps
             )
+        } catch (e: Exception) {
+            try { outputStream?.close() } catch (ignored: Exception) {}
+            outputStream = null
+            if (isCancelled() || (e is VoxDownloadException && e.code == VoxDownloadErrorCode.CANCELLED)) {
+                if (targetFile.exists()) {
+                    targetFile.delete()
+                }
+            }
+            throw e
         } finally {
             try { inputStream?.close() } catch (ignored: Exception) {}
             try { outputStream?.flush(); outputStream?.close() } catch (ignored: Exception) {}
         }
+    }
+
+    internal fun parseContentRange(contentRange: String?): Triple<Long?, Long?, Long?> {
+        if (contentRange.isNullOrBlank()) return Triple(null, null, null)
+        try {
+            val trimmed = contentRange.trim()
+            val spaceIdx = trimmed.indexOf(' ')
+            if (spaceIdx > 0 && trimmed.substring(0, spaceIdx).equals("bytes", ignoreCase = true)) {
+                val rest = trimmed.substring(spaceIdx + 1).trim()
+                val slashIdx = rest.lastIndexOf('/')
+                val total = if (slashIdx >= 0 && slashIdx < rest.length - 1) {
+                    rest.substring(slashIdx + 1).trim().toLongOrNull()
+                } else null
+                val rangePart = if (slashIdx >= 0) rest.substring(0, slashIdx).trim() else rest
+                val dashIdx = rangePart.indexOf('-')
+                val start = if (dashIdx >= 0) rangePart.substring(0, dashIdx).trim().toLongOrNull() else null
+                val end = if (dashIdx >= 0 && dashIdx < rangePart.length - 1) rangePart.substring(dashIdx + 1).trim().toLongOrNull() else null
+                return Triple(start, end, total)
+            }
+        } catch (ignored: Exception) {}
+        return Triple(null, null, null)
     }
 
     private fun parseTotalFromContentRange(contentRange: String?): Long? {

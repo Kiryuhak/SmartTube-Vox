@@ -12,11 +12,17 @@ import java.net.UnknownHostException
  */
 enum class VoxYouTubeErrorCategory {
     NETWORK_TIMEOUT,
+    CDN_CONNECT_TIMEOUT,
+    CDN_READ_TIMEOUT,
     DNS_FAILURE,
     HTTP_403,
     HTTP_410,
     HTTP_429,
     HTTP_5XX,
+    RANGE_MISMATCH,
+    MANIFEST_EXPIRED,
+    PARTIAL_FILE,
+    NO_FORMAT_2160P,
     PLAYER_RESPONSE_ERROR,
     FORMAT_EMPTY,
     SIGNED_URL_EXPIRED,
@@ -81,11 +87,20 @@ class VoxYouTubeRetryPolicy(
         if (throwable is VoxDownloadException) {
             return when (throwable.code) {
                 VoxDownloadErrorCode.CANCELLED -> VoxYouTubeErrorCategory.CANCELLED
-                VoxDownloadErrorCode.URL_EXPIRED -> VoxYouTubeErrorCategory.SIGNED_URL_EXPIRED
+                VoxDownloadErrorCode.URL_EXPIRED,
+                VoxDownloadErrorCode.MANIFEST_EXPIRED -> VoxYouTubeErrorCategory.MANIFEST_EXPIRED
                 VoxDownloadErrorCode.INSUFFICIENT_STORAGE -> VoxYouTubeErrorCategory.INSUFFICIENT_STORAGE
                 VoxDownloadErrorCode.UNSUPPORTED_CODEC -> VoxYouTubeErrorCategory.UNSUPPORTED_CODEC
                 VoxDownloadErrorCode.STREAM_UNAVAILABLE -> VoxYouTubeErrorCategory.VIDEO_UNAVAILABLE
-                VoxDownloadErrorCode.NETWORK_ERROR -> classifyThrowable(throwable.cause ?: throwable)
+                VoxDownloadErrorCode.NO_FORMAT_2160P -> VoxYouTubeErrorCategory.NO_FORMAT_2160P
+                VoxDownloadErrorCode.CDN_CONNECT_TIMEOUT -> VoxYouTubeErrorCategory.CDN_CONNECT_TIMEOUT
+                VoxDownloadErrorCode.CDN_READ_TIMEOUT -> VoxYouTubeErrorCategory.CDN_READ_TIMEOUT
+                VoxDownloadErrorCode.HTTP_403 -> VoxYouTubeErrorCategory.HTTP_403
+                VoxDownloadErrorCode.HTTP_429 -> VoxYouTubeErrorCategory.HTTP_429
+                VoxDownloadErrorCode.RANGE_MISMATCH -> VoxYouTubeErrorCategory.RANGE_MISMATCH
+                VoxDownloadErrorCode.PARTIAL_FILE -> VoxYouTubeErrorCategory.PARTIAL_FILE
+                VoxDownloadErrorCode.NETWORK_ERROR,
+                VoxDownloadErrorCode.NETWORK -> classifyThrowable(throwable.cause ?: throwable)
                 else -> VoxYouTubeErrorCategory.UNKNOWN
             }
         }
@@ -95,18 +110,28 @@ class VoxYouTubeRetryPolicy(
 
     private fun classifyThrowable(throwable: Throwable): VoxYouTubeErrorCategory {
         return when (throwable) {
-            is SocketTimeoutException -> VoxYouTubeErrorCategory.NETWORK_TIMEOUT
+            is SocketTimeoutException -> {
+                val msg = throwable.message?.lowercase() ?: ""
+                when {
+                    msg.contains("connect") -> VoxYouTubeErrorCategory.CDN_CONNECT_TIMEOUT
+                    msg.contains("read") -> VoxYouTubeErrorCategory.CDN_READ_TIMEOUT
+                    else -> VoxYouTubeErrorCategory.NETWORK_TIMEOUT
+                }
+            }
             is UnknownHostException -> VoxYouTubeErrorCategory.DNS_FAILURE
-            is ConnectException, is SocketException -> VoxYouTubeErrorCategory.NETWORK_TIMEOUT
+            is ConnectException, is SocketException -> VoxYouTubeErrorCategory.CDN_CONNECT_TIMEOUT
             is InterruptedIOException, is InterruptedException -> VoxYouTubeErrorCategory.CANCELLED
             else -> {
                 val msg = throwable.message?.lowercase() ?: ""
                 when {
+                    msg.contains("connect timed out") || msg.contains("connect timeout") -> VoxYouTubeErrorCategory.CDN_CONNECT_TIMEOUT
+                    msg.contains("read timed out") || msg.contains("read timeout") -> VoxYouTubeErrorCategory.CDN_READ_TIMEOUT
                     msg.contains("timeout") || msg.contains("timed out") -> VoxYouTubeErrorCategory.NETWORK_TIMEOUT
                     msg.contains("unable to resolve host") || msg.contains("no address associated") -> VoxYouTubeErrorCategory.DNS_FAILURE
                     msg.contains("403") || msg.contains("forbidden") -> VoxYouTubeErrorCategory.HTTP_403
                     msg.contains("410") || msg.contains("gone") -> VoxYouTubeErrorCategory.HTTP_410
                     msg.contains("429") || msg.contains("too many requests") -> VoxYouTubeErrorCategory.HTTP_429
+                    msg.contains("range") && (msg.contains("mismatch") || msg.contains("unsatisfiable")) -> VoxYouTubeErrorCategory.RANGE_MISMATCH
                     msg.contains("cancel") -> VoxYouTubeErrorCategory.CANCELLED
                     else -> VoxYouTubeErrorCategory.UNKNOWN
                 }
@@ -128,12 +153,14 @@ class VoxYouTubeRetryPolicy(
             VoxYouTubeErrorCategory.UNSUPPORTED_CODEC,
             VoxYouTubeErrorCategory.AGE_RESTRICTED,
             VoxYouTubeErrorCategory.LOGIN_REQUIRED,
+            VoxYouTubeErrorCategory.NO_FORMAT_2160P,
             VoxYouTubeErrorCategory.LIVE_UNSUPPORTED -> {
                 return VoxRetryDecision.Fatal(category, "Non-retryable terminal condition: $category")
             }
 
             VoxYouTubeErrorCategory.HTTP_403,
             VoxYouTubeErrorCategory.HTTP_410,
+            VoxYouTubeErrorCategory.MANIFEST_EXPIRED,
             VoxYouTubeErrorCategory.SIGNED_URL_EXPIRED -> {
                 return if (hasUrlRefreshProvider && currentAttempt < maxRetries) {
                     VoxRetryDecision.RefreshUrlAndRetry
@@ -142,8 +169,12 @@ class VoxYouTubeRetryPolicy(
                 }
             }
 
+            VoxYouTubeErrorCategory.CDN_CONNECT_TIMEOUT,
+            VoxYouTubeErrorCategory.CDN_READ_TIMEOUT,
             VoxYouTubeErrorCategory.NETWORK_TIMEOUT,
             VoxYouTubeErrorCategory.DNS_FAILURE,
+            VoxYouTubeErrorCategory.RANGE_MISMATCH,
+            VoxYouTubeErrorCategory.PARTIAL_FILE,
             VoxYouTubeErrorCategory.HTTP_429,
             VoxYouTubeErrorCategory.HTTP_5XX,
             VoxYouTubeErrorCategory.UNKNOWN -> {

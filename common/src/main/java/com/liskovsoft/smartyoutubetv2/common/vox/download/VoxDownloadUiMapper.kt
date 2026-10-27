@@ -35,10 +35,12 @@ object VoxDownloadUiMapper {
         VoxDownloadState.IDLE, VoxDownloadState.QUEUED -> "В очереди"
         VoxDownloadState.PREPARING_TRANSLATION -> "Подготовка перевода"
         VoxDownloadState.RESOLVING_STREAMS -> "Подготовка загрузки"
+        VoxDownloadState.CONNECTING -> "Подключение…"
         VoxDownloadState.DOWNLOADING_MEDIA -> "Загрузка медиа…"
         VoxDownloadState.DOWNLOADING_VIDEO -> "Загрузка видео"
         VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO -> "Загрузка оригинального звука"
         VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> "Загрузка перевода"
+        VoxDownloadState.VERIFYING -> "Проверка данных…"
         VoxDownloadState.READY_FOR_MUX,
         VoxDownloadState.MUXING -> "Сборка файла…"
         VoxDownloadState.FINALIZING, VoxDownloadState.MUXED,

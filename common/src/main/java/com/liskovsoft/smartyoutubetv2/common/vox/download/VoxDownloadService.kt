@@ -307,10 +307,12 @@ class VoxDownloadService : Service(), VoxDownloadListener {
         return when (progress.state) {
             VoxDownloadState.PREPARING_TRANSLATION -> getString(R.string.vox_download_stage_prep_trans)
             VoxDownloadState.RESOLVING_STREAMS -> getString(R.string.vox_download_stage_resolving)
+            VoxDownloadState.CONNECTING -> "Подключение…"
             VoxDownloadState.DOWNLOADING_MEDIA -> "Загрузка медиа…$pctSuffix"
             VoxDownloadState.DOWNLOADING_VIDEO -> "${getString(R.string.vox_download_stage_video)}$pctSuffix"
             VoxDownloadState.DOWNLOADING_ORIGINAL_AUDIO -> "${getString(R.string.vox_download_stage_orig_audio)}$pctSuffix"
             VoxDownloadState.DOWNLOADING_TRANSLATED_AUDIO -> "${getString(R.string.vox_download_stage_trans_audio)}$pctSuffix"
+            VoxDownloadState.VERIFYING -> "Проверка данных…"
             VoxDownloadState.MUXING -> "${getString(R.string.vox_download_stage_muxing)}$pctSuffix"
             VoxDownloadState.FINALIZING -> "Завершение файла…"
             VoxDownloadState.PUBLISHING -> "${getString(R.string.vox_download_stage_publishing)}$pctSuffix"

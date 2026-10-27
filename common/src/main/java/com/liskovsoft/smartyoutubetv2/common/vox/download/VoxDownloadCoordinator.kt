@@ -662,6 +662,10 @@ class VoxDownloadCoordinator(
 
                 if (isStale(job, expectedGen)) return
 
+                job.updateState(VoxDownloadState.CONNECTING)
+                job.lastOperation = "CONNECTING"
+                notifyStateChange(job)
+
                 // Устанавливаем общее состояние параллельной загрузки медиа
                 job.updateState(VoxDownloadState.DOWNLOADING_MEDIA)
                 job.lastOperation = "DOWNLOAD_MEDIA_PARALLEL"
@@ -890,6 +894,10 @@ class VoxDownloadCoordinator(
             if (isStale(job, expectedGen)) return
 
             // 6. Проверка инварианта: все 3 файла должны существовать и иметь ненулевой размер
+            job.updateState(VoxDownloadState.VERIFYING)
+            job.lastOperation = "VERIFYING"
+            notifyStateChange(job)
+
             val videoFile = storage.getTrackFile(downloadId, VoxDownloadTrack.VIDEO)
             val origAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.ORIGINAL_AUDIO)
             val transAudioFile = storage.getTrackFile(downloadId, VoxDownloadTrack.TRANSLATED_AUDIO)

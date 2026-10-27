@@ -62,8 +62,13 @@ class DefaultVoxStreamResolver(
         val fallbackResult = VoxDownloadFallbackPolicy.selectVideoFormat(videoCandidates, qualityPreference)
         if (fallbackResult == null) {
             if (qualityPreference != VoxQualityPreference.QUALITY_AUTO) {
+                if (qualityPreference == VoxQualityPreference.QUALITY_2160P) {
+                    throw VoxDownloadException(
+                        VoxDownloadErrorCode.NO_FORMAT_2160P,
+                        "Качество 2160p (4K) недоступно для этого видео"
+                    )
+                }
                 val label = when (qualityPreference) {
-                    VoxQualityPreference.QUALITY_2160P -> "2160p"
                     VoxQualityPreference.QUALITY_1440P -> "1440p"
                     VoxQualityPreference.QUALITY_1080P -> "1080p"
                     VoxQualityPreference.QUALITY_720P -> "720p"
@@ -82,6 +87,17 @@ class DefaultVoxStreamResolver(
             )
         }
         val selectedFormat = fallbackResult.selected
+
+        // Anti-masquerade check: 720p / 1080p / 1440p cannot masquerade as 2160p
+        if (qualityPreference == VoxQualityPreference.QUALITY_2160P) {
+            val effRes = VoxDownloadFallbackPolicy.getEffectiveResolution(selectedFormat.width, selectedFormat.height)
+            if (effRes < 2160) {
+                throw VoxDownloadException(
+                    VoxDownloadErrorCode.NO_FORMAT_2160P,
+                    "Формат с разрешением ${effRes}p не может маскироваться под 2160p"
+                )
+            }
+        }
 
         val url = selectedFormat.url
             ?: throw VoxDownloadException(VoxDownloadErrorCode.STREAM_UNAVAILABLE, "Video format missing URL")

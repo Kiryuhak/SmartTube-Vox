@@ -32,9 +32,16 @@ enum class VoxDownloadFailureCategory(val userMessageRu: String, val isRecoverab
     CHECKSUM_FAILED("Не удалось проверить целостность файла", true),
     INTEGRITY_FAILED("Не удалось проверить целостность файла", true),
     HTTP_FORBIDDEN("Доступ ограничен сервером", false),
+    HTTP_429("Слишком много запросов. Попробуйте позже", true),
     URL_EXPIRED("Ссылка на видео устарела. Повторяем загрузку…", true),
+    MANIFEST_EXPIRED("Ссылка на манифест истекла. Обновление потока…", true),
+    CDN_CONNECT_TIMEOUT("Превышено время подключения к CDN", true),
+    CDN_READ_TIMEOUT("Превышено время чтения данных из CDN", true),
+    RANGE_MISMATCH("Несовпадение диапазона докачки. Перезапуск загрузки…", true),
+    PARTIAL_FILE("Файл загружен не полностью", true),
     STREAM_UNAVAILABLE("Видео недоступно для скачивания", false),
     QUALITY_UNAVAILABLE("Запрошенное качество недоступно для этого видео", false),
+    NO_FORMAT_2160P("Качество 2160p (4K) недоступно для этого видео", false),
     AUDIO_UNAVAILABLE("Не удалось получить аудиодорожку", false),
     TRANSLATION_UNAVAILABLE("Перевод для этого видео недоступен", false),
     VIDEO_UNAVAILABLE("Это видео пока нельзя скачать", false),
@@ -103,10 +110,18 @@ object VoxDownloadFailureClassifier {
                 VoxDownloadErrorCode.OUTPUT_MOVE_FAILED -> VoxDownloadFailureCategory.OUTPUT_MOVE_FAILED
                 VoxDownloadErrorCode.FINALIZE_FAILED -> VoxDownloadFailureCategory.FINALIZE_FAILED
                 VoxDownloadErrorCode.URL_EXPIRED -> VoxDownloadFailureCategory.URL_EXPIRED
-                VoxDownloadErrorCode.AUTH_REQUIRED -> VoxDownloadFailureCategory.HTTP_FORBIDDEN
+                VoxDownloadErrorCode.MANIFEST_EXPIRED -> VoxDownloadFailureCategory.MANIFEST_EXPIRED
+                VoxDownloadErrorCode.AUTH_REQUIRED,
+                VoxDownloadErrorCode.HTTP_403 -> VoxDownloadFailureCategory.HTTP_FORBIDDEN
+                VoxDownloadErrorCode.HTTP_429 -> VoxDownloadFailureCategory.HTTP_429
                 VoxDownloadErrorCode.STREAM_UNAVAILABLE,
                 VoxDownloadErrorCode.RESOLVE_FAILED -> VoxDownloadFailureCategory.RESOLVE_FAILED
                 VoxDownloadErrorCode.QUALITY_UNAVAILABLE -> VoxDownloadFailureCategory.QUALITY_UNAVAILABLE
+                VoxDownloadErrorCode.NO_FORMAT_2160P -> VoxDownloadFailureCategory.NO_FORMAT_2160P
+                VoxDownloadErrorCode.CDN_CONNECT_TIMEOUT -> VoxDownloadFailureCategory.CDN_CONNECT_TIMEOUT
+                VoxDownloadErrorCode.CDN_READ_TIMEOUT -> VoxDownloadFailureCategory.CDN_READ_TIMEOUT
+                VoxDownloadErrorCode.RANGE_MISMATCH -> VoxDownloadFailureCategory.RANGE_MISMATCH
+                VoxDownloadErrorCode.PARTIAL_FILE -> VoxDownloadFailureCategory.PARTIAL_FILE
                 VoxDownloadErrorCode.VIDEO_DOWNLOAD_FAILED -> VoxDownloadFailureCategory.VIDEO_DOWNLOAD_FAILED
                 VoxDownloadErrorCode.AUDIO_DOWNLOAD_FAILED -> VoxDownloadFailureCategory.AUDIO_DOWNLOAD_FAILED
                 VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,
@@ -211,12 +226,20 @@ object VoxDownloadFailureClassifier {
             VoxDownloadErrorCode.OUTPUT_MOVE_FAILED -> "Не удалось переместить готовый файл"
             VoxDownloadErrorCode.FINALIZE_FAILED -> "Ошибка при сохранении видео"
             VoxDownloadErrorCode.URL_EXPIRED -> "Ссылка на видео устарела"
+            VoxDownloadErrorCode.MANIFEST_EXPIRED -> "Ссылка на манифест истекла"
+            VoxDownloadErrorCode.HTTP_403 -> "Доступ к потоку ограничен сервером (HTTP 403)"
+            VoxDownloadErrorCode.HTTP_429 -> "Слишком много запросов (HTTP 429)"
+            VoxDownloadErrorCode.RANGE_MISMATCH -> "Несовпадение диапазона докачки"
+            VoxDownloadErrorCode.PARTIAL_FILE -> "Файл загружен не полностью"
             VoxDownloadErrorCode.NETWORK_ERROR,
             VoxDownloadErrorCode.NETWORK -> "Ошибка сети. Попробуйте позже"
             VoxDownloadErrorCode.TIMEOUT -> "Превышено время ожидания ответа"
+            VoxDownloadErrorCode.CDN_CONNECT_TIMEOUT -> "Превышено время подключения к CDN"
+            VoxDownloadErrorCode.CDN_READ_TIMEOUT -> "Превышено время чтения данных из CDN"
             VoxDownloadErrorCode.STREAM_UNAVAILABLE,
             VoxDownloadErrorCode.RESOLVE_FAILED -> "Видео недоступно для скачивания"
             VoxDownloadErrorCode.QUALITY_UNAVAILABLE -> "Запрошенное качество недоступно для этого видео"
+            VoxDownloadErrorCode.NO_FORMAT_2160P -> "Качество 2160p (4K) недоступно для этого видео"
             VoxDownloadErrorCode.VIDEO_DOWNLOAD_FAILED -> "Ошибка загрузки видеопотока"
             VoxDownloadErrorCode.AUDIO_DOWNLOAD_FAILED -> "Ошибка загрузки аудиодорожки"
             VoxDownloadErrorCode.TRANSLATION_UNAVAILABLE,

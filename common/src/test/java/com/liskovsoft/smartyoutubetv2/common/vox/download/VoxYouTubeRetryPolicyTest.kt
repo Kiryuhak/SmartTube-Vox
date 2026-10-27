@@ -24,7 +24,9 @@ class VoxYouTubeRetryPolicyTest {
 
     @Test
     fun testClassifyErrorByThrowable() {
-        assertEquals(VoxYouTubeErrorCategory.NETWORK_TIMEOUT, policy.classifyError(SocketTimeoutException("Read timed out"), null))
+        assertEquals(VoxYouTubeErrorCategory.CDN_READ_TIMEOUT, policy.classifyError(SocketTimeoutException("Read timed out"), null))
+        assertEquals(VoxYouTubeErrorCategory.CDN_CONNECT_TIMEOUT, policy.classifyError(SocketTimeoutException("Connect timed out"), null))
+        assertEquals(VoxYouTubeErrorCategory.NETWORK_TIMEOUT, policy.classifyError(SocketTimeoutException("Generic timeout"), null))
         assertEquals(VoxYouTubeErrorCategory.DNS_FAILURE, policy.classifyError(UnknownHostException("googlevideo.com"), null))
         assertEquals(
             VoxYouTubeErrorCategory.CANCELLED,

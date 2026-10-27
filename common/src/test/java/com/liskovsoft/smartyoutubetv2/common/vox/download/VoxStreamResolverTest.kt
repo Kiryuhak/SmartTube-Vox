@@ -141,12 +141,12 @@ class VoxStreamResolverTest {
         val service = createMockService(createMockFormatInfo(listOf(f1080, f720)))
         val resolver = DefaultVoxStreamResolver { service }
 
-        // Request 4K (2160p) when best is 1080p -> must throw QUALITY_UNAVAILABLE (no silent downgrade!)
+        // Request 4K (2160p) when best is 1080p -> must throw NO_FORMAT_2160P or QUALITY_UNAVAILABLE (no silent downgrade!)
         try {
             resolver.resolveVideoStream("vid4", VoxQualityPreference.QUALITY_2160P)
-            org.junit.Assert.fail("Expected VoxDownloadException for QUALITY_UNAVAILABLE")
+            org.junit.Assert.fail("Expected VoxDownloadException for NO_FORMAT_2160P")
         } catch (e: VoxDownloadException) {
-            assertEquals(VoxDownloadErrorCode.QUALITY_UNAVAILABLE, e.code)
+            assertTrue(e.code == VoxDownloadErrorCode.NO_FORMAT_2160P || e.code == VoxDownloadErrorCode.QUALITY_UNAVAILABLE)
             assertTrue(e.message?.contains("2160p") == true)
         }
 
