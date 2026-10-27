@@ -1466,13 +1466,10 @@ public class Utils {
             // java.net.UnknownHostException: Unable to resolve host "www.youtube.com": No address associated with hostname
             PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
             int currentDns = playerTweaksData.getPreferredDnsType();
+            // Fallback strictly within system resolver (prefer IPv4) on broken IPv6 stacks.
+            // Do NOT silently force third-party Google DNS (8.8.8.8) to protect user's Private DNS, VPN, and local resolver.
             if (currentDns == PlayerTweaksData.DNS_TYPE_SYSTEM) {
                 playerTweaksData.setPreferredDnsType(PlayerTweaksData.DNS_TYPE_IPV4);
-                // Restart app to reinit OkHttp internal objects
-                Utils.restartTheApp(context);
-                return true;
-            } else if (currentDns == PlayerTweaksData.DNS_TYPE_IPV4) {
-                playerTweaksData.setPreferredDnsType(PlayerTweaksData.DNS_TYPE_GOOGLE);
                 // Restart app to reinit OkHttp internal objects
                 Utils.restartTheApp(context);
                 return true;
