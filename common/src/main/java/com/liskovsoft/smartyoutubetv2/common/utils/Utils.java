@@ -1459,11 +1459,20 @@ public class Utils {
     }
 
     public static boolean fixRetrofitErrors(@NonNull Context context, Throwable error) {
-        if (error != null && Helpers.contains(error.getMessage(), "No address associated with hostname")) {
+        if (error != null && (Helpers.contains(error.getMessage(), "No address associated with hostname")
+                || Helpers.contains(error.getMessage(), "Unable to resolve host")
+                || error instanceof java.net.UnknownHostException
+                || (error.getCause() instanceof java.net.UnknownHostException))) {
             // java.net.UnknownHostException: Unable to resolve host "www.youtube.com": No address associated with hostname
             PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
-            if (playerTweaksData.getPreferredDnsType() != PlayerTweaksData.DNS_TYPE_IPV4) {
+            int currentDns = playerTweaksData.getPreferredDnsType();
+            if (currentDns == PlayerTweaksData.DNS_TYPE_SYSTEM) {
                 playerTweaksData.setPreferredDnsType(PlayerTweaksData.DNS_TYPE_IPV4);
+                // Restart app to reinit OkHttp internal objects
+                Utils.restartTheApp(context);
+                return true;
+            } else if (currentDns == PlayerTweaksData.DNS_TYPE_IPV4) {
+                playerTweaksData.setPreferredDnsType(PlayerTweaksData.DNS_TYPE_GOOGLE);
                 // Restart app to reinit OkHttp internal objects
                 Utils.restartTheApp(context);
                 return true;

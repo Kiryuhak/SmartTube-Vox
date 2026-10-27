@@ -42,7 +42,10 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   const reports = [];
   const seenIds = new Set();
   const PAGE_SIZE = 100;
-  const MAX_EXPORT_REPORTS = options.maxReports || 5000;
+  const DEFAULT_MAX_EXPORT_REPORTS = 5000;
+  const MAX_EXPORT_REPORTS = options.maxReports !== undefined
+    ? Math.max(1, Number(options.maxReports))
+    : DEFAULT_MAX_EXPORT_REPORTS;
   let offset = options.offset || 0;
   let currentCursor = options.cursor || null;
   let hasMore = true;

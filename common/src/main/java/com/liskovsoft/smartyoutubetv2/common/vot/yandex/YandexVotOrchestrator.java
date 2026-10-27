@@ -374,6 +374,26 @@ public class YandexVotOrchestrator {
             switch (status) {
                 case YandexVotApiClient.STATUS_FINISHED: {
                     postUploadAudioRequestedCount = 0;
+                    String respLang = result.getResponseLanguage();
+                    String reqTarget = params.getTargetLang() != null ? params.getTargetLang().trim().toLowerCase() : "ru";
+                    if (respLang != null && !respLang.isEmpty()) {
+                        String baseResp = respLang.split("[-_]")[0];
+                        String baseReq = reqTarget.split("[-_]")[0];
+                        if (!baseResp.equals(baseReq)) {
+                            YandexVotLog.w(TAG, "VOT STATUS_FINISHED rejected: language mismatch (" + respLang + " != " + reqTarget + ")");
+                            YandexVotState errorState = YandexVotState.error(
+                                    gen,
+                                    params.getVideoId(),
+                                    params.getVideoUrl(),
+                                    "Translation language mismatch: expected " + reqTarget + ", received " + respLang,
+                                    "language_mismatch",
+                                    params.isUseLiveVoices()
+                            );
+                            currentState = errorState;
+                            notifyListenerLocked(errorState);
+                            break;
+                        }
+                    }
                     if (!com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.isValidAudioUrl(result.getAudioUrl())) {
                         YandexVotLog.w(TAG, "VOT STATUS_FINISHED but audioUrl is invalid: gen=" + gen);
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(

@@ -1406,12 +1406,52 @@
 
     showToast('Подготовка выгрузки всех активных отчётов (NEW + В работе)...');
 
+    async function fetchExportPartWithRetry(partUrl, partNum, maxAttempts = 3) {
+      let lastErr = null;
+      let lastRes = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch(partUrl, { credentials: 'same-origin' });
+          if (res.ok) {
+            return { ok: true, res };
+          }
+          if (res.status === 401 || res.status === 403) {
+            return { ok: false, authError: true, res };
+          }
+          lastRes = res;
+          const isRetryable = res.status >= 500 || res.status === 429;
+          if (isRetryable && attempt < maxAttempts) {
+            const retryAfter = res.headers.get('Retry-After');
+            let delaySec = Math.pow(2, attempt - 1);
+            if (retryAfter) {
+              const parsed = parseInt(retryAfter, 10);
+              if (!isNaN(parsed) && parsed > 0 && parsed <= 15) delaySec = parsed;
+            }
+            showToast('Сервис перегружен (' + res.status + '). Повтор части ' + partNum + ' (попытка ' + (attempt + 1) + '/' + maxAttempts + ') через ' + delaySec + ' сек...');
+            await new Promise((r) => setTimeout(r, delaySec * 1000));
+            continue;
+          }
+          return { ok: false, res };
+        } catch (fetchErr) {
+          lastErr = fetchErr;
+          if (attempt < maxAttempts) {
+            const delaySec = Math.pow(2, attempt - 1);
+            showToast('Сбой сети при запросе части ' + partNum + '. Повтор (' + (attempt + 1) + '/' + maxAttempts + ') через ' + delaySec + ' сек...');
+            await new Promise((r) => setTimeout(r, delaySec * 1000));
+            continue;
+          }
+        }
+      }
+      return { ok: false, res: lastRes, error: lastErr };
+    }
+
     try {
       while (hasMoreParts) {
         const params = new URLSearchParams({
           statuses: 'NEW,INVESTIGATING',
           until: String(exportSnapshotUntil),
           part: String(part),
+          limit: '200',
         });
         if (currentCursor) {
           params.set('cursor', currentCursor);
@@ -1422,17 +1462,27 @@
           showToast('Загрузка части ' + part + ' архива...');
         }
 
-        const res = await fetch(url, { credentials: 'same-origin' });
-        if (res.status === 401 || res.status === 403) {
+        const fetchOutcome = await fetchExportPartWithRetry(url, part, 3);
+        if (fetchOutcome.authError) {
           showToast('Нет доступа к выгрузке (401/403): требуется авторизация администратора', true);
           return;
         }
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          const errMsg = errJson.message || res.statusText || String(res.status);
+        if (!fetchOutcome.ok) {
+          let errMsg = 'Сбой сети';
+          if (fetchOutcome.res) {
+            const errJson = await fetchOutcome.res.json().catch(() => ({}));
+            errMsg = errJson.message || fetchOutcome.res.statusText || String(fetchOutcome.res.status);
+            if (fetchOutcome.res.status === 503) {
+              errMsg = '503 (сервис перегружен). Рекомендуется повторить позже или сузить период фильтрами.';
+            }
+          } else if (fetchOutcome.error) {
+            errMsg = fetchOutcome.error.message || 'сетевая ошибка';
+          }
           showToast('Ошибка формирования части ' + part + ': ' + errMsg, true);
           return;
         }
+
+        const res = fetchOutcome.res;
 
         const blob = await res.blob();
         const disposition = res.headers.get('Content-Disposition') || '';

@@ -46,6 +46,7 @@
     <string name="dialog_add_to_playlist">Добавить/Удалить из плейлиста</string>
     <string name="msg_signed_users_only">Необходимо войти в вккаунт</string>
     <string name="msg_cant_load_content">Не получилось загрузить содержимое.\n1) Включите историю просмотров.\n2) Проверьте дату и время на устройстве.\n3) Проверьте сетевое подключение.\n4) Проверьте настройки прокси.\n5) Попробуйте войти в аккаунт.\n6) Возможно, здесь ничего нет.</string>
+    <string name="msg_dns_error">Не удалось определить адрес YouTube (ошибка DNS). Проверьте интернет-подключение или настройки сети.</string>
     <string name="title_video_presets">Профили видео</string>
     <string name="settings_accounts">Аккаунты</string>
     <string name="settings_left_panel">Настроить категории</string>
@@ -442,8 +443,8 @@
     <string name="vot_token_saved">Токен сохранён</string>
     <string name="vot_token_cleared">Токен удалён</string>
     <string name="vot_clipboard_empty">Буфер обмена пуст</string>
-    <string name="vot_lively_voice">Живой голос (нужен OAuth)</string>
-    <string name="vot_lively_voice_desc">Более качественная озвучка. Требуется OAuth-токен Яндекса.</string>
+    <string name="vot_lively_voice">Живой голос Яндекса (OAuth)</string>
+    <string name="vot_lively_voice_desc">Улучшенная нейросетевая модель с естественными интонациями в закадровом переводе Яндекса. Требуется Яндекс ID.</string>
     <string name="vot_token_status_empty">Токен: не задан</string>
     <string name="vot_token_status_set">Токен: %s</string>
     <string name="vot_error_auth_required">Нужна авторизация Яндекса. Укажите OAuth-токен в настройках плеера.</string>
@@ -453,8 +454,8 @@
     <string name="vot_mix_menu_title">Баланс закадрового перевода</string>
     <string name="vot_mix_options">Настройки</string>
     <string name="vot_mix_menu_hint">Видео не ставится на паузу. Подберите комфортную громкость.</string>
-    <string name="vot_auto_translate">Автоперевод (если язык не русский)</string>
-    <string name="vot_auto_translate_desc">Автоматически включать перевод для видео с нерусской аудиодорожкой (английский и др.).</string>
+    <string name="vot_auto_translate">Автоперевод Яндекса</string>
+    <string name="vot_auto_translate_desc">Автоматически включать закадровый перевод видео с иностранных языков (нейросеть Яндекса).</string>
     <string name="vot_pause_while_preparing">Приостанавливать видео во время подготовки перевода</string>
     <string name="vot_pause_while_preparing_desc">Ставит воспроизведение на паузу, пока готовится дорожка перевода, и возобновляет его после готовности</string>
     <string name="vot_original_language_title">Язык оригинала</string>
@@ -488,8 +489,8 @@
     <string name="vot_already_russian">Ролик уже на русском</string>
     <string name="vot_lively_fallback_standard">Живой голос недоступен, используется обычная озвучка</string>
     <string name="vot_speed_blocked">Сначала выключите перевод</string>
-    <string name="vot_prefer_youtube_dub">Дорожка YouTube (автодубляж на русский)</string>
-    <string name="vot_prefer_youtube_dub_desc">Если есть, переключать на русскую дорожку YouTube вместо закадрового перевода Яндекса.</string>
+    <string name="vot_prefer_youtube_dub">Приоритет официального дубляжа YouTube</string>
+    <string name="vot_prefer_youtube_dub_desc">Если у видео уже есть русская дорожка на YouTube, использовать её вместо закадрового перевода Яндекса.</string>
     <string name="vot_using_youtube_dub">Включена русская дорожка YouTube</string>
     <string name="vot_disable_google_for_yandex">Сначала выключите «Дорожка YouTube» в меню закадрового перевода</string>
     <string name="vot_replace_dub_title">Заменить озвучку на Яндекс?</string>

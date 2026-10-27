@@ -27,11 +27,27 @@ public class CategoryEmptyError implements ErrorFragmentData {
     public String getMessage() {
         String result = mContext.getString(R.string.msg_cant_load_content);
         if (mError != null && !Helpers.containsAny(mError.getMessage(), "fromNullable result is null")) {
+            if (isDnsError(mError)) {
+                return mContext.getString(R.string.msg_dns_error);
+            }
             String className = mError.getClass().getSimpleName();
             result = String.format("%s: %s", className, Utils.getStackTraceAsString(mError));
             //result = mError.getMessage();
         }
         return result;
+    }
+
+    private static boolean isDnsError(Throwable t) {
+        Throwable curr = t;
+        while (curr != null) {
+            if (curr instanceof java.net.UnknownHostException) return true;
+            String msg = curr.getMessage();
+            if (msg != null && (msg.contains("Unable to resolve host") || msg.contains("No address associated with hostname"))) {
+                return true;
+            }
+            curr = curr.getCause();
+        }
+        return false;
     }
 
     @Override

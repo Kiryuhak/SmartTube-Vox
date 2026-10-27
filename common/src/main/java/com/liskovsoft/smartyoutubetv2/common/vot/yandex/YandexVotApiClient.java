@@ -186,15 +186,23 @@ public class YandexVotApiClient {
         private final String message;
         private final String errorCategory;
         private final boolean isNetworkError;
+        private final String responseLanguage;
 
         public TranslationResult(int status, String audioUrl, int remainingTime,
                                  String translationId, String message) {
-            this(status, audioUrl, remainingTime, translationId, message, null, false);
+            this(status, audioUrl, remainingTime, translationId, message, null, false, null);
         }
 
         public TranslationResult(int status, String audioUrl, int remainingTime,
                                  String translationId, String message,
                                  String errorCategory, boolean isNetworkError) {
+            this(status, audioUrl, remainingTime, translationId, message, errorCategory, isNetworkError, null);
+        }
+
+        public TranslationResult(int status, String audioUrl, int remainingTime,
+                                 String translationId, String message,
+                                 String errorCategory, boolean isNetworkError,
+                                 String responseLanguage) {
             this.status = status;
             this.audioUrl = audioUrl;
             this.remainingTime = remainingTime;
@@ -202,10 +210,11 @@ public class YandexVotApiClient {
             this.message = message;
             this.errorCategory = errorCategory;
             this.isNetworkError = isNetworkError;
+            this.responseLanguage = responseLanguage;
         }
 
         public static TranslationResult networkError(String message, String errorCategory) {
-            return new TranslationResult(STATUS_TRANSPORT_ERROR, null, -1, null, message, errorCategory, true);
+            return new TranslationResult(STATUS_TRANSPORT_ERROR, null, -1, null, message, errorCategory, true, null);
         }
 
         public int getStatus() {
@@ -226,6 +235,10 @@ public class YandexVotApiClient {
 
         public String getMessage() {
             return message;
+        }
+
+        public String getResponseLanguage() {
+            return responseLanguage;
         }
 
         public String getErrorCategory() {
@@ -354,6 +367,30 @@ public class YandexVotApiClient {
                     }
                 }
 
+                String respLang = response.language != null ? response.language.trim().toLowerCase() : null;
+                String effectiveTarget = (targetLang != null && !targetLang.isEmpty()) ? targetLang.trim().toLowerCase() : "ru";
+                if (respLang != null && !respLang.isEmpty()) {
+                    String baseResp = respLang.split("[-_]")[0];
+                    String baseTarget = effectiveTarget.split("[-_]")[0];
+                    if (!baseResp.equals(baseTarget)) {
+                        YandexVotLog.w(TAG, "VOT language mismatch: requested " + effectiveTarget + " but response indicates " + respLang);
+                        java.util.Map<String, String> langCtx = new java.util.HashMap<>();
+                        langCtx.put("requestedTargetLang", effectiveTarget);
+                        langCtx.put("responseLang", respLang);
+                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
+                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_LANGUAGE_MISMATCH,
+                                "Target language mismatch rejected",
+                                langCtx
+                        );
+                        return new TranslationResult(
+                                STATUS_FAILED, null, -1, response.translationId,
+                                "Translation target language mismatch: requested " + effectiveTarget + " but received " + respLang,
+                                "language_mismatch", false, respLang
+                        );
+                    }
+                }
+
                 TranslationResult result = new TranslationResult(
                         response.status,
                         response.url,
@@ -361,7 +398,8 @@ public class YandexVotApiClient {
                         response.translationId,
                         response.message,
                         response.status == STATUS_FAILED ? "failed" : null,
-                        false
+                        false,
+                        respLang
                 );
 
                 if (result.getStatus() == STATUS_FINISHED || result.getStatus() == STATUS_PART_CONTENT) {

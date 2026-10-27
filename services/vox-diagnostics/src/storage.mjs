@@ -521,11 +521,14 @@ export class ReportStorage {
 
     if (this.db) {
       const payloadCol = includePayload ? 'payload_json, ' : '';
+      const relatedCountCol = sort === 'repeats'
+        ? `(SELECT COUNT(*) FROM reports related WHERE related.error_signature = reports.error_signature AND related.report_id != reports.report_id AND reports.error_signature != '') AS related_count`
+        : `0 AS related_count`;
       let query = `SELECT report_id, created_at, schema_version, app_version, platform,
                           device_family, error_category, ${payloadCol}expires_at, status, developer_notes,
                           report_purpose, error_signature, severity, subsystem, stage,
                           event_error_category, updated_at,
-                          (SELECT COUNT(*) FROM reports related WHERE related.error_signature = reports.error_signature AND related.report_id != reports.report_id AND reports.error_signature != '') AS related_count
+                          ${relatedCountCol}
                    FROM reports WHERE 1=1`;
       const params = [];
 
@@ -591,7 +594,33 @@ export class ReportStorage {
 
       const stmt = this.db.prepare(query);
       const { results } = await stmt.bind(...params).all();
-      return (results || []).map(r => ({
+      const list = results || [];
+
+      // If related count was not calculated in query, and payload is NOT included (i.e. table view),
+      // compute related counts efficiently for just this page of results
+      if (sort !== 'repeats' && !includePayload && list.length > 0) {
+        const sigs = [...new Set(list.map(r => r.error_signature).filter(Boolean))];
+        if (sigs.length > 0) {
+          const placeholders = sigs.map(() => '?').join(',');
+          try {
+            const countRows = await this.db.prepare(
+              `SELECT error_signature, COUNT(*) as cnt FROM reports WHERE error_signature IN (${placeholders}) GROUP BY error_signature`
+            ).bind(...sigs).all();
+            const countMap = new Map();
+            for (const row of (countRows?.results || [])) {
+              countMap.set(row.error_signature, Number(row.cnt) || 0);
+            }
+            for (const r of list) {
+              if (r.error_signature) {
+                const totalForSig = countMap.get(r.error_signature) || 1;
+                r.related_count = Math.max(0, totalForSig - 1);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      return list.map(r => ({
         ...r,
         status: normalizeStatus(r.status),
       }));
@@ -706,18 +735,84 @@ export class ReportStorage {
 
       const stmt = this.db.prepare(query);
       const { results } = await stmt.bind(...params).all();
-      return Promise.all((results || []).map(async r => ({
-        ...r,
-        status: normalizeStatus(r.status),
-        new_count: Number(r.new_count) || 0,
-        in_progress_count: Number(r.in_progress_count) || 0,
-        resolved_count: Number(r.resolved_count) || 0,
-        known_issue_count: Number(r.known_issue_count) || 0,
-        ignored_test_count: Number(r.ignored_test_count) || 0,
-        severity: ({ 5: 'CRITICAL', 4: 'HIGH', 3: 'MEDIUM', 2: 'LOW', 1: 'INFO' })[r.severity_rank] || 'INFO',
-        affected_versions: await this.getAffectedVersions(r.error_signature),
-        ...await this.getIssue(r.error_signature),
-      })));
+      const list = results || [];
+      if (list.length === 0) return [];
+
+      const signatures = [...new Set(list.map(r => r.error_signature).filter(Boolean))];
+      const issueMap = new Map();
+      const versionsMap = new Map();
+
+      if (signatures.length > 0) {
+        const placeholders = signatures.map(() => '?').join(',');
+
+        let issueRows = null;
+        try {
+          issueRows = await this.db.prepare(
+            `SELECT signature, status AS issue_status, fixed_in_version, fix_patch, fix_commit, title, reopened_at, duplicate_of FROM issues WHERE signature IN (${placeholders})`
+          ).bind(...signatures).all();
+        } catch (_) {
+          try {
+            issueRows = await this.db.prepare(
+              `SELECT signature, status AS issue_status, fixed_in_version, fix_patch, fix_commit, title, reopened_at FROM issues WHERE signature IN (${placeholders})`
+            ).bind(...signatures).all();
+          } catch (_) {}
+        }
+        for (const row of (issueRows?.results || [])) {
+          const norm = normalizeStatus(row.issue_status);
+          issueMap.set(row.signature, {
+            status: norm,
+            issue_status: norm,
+            fixed_in_version: row.fixed_in_version || null,
+            fix_patch: row.fix_patch || null,
+            fix_commit: row.fix_commit || null,
+            title: row.title || null,
+            reopened_at: Number(row.reopened_at) || 0,
+            duplicate_of: row.duplicate_of || null,
+          });
+        }
+
+        try {
+          const versionRows = await this.db.prepare(
+            `SELECT error_signature, app_version FROM reports WHERE error_signature IN (${placeholders}) AND app_version IS NOT NULL AND app_version != '' GROUP BY error_signature, app_version ORDER BY app_version DESC`
+          ).bind(...signatures).all();
+          for (const row of (versionRows?.results || [])) {
+            if (!versionsMap.has(row.error_signature)) {
+              versionsMap.set(row.error_signature, []);
+            }
+            const vers = versionsMap.get(row.error_signature);
+            if (vers.length < 12) {
+              vers.push(row.app_version);
+            }
+          }
+        } catch (_) {}
+      }
+
+      return list.map(r => {
+        const sig = r.error_signature;
+        const issueData = issueMap.get(sig) || {};
+        const affectedVersions = versionsMap.get(sig) || [];
+        const normStatus = issueData.issue_status || normalizeStatus(r.status);
+        return {
+          ...r,
+          signature: sig,
+          status: normStatus,
+          issue_status: normStatus,
+          fixed_in_version: issueData.fixed_in_version || null,
+          fix_patch: issueData.fix_patch || null,
+          fix_commit: issueData.fix_commit || null,
+          title: issueData.title || null,
+          reopened_at: issueData.reopened_at || 0,
+          duplicate_of: issueData.duplicate_of || null,
+          occurrences: Number(r.count) || 0,
+          new_count: Number(r.new_count) || 0,
+          in_progress_count: Number(r.in_progress_count) || 0,
+          resolved_count: Number(r.resolved_count) || 0,
+          known_issue_count: Number(r.known_issue_count) || 0,
+          ignored_test_count: Number(r.ignored_test_count) || 0,
+          severity: ({ 5: 'CRITICAL', 4: 'HIGH', 3: 'MEDIUM', 2: 'LOW', 1: 'INFO' })[r.severity_rank] || 'INFO',
+          affected_versions: affectedVersions,
+        };
+      });
     } else {
       const groups = new Map();
       for (const r of this.inMemoryReports.values()) {
@@ -1022,12 +1117,12 @@ export class ReportStorage {
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
     if (this.db) {
-      const [totalRow, dayRow, weekRow, countsRes, platformsRes, versionsRes, categoriesRes, topIssuesRes] = await Promise.all([
-        this.db.prepare(`SELECT COUNT(*) as count FROM reports`).first(),
-        this.db.prepare(`SELECT COUNT(*) as count FROM reports WHERE created_at >= ?`).bind(oneDayAgo).first(),
-        this.db.prepare(`SELECT COUNT(*) as count FROM reports WHERE created_at >= ?`).bind(sevenDaysAgo).first(),
+      const [aggRow, platformsRes, versionsRes, categoriesRes, topIssuesRes] = await Promise.all([
         this.db.prepare(`
           SELECT 
+            COUNT(*) as total_reports,
+            SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as count_24h,
+            SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as count_7d,
             SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
             SUM(CASE WHEN UPPER(status) = 'TRIAGED' THEN 1 ELSE 0 END) as count_triaged,
             SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
@@ -1038,25 +1133,25 @@ export class ReportStorage {
             SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_ignored_test,
             SUM(CASE WHEN UPPER(COALESCE(status, '')) NOT IN ('NEW', 'TRIAGED', 'IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED', 'RESOLVED', 'VERIFIED', 'CLOSED', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN', 'IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_other
           FROM reports
-        `).first(),
+        `).bind(oneDayAgo, sevenDaysAgo).first(),
         this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
         this.db.prepare(`SELECT app_version, COUNT(*) as count FROM reports GROUP BY app_version ORDER BY count DESC LIMIT 8`).all(),
         this.db.prepare(`SELECT error_category, COUNT(*) as count FROM reports WHERE error_category IS NOT NULL AND error_category != '' GROUP BY error_category ORDER BY count DESC LIMIT 8`).all(),
         this.db.prepare(`SELECT error_signature, COUNT(*) as count FROM reports WHERE error_signature IS NOT NULL AND error_signature != '' GROUP BY error_signature ORDER BY count DESC LIMIT 5`).all(),
       ]);
 
-      const totalReports = totalRow?.count || 0;
-      const reports24h = dayRow?.count || 0;
-      const reports7d = weekRow?.count || 0;
-      const newCount = Number(countsRes?.count_new) || 0;
-      const triagedCount = Number(countsRes?.count_triaged) || 0;
-      const inProgressCount = Number(countsRes?.count_in_progress) || 0;
-      const fixedAwaitingCount = Number(countsRes?.count_fixed_awaiting) || 0;
-      const resolvedCount = Number(countsRes?.count_resolved) || 0;
-      const closedCount = Number(countsRes?.count_closed) || 0;
-      const knownIssueCount = Number(countsRes?.count_known_issue) || 0;
-      const ignoredTestCount = Number(countsRes?.count_ignored_test) || 0;
-      const otherCount = Number(countsRes?.count_other) || 0;
+      const totalReports = Number(aggRow?.total_reports) || 0;
+      const reports24h = Number(aggRow?.count_24h) || 0;
+      const reports7d = Number(aggRow?.count_7d) || 0;
+      const newCount = Number(aggRow?.count_new) || 0;
+      const triagedCount = Number(aggRow?.count_triaged) || 0;
+      const inProgressCount = Number(aggRow?.count_in_progress) || 0;
+      const fixedAwaitingCount = Number(aggRow?.count_fixed_awaiting) || 0;
+      const resolvedCount = Number(aggRow?.count_resolved) || 0;
+      const closedCount = Number(aggRow?.count_closed) || 0;
+      const knownIssueCount = Number(aggRow?.count_known_issue) || 0;
+      const ignoredTestCount = Number(aggRow?.count_ignored_test) || 0;
+      const otherCount = Number(aggRow?.count_other) || 0;
       const activeIssuesCount = newCount + inProgressCount + knownIssueCount;
 
       let liveCount = 0;
