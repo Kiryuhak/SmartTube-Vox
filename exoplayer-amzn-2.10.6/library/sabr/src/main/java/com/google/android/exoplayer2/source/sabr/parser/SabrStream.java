@@ -83,6 +83,8 @@ public class SabrStream {
     private boolean receivedNewSegments;
     private String url;
     private List<? extends  SabrPart> multiResult = null;
+    private volatile boolean reloadRequested;
+    private volatile String reloadPlaybackToken;
 
     private static class NoSegmentsTracker {
         public int consecutiveRequests = 0;
@@ -160,6 +162,20 @@ public class SabrStream {
 
     public void reset() {
         noNewSegmentsTracker.reset();
+        clearReloadRequested();
+    }
+
+    public boolean isReloadRequested() {
+        return reloadRequested;
+    }
+
+    public String getReloadPlaybackToken() {
+        return reloadPlaybackToken;
+    }
+
+    public void clearReloadRequested() {
+        reloadRequested = false;
+        reloadPlaybackToken = null;
     }
 
     public void reset(int iTag) {
@@ -388,6 +404,10 @@ public class SabrStream {
             throw new IllegalStateException(e);
         }
 
+        processNextRequestPolicy(nextRequestPolicy);
+    }
+
+    public void processNextRequestPolicy(NextRequestPolicy nextRequestPolicy) {
         Log.d(TAG, "Process NextRequestPolicy: %s", nextRequestPolicy);
         processor.processNextRequestPolicy(nextRequestPolicy);
     }
@@ -453,12 +473,19 @@ public class SabrStream {
             throw new IllegalStateException(e);
         }
 
-        Log.d(TAG, "Process ReloadPlayerResponse: %s", reloadPlayerResponse);
+        processReloadPlayerResponse(reloadPlayerResponse);
         return new RefreshPlayerResponseSabrPart(
                 RefreshPlayerResponseSabrPart.Reason.SABR_RELOAD_PLAYER_RESPONSE,
-                reloadPlayerResponse.hasReloadPlaybackParams() && reloadPlayerResponse.getReloadPlaybackParams().hasToken()
-                        ? reloadPlayerResponse.getReloadPlaybackParams().getToken() : null
+                this.reloadPlaybackToken
         );
+    }
+
+    public void processReloadPlayerResponse(ReloadPlayerResponse reloadPlayerResponse) {
+        String token = reloadPlayerResponse.hasReloadPlaybackParams() && reloadPlayerResponse.getReloadPlaybackParams().hasToken()
+                ? reloadPlayerResponse.getReloadPlaybackParams().getToken() : null;
+        this.reloadRequested = true;
+        this.reloadPlaybackToken = token;
+        Log.d(TAG, "Process ReloadPlayerResponse: %s (token=%s)", reloadPlayerResponse, token);
     }
 
     private List<MediaSeekSabrPart> processLiveMetadata(UMPPart part) {

@@ -121,6 +121,12 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     private boolean missingLastSegment;
     private long liveEdgeTimeUs;
 
+    private static final int MAX_EMPTY_INIT_ATTEMPTS = 3;
+    private static final long MAX_BACKOFF_WAIT_MS = 10_000L;
+
+    private int emptyInitAttempts = 0;
+    private long backoffDeadlineMs = 0;
+
     @Nullable private final SabrStream sabrStream;
     private final Map<String, String> sabrHeaders;
     private int nexChunkIdx = -1;
@@ -205,6 +211,12 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         try {
             manifest = newManifest;
             periodIndex = newPeriodIndex;
+            emptyInitAttempts = 0;
+            backoffDeadlineMs = 0;
+            fatalError = null;
+            if (sabrStream != null) {
+                sabrStream.clearReloadRequested();
+            }
             long periodDurationUs = manifest.getPeriodDurationUs(periodIndex);
             List<Representation> representations = getRepresentations();
             for (int i = 0; i < representationHolders.length; i++) {
@@ -221,6 +233,23 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     public void updateTrackSelection(TrackSelection trackSelection) {
         this.trackSelection = trackSelection;
         this.formatSelector = createFormatSelector(trackType, trackSelection);
+    }
+
+    @Nullable
+    SabrStream getSabrStream() {
+        return sabrStream;
+    }
+
+    int getEmptyInitAttempts() {
+        return emptyInitAttempts;
+    }
+
+    long getBackoffDeadlineMs() {
+        return backoffDeadlineMs;
+    }
+
+    TrackSelection getTrackSelection() {
+        return trackSelection;
     }
 
     @Override
@@ -275,6 +304,16 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     public void getNextChunk(long playbackPositionUs, long loadPositionUs, List<? extends MediaChunk> queue, ChunkHolder out) {
         if (fatalError != null) {
             return;
+        }
+
+        if (backoffDeadlineMs > 0) {
+            long remainingMs = backoffDeadlineMs - SystemClock.elapsedRealtime();
+            if (remainingMs > 0) {
+                // Server requested backoff pacing: defer request without sending HTTP
+                return;
+            } else {
+                backoffDeadlineMs = 0;
+            }
         }
 
         long bufferedDurationUs = loadPositionUs - playbackPositionUs;
@@ -454,20 +493,30 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         if (chunk instanceof InitializationChunk) {
             InitializationChunk initializationChunk = (InitializationChunk) chunk;
             int trackIndex = trackSelection.indexOf(initializationChunk.trackFormat);
-            RepresentationHolder representationHolder = representationHolders[trackIndex];
-            // The null check avoids overwriting an index obtained from the manifest with one obtained
-            // from the stream. If the manifest defines an index then the stream shouldn't, but in cases
-            // where it does we should ignore it.
-            //if (representationHolder.segmentIndex == null) {
-            //    SeekMap seekMap = representationHolder.extractorWrapper.getSeekMap();
-            //    if (seekMap != null) {
-            //        representationHolders[trackIndex] =
-            //                representationHolder.copyWithNewSegmentIndex(
-            //                        new SabrWrappingSegmentIndex(
-            //                                (ChunkIndex) seekMap,
-            //                                representationHolder.representation.presentationTimeOffsetUs));
-            //    }
-            //}
+            RepresentationHolder representationHolder = trackIndex >= 0 && trackIndex < representationHolders.length
+                    ? representationHolders[trackIndex] : null;
+
+            if (representationHolder != null && representationHolder.extractorWrapper != null
+                    && representationHolder.extractorWrapper.getSampleFormats() == null) {
+                emptyInitAttempts++;
+                int backoffMs = sabrStream != null ? sabrStream.getBackoffTimeMs() : 0;
+                if (backoffMs > 0) {
+                    backoffDeadlineMs = SystemClock.elapsedRealtime() + Math.min(backoffMs, MAX_BACKOFF_WAIT_MS);
+                }
+
+                if (sabrStream != null && sabrStream.isReloadRequested()) {
+                    String reloadToken = sabrStream.getReloadPlaybackToken();
+                    Log.e(TAG, "SABR server requested player reload (token: " + reloadToken + "). Halting spin loop.");
+                    fatalError = new IOException("SABR player reload requested by server: " + reloadToken);
+                } else if (emptyInitAttempts >= MAX_EMPTY_INIT_ATTEMPTS) {
+                    Log.e(TAG, "SABR initialization failed to obtain sample formats after " + emptyInitAttempts + " attempts. Halting spin loop.");
+                    fatalError = new IOException("SABR initialization failed to obtain sample formats after " + emptyInitAttempts + " attempts");
+                }
+            } else if (representationHolder != null && representationHolder.extractorWrapper != null
+                    && representationHolder.extractorWrapper.getSampleFormats() != null) {
+                emptyInitAttempts = 0;
+                backoffDeadlineMs = 0;
+            }
         }
         if (playerTrackEmsgHandler != null) {
             playerTrackEmsgHandler.onChunkLoadCompleted(chunk);
