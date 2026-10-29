@@ -893,6 +893,16 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         'X-Export-Truncated': String(Boolean(result.isTruncated)),
         'X-Export-Part': String(result.part || part || 1),
       };
+      if (result.sha256) {
+        headers['X-Export-SHA256'] = result.sha256;
+        headers['ETag'] = `"${result.sha256}"`;
+      }
+      if (result.cursorStart) {
+        headers['X-Export-Cursor-Start'] = result.cursorStart;
+      }
+      if (result.cursorEnd) {
+        headers['X-Export-Cursor-End'] = result.cursorEnd;
+      }
       if (sessionId) {
         headers['X-Export-Session-Id'] = sessionId;
       }

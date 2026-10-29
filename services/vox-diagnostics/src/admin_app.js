@@ -1398,7 +1398,93 @@
 
   // --- COMPLETE ACTIVE REPORTS ZIP EXPORT (NEW + INVESTIGATING) ---
   const EXPORT_SESSION_KEY = 'vox_export_session_v1';
+  const IDB_EXPORT_DB_NAME = 'vox_diagnostics_export_v2';
+  const IDB_EXPORT_STORE = 'parts';
   let isExportRunning = false;
+
+  function openExportDb() {
+    return new Promise((resolve, reject) => {
+      if (typeof indexedDB === 'undefined') {
+        return reject(new Error('IndexedDB not supported'));
+      }
+      const req = indexedDB.open(IDB_EXPORT_DB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_EXPORT_STORE)) {
+          const store = db.createObjectStore(IDB_EXPORT_STORE, { keyPath: ['exportId', 'part'] });
+          store.createIndex('exportId', 'exportId', { unique: false });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('Failed to open IndexedDB'));
+    });
+  }
+
+  async function idbSavePart(entry) {
+    try {
+      const db = await openExportDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_EXPORT_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_EXPORT_STORE);
+        const putReq = store.put(entry);
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => resolve(false);
+      });
+    } catch (err) {
+      console.warn('[AdminApp] IndexedDB savePart error:', err);
+      return false;
+    }
+  }
+
+  async function idbGetParts(exportId) {
+    try {
+      const db = await openExportDb();
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_EXPORT_STORE, 'readonly');
+        const store = tx.objectStore(IDB_EXPORT_STORE);
+        const index = store.index('exportId');
+        const req = index.getAll(IDBKeyRange.only(exportId));
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+    } catch (err) {
+      console.warn('[AdminApp] IndexedDB getParts error:', err);
+      return [];
+    }
+  }
+
+  async function idbClearExport(exportId) {
+    try {
+      const db = await openExportDb();
+      const items = await idbGetParts(exportId);
+      return new Promise((resolve) => {
+        const tx = db.transaction(IDB_EXPORT_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_EXPORT_STORE);
+        for (const item of items) {
+          store.delete([item.exportId, item.part]);
+        }
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function computeSha256(arrayBuffer) {
+    try {
+      if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+        const digest = await crypto.subtle.digest('SHA-256', arrayBuffer);
+        const bytes = new Uint8Array(digest);
+        let hex = '';
+        for (let i = 0; i < bytes.length; i++) {
+          hex += bytes[i].toString(16).padStart(2, '0');
+        }
+        return hex;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   function getExportSession() {
     try {
@@ -1415,19 +1501,31 @@
     } catch (_) {}
   }
 
-  function clearExportSession() {
+  function clearExportSession(exportId) {
     try {
       sessionStorage.removeItem(EXPORT_SESSION_KEY);
+      if (exportId) {
+        idbClearExport(exportId).catch(() => {});
+      }
     } catch (_) {}
   }
 
-  function showResumeBanner(session) {
+  async function checkAndShowResumeBanner(session) {
+    if (!session || session.status === 'COMPLETE_VERIFIED' || !session.completedParts || session.completedParts.length === 0) {
+      hideResumeBanner();
+      return;
+    }
+    const storedParts = await idbGetParts(session.exportId);
+    showResumeBanner(session, storedParts);
+  }
+
+  function showResumeBanner(session, storedParts = []) {
     let banner = document.getElementById('exportResumeBanner');
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'exportResumeBanner';
       banner.className = 'resume-banner';
-      banner.style.cssText = 'background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #bfdbfe; padding: 12px 20px; margin: 16px 24px 0 24px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);';
+      banner.style.cssText = 'background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #bfdbfe; padding: 12px 20px; margin: 16px 24px 0 24px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); flex-wrap: wrap;';
       const header = document.querySelector('.header');
       if (header && header.nextSibling) {
         header.parentNode.insertBefore(banner, header.nextSibling);
@@ -1435,29 +1533,90 @@
         document.body.prepend(banner);
       }
     }
+
     const completedCount = session.completedParts ? session.completedParts.length : 0;
     const reportsCount = session.totalExportedReports || session.totalDownloaded || 0;
     const nextPart = session.currentPart || (completedCount + 1);
-    banner.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 18px;">⚠️</span>
-        <span>Обнаружена незавершённая выгрузка: успешно скачано частей: <strong>${completedCount}</strong> (${reportsCount} отчётов).</span>
-      </div>
-      <div style="display: flex; gap: 8px; flex-shrink: 0;">
-        <button class="btn btn-primary" id="exportResumeBtn" type="button" style="padding: 6px 14px; font-size: 13px;">Продолжить с части ${nextPart}</button>
-        <button class="btn" id="exportDiscardBtn" type="button" style="padding: 6px 14px; font-size: 13px; background: #374151; color: #d1d5db;">Сбросить</button>
-      </div>
-    `;
-    banner.style.display = 'flex';
-    document.getElementById('exportResumeBtn')?.addEventListener('click', () => {
-      hideResumeBanner();
-      downloadAllActiveZip({ resume: true });
-    });
-    document.getElementById('exportDiscardBtn')?.addEventListener('click', () => {
-      clearExportSession();
-      hideResumeBanner();
-      showToast('Сессия экспорта сброшена.');
-    });
+
+    // Verify whether actual binary bytes of all completed parts exist in IndexedDB
+    const hasStoredBlobs = completedCount > 0 && storedParts.length >= completedCount &&
+      session.completedParts.every(cp => storedParts.some(sp => sp.part === cp.part && sp.blob));
+
+    if (hasStoredBlobs) {
+      banner.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px;">📦</span>
+          <span>Обнаружена незавершённая выгрузка: в локальном хранилище (IndexedDB) сохранены и проверены части <strong>1..${completedCount}</strong> (${reportsCount} отчётов, целостность байтов подтверждена).</span>
+        </div>
+        <div style="display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap;">
+          <button class="btn btn-primary" id="exportResumeBtn" type="button" style="padding: 6px 14px; font-size: 13px;">Продолжить с части ${nextPart}</button>
+          <button class="btn btn-secondary" id="exportDownloadStoredBtn" type="button" style="padding: 6px 14px; font-size: 13px; background: #2563eb; color: #fff;">Скачать сохранённые части (1..${completedCount})</button>
+          <button class="btn" id="exportDiscardBtn" type="button" style="padding: 6px 14px; font-size: 13px; background: #374151; color: #d1d5db;">Сбросить</button>
+        </div>
+      `;
+      banner.style.display = 'flex';
+
+      document.getElementById('exportResumeBtn')?.addEventListener('click', () => {
+        hideResumeBanner();
+        downloadAllActiveZip({ resume: true, verifiedStorage: true });
+      });
+
+      document.getElementById('exportDownloadStoredBtn')?.addEventListener('click', () => {
+        for (const sp of storedParts) {
+          if (sp.blob) {
+            const blobUrl = URL.createObjectURL(sp.blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = sp.filename || `VOX_Diagnostics_Active_part${sp.part}.zip`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+          }
+        }
+        showToast(`Инициировано скачивание ${storedParts.length} сохранённых частей из локального хранилища.`);
+      });
+
+      document.getElementById('exportDiscardBtn')?.addEventListener('click', () => {
+        clearExportSession(session.exportId);
+        hideResumeBanner();
+        showToast('Сессия экспорта и локальное хранилище очищены.');
+      });
+    } else {
+      // Missing binary bytes in local storage
+      banner.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px;">⚠️</span>
+          <span>Обнаружена прошлая сессия: части <strong>1..${completedCount}</strong> (${reportsCount} отчётов) есть в журнале, но файлы отсутствуют в хранилище браузера (очищен кэш или приватный режим).</span>
+        </div>
+        <div style="display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap;">
+          <button class="btn btn-primary" id="exportRestartBtn" type="button" style="padding: 6px 14px; font-size: 13px;">Начать заново с части 1 (Рекомендуется)</button>
+          <button class="btn" id="exportResumeUnverifiedBtn" type="button" style="padding: 6px 14px; font-size: 13px; background: #4b5563; color: #e5e7eb;">Продолжить с части ${nextPart} (файлы уже на диске)</button>
+          <button class="btn" id="exportDiscardBtn" type="button" style="padding: 6px 14px; font-size: 13px; background: #374151; color: #d1d5db;">Сбросить</button>
+        </div>
+      `;
+      banner.style.display = 'flex';
+
+      document.getElementById('exportRestartBtn')?.addEventListener('click', () => {
+        clearExportSession(session.exportId);
+        hideResumeBanner();
+        downloadAllActiveZip({ resume: false });
+      });
+
+      document.getElementById('exportResumeUnverifiedBtn')?.addEventListener('click', () => {
+        hideResumeBanner();
+        session.unverifiedStorageResume = true;
+        saveExportSession(session);
+        downloadAllActiveZip({ resume: true, verifiedStorage: false });
+      });
+
+      document.getElementById('exportDiscardBtn')?.addEventListener('click', () => {
+        clearExportSession(session.exportId);
+        hideResumeBanner();
+        showToast('Сессия экспорта сброшена.');
+      });
+    }
   }
 
   function hideResumeBanner() {
@@ -1505,8 +1664,12 @@
         totalDownloaded: 0,
         allCollectedIds: [],
         status: 'IN_PROGRESS',
+        unverifiedStorageResume: false,
         createdAt: new Date().toISOString(),
       };
+      saveExportSession(session);
+    } else if (options.verifiedStorage === false) {
+      session.unverifiedStorageResume = true;
       saveExportSession(session);
     }
 
@@ -1648,7 +1811,7 @@
           session.currentCursor = currentCursor;
           session.totalDownloaded = totalDownloaded;
           saveExportSession(session);
-          showResumeBanner(session);
+          checkAndShowResumeBanner(session);
 
           showToast(`Ошибка формирования части ${part}: ${errMsg}. Выгрузка приостановлена. Вы можете возобновить её.`, true);
           return;
@@ -1656,12 +1819,41 @@
 
         const res = fetchOutcome.res;
         const blob = await res.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const clientSha256 = await computeSha256(arrayBuffer);
+        const serverSha256 = res.headers.get('X-Export-SHA256');
+        const cursorStart = res.headers.get('X-Export-Cursor-Start');
+        const cursorEnd = res.headers.get('X-Export-Cursor-End');
+
+        if (serverSha256 && clientSha256 && serverSha256.toLowerCase() !== clientSha256.toLowerCase()) {
+          console.error(`[AdminApp] SHA-256 verification failed on part ${part}: server=${serverSha256}, client=${clientSha256}`);
+          showToast(`Ошибка целостности данных: несовпадение контрольной суммы SHA-256 части ${part}`, true);
+          session.status = 'PAUSED';
+          saveExportSession(session);
+          return;
+        }
+
         const disposition = res.headers.get('Content-Disposition') || '';
         const match = disposition.match(/filename="?([^";]+)"?/i);
         const defaultName = part > 1 ? (`VOX_Diagnostics_Active_part${part}.zip`) : 'VOX_Diagnostics_Active.zip';
         const rawFilename = match ? match[1] : defaultName;
         const filename = rawFilename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 
+        // Persist binary blob and metadata into IndexedDB
+        const storedOk = await idbSavePart({
+          exportId: session.exportId,
+          part,
+          filename,
+          blob,
+          byteLength: blob.size,
+          sha256: clientSha256,
+          serverSha256,
+          cursorStart,
+          cursorEnd,
+          savedAt: new Date().toISOString(),
+        });
+
+        // Trigger browser download for individual part
         const blobUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = blobUrl;
@@ -1681,6 +1873,12 @@
           part,
           filename,
           reportsCount: partReports,
+          byteLength: blob.size,
+          sha256: clientSha256,
+          serverSha256,
+          cursorStart,
+          cursorEnd,
+          hasStoredBlob: storedOk,
           nextCursor: isTruncated ? nextCursor : null,
           downloadedAt: new Date().toISOString(),
         });
@@ -1699,11 +1897,22 @@
         }
       }
 
+      // Check whether all completed parts are verified in IndexedDB
+      const finalStoredParts = await idbGetParts(session.exportId);
+      const allPartsRetained = session.completedParts.length > 0 &&
+        session.completedParts.every(cp => finalStoredParts.some(sp => sp.part === cp.part && sp.blob));
+
+      const isUnverifiedResume = Boolean(session.unverifiedStorageResume);
+      const verificationStatus = (allPartsRetained && !isUnverifiedResume)
+        ? 'COMPLETE_VERIFIED'
+        : 'COMPLETE_METADATA_ONLY_UNVERIFIED_STORAGE';
+
       // Verifiable Completeness Manifest Generation
       const manifestData = {
         schemaVersion: '1.0',
         exportId: session.exportId,
         consistencyGuarantee: 'CREATION_CEILING_CONSISTENT',
+        statusConsistency: 'READ_COMMITTED_AT_QUERY_TIME',
         snapshotUntil: session.snapshotUntil,
         snapshotUntilIso: new Date(session.snapshotUntil).toISOString(),
         targetStatuses: session.targetStatuses,
@@ -1711,8 +1920,25 @@
         totalReportsExported: totalDownloaded,
         duplicateReportsCount: 0,
         missingReportsCount: 0,
-        parts: session.completedParts,
-        verificationStatus: 'COMPLETE_VERIFIED',
+        partsRetainedInBrowserStorage: allPartsRetained,
+        storageRetentionType: allPartsRetained ? 'INDEXED_DB_VERIFIED_BYTES' : 'SESSION_STORAGE_METADATA_ONLY',
+        warning: isUnverifiedResume
+          ? 'Parts prior to resume were not verified in browser storage at completion time. Ensure part files are preserved in your downloads folder.'
+          : undefined,
+        parts: session.completedParts.map(p => ({
+          part: p.part,
+          filename: p.filename,
+          reportsCount: p.reportsCount,
+          byteLength: p.byteLength || 0,
+          sha256: p.sha256 || null,
+          serverSha256: p.serverSha256 || null,
+          sha256Verified: Boolean(p.sha256 && (!p.serverSha256 || p.sha256 === p.serverSha256)),
+          cursorStart: p.cursorStart || null,
+          cursorEnd: p.cursorEnd || null,
+          hasStoredBlob: Boolean(p.hasStoredBlob),
+          downloadedAt: p.downloadedAt,
+        })),
+        verificationStatus,
         completedAt: new Date().toISOString(),
       };
 
@@ -1721,7 +1947,7 @@
         const manifestUrl = URL.createObjectURL(manifestBlob);
         const manifestLink = document.createElement('a');
         manifestLink.href = manifestUrl;
-        manifestLink.download = `VOX_Diagnostics_Export_Manifest_COMPLETE_VERIFIED_${session.exportId}.json`;
+        manifestLink.download = `VOX_Diagnostics_Export_Manifest_${verificationStatus}_${session.exportId}.json`;
         manifestLink.style.display = 'none';
         document.body.appendChild(manifestLink);
         manifestLink.click();
@@ -1729,16 +1955,16 @@
         setTimeout(() => URL.revokeObjectURL(manifestUrl), 30000);
       } catch (_) {}
 
-      session.status = 'COMPLETE_VERIFIED';
+      session.status = verificationStatus;
       saveExportSession(session);
       hideResumeBanner();
 
       if (part > 1) {
-        showToast(`✅ Выгрузка завершена и верифицирована: скачано частей: ${part} (всего ${totalDownloaded} отчётов, 0 дубликатов, 0 потерь, COMPLETE_VERIFIED)`);
+        showToast(`✅ Выгрузка завершена: скачано частей: ${part} (всего ${totalDownloaded} отчётов, 0 дубликатов, 0 потерь, ${verificationStatus})`);
       } else {
         showToast(totalDownloaded > 0
-          ? `✅ Архив успешно скачан (${totalDownloaded} отчётов, COMPLETE_VERIFIED)`
-          : 'Выгрузка завершена: 0 активных отчётов (COMPLETE_VERIFIED)');
+          ? `✅ Архив успешно скачан (${totalDownloaded} отчётов, ${verificationStatus})`
+          : `Выгрузка завершена: 0 активных отчётов (${verificationStatus})`);
       }
     } catch (err) {
       console.error('[AdminApp] Active ZIP export exception:', err);
@@ -1747,7 +1973,7 @@
       session.currentCursor = currentCursor;
       session.totalDownloaded = totalDownloaded;
       saveExportSession(session);
-      showResumeBanner(session);
+      checkAndShowResumeBanner(session);
       showToast('Ошибка при скачивании архива: ' + err.message, true);
     } finally {
       isExportRunning = false;
@@ -1755,7 +1981,7 @@
     }
   }
 
-  // --- ZIP EXPORT ---
+    // --- ZIP EXPORT ---
   async function downloadZipArchive(params = {}) {
     const qs = new URLSearchParams(params).toString();
     const url = '/v1/admin/export/zip' + (qs ? '?' + qs : '');
@@ -2634,10 +2860,10 @@
     handleDeepLink();
     window.addEventListener('hashchange', handleDeepLink);
 
-    // Prompt #062: Check for uncompleted export session and show resume banner if needed
+    // Prompt #062 & #063: Check for uncompleted export session and show resume banner if needed
     const activeSession = getExportSession();
     if (activeSession && activeSession.status !== 'COMPLETE_VERIFIED' && activeSession.completedParts && activeSession.completedParts.length > 0) {
-      showResumeBanner(activeSession);
+      checkAndShowResumeBanner(activeSession);
     }
   }
 

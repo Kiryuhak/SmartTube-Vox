@@ -248,6 +248,8 @@ export async function buildDiagnosticsZip(storage, options = {}) {
       until: options.until || null,
     },
     timezone: 'UTC',
+    cursorStart: reports.length > 0 ? `${reports[0].created_at || reports[0].createdAt}:${reports[0].report_id || reports[0].reportId}` : null,
+    cursorEnd: reports.length > 0 ? `${reports[reports.length - 1].created_at || reports[reports.length - 1].createdAt}:${reports[reports.length - 1].report_id || reports[reports.length - 1].reportId}` : null,
     consistency: {
       creationCeiling: options.until ? new Date(Number(options.until)).toISOString() : null,
       guarantee: 'CREATION_CEILING_CONSISTENT',
@@ -280,6 +282,11 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   zip.addFile('summary.json', JSON.stringify(summary, null, 2));
 
   const buffer = zip.build();
+  let sha256 = null;
+  try {
+    const hash = await crypto.subtle.digest('SHA-256', buffer);
+    sha256 = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (_) {}
   
   // Naming: VOX_Diagnostics_Active_YYYYMMDD_HHMM.zip (with _partN for multipart)
   const partSuffix = (partNum > 1) ? `_part${partNum}` : (isTruncated ? '_part1' : '');
@@ -292,9 +299,19 @@ export async function buildDiagnosticsZip(storage, options = {}) {
     zipFilename = `VOX_Diagnostics_Active_${dateHoursStr}${partSuffix}.zip`;
   }
 
+  const cursorStart = (reports.length > 0)
+    ? `${reports[0].created_at || reports[0].createdAt}:${reports[0].report_id || reports[0].reportId}`
+    : null;
+  const cursorEnd = (reports.length > 0)
+    ? `${reports[reports.length - 1].created_at || reports[reports.length - 1].createdAt}:${reports[reports.length - 1].report_id || reports[reports.length - 1].reportId}`
+    : null;
+
   return {
     buffer,
     filename: zipFilename,
+    sha256,
+    cursorStart,
+    cursorEnd,
     manifest,
     summary,
     totalReports: reports.length,
