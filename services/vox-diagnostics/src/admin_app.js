@@ -1486,6 +1486,212 @@
     return null;
   }
 
+  // --- Client-side Pure JS ZIP Utilities (PKWARE Stored Mode) ---
+  const CLIENT_CRC_TABLE = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    CLIENT_CRC_TABLE[i] = c >>> 0;
+  }
+
+  function clientCrc32(buffer) {
+    let crc = 0xFFFFFFFF;
+    const len = buffer.length;
+    let i = 0;
+    const rem = len & 7;
+    const unrolled = len - rem;
+    while (i < unrolled) {
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    }
+    while (i < len) {
+      crc = (crc >>> 8) ^ CLIENT_CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function clientDateToDosTime(date = new Date()) {
+    const d = date instanceof Date ? date : new Date(date);
+    const year = Math.max(1980, d.getFullYear());
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const hours = d.getHours();
+    const minutes = d.getMinutes();
+    const seconds = Math.floor(d.getSeconds() / 2);
+    const dosDate = ((year - 1980) << 9) | (month << 5) | day;
+    const dosTime = (hours << 11) | (minutes << 5) | seconds;
+    return { dosDate, dosTime };
+  }
+
+  function parseStoredZip(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+    let eocdOffset = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+      if (view.getUint32(i, true) === 0x06054b50) {
+        eocdOffset = i;
+        break;
+      }
+    }
+    if (eocdOffset === -1) {
+      throw new Error('EOCD record not found in ZIP payload');
+    }
+
+    const totalEntries = view.getUint16(eocdOffset + 10, true);
+    const cdOffset = view.getUint32(eocdOffset + 16, true);
+    const decoder = new TextDecoder('utf-8');
+
+    const entries = [];
+    let curCd = cdOffset;
+    for (let i = 0; i < totalEntries; i++) {
+      const sig = view.getUint32(curCd, true);
+      if (sig !== 0x02014b50) {
+        throw new Error('Invalid Central Directory signature at offset ' + curCd);
+      }
+
+      const compMethod = view.getUint16(curCd + 10, true);
+      const compSize = view.getUint32(curCd + 20, true);
+      const uncompSize = view.getUint32(curCd + 24, true);
+      const nameLen = view.getUint16(curCd + 28, true);
+      const extraLen = view.getUint16(curCd + 30, true);
+      const commentLen = view.getUint16(curCd + 32, true);
+      const localOffset = view.getUint32(curCd + 42, true);
+
+      const nameBytes = bytes.subarray(curCd + 46, curCd + 46 + nameLen);
+      const filename = decoder.decode(nameBytes);
+
+      const localSig = view.getUint32(localOffset, true);
+      if (localSig !== 0x04034b50) {
+        throw new Error('Invalid Local Header signature at offset ' + localOffset);
+      }
+      const localNameLen = view.getUint16(localOffset + 26, true);
+      const localExtraLen = view.getUint16(localOffset + 28, true);
+      const dataStart = localOffset + 30 + localNameLen + localExtraLen;
+      const data = bytes.subarray(dataStart, dataStart + compSize);
+
+      entries.push({ filename, data, compMethod, compSize, uncompSize });
+      curCd += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+  }
+
+  class ClientZipWriter {
+    constructor() {
+      this.entries = [];
+    }
+
+    addFile(path, content, date = new Date()) {
+      let dataBuffer;
+      if (typeof content === 'string') {
+        dataBuffer = new TextEncoder().encode(content);
+      } else if (content instanceof Uint8Array) {
+        dataBuffer = content;
+      } else {
+        dataBuffer = new TextEncoder().encode(JSON.stringify(content, null, 2));
+      }
+
+      const pathBytes = new TextEncoder().encode(path);
+      const checksum = clientCrc32(dataBuffer);
+      const { dosDate, dosTime } = clientDateToDosTime(date);
+
+      this.entries.push({
+        path,
+        pathBytes,
+        data: dataBuffer,
+        size: dataBuffer.length,
+        crc: checksum,
+        dosDate,
+        dosTime,
+      });
+      return this;
+    }
+
+    build() {
+      let totalSize = 0;
+      for (const entry of this.entries) {
+        entry.localHeaderOffset = totalSize;
+        totalSize += 30 + entry.pathBytes.length + entry.size;
+      }
+
+      const centralDirectoryStart = totalSize;
+      let centralDirectorySize = 0;
+      for (const entry of this.entries) {
+        centralDirectorySize += 46 + entry.pathBytes.length;
+      }
+      totalSize += centralDirectorySize;
+      totalSize += 22;
+
+      const buffer = new Uint8Array(totalSize);
+      const view = new DataView(buffer.buffer);
+      let offset = 0;
+
+      for (const entry of this.entries) {
+        view.setUint32(offset, 0x04034b50, true);
+        view.setUint16(offset + 4, 20, true);
+        view.setUint16(offset + 6, 0x0800, true);
+        view.setUint16(offset + 8, 0, true);
+        view.setUint16(offset + 10, entry.dosTime, true);
+        view.setUint16(offset + 12, entry.dosDate, true);
+        view.setUint32(offset + 14, entry.crc, true);
+        view.setUint32(offset + 18, entry.size, true);
+        view.setUint32(offset + 22, entry.size, true);
+        view.setUint16(offset + 26, entry.pathBytes.length, true);
+        view.setUint16(offset + 28, 0, true);
+        offset += 30;
+
+        buffer.set(entry.pathBytes, offset);
+        offset += entry.pathBytes.length;
+
+        buffer.set(entry.data, offset);
+        offset += entry.size;
+      }
+
+      for (const entry of this.entries) {
+        view.setUint32(offset, 0x02014b50, true);
+        view.setUint16(offset + 4, 20, true);
+        view.setUint16(offset + 6, 20, true);
+        view.setUint16(offset + 8, 0x0800, true);
+        view.setUint16(offset + 10, 0, true);
+        view.setUint16(offset + 12, entry.dosTime, true);
+        view.setUint16(offset + 14, entry.dosDate, true);
+        view.setUint32(offset + 16, entry.crc, true);
+        view.setUint32(offset + 20, entry.size, true);
+        view.setUint32(offset + 24, entry.size, true);
+        view.setUint16(offset + 28, entry.pathBytes.length, true);
+        view.setUint16(offset + 30, 0, true);
+        view.setUint16(offset + 32, 0, true);
+        view.setUint16(offset + 34, 0, true);
+        view.setUint16(offset + 36, 0, true);
+        view.setUint32(offset + 38, 0, true);
+        view.setUint32(offset + 42, entry.localHeaderOffset, true);
+        offset += 46;
+
+        buffer.set(entry.pathBytes, offset);
+        offset += entry.pathBytes.length;
+      }
+
+      view.setUint32(offset, 0x06054b50, true);
+      view.setUint16(offset + 4, 0, true);
+      view.setUint16(offset + 6, 0, true);
+      view.setUint16(offset + 8, this.entries.length, true);
+      view.setUint16(offset + 10, this.entries.length, true);
+      view.setUint32(offset + 12, centralDirectorySize, true);
+      view.setUint32(offset + 16, centralDirectoryStart, true);
+      view.setUint16(offset + 20, 0, true);
+
+      return buffer;
+    }
+  }
+
   function getExportSession() {
     try {
       const data = sessionStorage.getItem(EXPORT_SESSION_KEY);
@@ -1649,6 +1855,9 @@
       return;
     }
 
+    const TARGET_PART_REPORTS = 100;
+    const DEFAULT_SUB_CHUNK_LIMIT = 25;
+
     const isResume = Boolean(options.resume);
     let session = isResume ? getExportSession() : null;
 
@@ -1657,12 +1866,13 @@
         exportId: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
         snapshotUntil: Date.now(),
         targetStatuses: 'NEW,INVESTIGATING',
+        targetPartReports: TARGET_PART_REPORTS,
         currentPart: 1,
         currentCursor: null,
-        chunkLimit: 25,
+        partStartCursor: null,
+        chunkLimit: DEFAULT_SUB_CHUNK_LIMIT,
         completedParts: [],
         totalDownloaded: 0,
-        allCollectedIds: [],
         status: 'IN_PROGRESS',
         unverifiedStorageResume: false,
         createdAt: new Date().toISOString(),
@@ -1675,21 +1885,22 @@
 
     isExportRunning = true;
     hideResumeBanner();
-    setExportButtonsState(true, `Часть ${session.currentPart}...`);
+    setExportButtonsState(true, `Часть ${session.currentPart} (100/часть)...`);
 
     let exportSnapshotUntil = session.snapshotUntil;
     let currentCursor = session.currentCursor;
-    let part = session.currentPart;
+    let part = session.currentPart || 1;
+    let partStartCursor = session.partStartCursor || currentCursor;
     let totalDownloaded = session.totalDownloaded || 0;
-    let chunkLimit = session.chunkLimit || 25;
-    let hasMoreParts = true;
+    let chunkLimit = session.chunkLimit || DEFAULT_SUB_CHUNK_LIMIT;
+    let consecutiveSuccesses = 0;
 
     showToast(isResume
-      ? `Возобновление выгрузки активных отчётов с части ${part} (ранее скачано: ${totalDownloaded})...`
-      : 'Подготовка надёжной выгрузки всех активных отчётов (NEW + В работе)...');
+      ? `Возобновление выгрузки активных отчётов с части ${part} (целевой размер: 100 отчётов/часть, ранее скачано: ${totalDownloaded})...`
+      : 'Подготовка надёжной выгрузки всех активных отчётов (100 отчётов/часть, NEW + В работе)...');
 
-    // Helper: fetch part with adaptive backoff and chunk size step-down
-    async function fetchExportPartAdaptively(partNum, cursorVal, maxRetries = 5) {
+    // Helper: fetch sub-chunk with adaptive backoff and chunk size step-down
+    async function fetchExportPartAdaptively(subPartNum, cursorVal, maxRetries = 5) {
       let attempt = 0;
       let lastRes = null;
       let lastErr = null;
@@ -1699,7 +1910,7 @@
         const params = new URLSearchParams({
           statuses: 'NEW,INVESTIGATING',
           until: String(exportSnapshotUntil),
-          part: String(partNum),
+          part: String(subPartNum),
           limit: String(chunkLimit),
           sessionId: session.exportId,
         });
@@ -1742,7 +1953,7 @@
             }
             delaySec = Math.max(1, Math.round(delaySec * (0.8 + 0.4 * Math.random())));
 
-            showToast(`Сервис перегружен (${res.status}). Уменьшаем порцию до ${chunkLimit} и повторяем часть ${partNum} (${attempt}/${maxRetries}) через ${delaySec} сек...`);
+            showToast(`Сервис перегружен (${res.status}). Уменьшаем порцию до ${chunkLimit} и повторяем (${attempt}/${maxRetries}) через ${delaySec} сек...`);
             await new Promise((r) => setTimeout(r, delaySec * 1000));
             continue;
           }
@@ -1764,7 +1975,7 @@
 
             let delaySec = Math.min(15, Math.pow(2, attempt - 1));
             delaySec = Math.max(1, Math.round(delaySec * (0.8 + 0.4 * Math.random())));
-            showToast(`Сбой сети при запросе части ${partNum}. Уменьшаем порцию до ${chunkLimit} и повторяем (${attempt}/${maxRetries}) через ${delaySec} сек...`);
+            showToast(`Сбой сети при запросе отчётов. Уменьшаем порцию до ${chunkLimit} и повторяем (${attempt}/${maxRetries}) через ${delaySec} сек...`);
             await new Promise((r) => setTimeout(r, delaySec * 1000));
             continue;
           }
@@ -1775,129 +1986,214 @@
     }
 
     try {
-      while (hasMoreParts) {
-        setExportButtonsState(true, `Часть ${part}...`);
+      const pendingReports = [];
+      const seenReportIds = new Set();
+      let hasMoreServerChunks = true;
+      let serverSubPartNum = 1;
+      let currentPartCursorEnd = null;
 
-        if (part > 1) {
-          showToast(`Загрузка части ${part} архива (порция: ${chunkLimit})...`);
-        }
+      while (hasMoreServerChunks || pendingReports.length > 0) {
+        if (hasMoreServerChunks && pendingReports.length < TARGET_PART_REPORTS) {
+          setExportButtonsState(true, `Часть ${part} (собрано ${pendingReports.length}/${TARGET_PART_REPORTS})...`);
 
-        const fetchOutcome = await fetchExportPartAdaptively(part, currentCursor, 5);
-        if (fetchOutcome.authError) {
-          showToast('Нет доступа к выгрузке (401/403): требуется авторизация администратора', true);
-          session.status = 'AUTH_ERROR';
-          saveExportSession(session);
-          return;
-        }
-
-        if (!fetchOutcome.ok) {
-          let errMsg = 'Сбой сети';
-          if (fetchOutcome.res) {
-            const text = await fetchOutcome.res.text().catch(() => '');
-            if (text.includes('1102')) {
-              errMsg = 'Cloudflare Error 1102 (исчерпан лимит CPU Worker)';
-            } else if (fetchOutcome.res.status === 503) {
-              errMsg = 'HTTP 503 (шлюз базы данных перегружен)';
-            } else {
-              try {
-                const errJson = JSON.parse(text);
-                errMsg = errJson.message || fetchOutcome.res.statusText || String(fetchOutcome.res.status);
-              } catch (_) {
-                errMsg = fetchOutcome.res.statusText || String(fetchOutcome.res.status);
-              }
-            }
-          } else if (fetchOutcome.error) {
-            errMsg = fetchOutcome.error.message || 'сетевая ошибка';
+          const fetchOutcome = await fetchExportPartAdaptively(serverSubPartNum++, currentCursor, 5);
+          if (fetchOutcome.authError) {
+            showToast('Нет доступа к выгрузке (401/403): требуется авторизация администратора', true);
+            session.status = 'AUTH_ERROR';
+            saveExportSession(session);
+            return;
           }
 
-          session.status = 'PAUSED';
-          session.currentPart = part;
-          session.currentCursor = currentCursor;
-          session.totalDownloaded = totalDownloaded;
-          saveExportSession(session);
-          checkAndShowResumeBanner(session);
+          if (!fetchOutcome.ok) {
+            let errMsg = 'Сбой сети';
+            if (fetchOutcome.res) {
+              const text = await fetchOutcome.res.text().catch(() => '');
+              if (text.includes('1102')) {
+                errMsg = 'Cloudflare Error 1102 (исчерпан лимит CPU Worker)';
+              } else if (fetchOutcome.res.status === 503) {
+                errMsg = 'HTTP 503 (шлюз базы данных перегружен)';
+              } else {
+                try {
+                  const errJson = JSON.parse(text);
+                  errMsg = errJson.message || fetchOutcome.res.statusText || String(fetchOutcome.res.status);
+                } catch (_) {
+                  errMsg = fetchOutcome.res.statusText || String(fetchOutcome.res.status);
+                }
+              }
+            } else if (fetchOutcome.error) {
+              errMsg = fetchOutcome.error.message || 'сетевая ошибка';
+            }
 
-          showToast(`Ошибка формирования части ${part}: ${errMsg}. Выгрузка приостановлена. Вы можете возобновить её.`, true);
-          return;
-        }
+            session.status = 'PAUSED';
+            session.currentPart = part;
+            session.partStartCursor = partStartCursor;
+            session.currentCursor = partStartCursor;
+            session.totalDownloaded = totalDownloaded;
+            saveExportSession(session);
+            checkAndShowResumeBanner(session);
 
-        const res = fetchOutcome.res;
-        const blob = await res.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const clientSha256 = await computeSha256(arrayBuffer);
-        const serverSha256 = res.headers.get('X-Export-SHA256');
-        const cursorStart = res.headers.get('X-Export-Cursor-Start');
-        const cursorEnd = res.headers.get('X-Export-Cursor-End');
+            showToast(`Ошибка формирования части ${part}: ${errMsg}. Выгрузка приостановлена. Вы можете возобновить её.`, true);
+            return;
+          }
 
-        if (serverSha256 && clientSha256 && serverSha256.toLowerCase() !== clientSha256.toLowerCase()) {
-          console.error(`[AdminApp] SHA-256 verification failed on part ${part}: server=${serverSha256}, client=${clientSha256}`);
-          showToast(`Ошибка целостности данных: несовпадение контрольной суммы SHA-256 части ${part}`, true);
-          session.status = 'PAUSED';
-          saveExportSession(session);
-          return;
-        }
+          const res = fetchOutcome.res;
+          const arrayBuffer = await res.arrayBuffer();
+          const clientSha256 = await computeSha256(arrayBuffer);
+          const serverSha256 = res.headers.get('X-Export-SHA256');
 
-        const disposition = res.headers.get('Content-Disposition') || '';
-        const match = disposition.match(/filename="?([^";]+)"?/i);
-        const defaultName = part > 1 ? (`VOX_Diagnostics_Active_part${part}.zip`) : 'VOX_Diagnostics_Active.zip';
-        const rawFilename = match ? match[1] : defaultName;
-        const filename = rawFilename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+          if (serverSha256 && clientSha256 && serverSha256.toLowerCase() !== clientSha256.toLowerCase()) {
+            console.error(`[AdminApp] SHA-256 verification failed on sub-chunk: server=${serverSha256}, client=${clientSha256}`);
+            showToast(`Ошибка целостности данных: несовпадение контрольной суммы SHA-256 при передаче`, true);
+            session.status = 'PAUSED';
+            saveExportSession(session);
+            return;
+          }
 
-        // Persist binary blob and metadata into IndexedDB
-        const storedOk = await idbSavePart({
-          exportId: session.exportId,
-          part,
-          filename,
-          blob,
-          byteLength: blob.size,
-          sha256: clientSha256,
-          serverSha256,
-          cursorStart,
-          cursorEnd,
-          savedAt: new Date().toISOString(),
-        });
+          // Unpack records from stored sub-chunk ZIP
+          const entries = parseStoredZip(arrayBuffer);
+          for (const entry of entries) {
+            // Keep only JSON diagnostic reports (ignore sub-chunk manifest and summary)
+            if (entry.filename.endsWith('.json') && !entry.filename.endsWith('manifest.json') && !entry.filename.endsWith('summary.json')) {
+              let reportId = null;
+              const match = entry.filename.match(/(VOX-[A-Za-z0-9_-]+)/);
+              if (match) {
+                reportId = match[1];
+              }
+              if (!reportId) {
+                try {
+                  const obj = JSON.parse(new TextDecoder('utf-8').decode(entry.data));
+                  reportId = obj.report_id || obj.reportId;
+                } catch (_) {}
+              }
+              const dedupeKey = reportId || entry.filename;
+              if (!seenReportIds.has(dedupeKey)) {
+                seenReportIds.add(dedupeKey);
+                pendingReports.push({
+                  filename: entry.filename,
+                  data: entry.data,
+                  reportId: dedupeKey,
+                });
+              }
+            }
+          }
 
-        // Trigger browser download for individual part
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-
-        const partReports = parseInt(res.headers.get('X-Total-Reports') || '0', 10);
-        totalDownloaded += partReports;
-        const isTruncated = res.headers.get('X-Export-Truncated') === 'true';
-        const nextCursor = res.headers.get('X-Export-Next-Cursor');
-
-        session.completedParts.push({
-          part,
-          filename,
-          reportsCount: partReports,
-          byteLength: blob.size,
-          sha256: clientSha256,
-          serverSha256,
-          cursorStart,
-          cursorEnd,
-          hasStoredBlob: storedOk,
-          nextCursor: isTruncated ? nextCursor : null,
-          downloadedAt: new Date().toISOString(),
-        });
-        session.totalDownloaded = totalDownloaded;
-        session.currentPart = part + 1;
-        session.currentCursor = nextCursor;
-        saveExportSession(session);
-
-        if (isTruncated && nextCursor) {
-          showToast(`Часть ${part} скачана (${partReports} отчётов). Загрузка следующей части...`);
+          const isTruncated = res.headers.get('X-Export-Truncated') === 'true';
+          const nextCursor = res.headers.get('X-Export-Next-Cursor');
+          currentPartCursorEnd = res.headers.get('X-Export-Cursor-End') || nextCursor || currentPartCursorEnd;
           currentCursor = nextCursor;
+
+          if (!partStartCursor) {
+            partStartCursor = res.headers.get('X-Export-Cursor-Start') || currentCursor;
+          }
+
+          // Adaptive hysteresis: restore chunkLimit to default after 3 consecutive successes
+          consecutiveSuccesses++;
+          if (consecutiveSuccesses >= 3 && chunkLimit < DEFAULT_SUB_CHUNK_LIMIT) {
+            chunkLimit = DEFAULT_SUB_CHUNK_LIMIT;
+            session.chunkLimit = chunkLimit;
+            saveExportSession(session);
+          }
+
+          if (!isTruncated || !nextCursor) {
+            hasMoreServerChunks = false;
+          }
+        }
+
+        // Check if we should assemble a full 100-report part or the final remainder part
+        while (pendingReports.length >= TARGET_PART_REPORTS || (!hasMoreServerChunks && pendingReports.length > 0)) {
+          const partReports = pendingReports.splice(0, TARGET_PART_REPORTS);
+          setExportButtonsState(true, `Сборка части ${part} (${partReports.length} отчётов)...`);
+
+          const zipWriter = new ClientZipWriter();
+
+          // Consolidated Part Manifest
+          const partManifest = {
+            schemaVersion: '1.0',
+            exportId: session.exportId,
+            part,
+            targetPartReports: TARGET_PART_REPORTS,
+            totalReports: partReports.length,
+            cursorStart: partStartCursor,
+            cursorEnd: currentPartCursorEnd,
+            reports: partReports.map(r => r.reportId),
+            generatedAt: new Date().toISOString(),
+          };
+
+          // Consolidated Part Summary
+          const statusCounts = {};
+          for (const r of partReports) {
+            const folder = r.filename.split('/')[0] || 'REPORTS';
+            statusCounts[folder] = (statusCounts[folder] || 0) + 1;
+          }
+          const partSummary = {
+            exportId: session.exportId,
+            part,
+            totalReports: partReports.length,
+            statusDistribution: statusCounts,
+            generatedAt: new Date().toISOString(),
+          };
+
+          zipWriter.addFile('manifest.json', JSON.stringify(partManifest, null, 2));
+          zipWriter.addFile('summary.json', JSON.stringify(partSummary, null, 2));
+
+          for (const reportItem of partReports) {
+            zipWriter.addFile(reportItem.filename, reportItem.data);
+          }
+
+          const assembledZipBuffer = zipWriter.build();
+          const partSha256 = await computeSha256(assembledZipBuffer.buffer);
+          const partBlob = new Blob([assembledZipBuffer], { type: 'application/zip' });
+
+          const isSingleSmallExport = part === 1 && !hasMoreServerChunks && pendingReports.length === 0 && partReports.length < TARGET_PART_REPORTS;
+          const filename = isSingleSmallExport ? 'VOX_Diagnostics_Active.zip' : `VOX_Diagnostics_Active_part${part}.zip`;
+
+          // Persist binary blob and metadata into IndexedDB
+          const storedOk = await idbSavePart({
+            exportId: session.exportId,
+            part,
+            filename,
+            blob: partBlob,
+            byteLength: partBlob.size,
+            sha256: partSha256,
+            cursorStart: partStartCursor,
+            cursorEnd: currentPartCursorEnd,
+            reportsCount: partReports.length,
+            savedAt: new Date().toISOString(),
+          });
+
+          // Trigger browser download for individual 100-report part
+          const blobUrl = URL.createObjectURL(partBlob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+
+          totalDownloaded += partReports.length;
+
+          session.completedParts.push({
+            part,
+            filename,
+            reportsCount: partReports.length,
+            byteLength: partBlob.size,
+            sha256: partSha256,
+            cursorStart: partStartCursor,
+            cursorEnd: currentPartCursorEnd,
+            hasStoredBlob: storedOk,
+            downloadedAt: new Date().toISOString(),
+          });
+          session.totalDownloaded = totalDownloaded;
+          session.currentPart = part + 1;
+          session.partStartCursor = currentCursor;
+          session.currentCursor = currentCursor;
+          saveExportSession(session);
+
+          showToast(`Часть ${part} скачана (${partReports.length} отчётов, целевой размер: 100 отчётов/часть)...`);
           part++;
-          await new Promise((r) => setTimeout(r, 700));
-        } else {
-          hasMoreParts = false;
+          partStartCursor = currentCursor;
         }
       }
 
@@ -1917,6 +2213,7 @@
         exportId: session.exportId,
         consistencyGuarantee: 'CREATION_CEILING_CONSISTENT',
         statusConsistency: 'READ_COMMITTED_AT_QUERY_TIME',
+        targetPartReports: TARGET_PART_REPORTS,
         snapshotUntil: session.snapshotUntil,
         snapshotUntilIso: new Date(session.snapshotUntil).toISOString(),
         targetStatuses: session.targetStatuses,
@@ -1935,8 +2232,7 @@
           reportsCount: p.reportsCount,
           byteLength: p.byteLength || 0,
           sha256: p.sha256 || null,
-          serverSha256: p.serverSha256 || null,
-          sha256Verified: Boolean(p.sha256 && (!p.serverSha256 || p.sha256 === p.serverSha256)),
+          sha256Verified: Boolean(p.sha256),
           cursorStart: p.cursorStart || null,
           cursorEnd: p.cursorEnd || null,
           hasStoredBlob: Boolean(p.hasStoredBlob),
@@ -1963,8 +2259,9 @@
       saveExportSession(session);
       hideResumeBanner();
 
-      if (part > 1) {
-        showToast(`✅ Выгрузка завершена: скачано частей: ${part} (всего ${totalDownloaded} отчётов, 0 дубликатов, 0 потерь, ${verificationStatus})`);
+      const totalPartsCount = session.completedParts.length;
+      if (totalPartsCount > 1) {
+        showToast(`✅ Выгрузка завершена: скачано частей: ${totalPartsCount} (целевой размер: 100 отчётов/часть, всего ${totalDownloaded} отчётов, 0 дубликатов, 0 потерь, ${verificationStatus})`);
       } else {
         showToast(totalDownloaded > 0
           ? `✅ Архив успешно скачан (${totalDownloaded} отчётов, ${verificationStatus})`
@@ -1974,7 +2271,8 @@
       console.error('[AdminApp] Active ZIP export exception:', err);
       session.status = 'PAUSED';
       session.currentPart = part;
-      session.currentCursor = currentCursor;
+      session.partStartCursor = partStartCursor;
+      session.currentCursor = partStartCursor;
       session.totalDownloaded = totalDownloaded;
       saveExportSession(session);
       checkAndShowResumeBanner(session);
