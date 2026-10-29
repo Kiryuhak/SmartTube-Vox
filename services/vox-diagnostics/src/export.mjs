@@ -3,6 +3,17 @@ import { normalizeStatus } from './storage.mjs';
 import { prepareReportDownloadJson } from './diagnostics.mjs';
 
 /**
+ * Normalizes active statuses and their aliases (e.g. IN_PROGRESS, TRIAGED -> INVESTIGATING)
+ * while preserving strict rejection of unknown or non-active statuses.
+ */
+export function normalizeActiveStatus(rawStatus) {
+  const norm = normalizeStatus(rawStatus);
+  if (norm === 'NEW') return 'NEW';
+  if (['INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'REVIEWED', 'NEEDS_INFO'].includes(norm)) return 'INVESTIGATING';
+  return norm;
+}
+
+/**
  * SmartTube VOX Diagnostics — Bulk Diagnostics ZIP Export Service.
  * Safely generates complete ZIP archives of active diagnostic reports with
  * manifest.json, summary.json, and structured status folders.
@@ -34,18 +45,18 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   // Target statuses: defaults strictly to ACTIVE_EXPORT_STATUSES ('NEW', 'INVESTIGATING')
   let targetStatuses = ACTIVE_EXPORT_STATUSES;
   if (Array.isArray(options.statuses) && options.statuses.length > 0) {
-    targetStatuses = options.statuses.map(s => normalizeStatus(s));
+    targetStatuses = options.statuses.map(s => normalizeActiveStatus(s));
   } else if (typeof options.statuses === 'string' && options.statuses.trim()) {
-    targetStatuses = options.statuses.split(',').map(s => normalizeStatus(s.trim())).filter(Boolean);
+    targetStatuses = options.statuses.split(',').map(s => normalizeActiveStatus(s.trim())).filter(Boolean);
   }
 
   const reports = [];
   const seenIds = new Set();
-  const PAGE_SIZE = 100;
   const DEFAULT_MAX_EXPORT_REPORTS = 5000;
   const MAX_EXPORT_REPORTS = options.maxReports !== undefined
     ? Math.max(1, Number(options.maxReports))
     : DEFAULT_MAX_EXPORT_REPORTS;
+  const PAGE_SIZE = Math.min(100, MAX_EXPORT_REPORTS);
   let offset = options.offset || 0;
   let currentCursor = options.cursor || null;
   let hasMore = true;
@@ -61,12 +72,17 @@ export async function buildDiagnosticsZip(storage, options = {}) {
 
   while (hasMore && pageIndex < MAX_PAGES) {
     pageIndex++;
+    const remainingToFetch = MAX_EXPORT_REPORTS - reports.length;
+    const fetchLimit = remainingToFetch > 0 ? Math.min(PAGE_SIZE, remainingToFetch) : 1;
+    const needPayload = remainingToFetch > 0;
+
     const listParams = {
-      limit: PAGE_SIZE,
-      offset: currentCursor ? 0 : offset,
+      limit: fetchLimit,
+      statuses: targetStatuses,
+      offset: offset,
       cursor: currentCursor || undefined,
       until: options.until || undefined,
-      includePayload: true,
+      includePayload: needPayload,
       search: options.search,
       platform: options.platform,
       appVersion: options.appVersion,
@@ -95,19 +111,19 @@ export async function buildDiagnosticsZip(storage, options = {}) {
         skippedReasons.push(`Report ${reportId}: status is missing or empty`);
         continue;
       }
-      const normStatus = normalizeStatus(rawStatus);
+      const normStatus = normalizeActiveStatus(rawStatus);
 
       // Explicitly exclude completed/final/other excluded statuses
-      if (FINAL_EXCLUDED_STATUSES.includes(normStatus)) {
+      if (FINAL_EXCLUDED_STATUSES.includes(normStatus) || FINAL_EXCLUDED_STATUSES.includes(normalizeStatus(rawStatus))) {
         skippedCount++;
-        skippedReasons.push(`Report ${reportId}: status ${normStatus} is excluded`);
+        skippedReasons.push(`Report ${reportId}: status ${rawStatus} is excluded`);
         continue;
       }
 
       // Exclude any status not in target active statuses (including unknown statuses)
       if (!targetStatuses.includes(normStatus)) {
         skippedCount++;
-        skippedReasons.push(`Report ${reportId}: status ${normStatus} is not in target active statuses`);
+        skippedReasons.push(`Report ${reportId}: status ${rawStatus} is not in target active statuses`);
         continue;
       }
 
@@ -135,8 +151,8 @@ export async function buildDiagnosticsZip(storage, options = {}) {
     }
 
     offset += items.length;
-    // If fewer items returned than PAGE_SIZE, we've reached the end
-    if (items.length < PAGE_SIZE) {
+    // If fewer items returned than fetchLimit, we've reached the end
+    if (items.length < fetchLimit) {
       hasMore = false;
     }
   }
@@ -154,7 +170,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
 
   for (const r of reports) {
     const reportId = r.report_id || r.reportId;
-    const status = normalizeStatus(r.status || 'NEW');
+    const status = normalizeActiveStatus(r.status || 'NEW');
     if (status === 'NEW') newReportsCount++;
     if (status === 'INVESTIGATING') investigatingReportsCount++;
 

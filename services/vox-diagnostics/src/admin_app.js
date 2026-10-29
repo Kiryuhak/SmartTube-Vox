@@ -1451,7 +1451,7 @@
           statuses: 'NEW,INVESTIGATING',
           until: String(exportSnapshotUntil),
           part: String(part),
-          limit: '200',
+          limit: '100',
         });
         if (currentCursor) {
           params.set('cursor', currentCursor);

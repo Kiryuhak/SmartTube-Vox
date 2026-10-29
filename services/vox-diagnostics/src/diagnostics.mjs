@@ -858,7 +858,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const cursor = url.searchParams.get('cursor') || undefined;
     const part = url.searchParams.get('part') ? parseInt(url.searchParams.get('part'), 10) : undefined;
     const until = url.searchParams.get('until') ? parseInt(url.searchParams.get('until'), 10) : undefined;
-    const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : 200;
+    const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : 100;
 
     try {
       const result = await buildDiagnosticsZip(storage, {

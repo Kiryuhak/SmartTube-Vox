@@ -172,6 +172,90 @@ export function toCanonicalIncidentStatus(rawStatus) {
   return toCanonicalStatus(rawStatus);
 }
 
+export function expandStatusVariants(statuses) {
+  if (!statuses) return [];
+  const list = Array.isArray(statuses) ? statuses : [statuses];
+  const variants = new Set();
+  for (const s of list) {
+    if (!s) continue;
+    const str = String(s).trim();
+    if (!str) continue;
+    const norm = normalizeStatus(str);
+    const upper = norm.toUpperCase();
+    const lower = norm.toLowerCase();
+    variants.add(upper);
+    variants.add(lower);
+    variants.add(str);
+
+    if (upper === 'NEW') {
+      variants.add('NEW');
+      variants.add('new');
+    } else if (['INVESTIGATING', 'IN_PROGRESS', 'TRIAGED', 'REVIEWED', 'NEEDS_INFO'].includes(upper)) {
+      variants.add('INVESTIGATING');
+      variants.add('investigating');
+      variants.add('IN_PROGRESS');
+      variants.add('in_progress');
+      variants.add('TRIAGED');
+      variants.add('triaged');
+      variants.add('REVIEWED');
+      variants.add('reviewed');
+      variants.add('NEEDS_INFO');
+      variants.add('needs_info');
+    } else if (upper === 'ROOT_CAUSE_FOUND') {
+      variants.add('ROOT_CAUSE_FOUND');
+      variants.add('root_cause_found');
+    } else if (upper === 'FIX_IMPLEMENTED') {
+      variants.add('FIX_IMPLEMENTED');
+      variants.add('fix_implemented');
+    } else if (upper === 'TESTING') {
+      variants.add('TESTING');
+      variants.add('testing');
+    } else if (['FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFY', 'FIXED_PENDING_VERIFICATION', 'FIXED_PENDING_VALIDATION', 'PENDING_VERIFICATION', 'FIXED'].includes(upper)) {
+      variants.add('FIXED_AWAITING_VERIFICATION');
+      variants.add('fixed_awaiting_verification');
+      variants.add('FIXED_PENDING_VERIFY');
+      variants.add('fixed_pending_verify');
+      variants.add('FIXED_PENDING_VERIFICATION');
+      variants.add('fixed_pending_verification');
+      variants.add('FIXED_PENDING_VALIDATION');
+      variants.add('fixed_pending_validation');
+      variants.add('FIXED');
+      variants.add('fixed');
+    } else if (['VERIFIED', 'RESOLVED', 'CLOSED'].includes(upper)) {
+      variants.add('VERIFIED');
+      variants.add('verified');
+      variants.add('RESOLVED');
+      variants.add('resolved');
+      variants.add('CLOSED');
+      variants.add('closed');
+    } else if (['REGRESSION', 'REOPENED'].includes(upper)) {
+      variants.add('REGRESSION');
+      variants.add('regression');
+      variants.add('REOPENED');
+      variants.add('reopened');
+    } else if (['KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN'].includes(upper)) {
+      variants.add('KNOWN_LIMITATION');
+      variants.add('known_limitation');
+      variants.add('KNOWN_ISSUE');
+      variants.add('known_issue');
+      variants.add('KNOWN');
+      variants.add('known');
+    } else if (['IGNORED', 'IGNORED_TEST', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP'].includes(upper)) {
+      variants.add('IGNORED');
+      variants.add('ignored');
+      variants.add('IGNORED_TEST');
+      variants.add('ignored_test');
+      variants.add('TEST');
+      variants.add('test');
+      variants.add('WONT_FIX');
+      variants.add('wont_fix');
+      variants.add('DUPLICATE');
+      variants.add('duplicate');
+    }
+  }
+  return Array.from(variants);
+}
+
 /**
  * Адаптер хранилища отчётов диагностики VOX.
  * Поддерживает Cloudflare D1 (когда передан env.DB) и in-memory хранилище (для тестов и локального запуска).
@@ -545,25 +629,15 @@ export class ReportStorage {
         params.push(errorCategory);
       }
       if (Array.isArray(statuses) && statuses.length > 0) {
-        const placeholders = statuses.map(() => '?').join(', ');
+        const expanded = expandStatusVariants(statuses);
+        const placeholders = expanded.map(() => '?').join(', ');
         query += ` AND status IN (${placeholders})`;
-        params.push(...statuses.map(s => normalizeStatus(s)));
+        params.push(...expanded);
       } else if (status) {
-        const norm = normalizeStatus(status);
-        if (norm === 'IN_PROGRESS') {
-          query += ` AND status IN ('IN_PROGRESS', 'REVIEWED', 'TRIAGED', 'in_progress', 'reviewed', 'triaged')`;
-        } else if (norm === 'KNOWN_ISSUE') {
-          query += ` AND status IN ('KNOWN_ISSUE', 'KNOWN', 'known_issue', 'known')`;
-        } else if (norm === 'IGNORED_TEST') {
-          query += ` AND status IN ('IGNORED_TEST', 'TEST', 'ignored_test', 'test')`;
-        } else if (norm === 'NEW') {
-          query += ` AND status IN ('NEW', 'new')`;
-        } else if (norm === 'RESOLVED') {
-          query += ` AND status IN ('RESOLVED', 'resolved')`;
-        } else {
-          query += ` AND status = ?`;
-          params.push(norm);
-        }
+        const expanded = expandStatusVariants(status);
+        const placeholders = expanded.map(() => '?').join(', ');
+        query += ` AND status IN (${placeholders})`;
+        params.push(...expanded);
       }
       if (reportPurpose) {
         query += ` AND report_purpose = ?`;
@@ -630,11 +704,11 @@ export class ReportStorage {
       if (appVersion) list = list.filter((r) => r.app_version === appVersion);
       if (errorCategory) list = list.filter((r) => r.error_category === errorCategory);
       if (Array.isArray(statuses) && statuses.length > 0) {
-        const normStatuses = statuses.map(s => normalizeStatus(s));
-        list = list.filter(r => normStatuses.includes(normalizeStatus(r.status)));
+        const expandedSet = new Set(expandStatusVariants(statuses).map(s => s.toUpperCase()));
+        list = list.filter(r => expandedSet.has(String(r.status || '').toUpperCase()) || statuses.map(s => normalizeStatus(s)).includes(normalizeStatus(r.status)));
       } else if (status) {
-        const norm = normalizeStatus(status);
-        list = list.filter((r) => normalizeStatus(r.status) === norm);
+        const expandedSet = new Set(expandStatusVariants(status).map(s => s.toUpperCase()));
+        list = list.filter(r => expandedSet.has(String(r.status || '').toUpperCase()) || normalizeStatus(r.status) === normalizeStatus(status));
       }
       if (reportPurpose) list = list.filter((r) => r.report_purpose === reportPurpose);
       if (search) {
