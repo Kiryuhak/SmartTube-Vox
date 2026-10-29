@@ -129,8 +129,8 @@ test('Prompt #054: Count Matrix - 0 reports', async () => {
   d1.close();
 });
 
-test('Prompt #054: Count Matrix - 1, 25, 50, 100 reports (Single Part Bounded)', async () => {
-  for (const count of [1, 25, 50, 100]) {
+test('Prompt #054: Count Matrix - 1, 25, 50, 99, 100 reports (Single Part Bounded)', async () => {
+  for (const count of [1, 25, 50, 99, 100]) {
     const { d1, sqlite } = createD1Mock();
     const storage = new ReportStorage(d1);
     const now = 1700000000000;
@@ -155,8 +155,8 @@ test('Prompt #054: Count Matrix - 1, 25, 50, 100 reports (Single Part Bounded)',
   }
 });
 
-test('Prompt #054: Count Matrix - 200, 250, 251 reports (Multipart Bounded Chunks of 100)', async () => {
-  for (const totalCount of [200, 250, 251]) {
+test('Prompt #054: Count Matrix - 101, 200, 250, 251, 796 reports (Multipart Bounded Chunks of 100)', async () => {
+  for (const totalCount of [101, 200, 250, 251, 796]) {
     const { d1, sqlite } = createD1Mock();
     const storage = new ReportStorage(d1);
     const now = 1700000000000;
