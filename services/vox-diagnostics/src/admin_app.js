@@ -1659,7 +1659,7 @@
         targetStatuses: 'NEW,INVESTIGATING',
         currentPart: 1,
         currentCursor: null,
-        chunkLimit: 50,
+        chunkLimit: 25,
         completedParts: [],
         totalDownloaded: 0,
         allCollectedIds: [],
@@ -1681,7 +1681,7 @@
     let currentCursor = session.currentCursor;
     let part = session.currentPart;
     let totalDownloaded = session.totalDownloaded || 0;
-    let chunkLimit = session.chunkLimit || 50;
+    let chunkLimit = session.chunkLimit || 25;
     let hasMoreParts = true;
 
     showToast(isResume
@@ -1721,12 +1721,14 @@
           lastRes = res;
           const isRetryable = res.status >= 500 || res.status === 429;
           if (isRetryable && attempt < maxRetries) {
-            if (chunkLimit > 25) {
-              chunkLimit = 25;
+            if (chunkLimit > 15) {
+              chunkLimit = 15;
             } else if (chunkLimit > 10) {
               chunkLimit = 10;
             } else if (chunkLimit > 5) {
               chunkLimit = 5;
+            } else if (chunkLimit > 2) {
+              chunkLimit = 2;
             }
 
             session.chunkLimit = chunkLimit;
@@ -1749,10 +1751,12 @@
         } catch (fetchErr) {
           lastErr = fetchErr;
           if (attempt < maxRetries) {
-            if (chunkLimit > 25) {
-              chunkLimit = 25;
+            if (chunkLimit > 15) {
+              chunkLimit = 15;
             } else if (chunkLimit > 10) {
               chunkLimit = 10;
+            } else if (chunkLimit > 5) {
+              chunkLimit = 5;
             }
 
             session.chunkLimit = chunkLimit;
