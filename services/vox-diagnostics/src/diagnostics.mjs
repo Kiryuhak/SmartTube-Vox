@@ -541,11 +541,18 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         },
       });
     }
-    const [reports, stats, groupedIssues] = await Promise.all([
-      storage.listReports({ limit: 50 }),
-      storage.getStats(),
-      storage.getGroupedIssues({ limit: 50 }),
-    ]);
+    let reports = [];
+    let stats = {};
+    let groupedIssues = [];
+    try {
+      [reports, stats, groupedIssues] = await Promise.all([
+        storage.listReports({ limit: 50 }),
+        storage.getStats(),
+        storage.getGroupedIssues({ limit: 25 }),
+      ]);
+    } catch (dbErr) {
+      console.error('[Admin] Storage error while loading /admin data:', dbErr);
+    }
 
     const html = renderAdminHtml(reports, stats, groupedIssues);
     const headers = {
@@ -858,6 +865,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const cursor = url.searchParams.get('cursor') || undefined;
     const part = url.searchParams.get('part') ? parseInt(url.searchParams.get('part'), 10) : undefined;
     const until = url.searchParams.get('until') ? parseInt(url.searchParams.get('until'), 10) : undefined;
+    const sessionId = url.searchParams.get('sessionId') || url.searchParams.get('exportSessionId') || undefined;
     const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : 100;
 
     try {
@@ -872,6 +880,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         cursor,
         part,
         until,
+        exportSessionId: sessionId,
         maxReports: limit,
       });
 
@@ -884,6 +893,9 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         'X-Export-Truncated': String(Boolean(result.isTruncated)),
         'X-Export-Part': String(result.part || part || 1),
       };
+      if (sessionId) {
+        headers['X-Export-Session-Id'] = sessionId;
+      }
       if (result.isTruncated && result.nextCursor) {
         headers['X-Export-Next-Cursor'] = result.nextCursor;
       }

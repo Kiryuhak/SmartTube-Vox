@@ -56,7 +56,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   const MAX_EXPORT_REPORTS = options.maxReports !== undefined
     ? Math.max(1, Number(options.maxReports))
     : DEFAULT_MAX_EXPORT_REPORTS;
-  const PAGE_SIZE = Math.min(100, MAX_EXPORT_REPORTS);
+  const PAGE_SIZE = Math.min(options.pageSize || 50, MAX_EXPORT_REPORTS);
   let offset = options.offset || 0;
   let currentCursor = options.cursor || null;
   let hasMore = true;
@@ -221,7 +221,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
       payload_json: r.payload_json || (typeof payload === 'object' ? JSON.stringify(payload) : undefined),
     };
     const sanitizedJson = prepareReportDownloadJson(fullReportData);
-    zip.addFile(filename, JSON.stringify(sanitizedJson, null, 2));
+    zip.addFile(filename, JSON.stringify(sanitizedJson));
   }
 
   // 4. Repeated error signatures
@@ -233,6 +233,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   // 5. Create manifest.json
   const manifest = {
     schemaVersion: '1.0',
+    exportSessionId: options.exportSessionId || options.sessionId || null,
     exportedAt: new Date(now).toISOString(),
     part: partNum,
     totalReports: reports.length,
@@ -300,5 +301,6 @@ export async function buildDiagnosticsZip(storage, options = {}) {
     isTruncated,
     nextCursor,
     part: partNum,
+    reportIds: Array.from(seenIds),
   };
 }

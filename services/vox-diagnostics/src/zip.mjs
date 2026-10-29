@@ -16,8 +16,22 @@ for (let i = 0; i < 256; i++) {
 
 export function crc32(buffer) {
   let crc = 0xFFFFFFFF;
-  for (let i = 0; i < buffer.length; i++) {
-    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i]) & 0xFF];
+  const len = buffer.length;
+  let i = 0;
+  const rem = len & 7;
+  const unrolled = len - rem;
+  while (i < unrolled) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
+  }
+  while (i < len) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i++]) & 0xFF];
   }
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
