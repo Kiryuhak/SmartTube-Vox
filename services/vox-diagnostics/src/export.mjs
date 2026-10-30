@@ -51,6 +51,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   }
 
   const reports = [];
+  const reportsList = [];
   const seenIds = new Set();
   const DEFAULT_MAX_EXPORT_REPORTS = 5000;
   const MAX_EXPORT_REPORTS = options.maxReports !== undefined
@@ -221,7 +222,17 @@ export async function buildDiagnosticsZip(storage, options = {}) {
       payload_json: r.payload_json || (typeof payload === 'object' ? JSON.stringify(payload) : undefined),
     };
     const sanitizedJson = prepareReportDownloadJson(fullReportData);
-    zip.addFile(filename, JSON.stringify(sanitizedJson));
+    if (options.format === 'json') {
+      reportsList.push({
+        reportId,
+        status,
+        folder,
+        filename,
+        report: sanitizedJson,
+      });
+    } else {
+      zip.addFile(filename, JSON.stringify(sanitizedJson));
+    }
   }
 
   // 4. Repeated error signatures
@@ -279,6 +290,31 @@ export async function buildDiagnosticsZip(storage, options = {}) {
     historicalEventsCount,
     uniqueErrorSignaturesCount: Object.keys(signatures).length,
   };
+
+  const cursorStart = (reports.length > 0)
+    ? `${reports[0].created_at || reports[0].createdAt}:${reports[0].report_id || reports[0].reportId}`
+    : null;
+  const cursorEnd = (reports.length > 0)
+    ? `${reports[reports.length - 1].created_at || reports[reports.length - 1].createdAt}:${reports[reports.length - 1].report_id || reports[reports.length - 1].reportId}`
+    : null;
+
+  if (options.format === 'json') {
+    return {
+      format: 'json',
+      filename: `VOX_Diagnostics_Active_${dateHoursStr}_part${partNum}.json`,
+      totalReports: reports.length,
+      isTruncated,
+      nextCursor,
+      cursorStart,
+      cursorEnd,
+      part: partNum,
+      reportsList,
+      manifest,
+      summary,
+      reportIds: Array.from(seenIds),
+    };
+  }
+
   zip.addFile('summary.json', JSON.stringify(summary, null, 2));
 
   const buffer = zip.build();
@@ -298,13 +334,6 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   } else {
     zipFilename = `VOX_Diagnostics_Active_${dateHoursStr}${partSuffix}.zip`;
   }
-
-  const cursorStart = (reports.length > 0)
-    ? `${reports[0].created_at || reports[0].createdAt}:${reports[0].report_id || reports[0].reportId}`
-    : null;
-  const cursorEnd = (reports.length > 0)
-    ? `${reports[reports.length - 1].created_at || reports[reports.length - 1].createdAt}:${reports[reports.length - 1].report_id || reports[reports.length - 1].reportId}`
-    : null;
 
   return {
     buffer,

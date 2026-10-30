@@ -599,11 +599,81 @@ export class ReportStorage {
   /**
    * Возвращает список отчётов с фильтрацией и пагинацией.
    */
-  async listReports({ platform, appVersion, errorCategory, status, statuses, reportPurpose, search, severity, device, signature, hasNotes, hasDuplicates, attention, since, until, sort = 'newest', cursor, limit = 50, offset = 0, includePayload = false } = {}) {
+  async listReports({ platform, appVersion, errorCategory, status, statuses, reportPurpose, search, severity, device, signature, hasNotes, hasDuplicates, attention, since, until, sort = 'newest', cursor, limit = 50, offset = 0, includePayload = false, fast = false } = {}) {
     const lim = Math.min(Math.max(1, limit), 100);
     const off = Math.max(0, offset);
 
     if (this.db) {
+      let whereClause = 'WHERE 1=1';
+      const params = [];
+
+      if (platform) {
+        whereClause += ` AND platform = ?`;
+        params.push(platform);
+      }
+      if (appVersion) {
+        whereClause += ` AND app_version = ?`;
+        params.push(appVersion);
+      }
+      if (errorCategory) {
+        whereClause += ` AND error_category = ?`;
+        params.push(errorCategory);
+      }
+      if (Array.isArray(statuses) && statuses.length > 0) {
+        const expanded = expandStatusVariants(statuses);
+        const placeholders = expanded.map(() => '?').join(', ');
+        whereClause += ` AND status IN (${placeholders})`;
+        params.push(...expanded);
+      } else if (status) {
+        const expanded = expandStatusVariants(status);
+        const placeholders = expanded.map(() => '?').join(', ');
+        whereClause += ` AND status IN (${placeholders})`;
+        params.push(...expanded);
+      }
+      if (reportPurpose) {
+        whereClause += ` AND report_purpose = ?`;
+        params.push(reportPurpose);
+      }
+      if (search) {
+        const term = `%${String(search).replace(/[\\%_]/g, '\\$&')}%`;
+        whereClause += ` AND (report_id LIKE ? ESCAPE '\\' OR device_family LIKE ? ESCAPE '\\' OR error_signature LIKE ? ESCAPE '\\' OR app_version LIKE ? ESCAPE '\\' OR error_category LIKE ? ESCAPE '\\' OR event_error_category LIKE ? ESCAPE '\\')`;
+        params.push(term, term, term, term, term, term);
+      }
+      if (severity) { whereClause += ' AND severity = ?'; params.push(severity); }
+      if (device) { whereClause += ' AND device_family LIKE ?'; params.push(`%${device}%`); }
+      if (signature) { whereClause += ' AND error_signature = ?'; params.push(signature); }
+      if (hasNotes === true) whereClause += " AND developer_notes != ''";
+      if (hasDuplicates === true) whereClause += " AND error_signature != '' AND (SELECT COUNT(*) FROM reports r2 WHERE r2.error_signature = reports.error_signature) > 1";
+      if (attention === true) whereClause += " AND status NOT IN ('IGNORED_TEST', 'TEST', 'ignored_test', 'test', 'RESOLVED', 'resolved') AND (status IN ('NEW', 'IN_PROGRESS') OR severity IN ('HIGH', 'CRITICAL') OR EXISTS (SELECT 1 FROM issues WHERE issues.signature = reports.error_signature AND issues.reopened_at > 0 AND issues.status = 'IN_PROGRESS'))";
+      if (since) { whereClause += ' AND created_at >= ?'; params.push(Number(since)); }
+      if (until) { whereClause += ' AND created_at <= ?'; params.push(Number(until)); }
+      if (cursor && sort === 'newest') {
+        const [created, id] = String(cursor).split(':');
+        if (!Number.isSafeInteger(Number(created)) || !id) throw new RangeError('Invalid cursor');
+        whereClause += ' AND (created_at < ? OR (created_at = ? AND report_id < ?))';
+        params.push(Number(created), Number(created), id);
+      }
+
+      if (includePayload && sort === 'newest') {
+        // Two-stage subquery join: avoids SQLite sorting heavy payload_json in temp B-tree
+        const innerQuery = `SELECT report_id FROM reports ${whereClause} ORDER BY created_at DESC, report_id DESC LIMIT ? OFFSET ?`;
+        const innerParams = [...params, lim, cursor ? 0 : off];
+        const outerQuery = `SELECT r.report_id, r.created_at, r.schema_version, r.app_version, r.platform,
+                                   r.device_family, r.error_category, r.payload_json, r.expires_at, r.status, r.developer_notes,
+                                   r.report_purpose, r.error_signature, r.severity, r.subsystem, r.stage,
+                                   r.event_error_category, r.updated_at, 0 AS related_count
+                            FROM reports r
+                            JOIN (${innerQuery}) k ON r.report_id = k.report_id
+                            ORDER BY r.created_at DESC, r.report_id DESC`;
+        const stmt = this.db.prepare(outerQuery);
+        const { results } = await stmt.bind(...innerParams).all();
+        const list = results || [];
+        return list.map(r => ({
+          ...r,
+          status: normalizeStatus(r.status),
+        }));
+      }
+
       const payloadCol = includePayload ? 'payload_json, ' : '';
       const relatedCountCol = sort === 'repeats'
         ? `(SELECT COUNT(*) FROM reports related WHERE related.error_signature = reports.error_signature AND related.report_id != reports.report_id AND reports.error_signature != '') AS related_count`
@@ -613,55 +683,8 @@ export class ReportStorage {
                           report_purpose, error_signature, severity, subsystem, stage,
                           event_error_category, updated_at,
                           ${relatedCountCol}
-                   FROM reports WHERE 1=1`;
-      const params = [];
+                   FROM reports ${whereClause}`;
 
-      if (platform) {
-        query += ` AND platform = ?`;
-        params.push(platform);
-      }
-      if (appVersion) {
-        query += ` AND app_version = ?`;
-        params.push(appVersion);
-      }
-      if (errorCategory) {
-        query += ` AND error_category = ?`;
-        params.push(errorCategory);
-      }
-      if (Array.isArray(statuses) && statuses.length > 0) {
-        const expanded = expandStatusVariants(statuses);
-        const placeholders = expanded.map(() => '?').join(', ');
-        query += ` AND status IN (${placeholders})`;
-        params.push(...expanded);
-      } else if (status) {
-        const expanded = expandStatusVariants(status);
-        const placeholders = expanded.map(() => '?').join(', ');
-        query += ` AND status IN (${placeholders})`;
-        params.push(...expanded);
-      }
-      if (reportPurpose) {
-        query += ` AND report_purpose = ?`;
-        params.push(reportPurpose);
-      }
-      if (search) {
-        const term = `%${String(search).replace(/[\\%_]/g, '\\$&')}%`;
-        query += ` AND (report_id LIKE ? ESCAPE '\\' OR device_family LIKE ? ESCAPE '\\' OR error_signature LIKE ? ESCAPE '\\' OR app_version LIKE ? ESCAPE '\\' OR error_category LIKE ? ESCAPE '\\' OR event_error_category LIKE ? ESCAPE '\\')`;
-        params.push(term, term, term, term, term, term);
-      }
-      if (severity) { query += ' AND severity = ?'; params.push(severity); }
-      if (device) { query += ' AND device_family LIKE ?'; params.push(`%${device}%`); }
-      if (signature) { query += ' AND error_signature = ?'; params.push(signature); }
-      if (hasNotes === true) query += " AND developer_notes != ''";
-      if (hasDuplicates === true) query += " AND error_signature != '' AND (SELECT COUNT(*) FROM reports r2 WHERE r2.error_signature = reports.error_signature) > 1";
-      if (attention === true) query += " AND status NOT IN ('IGNORED_TEST', 'TEST', 'ignored_test', 'test', 'RESOLVED', 'resolved') AND (status IN ('NEW', 'IN_PROGRESS') OR severity IN ('HIGH', 'CRITICAL') OR EXISTS (SELECT 1 FROM issues WHERE issues.signature = reports.error_signature AND issues.reopened_at > 0 AND issues.status = 'IN_PROGRESS'))";
-      if (since) { query += ' AND created_at >= ?'; params.push(Number(since)); }
-      if (until) { query += ' AND created_at <= ?'; params.push(Number(until)); }
-      if (cursor && sort === 'newest') {
-        const [created, id] = String(cursor).split(':');
-        if (!Number.isSafeInteger(Number(created)) || !id) throw new RangeError('Invalid cursor');
-        query += ' AND (created_at < ? OR (created_at = ? AND report_id < ?))';
-        params.push(Number(created), Number(created), id);
-      }
       const order = { newest: 'created_at DESC, report_id DESC', oldest: 'created_at ASC, report_id ASC', severity: "CASE severity WHEN 'CRITICAL' THEN 5 WHEN 'HIGH' THEN 4 WHEN 'MEDIUM' THEN 3 WHEN 'LOW' THEN 2 ELSE 1 END DESC, created_at DESC", repeats: 'related_count DESC, created_at DESC', status: 'status ASC, created_at DESC', version: 'app_version DESC, created_at DESC' }[sort] || 'created_at DESC, report_id DESC';
       query += ` ORDER BY ${order} LIMIT ? OFFSET ?`;
       params.push(lim, cursor ? 0 : off);
@@ -671,8 +694,8 @@ export class ReportStorage {
       const list = results || [];
 
       // If related count was not calculated in query, and payload is NOT included (i.e. table view),
-      // compute related counts efficiently for just this page of results
-      if (sort !== 'repeats' && !includePayload && list.length > 0) {
+      // compute related counts efficiently for just this page of results unless fast mode is requested
+      if (sort !== 'repeats' && !includePayload && !fast && list.length > 0) {
         const sigs = [...new Set(list.map(r => r.error_signature).filter(Boolean))];
         if (sigs.length > 0) {
           const placeholders = sigs.map(() => '?').join(',');
@@ -1186,33 +1209,52 @@ export class ReportStorage {
   /**
    * Возвращает агрегированную статистику для панели управления.
    */
-  async getStats(now = Date.now()) {
+  async getStats(nowArg = Date.now(), options = {}) {
+    let now = typeof nowArg === 'number' ? nowArg : Date.now();
+    let opts = options;
+    if (typeof nowArg === 'object' && nowArg !== null) {
+      opts = nowArg;
+      now = typeof opts.now === 'number' ? opts.now : Date.now();
+    }
+    const isFast = Boolean(opts?.fast);
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
     if (this.db) {
-      const [aggRow, platformsRes, versionsRes, categoriesRes, topIssuesRes] = await Promise.all([
-        this.db.prepare(`
-          SELECT 
-            COUNT(*) as total_reports,
-            SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as count_24h,
-            SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as count_7d,
-            SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
-            SUM(CASE WHEN UPPER(status) = 'TRIAGED' THEN 1 ELSE 0 END) as count_triaged,
-            SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
-            SUM(CASE WHEN UPPER(status) IN ('FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED') THEN 1 ELSE 0 END) as count_fixed_awaiting,
-            SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
-            SUM(CASE WHEN UPPER(status) = 'CLOSED' THEN 1 ELSE 0 END) as count_closed,
-            SUM(CASE WHEN UPPER(status) IN ('KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
-            SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_ignored_test,
-            SUM(CASE WHEN UPPER(COALESCE(status, '')) NOT IN ('NEW', 'TRIAGED', 'IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED', 'RESOLVED', 'VERIFIED', 'CLOSED', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN', 'IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_other
-          FROM reports
-        `).bind(oneDayAgo, sevenDaysAgo).first(),
-        this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
-        this.db.prepare(`SELECT app_version, COUNT(*) as count FROM reports GROUP BY app_version ORDER BY count DESC LIMIT 8`).all(),
-        this.db.prepare(`SELECT error_category, COUNT(*) as count FROM reports WHERE error_category IS NOT NULL AND error_category != '' GROUP BY error_category ORDER BY count DESC LIMIT 8`).all(),
-        this.db.prepare(`SELECT error_signature, COUNT(*) as count FROM reports WHERE error_signature IS NOT NULL AND error_signature != '' GROUP BY error_signature ORDER BY count DESC LIMIT 5`).all(),
-      ]);
+      const aggRowPromise = this.db.prepare(`
+        SELECT 
+          COUNT(*) as total_reports,
+          SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as count_24h,
+          SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as count_7d,
+          SUM(CASE WHEN UPPER(status) = 'NEW' THEN 1 ELSE 0 END) as count_new,
+          SUM(CASE WHEN UPPER(status) = 'TRIAGED' THEN 1 ELSE 0 END) as count_triaged,
+          SUM(CASE WHEN UPPER(status) IN ('IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING') THEN 1 ELSE 0 END) as count_in_progress,
+          SUM(CASE WHEN UPPER(status) IN ('FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED') THEN 1 ELSE 0 END) as count_fixed_awaiting,
+          SUM(CASE WHEN UPPER(status) IN ('RESOLVED', 'VERIFIED') THEN 1 ELSE 0 END) as count_resolved,
+          SUM(CASE WHEN UPPER(status) = 'CLOSED' THEN 1 ELSE 0 END) as count_closed,
+          SUM(CASE WHEN UPPER(status) IN ('KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN') THEN 1 ELSE 0 END) as count_known_issue,
+          SUM(CASE WHEN UPPER(status) IN ('IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_ignored_test,
+          SUM(CASE WHEN UPPER(COALESCE(status, '')) NOT IN ('NEW', 'TRIAGED', 'IN_PROGRESS', 'REVIEWED', 'INVESTIGATING', 'ROOT_CAUSE_FOUND', 'FIX_IMPLEMENTED', 'TESTING', 'FIXED_AWAITING_VERIFICATION', 'FIXED_PENDING_VERIFICATION', 'FIXED', 'RESOLVED', 'VERIFIED', 'CLOSED', 'KNOWN_LIMITATION', 'KNOWN_ISSUE', 'KNOWN', 'IGNORED_TEST', 'IGNORED', 'TEST', 'WONT_FIX', 'WONTFIX', 'DUPLICATE', 'DUP') THEN 1 ELSE 0 END) as count_other
+        FROM reports
+      `).bind(oneDayAgo, sevenDaysAgo).first();
+
+      let aggRow;
+      let platformsRes = { results: [] };
+      let versionsRes = { results: [] };
+      let categoriesRes = { results: [] };
+      let topIssuesRes = { results: [] };
+
+      if (isFast) {
+        aggRow = await aggRowPromise;
+      } else {
+        [aggRow, platformsRes, versionsRes, categoriesRes, topIssuesRes] = await Promise.all([
+          aggRowPromise,
+          this.db.prepare(`SELECT platform, COUNT(*) as count FROM reports GROUP BY platform ORDER BY count DESC`).all(),
+          this.db.prepare(`SELECT app_version, COUNT(*) as count FROM reports GROUP BY app_version ORDER BY count DESC LIMIT 8`).all(),
+          this.db.prepare(`SELECT error_category, COUNT(*) as count FROM reports WHERE error_category IS NOT NULL AND error_category != '' GROUP BY error_category ORDER BY count DESC LIMIT 8`).all(),
+          this.db.prepare(`SELECT error_signature, COUNT(*) as count FROM reports WHERE error_signature IS NOT NULL AND error_signature != '' GROUP BY error_signature ORDER BY count DESC LIMIT 5`).all(),
+        ]);
+      }
 
       const totalReports = Number(aggRow?.total_reports) || 0;
       const reports24h = Number(aggRow?.count_24h) || 0;

@@ -1160,7 +1160,7 @@ export function renderAdminHtml(reports = [], stats = {}, groupedIssues = []) {
   <!-- Navigation Tabs -->
   <div class="nav-tabs">
     <button class="nav-tab active" id="tabBtnReports" data-tab="reports">Все отчёты (${reports.length})</button>
-    <button class="nav-tab" id="tabBtnIssues" data-tab="issues">Частые проблемы (${groupedIssues.length})</button>
+    <button class="nav-tab" id="tabBtnIssues" data-tab="issues">Частые проблемы${groupedIssues.length > 0 ? ` (${groupedIssues.length})` : ''}</button>
     <button class="nav-tab" id="tabBtnStats" data-tab="metrics" data-tab-name="metrics">Сводка и метрики</button>
     <button class="nav-tab" id="tabBtnDevices" data-tab="devices">Устройства</button>
     <button class="nav-tab" id="tabBtnAnalytics" data-tab="analytics">Аналитика</button>

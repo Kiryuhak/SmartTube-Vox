@@ -543,12 +543,11 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     }
     let reports = [];
     let stats = {};
-    let groupedIssues = [];
+    const groupedIssues = [];
     try {
-      [reports, stats, groupedIssues] = await Promise.all([
-        storage.listReports({ limit: 50 }),
-        storage.getStats(),
-        storage.getGroupedIssues({ limit: 25 }),
+      [reports, stats] = await Promise.all([
+        storage.listReports({ limit: 30, fast: true }),
+        storage.getStats(Date.now(), { fast: true }),
       ]);
     } catch (dbErr) {
       console.error('[Admin] Storage error while loading /admin data:', dbErr);
@@ -865,8 +864,9 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const cursor = url.searchParams.get('cursor') || undefined;
     const part = url.searchParams.get('part') ? parseInt(url.searchParams.get('part'), 10) : undefined;
     const until = url.searchParams.get('until') ? parseInt(url.searchParams.get('until'), 10) : undefined;
+    const format = url.searchParams.get('format') || (request.headers.get('accept')?.includes('application/json') ? 'json' : 'zip');
     const sessionId = url.searchParams.get('sessionId') || url.searchParams.get('exportSessionId') || undefined;
-    const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : 100;
+    const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : (format === 'json' ? 15 : 100);
 
     try {
       const result = await buildDiagnosticsZip(storage, {
@@ -882,7 +882,34 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         until,
         exportSessionId: sessionId,
         maxReports: limit,
+        format,
       });
+
+      if (format === 'json' || result.format === 'json') {
+        const headers = {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Total-Reports': String(result.totalReports),
+          'X-Export-Truncated': String(Boolean(result.isTruncated)),
+          'X-Export-Part': String(result.part || part || 1),
+        };
+        if (result.cursorStart) headers['X-Export-Cursor-Start'] = result.cursorStart;
+        if (result.cursorEnd) headers['X-Export-Cursor-End'] = result.cursorEnd;
+        if (sessionId) headers['X-Export-Session-Id'] = sessionId;
+        if (result.isTruncated && result.nextCursor) headers['X-Export-Next-Cursor'] = result.nextCursor;
+
+        return jsonResponse({
+          ok: true,
+          reports: result.reportsList || [],
+          totalReports: result.totalReports,
+          isTruncated: Boolean(result.isTruncated),
+          nextCursor: result.nextCursor || null,
+          cursorStart: result.cursorStart || null,
+          cursorEnd: result.cursorEnd || null,
+          part: result.part || part || 1,
+          exportSessionId: sessionId || null,
+        }, 200, headers);
+      }
 
       const headers = {
         'Content-Type': 'application/zip',
