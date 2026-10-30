@@ -63,6 +63,25 @@ class VoxTranslationStateMachine {
     var fallbackAttempted: Boolean = false
         private set
 
+    var lastHttpStatusCode: Int = 0
+        private set
+    var lastHttpStatusClass: String = "NONE"
+        private set
+
+    fun recordHttpStatus(code: Int) {
+        if (code > 0) {
+            lastHttpStatusCode = code
+            lastHttpStatusClass = when {
+                code in 200..299 -> "2xx_SUCCESS"
+                code == 429 -> "429_RATE_LIMIT"
+                code in 400..499 -> "4xx_CLIENT_ERROR"
+                code == 504 -> "504_GATEWAY_TIMEOUT"
+                code in 500..599 -> "5xx_SERVER_ERROR"
+                else -> "HTTP_$code"
+            }
+        }
+    }
+
     private var stageStartedAtMs: Long = 0L
     private var jobStartedAtMs: Long = 0L
 
@@ -285,6 +304,8 @@ class VoxTranslationStateMachine {
         lastReportedEtaSec = -1
         lowestBackendEtaSec = Int.MAX_VALUE
         etaTargetMs = 0L
+        lastHttpStatusCode = 0
+        lastHttpStatusClass = "NONE"
     }
 
     enum class TranslationSource(val label: String) {
@@ -317,6 +338,7 @@ class VoxTranslationStateMachine {
             "translationLookupMs" to lookupElapsedMs,
             "translationWaitMs" to (requestElapsedMs + providerWaitElapsedMs),
             "translationAttachMs" to audioAttachElapsedMs,
+            "attachLatencyMs" to audioAttachElapsedMs,
             "translationPostprocessMs" to audioAttachElapsedMs,
             "translationTotalMs" to totalTranslationStartupMs
         )
@@ -331,12 +353,17 @@ class VoxTranslationStateMachine {
             "providerWaitElapsedMs" to providerWaitElapsedMs.toString(),
             "processingElapsedMs" to processingElapsedMs.toString(),
             "audioAttachElapsedMs" to audioAttachElapsedMs.toString(),
+            "attachLatencyMs" to audioAttachElapsedMs.toString(),
             "translationPostprocessMs" to audioAttachElapsedMs.toString(),
             "totalTranslationStartupMs" to totalTranslationStartupMs.toString(),
             "isReused" to (reuseSource != ReuseSource.NONE).toString()
         )
         primaryFailureReason?.let { ctx["primaryFailureReason"] = it }
         if (fallbackAttempted) ctx["fallbackAttempted"] = "true"
+        if (lastHttpStatusCode > 0) {
+            ctx["httpStatus"] = lastHttpStatusCode.toString()
+            ctx["httpClass"] = lastHttpStatusClass
+        }
         return ctx
     }
 }

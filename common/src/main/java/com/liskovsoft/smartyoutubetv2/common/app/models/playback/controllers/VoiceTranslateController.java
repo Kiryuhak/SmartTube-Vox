@@ -234,7 +234,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 }
                 mNewBackendPlaybackStarted = true;
                 mOverlayProgress.onAudioAttachedAndSelected();
-                long nowMs = System.currentTimeMillis();
+                long nowMs = android.os.SystemClock.elapsedRealtime();
                 mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, nowMs);
                 mStateMachine.onAudioProgressCheck(
                         mYandexPlaybackAdapter != null ? mYandexPlaybackAdapter.getPositionMs() : 0L,
@@ -287,7 +287,7 @@ public class VoiceTranslateController extends BasePlayerController {
                     }
                     mNewBackendPlaybackStarted = true;
                     mOverlayProgress.onAudioAttachedAndSelected();
-                    mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, System.currentTimeMillis());
+                    mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, android.os.SystemClock.elapsedRealtime());
                     setState(STATE_ACTIVE);
                     if (mTrackSwitchState == TrackSwitchState.STARTING_VOT) {
                         mTrackSwitchState = TrackSwitchState.VOT_ACTIVE;
@@ -412,10 +412,12 @@ public class VoiceTranslateController extends BasePlayerController {
         }
         logBackendTelemetrySnapshot("POSTPROCESS_TIMEOUT");
         Log.w(TAG, "VOT Post-process Watchdog: Audio attach timed out after READY/100%% for video=%s", mCurrentVideoId);
-        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.TIMEOUT, System.currentTimeMillis());
-        Map<String, String> attachCtx = new HashMap<>();
+        long nowMs = android.os.SystemClock.elapsedRealtime();
+        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.TIMEOUT, nowMs);
+        Map<String, String> attachCtx = new HashMap<>(mStateMachine.toDiagnosticsContext());
         attachCtx.put("videoId", mCurrentVideoId != null ? mCurrentVideoId : "unknown");
         attachCtx.put("timeoutMs", String.valueOf(TRANSLATION_POSTPROCESS_TIMEOUT_MS));
+        attachCtx.put("attachLatencyMs", String.valueOf(mStateMachine.getAudioAttachElapsedMs()));
         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
                 com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_POSTPROCESS_TIMEOUT,
@@ -2179,7 +2181,7 @@ public class VoiceTranslateController extends BasePlayerController {
                             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_INVALID_AUDIO_URL,
                             "Translation READY received with invalid audio URL"
                     );
-                    handleNewBackendError(state.getGenerationId(), "invalid_audio_url", false);
+                    handleNewBackendError(state.getGenerationId(), "invalid_audio_url", "invalid_audio_url", false);
                     break;
                 }
                 long elapsedMs = Math.max(0L, SystemClock.elapsedRealtime() - mRequestStartTimestamp);
@@ -2254,7 +2256,7 @@ public class VoiceTranslateController extends BasePlayerController {
                 mOverlayProgress.onArtifactReady();
                 updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
                 logBackendTelemetrySnapshot("ATTACHING_STAGE_99_NEW", state.getAudioUrl());
-                mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
+                mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, android.os.SystemClock.elapsedRealtime());
                 Utils.removeCallbacks(mPostProcessWatchdogRunnable);
                 Utils.postDelayed(mPostProcessWatchdogRunnable, TRANSLATION_POSTPROCESS_TIMEOUT_MS);
                 if (mUserArmed && progressOverlay() != null) {
@@ -2267,7 +2269,7 @@ public class VoiceTranslateController extends BasePlayerController {
             case ERROR:
                 Utils.removeCallbacks(mProgressTickRunnable);
                 mProgressTimer.clear();
-                handleNewBackendError(state.getGenerationId(), state.getErrorMessage(), false);
+                handleNewBackendError(state.getGenerationId(), state.getErrorMessage(), state.getErrorCategory(), false);
                 break;
             case CANCELLED:
                 Utils.removeCallbacks(mProgressTickRunnable);
@@ -2279,10 +2281,35 @@ public class VoiceTranslateController extends BasePlayerController {
         }
     }
 
+    public static int extractHttpStatusCode(String errorMsg, String errorCategory) {
+        if (errorMsg != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("HTTP\\s+(\\d{3})", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(errorMsg);
+            if (m.find()) {
+                try {
+                    return Integer.parseInt(m.group(1));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        if ("rate_limited".equals(errorCategory)) return 429;
+        if ("auth".equals(errorCategory)) return 401;
+        if ("not_found".equals(errorCategory)) return 404;
+        if ("http_server_error".equals(errorCategory)) return 500;
+        return 0;
+    }
+
     private void handleNewBackendError(long generationId, String errorMsg, boolean isPlaybackError) {
+        handleNewBackendError(generationId, errorMsg, null, isPlaybackError);
+    }
+
+    private void handleNewBackendError(long generationId, String errorMsg, String errorCategory, boolean isPlaybackError) {
         if (!mIsNewBackendActive || (mNewBackendGenerationId != 0 && generationId != mNewBackendGenerationId)) {
             YandexVotLog.w(TAG, "Ignoring stale error callback for generation=" + generationId);
             return;
+        }
+
+        int httpStatus = extractHttpStatusCode(errorMsg, errorCategory);
+        if (httpStatus > 0) {
+            mStateMachine.recordHttpStatus(httpStatus);
         }
 
         // Self-heal: if playback failed on a CACHED or expired translation URL (403/410/invalidated on server),
@@ -2353,9 +2380,13 @@ public class VoiceTranslateController extends BasePlayerController {
             mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.WAITING_PROVIDER, nowMs);
             mLastBackendPendingTimestamp = nowElapsed;
             mLastRealStageProgressTimestamp = nowElapsed;
-            Map<String, String> fbCtx = new HashMap<>();
+            Map<String, String> fbCtx = new HashMap<>(mStateMachine.toDiagnosticsContext());
             fbCtx.put("primaryFailure", errorMsg != null ? errorMsg : "unknown");
             fbCtx.put("fallbackCount", mStateMachine.getFallbackAttempted() ? "1" : "0");
+            if (httpStatus > 0) {
+                fbCtx.put("httpStatus", String.valueOf(httpStatus));
+                fbCtx.put("httpClass", mStateMachine.getLastHttpStatusClass());
+            }
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
                     com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_FALLBACK_ATTEMPT,
@@ -2772,8 +2803,8 @@ public class VoiceTranslateController extends BasePlayerController {
         mCurrentVideoId = videoId;
         mPendingVideoUrl = videoUrl;
 
-        mStateMachine.markLookupReady(reuseSource, System.currentTimeMillis());
-        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
+        mStateMachine.markLookupReady(reuseSource, android.os.SystemClock.elapsedRealtime());
+        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, android.os.SystemClock.elapsedRealtime());
         updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
         logBackendTelemetrySnapshot("ATTACHING_STAGE_99_REUSE", audioUrl);
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
@@ -2810,7 +2841,7 @@ public class VoiceTranslateController extends BasePlayerController {
         mUserExplicitlySelectedOriginal = false;
         mTranslationRequestedByUser = true;
 
-        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, System.currentTimeMillis());
+        mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.ATTACHING, android.os.SystemClock.elapsedRealtime());
         updateVoiceButtonProgress(99, BTN_STAGE_ATTACHING);
         logBackendTelemetrySnapshot("ATTACHING_STAGE_99_OLD", audioUrl);
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
@@ -2895,7 +2926,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
         Utils.removeCallbacks(mPostProcessWatchdogRunnable);
         mOverlayProgress.onAudioAttachedAndSelected();
-        long nowMs = System.currentTimeMillis();
+        long nowMs = android.os.SystemClock.elapsedRealtime();
         mStateMachine.transitionTo(com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine.State.READY, nowMs);
         mStateMachine.onAudioProgressCheck(mTranslationPlayer.getPositionMs(), mTranslationPlayer.getBufferedPositionMs(), nowMs);
 

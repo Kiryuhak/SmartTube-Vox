@@ -32,10 +32,36 @@ import java.util.UUID
  *    - Hides buffering spinner on failure, shows localized exhausted message with Retry and Back.
  *    - Back navigation is always responsive and safe.
  */
-class VoxPlayerRecoveryController @JvmOverloads constructor(
+class VoxPlayerRecoveryController internal constructor(
     private val actionHandler: PlayerRecoveryActionHandler,
-    private val looper: Looper = Looper.getMainLooper()
+    private val scheduler: Scheduler
 ) {
+
+    interface Scheduler {
+        fun postDelayed(runnable: Runnable, delayMs: Long)
+        fun removeCallbacks(runnable: Runnable)
+        fun removeCallbacksAndMessages(token: Any?)
+    }
+
+    private class HandlerScheduler(private val handler: Handler) : Scheduler {
+        override fun postDelayed(runnable: Runnable, delayMs: Long) {
+            handler.postDelayed(runnable, delayMs)
+        }
+
+        override fun removeCallbacks(runnable: Runnable) {
+            handler.removeCallbacks(runnable)
+        }
+
+        override fun removeCallbacksAndMessages(token: Any?) {
+            handler.removeCallbacksAndMessages(token)
+        }
+    }
+
+    @JvmOverloads
+    constructor(
+        actionHandler: PlayerRecoveryActionHandler,
+        looper: Looper = Looper.getMainLooper()
+    ) : this(actionHandler, HandlerScheduler(Handler(looper)))
 
     interface PlayerRecoveryActionHandler {
         fun onSourceRefreshRequested(targetPositionMs: Long, playWhenReady: Boolean, gen: Long)
@@ -50,8 +76,6 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         fun hideRecoveryOverlay()
         fun hideBufferingSpinner()
     }
-
-    private val handler = Handler(looper)
 
     private var currentState: VoxPlayerRecoveryState = VoxPlayerRecoveryState.IDLE
     private var isLiveSession: Boolean = false
@@ -157,9 +181,12 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         lastObservedPositionMs = targetPositionMs
         lastObservedRenderedPositionMs = targetPositionMs
         lastObservedProgressTimestampMs = currentTimeMs()
-        handler.removeCallbacksAndMessages(null)
-        if (currentState == VoxPlayerRecoveryState.BUFFERING) {
+        scheduler.removeCallbacksAndMessages(null)
+        if (currentState == VoxPlayerRecoveryState.BUFFERING ||
+            currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
             currentState = VoxPlayerRecoveryState.IDLE
+            verificationStartPositionMs = -1L
+            verificationStartTimeMs = 0L
         }
     }
 
@@ -169,9 +196,12 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         lastObservedRenderedPositionMs = positionMs
         lastObservedBufferedMs = bufferedPositionMs
         lastObservedProgressTimestampMs = currentTimeMs()
-        handler.removeCallbacksAndMessages(null)
-        if (currentState == VoxPlayerRecoveryState.BUFFERING) {
+        scheduler.removeCallbacksAndMessages(null)
+        if (currentState == VoxPlayerRecoveryState.BUFFERING ||
+            currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
             currentState = VoxPlayerRecoveryState.IDLE
+            verificationStartPositionMs = -1L
+            verificationStartTimeMs = 0L
         }
     }
 
@@ -238,20 +268,20 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
         if (currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
             // Immediate rebuffer during verification window! Escalates to next stage.
-            handler.removeCallbacks(verificationRunnable)
+            scheduler.removeCallbacks(verificationRunnable)
             onVerificationFailed("REBUFFER_DURING_VERIFICATION")
             return
         }
 
         if (currentState != VoxPlayerRecoveryState.BUFFERING) {
             currentState = VoxPlayerRecoveryState.BUFFERING
-            handler.removeCallbacksAndMessages(null)
+            scheduler.removeCallbacksAndMessages(null)
             scheduleStallWatchdog(recoveryGeneration, currentSessionId, playWhenReady)
         }
     }
 
     private fun scheduleStallWatchdog(gen: Long, sess: Long, playWhenReady: Boolean) {
-        handler.postDelayed({
+        scheduler.postDelayed({
             synchronized(this@VoxPlayerRecoveryController) {
                 if (gen != recoveryGeneration || sess != currentSessionId) {
                     return@synchronized
@@ -276,7 +306,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
             lastObservedBufferedMs = bufferedPositionMs
             if (currentState == VoxPlayerRecoveryState.BUFFERING) {
                 // Buffer is advancing steadily. Extend watchdog timeout.
-                handler.removeCallbacksAndMessages(null)
+                scheduler.removeCallbacksAndMessages(null)
                 scheduleStallWatchdog(recoveryGeneration, currentSessionId, playWhenReady)
             }
         }
@@ -300,8 +330,8 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
             currentState = VoxPlayerRecoveryState.RECOVERY_VERIFYING
             verificationStartPositionMs = positionMs
             verificationStartTimeMs = currentTimeMs()
-            handler.removeCallbacks(verificationRunnable)
-            handler.postDelayed(verificationRunnable, VoxPlayerRecoveryPolicy.VERIFICATION_WINDOW_MS)
+            scheduler.removeCallbacks(verificationRunnable)
+            scheduler.postDelayed(verificationRunnable, VoxPlayerRecoveryPolicy.VERIFICATION_WINDOW_MS)
 
             val ctx = buildTelemetryContext("RECOVERY_VERIFYING")
             ctx["verifyingAtPosMs"] = positionMs.toString()
@@ -316,7 +346,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
         if (currentState == VoxPlayerRecoveryState.BUFFERING) {
             currentState = VoxPlayerRecoveryState.IDLE
-            handler.removeCallbacksAndMessages(null)
+            scheduler.removeCallbacksAndMessages(null)
             return
         }
 
@@ -345,7 +375,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
             onVerificationFailed("VERIFICATION_TIMEOUT_NO_PROGRESS")
         } else {
             // Still within verification period, check again in 1000ms
-            handler.postDelayed(verificationRunnable, 1_000L)
+            scheduler.postDelayed(verificationRunnable, 1_000L)
         }
     }
 
@@ -362,7 +392,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         }
 
         currentState = VoxPlayerRecoveryState.RECOVERED
-        handler.removeCallbacksAndMessages(null)
+        scheduler.removeCallbacksAndMessages(null)
         actionHandler.hideRecoveryOverlay()
         actionHandler.onRecoverySucceeded(recoveryGeneration)
 
@@ -477,7 +507,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
         if (reason.contains("DNS") || VoxPlayerRecoveryPolicy.isDnsFailureReason(reason)) {
             return false
         }
-        return currentHeight >= 2160 || currentBitrate >= 35_000_000L || VoxPlayerRecoveryTestHooks.forceQualityFallbackEligible
+        return currentHeight >= 1440 || currentBitrate >= 12_000_000L || VoxPlayerRecoveryTestHooks.forceQualityFallbackEligible
     }
 
     private fun ensureRecoverySequenceId(reason: String) {
@@ -600,7 +630,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
 
     private fun triggerTerminalFailure(reason: String) {
         currentState = VoxPlayerRecoveryState.FAILED
-        handler.removeCallbacksAndMessages(null)
+        scheduler.removeCallbacksAndMessages(null)
         actionHandler.hideBufferingSpinner()
         actionHandler.hideRecoveryOverlay()
 
@@ -697,7 +727,7 @@ class VoxPlayerRecoveryController @JvmOverloads constructor(
     @Synchronized
     fun reset() {
         recoveryGeneration++
-        handler.removeCallbacksAndMessages(null)
+        scheduler.removeCallbacksAndMessages(null)
         isInternalRecoveryReload = false
         lastObservedProgressTimestampMs = 0L
         verificationStartPositionMs = -1L

@@ -805,7 +805,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         }
 
         int currentRes = Math.max(currentFormat.getWidth(), currentFormat.getHeight());
-        if (currentRes < 2160) {
+        if (currentRes < 1440) {
             return false;
         }
 
@@ -814,7 +814,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
 
         if (videoFormats.size() > nextIdx) {
             FormatItem fallbackItem = videoFormats.get(nextIdx);
-            Log.w(TAG, "Recovery: falling back quality from %s to %s for 4K stability", currentFormat.getTitle(), fallbackItem.getTitle());
+            Log.w(TAG, "Recovery: falling back quality from %s to %s for high-resolution stability", currentFormat.getTitle(), fallbackItem.getTitle());
             getPlayer().setFormat(fallbackItem);
             getPlayerData().setTempVideoFormat(fallbackItem);
             Video video = getVideo();
