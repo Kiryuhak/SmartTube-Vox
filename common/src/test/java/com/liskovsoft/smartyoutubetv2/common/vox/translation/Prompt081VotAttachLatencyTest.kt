@@ -115,4 +115,46 @@ class Prompt081VotAttachLatencyTest {
             assertFalse("Diagnostic value '$value' must not expose tokens", value.contains("secret", ignoreCase = true) || value.contains("signature", ignoreCase = true))
         }
     }
+
+    @Test
+    fun testAttachCancellationOnNewVideoOrReset() {
+        stateMachine.transitionTo(VoxTranslationStateMachine.State.LOOKUP, 1_000L)
+        stateMachine.transitionTo(VoxTranslationStateMachine.State.ATTACHING, 2_000L)
+        assertEquals(VoxTranslationStateMachine.State.ATTACHING, stateMachine.currentState)
+
+        // User switches video or cancels translation before attach completes
+        stateMachine.reset()
+
+        assertEquals(VoxTranslationStateMachine.State.IDLE, stateMachine.currentState)
+        assertEquals(0L, stateMachine.audioAttachElapsedMs)
+        assertEquals(0, stateMachine.lastHttpStatusCode)
+        assertEquals("NONE", stateMachine.lastHttpStatusClass)
+
+        val diag = stateMachine.toDiagnosticsContext()
+        assertEquals("IDLE", diag["state"])
+        assertEquals("0", diag["attachLatencyMs"])
+        assertFalse(diag.containsKey("httpStatus"))
+    }
+
+    @Test
+    fun testFallbackLatencyAndHttpStatusExtractionOnDelayed504() {
+        // Request started at t=10_000ms
+        stateMachine.transitionTo(VoxTranslationStateMachine.State.REQUESTING, 10_000L)
+        stateMachine.transitionTo(VoxTranslationStateMachine.State.WAITING_PROVIDER, 11_000L)
+
+        // Gateway timeout 504 arrives at t=25_000ms
+        val code = VoiceTranslateController.extractHttpStatusCode("HTTP 504 Gateway Timeout", "http_server_error")
+        assertEquals(504, code)
+        stateMachine.recordHttpStatus(code)
+        stateMachine.recordFallbackAttempt("gateway_timeout_504")
+
+        assertTrue(stateMachine.fallbackAttempted)
+        assertEquals(504, stateMachine.lastHttpStatusCode)
+        assertEquals("504_GATEWAY_TIMEOUT", stateMachine.lastHttpStatusClass)
+
+        val diag = stateMachine.toDiagnosticsContext()
+        assertEquals("504", diag["httpStatus"])
+        assertEquals("504_GATEWAY_TIMEOUT", diag["httpClass"])
+        assertEquals("true", diag["fallbackAttempted"])
+    }
 }

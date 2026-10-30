@@ -276,4 +276,63 @@ class Prompt081PlayerRecoveryRegressionTest {
         assertEquals(1, mockActionHandler.recoverySucceededCount)
         assertTrue(mockActionHandler.hideOverlayCount >= 1)
     }
+
+    @Test
+    fun test6_RepeatedSeekDuringRecoveryVerificationMustMaintainIdleStateAndPreventRebufferEscalation() {
+        controller.onPlaybackStart(sessionId = 106L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "vid_multi_seek")
+        controller.updateMediaTrackInfo("vp9", 1080, 5_000_000L)
+
+        // Trigger recovery reload
+        controller.onBufferingStarted(positionMs = 15_000L, bufferedPositionMs = 15_000L, playWhenReady = true)
+        testScheduler.advanceTimeBy(4_100L)
+        assertEquals(VoxPlayerRecoveryState.RECOVERING_SOURCE, controller.getState())
+
+        // Playback resumes -> RECOVERY_VERIFYING
+        controller.onPlaybackProgress(positionMs = 15_000L, bufferedPositionMs = 20_000L)
+        assertEquals(VoxPlayerRecoveryState.RECOVERY_VERIFYING, controller.getState())
+
+        // User rapidly seeks twice: 30s then 60s
+        controller.onSeekRequested(targetPositionMs = 30_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        controller.onSeekRequested(targetPositionMs = 60_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        controller.onSeekProcessed(positionMs = 60_000L, bufferedPositionMs = 60_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+
+        // Buffering at seek destination
+        controller.onBufferingStarted(positionMs = 60_000L, bufferedPositionMs = 60_000L, playWhenReady = true)
+        assertEquals(VoxPlayerRecoveryState.BUFFERING, controller.getState())
+        assertEquals("Multi-seek buffering must not trigger false recovery failure", 0, mockActionHandler.recoveryFailedCount)
+    }
+
+    @Test
+    fun test7_QualityFallbackRejectedForLowResolutionStreamEscalatesToTerminalFailureCleanly() {
+        controller.onPlaybackStart(sessionId = 107L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "vid_1080p_stall")
+        // Stream resolution 1080p (height = 1080 < 1440, bitrate = 5 Mbps < 12 Mbps)
+        controller.updateMediaTrackInfo("vp9", 1080, 5_000_000L)
+
+        // Stall 1 -> source refresh 1
+        controller.onBufferingStarted(positionMs = 30_000L, bufferedPositionMs = 30_000L, playWhenReady = true)
+        testScheduler.advanceTimeBy(4_100L)
+        assertEquals(1, mockActionHandler.sourceRefreshCount)
+
+        // Stall 2 -> source refresh 2
+        controller.onBufferingStarted(positionMs = 28_000L, bufferedPositionMs = 28_000L, playWhenReady = true)
+        testScheduler.advanceTimeBy(4_100L)
+        assertEquals(2, mockActionHandler.sourceRefreshCount)
+
+        // Stall 3 -> engine switch 1
+        controller.onBufferingStarted(positionMs = 26_000L, bufferedPositionMs = 26_000L, playWhenReady = true)
+        testScheduler.advanceTimeBy(4_100L)
+        assertEquals(1, mockActionHandler.engineSwitchCount)
+
+        // Stall 4 -> For 1080p stream, quality fallback must be REJECTED and cleanly trigger terminal failure!
+        controller.onBufferingStarted(positionMs = 24_000L, bufferedPositionMs = 24_000L, playWhenReady = true)
+        testScheduler.advanceTimeBy(4_100L)
+        assertEquals("1080p stream must not trigger quality fallback", 0, mockActionHandler.qualityFallbackCount)
+        assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
+        assertEquals(1, mockActionHandler.recoveryFailedCount)
+    }
 }
