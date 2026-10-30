@@ -57,6 +57,11 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   const MAX_EXPORT_REPORTS = options.maxReports !== undefined
     ? Math.max(1, Number(options.maxReports))
     : DEFAULT_MAX_EXPORT_REPORTS;
+  const DEFAULT_MAX_EXPORT_BYTES = options.format === 'json' ? 650 * 1024 : 15 * 1024 * 1024;
+  const MAX_EXPORT_BYTES = options.maxBytes !== undefined
+    ? Math.max(10 * 1024, Number(options.maxBytes))
+    : DEFAULT_MAX_EXPORT_BYTES;
+  let accumulatedBytes = 0;
   const PAGE_SIZE = Math.min(options.pageSize || 50, MAX_EXPORT_REPORTS);
   let offset = options.offset || 0;
   let currentCursor = options.cursor || null;
@@ -128,6 +133,19 @@ export async function buildDiagnosticsZip(storage, options = {}) {
         continue;
       }
 
+      // Check byte budget: if we already have at least 1 report, and adding another would exceed byte budget
+      const reportBytes = (raw.payload_json && typeof raw.payload_json === 'string')
+        ? raw.payload_json.length
+        : (typeof raw.payload === 'object' ? JSON.stringify(raw.payload).length : 2000);
+
+      if (reports.length >= 1 && (accumulatedBytes + reportBytes > MAX_EXPORT_BYTES)) {
+        isTruncated = true;
+        const lastIncluded = reports[reports.length - 1];
+        nextCursor = `${lastIncluded.created_at || lastIncluded.createdAt}:${lastIncluded.report_id || lastIncluded.reportId}`;
+        hasMore = false;
+        break;
+      }
+
       // If we have already reached the maximum requested reports, and another matching report is found,
       // the archive is strictly truncated beyond the maximum limit.
       if (reports.length >= MAX_EXPORT_REPORTS) {
@@ -140,6 +158,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
 
       seenIds.add(reportId);
       reports.push(raw);
+      accumulatedBytes += reportBytes;
     }
 
     if (isTruncated || !hasMore) {

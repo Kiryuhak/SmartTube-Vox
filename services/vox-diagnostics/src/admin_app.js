@@ -2059,7 +2059,7 @@
       return;
     }
 
-    const DEFAULT_SUB_CHUNK_LIMIT = 15;
+    const DEFAULT_SUB_CHUNK_LIMIT = 10;
     const isResume = Boolean(options.resume);
     let session = isResume ? getExportSession() : null;
 
@@ -2113,6 +2113,7 @@
           statuses: 'NEW,INVESTIGATING',
           until: String(exportSnapshotUntil),
           limit: String(chunkLimit),
+          maxBytes: '650000',
           sessionId: session.exportId,
           format: 'json',
         });
@@ -2194,6 +2195,8 @@
 
     try {
       let hasMore = !options.forceAssembleNow;
+      let lastCursor = null;
+      let cursorStallCount = 0;
 
       while (hasMore) {
         const mbText = (bytesAccumulated / 1048576).toFixed(1);
@@ -2342,6 +2345,20 @@
           chunkLimit = DEFAULT_SUB_CHUNK_LIMIT;
           session.chunkLimit = chunkLimit;
           saveExportSession(session);
+        }
+
+        if (hasMore && currentCursor && currentCursor === lastCursor) {
+          cursorStallCount++;
+          if (cursorStallCount >= 3) {
+            throw new Error(`Обнаружено зацикливание курсора на ${currentCursor}`);
+          }
+        } else {
+          lastCursor = currentCursor;
+          cursorStallCount = 0;
+        }
+
+        if (totalDownloaded >= 1000) {
+          hasMore = false;
         }
       }
 

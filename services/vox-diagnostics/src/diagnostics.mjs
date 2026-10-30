@@ -866,7 +866,8 @@ export async function handleRequest(request, env = {}, customStorage = null) {
     const until = url.searchParams.get('until') ? parseInt(url.searchParams.get('until'), 10) : undefined;
     const format = url.searchParams.get('format') || (request.headers.get('accept')?.includes('application/json') ? 'json' : 'zip');
     const sessionId = url.searchParams.get('sessionId') || url.searchParams.get('exportSessionId') || undefined;
-    const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : (format === 'json' ? 15 : 100);
+    const maxBytes = url.searchParams.get('maxBytes') ? parseInt(url.searchParams.get('maxBytes'), 10) : undefined;
+    const limit = url.searchParams.get('limit') ? Math.min(Math.max(1, parseInt(url.searchParams.get('limit'), 10)), 250) : (format === 'json' ? 10 : 100);
 
     try {
       const result = await buildDiagnosticsZip(storage, {
@@ -882,6 +883,7 @@ export async function handleRequest(request, env = {}, customStorage = null) {
         until,
         exportSessionId: sessionId,
         maxReports: limit,
+        maxBytes,
         format,
       });
 
