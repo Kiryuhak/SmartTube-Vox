@@ -135,8 +135,8 @@ export async function buildDiagnosticsZip(storage, options = {}) {
 
       // Check byte budget: if we already have at least 1 report, and adding another would exceed byte budget
       const reportBytes = (raw.payload_json && typeof raw.payload_json === 'string')
-        ? raw.payload_json.length
-        : (typeof raw.payload === 'object' ? JSON.stringify(raw.payload).length : 2000);
+        ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(raw.payload_json, 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(raw.payload_json).length : raw.payload_json.length))
+        : (typeof raw.payload === 'object' ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(JSON.stringify(raw.payload), 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(JSON.stringify(raw.payload)).length : 2000)) : 2000);
 
       if (reports.length >= 1 && (accumulatedBytes + reportBytes > MAX_EXPORT_BYTES)) {
         isTruncated = true;
