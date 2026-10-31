@@ -1,130 +1,126 @@
 #!/usr/bin/env bash
-# scripts/linux/vox-emulator-start.sh
-# Robust Android TV emulator launcher with health-check and bounded timeout
-
+# ==============================================================================
+# SmartTube VOX — Linux Emulator Canonical Start Script
+# Enforces:
+#  - Audio ENABLED by default (host PulseAudio / PipeWire server integration)
+#  - VOX_EMU_AUDIO=0 or --no-audio override for explicit headless/audio-disabled runs
+#  - Memory preflight guard before launching emulator
+#  - KVM virtualization readiness
+#  - Host GPU direct rendering (-gpu host)
+# ==============================================================================
 set -euo pipefail
 
-ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
-EMULATOR_BIN="${ANDROID_HOME}/emulator/emulator"
-ADB_BIN="${ANDROID_HOME}/platform-tools/adb"
-LOG_FILE="/tmp/vox_emulator.log"
-TIMEOUT_SECS="${BOOT_TIMEOUT:-60}"
-GPU_MODE="${GPU_MODE:-host}"
+AVD_NAME="${AVD_NAME:-VOX_TV_API34}"
+ANDROID_SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
+EMULATOR_BIN="${EMULATOR_BIN:-$ANDROID_SDK/emulator/emulator}"
+ADB_BIN="${ADB_BIN:-adb}"
+export PATH="$ANDROID_SDK/platform-tools:$ANDROID_SDK/emulator:$PATH"
+BOOT_TIMEOUT_SEC="${BOOT_TIMEOUT_SEC:-120}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Auto-detect default AVD
-if [[ -z "${AVD_NAME:-}" ]]; then
-    if "${EMULATOR_BIN}" -list-avds 2>/dev/null | grep -qx "VOX_TV_API34"; then
-        AVD_NAME="VOX_TV_API34"
-    elif "${EMULATOR_BIN}" -list-avds 2>/dev/null | grep -qx "DIAG_TV_API34"; then
-        AVD_NAME="DIAG_TV_API34"
-    else
-        AVD_NAME="$("${EMULATOR_BIN}" -list-avds 2>/dev/null | head -n 1 || echo "VOX_TV_API34")"
+# Resolve memory preflight guard script
+PREFLIGHT_SCRIPT="${SCRIPT_DIR}/vox-memory-preflight.sh"
+if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
+    if [ -x "${HOME}/.smarttube-vox/avd-config/vox-memory-preflight.sh" ]; then
+        PREFLIGHT_SCRIPT="${HOME}/.smarttube-vox/avd-config/vox-memory-preflight.sh"
+    elif [ -x "${SCRIPT_DIR}/../../SmartTube-VOX-Private/scripts/linux/vox-memory-preflight.sh" ]; then
+        PREFLIGHT_SCRIPT="${SCRIPT_DIR}/../../SmartTube-VOX-Private/scripts/linux/vox-memory-preflight.sh"
     fi
 fi
 
-# Flag handling: support --gui / --headless
-WINDOW_FLAG="-no-window"
-for arg in "$@"; do
+echo "[vox-emu] Executing memory preflight guard..."
+if [ -x "$PREFLIGHT_SCRIPT" ]; then
+    if ! "$PREFLIGHT_SCRIPT" --phase=emulator --auto-stop-gradle; then
+        echo "[vox-emu] PREFLIGHT FAILED: Insufficient memory or active conflicts. Aborting start." >&2
+        exit 1
+    fi
+else
+    echo "[vox-emu] Note: Preflight script not found, proceeding with caution."
+fi
+
+echo "[vox-emu] Checking KVM virtualization..."
+if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+    echo "[vox-emu] WARNING: /dev/kvm is not accessible. Hardware acceleration may fail."
+fi
+
+echo "[vox-emu] Checking if an emulator is already running..."
+if "$ADB_BIN" devices | grep -E "emulator-[0-9]+" | grep -q "device"; then
+    echo "[vox-emu] Emulator is already running and online."
+    exit 0
+fi
+
+echo "[vox-emu] Cleaning up stale locks in AVD directory..."
+AVD_DIR="$HOME/.android/avd/${AVD_NAME}.avd"
+if [ -d "$AVD_DIR" ]; then
+    rm -f "$AVD_DIR"/*.lock
+fi
+
+# Audio server check function
+check_host_audio() {
+    if command -v pactl >/dev/null 2>&1 && pactl info >/dev/null 2>&1; then
+        local server_name
+        server_name=$(pactl info 2>/dev/null | grep "Server Name:" | cut -d: -f2- | xargs || echo "PulseAudio/PipeWire")
+        echo "[vox-emu] Host audio server active: ${server_name}"
+        return 0
+    elif [ -S "/run/user/$(id -u)/pulse/native" ] || [ -n "${PULSE_SERVER:-}" ]; then
+        echo "[vox-emu] Host audio server active: PulseAudio native socket found."
+        return 0
+    elif [ -S "/run/user/$(id -u)/pipewire-0" ]; then
+        echo "[vox-emu] Host audio server active: PipeWire socket found."
+        return 0
+    fi
+    return 1
+}
+
+# Determine audio status: DEFAULT is enabled (1).
+# Explicit disable via VOX_EMU_AUDIO=0
+AUDIO_ENABLED=1
+if [ "${VOX_EMU_AUDIO:-1}" = "0" ]; then
+    AUDIO_ENABLED=0
+fi
+
+# Command-line arguments take precedence over environment variable
+for arg in "${@:-}"; do
     case "$arg" in
-        --gui|--window) WINDOW_FLAG="" ;;
-        --headless|--no-window) WINDOW_FLAG="-no-window" ;;
+        --no-audio|--without-audio) AUDIO_ENABLED=0 ;;
+        --with-audio|--audio) AUDIO_ENABLED=1 ;;
     esac
 done
 
-echo "========================================="
-echo "  Starting SmartTube VOX TV Emulator     "
-echo "  AVD:      ${AVD_NAME}"
-echo "  GPU Mode: ${GPU_MODE}"
-echo "  Display:  ${WINDOW_FLAG:-gui}"
-echo "========================================="
+EMU_ARGS=(-avd "$AVD_NAME" -gpu host -accel on)
 
-# 1. Prevent duplicate instances & check existing emulator health
-EXISTING_QEMU=$(pgrep -f "qemu-system.*${AVD_NAME}" || true)
-if [[ -n "${EXISTING_QEMU}" ]]; then
-    echo "Found existing emulator process (PID: ${EXISTING_QEMU}). Checking health..."
-    ADB_STATE=$("${ADB_BIN}" devices | grep "emulator-5554" | awk '{print $2}' || true)
-    if [[ "${ADB_STATE}" == "device" ]]; then
-        BOOT_DONE=$("${ADB_BIN}" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)
-        if [[ "${BOOT_DONE}" == "1" ]]; then
-            echo "Emulator ${AVD_NAME} is already running, healthy and ready! (sys.boot_completed=1)"
-            exit 0
-        fi
+if [ "$AUDIO_ENABLED" -eq 1 ]; then
+    if check_host_audio; then
+        echo "[vox-emu] Audio enabled by default (host audio server verified)."
+    else
+        echo "[vox-emu] WARNING: Host audio server (PipeWire/PulseAudio) not detected. Audio will be routed but may be inaudible on host." >&2
     fi
-    echo "Existing emulator is unhealthy or unresponsive (ADB state: ${ADB_STATE:-none}). Cleaning up before restart..."
-    "${ADB_BIN}" -s emulator-5554 emu kill 2>/dev/null || true
-    sleep 2
-    pkill -f "qemu-system.*${AVD_NAME}|emulator.*${AVD_NAME}" 2>/dev/null || true
-    sleep 1
+    # No -no-audio flag: standard Android emulator audio is active
+else
+    EMU_ARGS+=("-no-audio")
+    echo "[vox-emu] Audio explicitly disabled (VOX_EMU_AUDIO=0 or --no-audio)."
 fi
 
-# Clean up any orphan QEMU processes to prevent multiple instances
-ORPHANS=$(pgrep -f "qemu-system" || true)
-if [[ -n "${ORPHANS}" ]]; then
-    echo "Notice: Cleaning up unmanaged QEMU processes (${ORPHANS}) to avoid runaway memory..."
-    pkill -f "qemu-system" 2>/dev/null || true
-    sleep 1
-fi
+echo "[vox-emu] Launching emulator with -gpu host (Mesa direct rendering)..."
+setsid "$EMULATOR_BIN" "${EMU_ARGS[@]}" </dev/null > /tmp/vox_emulator.log 2>&1 &
 
-if [[ ! -x "${EMULATOR_BIN}" ]]; then
-    echo "Error: Emulator binary not found at ${EMULATOR_BIN}" >&2
-    exit 1
-fi
+echo "[vox-emu] Waiting for adb device (timeout: ${BOOT_TIMEOUT_SEC}s)..."
+"$ADB_BIN" -s emulator-5554 wait-for-device
 
-echo "Launching emulator in background (logging to ${LOG_FILE})..."
-CMD=("${EMULATOR_BIN}" -avd "${AVD_NAME}" -gpu "${GPU_MODE}" -no-snapshot -no-boot-anim)
-if [[ -n "${WINDOW_FLAG}" ]]; then
-    CMD+=("${WINDOW_FLAG}")
-fi
-
-setsid "${CMD[@]}" > "${LOG_FILE}" 2>&1 &
-EMU_PID=$!
-disown "${EMU_PID}" 2>/dev/null || true
-
-echo "Supervisor started (PID: ${EMU_PID}). Waiting for boot completion (timeout: ${TIMEOUT_SECS}s)..."
-
-BOOTED=0
+echo "[vox-emu] Waiting for boot completion..."
 START_TIME=$(date +%s)
-
 while true; do
     CURRENT_TIME=$(date +%s)
-    ELAPSED=$(( CURRENT_TIME - START_TIME ))
-
-    if ! kill -0 "${EMU_PID}" 2>/dev/null; then
-        echo "Error: Emulator process terminated unexpectedly! Check ${LOG_FILE} for details." >&2
-        tail -n 30 "${LOG_FILE}" >&2 || true
+    ELAPSED=$((CURRENT_TIME - START_TIME))
+    if [ "$ELAPSED" -ge "$BOOT_TIMEOUT_SEC" ]; then
+        echo "[vox-emu] ERROR: Boot timeout reached (${BOOT_TIMEOUT_SEC}s)."
         exit 1
     fi
 
-    if [[ ${ELAPSED} -ge ${TIMEOUT_SECS} ]]; then
-        echo "Error: Boot timeout (${TIMEOUT_SECS}s) reached!" >&2
+    BOOT_VAL=$("$ADB_BIN" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null || echo "0")
+    if [ "${BOOT_VAL//$'\r'/}" = "1" ]; then
+        echo "[vox-emu] Emulator successfully booted and online in ${ELAPSED}s!"
         break
     fi
-
-    ADB_STATE=$("${ADB_BIN}" devices | grep "emulator-5554" | awk '{print $2}' || true)
-    if [[ "${ADB_STATE}" == "device" ]]; then
-        RES=$("${ADB_BIN}" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)
-        if [[ "${RES}" == "1" ]]; then
-            BOOTED=1
-            break
-        fi
-    fi
-
     sleep 2
 done
-
-if [[ "${BOOTED}" -eq 1 ]]; then
-    echo "========================================="
-    echo "Emulator ${AVD_NAME} booted successfully in ${ELAPSED}s!"
-    echo "ADB: device | sys.boot_completed = 1"
-    echo "========================================="
-    exit 0
-else
-    echo "Boot failed! Terminating emulator..." >&2
-    "${ADB_BIN}" -s emulator-5554 emu kill 2>/dev/null || true
-    sleep 2
-    kill -TERM "${EMU_PID}" 2>/dev/null || true
-    pkill -f "qemu-system-x86_64.*${AVD_NAME}" 2>/dev/null || true
-    echo "Diagnostic log excerpt (${LOG_FILE}):" >&2
-    tail -n 25 "${LOG_FILE}" >&2 || true
-    exit 1
-fi

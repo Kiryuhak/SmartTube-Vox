@@ -1,23 +1,43 @@
 #!/usr/bin/env bash
-# scripts/linux/vox-emulator-stop.sh
-# Gracefully shuts down the Vox-TV-14 emulator
+# ==============================================================================
+# SmartTube VOX — Linux Emulator Safe Stop Script
+# Enforces: Graceful shutdown via adb emu kill, stale lock cleanup
+# ==============================================================================
+set -euo pipefail
 
-ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
-ADB_BIN="${ANDROID_HOME}/platform-tools/adb"
+AVD_NAME="VOX_TV_API34"
+ANDROID_SDK="${ANDROID_HOME:-$HOME/Android/Sdk}"
+export PATH="$ANDROID_SDK/platform-tools:$ANDROID_SDK/emulator:$PATH"
 
-echo "========================================="
-echo "  Stopping SmartTube VOX TV Emulator     "
-echo "========================================="
-
-echo "Sending graceful kill signal via ADB..."
-"${ADB_BIN}" -s emulator-5554 emu kill 2>/dev/null || true
-
-sleep 3
-
-# Check if process is still alive
-if pgrep -f "qemu-system|emulator" >/dev/null 2>&1; then
-    echo "Terminating remaining emulator processes..."
-    pkill -f "qemu-system|emulator" || true
+echo "[vox-emu] Initiating graceful shutdown..."
+if adb devices | grep -q "emulator"; then
+    adb -s emulator-5554 emu kill 2>/dev/null || true
+    echo "[vox-emu] Sent kill command via adb -s emulator-5554."
 fi
 
-echo "Emulator stopped."
+# Wait up to 15 seconds for QEMU process to exit
+for i in {1..15}; do
+    if ! pgrep -f "qemu-system" > /dev/null; then
+        echo "[vox-emu] Emulator process cleanly terminated."
+        break
+    fi
+    sleep 1
+done
+
+if pgrep -f "qemu-system" > /dev/null; then
+    echo "[vox-emu] Process still running. Sending SIGTERM..."
+    pkill -TERM -f "qemu-system" || true
+    sleep 2
+    if pgrep -f "qemu-system" > /dev/null; then
+        echo "[vox-emu] Process still running. Sending SIGKILL..."
+        pkill -9 -f "qemu-system" || true
+    fi
+fi
+
+echo "[vox-emu] Cleaning up stale locks in AVD directory..."
+AVD_DIR="$HOME/.android/avd/${AVD_NAME}.avd"
+if [ -d "$AVD_DIR" ]; then
+    rm -f "$AVD_DIR"/*.lock
+fi
+
+echo "[vox-emu] Emulator stopped successfully."
