@@ -287,7 +287,7 @@ describe('Prompt #086: Byte-Budget Contracts, Unicode & Edge-Cases Test Suite', 
     const result = await buildDiagnosticsZip(storage, {
       statuses: ACTIVE_EXPORT_STATUSES,
       maxReports: 10,
-      maxBytes: 650 * 1024,
+      maxBytes: 1200 * 1024,
       format: 'json',
     });
 

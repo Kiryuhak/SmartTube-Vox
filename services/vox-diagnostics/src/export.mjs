@@ -133,10 +133,34 @@ export async function buildDiagnosticsZip(storage, options = {}) {
         continue;
       }
 
-      // Check byte budget: if we already have at least 1 report, and adding another would exceed byte budget
-      const reportBytes = (raw.payload_json && typeof raw.payload_json === 'string')
-        ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(raw.payload_json, 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(raw.payload_json).length : raw.payload_json.length))
-        : (typeof raw.payload === 'object' ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(JSON.stringify(raw.payload), 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(JSON.stringify(raw.payload)).length : 2000)) : 2000);
+      // Check byte budget: when format === 'json', account for true serialized wire bytes
+      // (including duplicated structuredEvents/safeRecentEvents in sanitizedJson)
+      let reportBytes;
+      let precomputedSanitizedJson = null;
+
+      if (options.format === 'json') {
+        let p = null;
+        if (raw.payload_json && typeof raw.payload_json === 'string') {
+          try { p = JSON.parse(raw.payload_json); } catch (_) {}
+        } else if (raw.payload && typeof raw.payload === 'object') {
+          p = raw.payload;
+        } else {
+          p = raw;
+        }
+        const fullReportData = {
+          ...raw,
+          payload: (p && p !== raw) ? p : (raw.payload || p),
+          payload_json: raw.payload_json || (typeof p === 'object' ? JSON.stringify(p) : undefined),
+        };
+        precomputedSanitizedJson = prepareReportDownloadJson(fullReportData);
+        const wireStr = JSON.stringify(precomputedSanitizedJson);
+        reportBytes = typeof Buffer !== 'undefined' ? Buffer.byteLength(wireStr, 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(wireStr).length : wireStr.length);
+        raw._sanitizedJson = precomputedSanitizedJson;
+      } else {
+        reportBytes = (raw.payload_json && typeof raw.payload_json === 'string')
+          ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(raw.payload_json, 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(raw.payload_json).length : raw.payload_json.length))
+          : (typeof raw.payload === 'object' ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(JSON.stringify(raw.payload), 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(JSON.stringify(raw.payload)).length : 2000)) : 2000);
+      }
 
       if (reports.length >= 1 && (accumulatedBytes + reportBytes > MAX_EXPORT_BYTES)) {
         isTruncated = true;
@@ -240,7 +264,7 @@ export async function buildDiagnosticsZip(storage, options = {}) {
       payload: (payload && payload !== r) ? payload : (r.payload || payload),
       payload_json: r.payload_json || (typeof payload === 'object' ? JSON.stringify(payload) : undefined),
     };
-    const sanitizedJson = prepareReportDownloadJson(fullReportData);
+    const sanitizedJson = r._sanitizedJson || prepareReportDownloadJson(fullReportData);
     if (options.format === 'json') {
       reportsList.push({
         reportId,
