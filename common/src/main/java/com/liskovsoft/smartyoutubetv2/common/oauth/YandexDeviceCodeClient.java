@@ -165,7 +165,8 @@ public class YandexDeviceCodeClient {
     // -------------------------------------------------------------------------
 
     @NonNull
-    private static YandexDeviceCodeResponse parseDeviceCodeResponse(String json)
+    @VisibleForTesting
+    public static YandexDeviceCodeResponse parseDeviceCodeResponse(String json)
             throws YandexDeviceCodeException {
         if (json == null || json.trim().isEmpty()) {
             throw new YandexDeviceCodeException(0, "Empty device code response");

@@ -12,9 +12,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+
+import okhttp3.Call;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 /** Stateless client for the fixed, normalized broker contract. Never logs request or response bodies. */
 public final class YandexBrokerClient {
@@ -55,11 +61,24 @@ public final class YandexBrokerClient {
     private final String deviceEndpoint;
     private final String refreshEndpoint;
     private final ConnectionFactory connectionFactory;
+    private final OkHttpClient okHttpClient;
     private volatile HttpURLConnection activeConnection;
+    private volatile Call activeCall;
     private volatile boolean cancelled;
 
     public YandexBrokerClient(String baseUrl) {
-        this(baseUrl, url -> com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.openYandexConnection(url));
+        this(baseUrl, com.liskovsoft.smartyoutubetv2.common.vox.proxy.VoxHttpClientFactory.getVotHttpClient());
+    }
+
+    public YandexBrokerClient(String baseUrl, @NonNull OkHttpClient okHttpClient) {
+        if (!baseUrl.matches("https://[^\\s]+|http://(?:127\\.0\\.0\\.1|localhost)(?::\\d+)?(?:/[^\\s]*)?")) {
+            throw new IllegalArgumentException("Invalid broker URL");
+        }
+        this.baseUrl = baseUrl.replaceAll("/+$", "");
+        this.deviceEndpoint = this.baseUrl + "/oauth/yandex/device/token";
+        this.refreshEndpoint = this.baseUrl + "/oauth/yandex/refresh";
+        this.okHttpClient = okHttpClient;
+        this.connectionFactory = null;
     }
 
     static Result expired() {
@@ -75,6 +94,7 @@ public final class YandexBrokerClient {
         this.deviceEndpoint = this.baseUrl + "/oauth/yandex/device/token";
         this.refreshEndpoint = this.baseUrl + "/oauth/yandex/refresh";
         this.connectionFactory = factory;
+        this.okHttpClient = null;
     }
 
     public Result poll(String deviceCode) {
@@ -101,6 +121,51 @@ public final class YandexBrokerClient {
 
     private Result executePost(String targetUrl, String jsonBody) {
         if (cancelled) return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+
+        if (okHttpClient != null) {
+            return executePostOkHttp(targetUrl, jsonBody);
+        } else if (connectionFactory != null) {
+            return executePostHttpURLConnection(targetUrl, jsonBody);
+        } else {
+            return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+        }
+    }
+
+    private Result executePostOkHttp(String targetUrl, String jsonBody) {
+        byte[] request = jsonBody.getBytes(StandardCharsets.UTF_8);
+        if (request.length > 1024) return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+
+        try {
+            RequestBody body = RequestBody.create(
+                    MediaType.parse("application/json; charset=utf-8"), request);
+            Request req = new Request.Builder()
+                    .url(targetUrl)
+                    .header("Accept", "application/json")
+                    .header("Cache-Control", "no-store")
+                    .post(body)
+                    .build();
+
+            Call call = okHttpClient.newCall(req);
+            activeCall = call;
+            if (cancelled) {
+                call.cancel();
+                return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+            }
+
+            try (Response response = call.execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                int status = response.code();
+                int retry = parseRetryAfter(response.header("Retry-After"));
+                return parse(responseBody, status, retry);
+            }
+        } catch (IOException e) {
+            return new Result(State.NETWORK_ERROR, null, null, 0, 0);
+        } finally {
+            activeCall = null;
+        }
+    }
+
+    private Result executePostHttpURLConnection(String targetUrl, String jsonBody) {
         HttpURLConnection connection = null;
         try {
             connection = connectionFactory.open(targetUrl);
@@ -134,6 +199,8 @@ public final class YandexBrokerClient {
     /** Disconnect an in-flight request when its auth generation is dismissed. */
     public void cancel() {
         cancelled = true;
+        Call call = activeCall;
+        if (call != null) call.cancel();
         HttpURLConnection connection = activeConnection;
         if (connection != null) connection.disconnect();
     }
@@ -179,3 +246,4 @@ public final class YandexBrokerClient {
         }
     }
 }
+

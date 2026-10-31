@@ -184,6 +184,7 @@ public final class VoxHttpClientFactory {
                 .connectTimeout(connectSec, TimeUnit.SECONDS)
                 .readTimeout(readSec, TimeUnit.SECONDS)
                 .writeTimeout(writeSec, TimeUnit.SECONDS)
+                .dns(new VoxCloudflareResilientDns())
                 .followRedirects(true);
 
         Proxy proxy = config.toJavaProxy();

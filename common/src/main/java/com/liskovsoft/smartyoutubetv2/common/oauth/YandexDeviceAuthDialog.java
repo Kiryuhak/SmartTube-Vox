@@ -22,7 +22,9 @@ import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
 import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
 
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import io.reactivex.Observable;
@@ -187,7 +189,12 @@ public class YandexDeviceAuthDialog {
         mCodeView.setText("··········");
         mTimerView.setText("");
 
+        Map<String, String> startCtx = new HashMap<>();
+        startCtx.put("stage", "START");
+        startCtx.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_STARTED, "Запуск авторизации Яндекс ID (Device Code Flow)", startCtx);
         VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_STARTED, "Запуск авторизации Яндекс ID", null);
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_DEVICE_CODE_REQUEST_STARTED, "Запрос кода устройства у Яндекс OAuth", null);
 
         mPollDisposable = Observable
                 .<YandexDeviceCodeResponse>create(emitter -> {
@@ -223,7 +230,12 @@ public class YandexDeviceAuthDialog {
         }
 
         Log.d(TAG, "Device code received");
+        Map<String, String> codeCtx = new HashMap<>();
+        codeCtx.put("expires_in", String.valueOf(response.getExpiresIn()));
+        codeCtx.put("interval", String.valueOf(response.getInterval()));
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_DEVICE_CODE_RESPONSE_RECEIVED, "Код устройства успешно получен", codeCtx);
         VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.DEVICE_CODE_RECEIVED, "Получен код устройства для авторизации", null);
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_USER_APPROVAL_PENDING, "Ожидание ввода кода пользователем на ya.ru/device", null);
 
         if (!response.isValid()) {
             onDeviceCodeError(sessionId, new YandexDeviceCodeException(0, "Invalid device code response"));
@@ -244,6 +256,9 @@ public class YandexDeviceAuthDialog {
             return;
         }
         Log.e(TAG, "Failed to get device code");
+        Map<String, String> errCtx = new HashMap<>();
+        errCtx.put("stage", "DEVICE_CODE_REQUEST");
+        VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Ошибка запроса кода устройства", errCtx, error);
         VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_FAILED, "Не удалось получить код устройства", null, error);
         mStatusView.setText(R.string.vot_device_auth_network_error);
         mCodeView.setText("—");
@@ -284,6 +299,9 @@ public class YandexDeviceAuthDialog {
     private void onCodeExpired(int sessionId) {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
+        Map<String, String> ctx = new HashMap<>();
+        ctx.put("cause", "code_expired");
+        VoxSafeLogger.w(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Срок действия кода авторизации истёк", ctx);
         VoxSafeLogger.w(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_TIMEOUT, "Срок действия кода авторизации истёк", null);
         mStatusView.setText(R.string.vot_device_auth_expired);
         mCodeView.setText("—");
@@ -301,7 +319,8 @@ public class YandexDeviceAuthDialog {
         final String deviceCode = codeResponse.getDeviceCode();
         final YandexBrokerPollPolicy policy = new YandexBrokerPollPolicy(pollIntervalSec);
         final YandexBrokerClient brokerClient = new YandexBrokerClient(YandexBrokerConfig.url());
-        final long deadline = SystemClock.elapsedRealtime()
+        final long startTime = SystemClock.elapsedRealtime();
+        final long deadline = startTime
                 + TimeUnit.SECONDS.toMillis(codeResponse.getExpiresIn());
 
         if (mPollDisposable != null) {
@@ -311,6 +330,7 @@ public class YandexDeviceAuthDialog {
         mPollDisposable = Observable
                 .<PollEvent>create(emitter -> {
                     emitter.setCancellable(brokerClient::cancel);
+                    int pollAttempt = 0;
                     while (!emitter.isDisposed() && SystemClock.elapsedRealtime() < deadline) {
                         // Ждём интервал секунда-по-секунде (для быстрой отмены)
                         for (int i = 0; i < policy.nextIntervalSeconds(); i++) {
@@ -323,6 +343,13 @@ public class YandexDeviceAuthDialog {
                             emitter.onComplete();
                             return;
                         }
+
+                        pollAttempt++;
+                        long elapsed = SystemClock.elapsedRealtime() - startTime;
+                        Map<String, String> attemptCtx = new HashMap<>();
+                        attemptCtx.put("attempt", String.valueOf(pollAttempt));
+                        attemptCtx.put("elapsed_ms", String.valueOf(elapsed));
+                        VoxSafeLogger.d(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_POLL_ATTEMPT, "Опрос статуса токена через брокер", attemptCtx);
 
                         YandexBrokerClient.Result result = brokerClient.poll(deviceCode);
                         boolean canRetry = policy.accept(result);
@@ -346,9 +373,10 @@ public class YandexDeviceAuthDialog {
                             if (!isSessionCurrent(sessionId)) return;
                             switch (event.result.state) {
                                 case AUTHORIZATION_PENDING:
-                                    // продолжаем, ничего не меняем
+                                    VoxSafeLogger.d(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_POLL_PENDING, "Ожидание подтверждения на сервере", null);
                                     break;
                                 case SLOW_DOWN:
+                                    VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_POLL_SLOW_DOWN, "Сервер запросил замедление опроса", null);
                                     break;
                                 case RATE_LIMITED:
                                     break;
@@ -370,6 +398,7 @@ public class YandexDeviceAuthDialog {
                                     onInvalidClient(sessionId, null);
                                     break;
                                 case SUCCESS:
+                                    VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_POLL_APPROVED, "Брокер вернул подтверждение авторизации", null);
                                     onTokenReceived(sessionId, event.result.accessToken,
                                             event.result.refreshToken,
                                             event.result.expiresInSeconds);
@@ -390,17 +419,24 @@ public class YandexDeviceAuthDialog {
             return; // stale callback — не применяем токен
         }
         invalidateSessionAndStopPolling();
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_TOKEN_RESPONSE_PARSED, "Токен успешно разобран из ответа брокера", null);
+
         // Сохраняем токен: setOAuthTokens устанавливает UNVERIFIED + включает Lively
         if (!VotOAuthTokenValidator.isValid(token)) {
             Log.w(TAG, "Yandex OAuth returned an invalid token");
+            VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Полученный токен не прошёл валидацию формата", null, null);
             mStatusView.setText(R.string.vot_device_auth_network_error);
             mRefreshButton.setEnabled(true);
             mRefreshButton.requestFocus();
             return;
         }
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_TOKEN_VALIDATION_PASSED, "Валидация токена успешно пройдена", null);
+
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_TOKEN_STORAGE_STARTED, "Запись токена в зашифрованное хранилище KeyStore", null);
         mVotData.setOAuthTokens(token, refreshToken, expiresInSeconds);
         if (!mVotData.hasOAuthToken()) {
             Log.e(TAG, "Failed to persist OAuth token to secure store");
+            VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Сбой сохранения токена в KeyStore", null, null);
             VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.TOKEN_SAVE_FAILED, "Ошибка сохранения токена авторизации", null, null);
             mStatusView.setText(R.string.vot_device_auth_network_error);
             mRefreshButton.setEnabled(true);
@@ -409,8 +445,10 @@ public class YandexDeviceAuthDialog {
         }
         // token здесь не логируется
         Log.d(TAG, "Yandex OAuth SUCCESS (tokenPresent=true, refreshPresent=%b)", refreshToken != null && !refreshToken.isEmpty());
-        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_SUCCESS, "Авторизация Яндекс ID успешно выполнена", null);
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_TOKEN_STORAGE_PASSED, "Токен сохранён в хранилище KeyStore", null);
         VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.TOKEN_SAVE_SUCCESS, "Токен авторизации успешно сохранён", null);
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_SUCCESS, "Авторизация Яндекс ID успешно выполнена", null);
+        VoxSafeLogger.i(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_SESSION_READY, "Сессия Яндекс ID готова для использования в VOT", null);
         mStatusView.setText(R.string.vot_device_auth_success);
         mCodeView.setText("✓");
         mTimerView.setText("");
@@ -430,6 +468,9 @@ public class YandexDeviceAuthDialog {
     private void onAccessDenied(int sessionId) {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
+        Map<String, String> ctx = new HashMap<>();
+        ctx.put("cause", "access_denied");
+        VoxSafeLogger.w(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Авторизация отклонена пользователем", ctx);
         VoxSafeLogger.w(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_FAILED, "Пользователь отклонил запрос авторизации", null);
         mStatusView.setText(R.string.vot_device_auth_denied);
         mCodeView.setText("✕");
@@ -442,6 +483,9 @@ public class YandexDeviceAuthDialog {
     private void onPollError(int sessionId, String message) {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
+        Map<String, String> ctx = new HashMap<>();
+        ctx.put("cause", "poll_network_error");
+        VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Ошибка при опросе статуса авторизации", ctx, null);
         VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.AUTH_FAILED, "Ошибка при опросе статуса авторизации", null, null);
         mStatusView.setText(R.string.vot_device_auth_network_error);
         mRefreshButton.setEnabled(true);
@@ -453,6 +497,9 @@ public class YandexDeviceAuthDialog {
         if (!isSessionCurrent(sessionId)) return;
         invalidateSessionAndStopPolling();
         Log.w(TAG, "OAuth client configuration error (invalid_client)");
+        Map<String, String> ctx = new HashMap<>();
+        ctx.put("cause", "invalid_client");
+        VoxSafeLogger.e(VoxLogCategory.YANDEX_AUTH, VoxLogCode.YANDEX_OAUTH_FLOW_FAILED, "Ошибка конфигурации клиента OAuth", ctx, null);
         mStatusView.setText(R.string.vot_device_auth_invalid_client);
         mCodeView.setText("✕");
         mTimerView.setText("");
