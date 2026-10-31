@@ -378,7 +378,7 @@ class VoxUserJourneyRecorderTest {
         assertTrue(root.has("incidentSummary"))
         val summary = root.getJSONObject("incidentSummary")
         assertNotNull(summary)
-        assertEquals("32.56-vox.9.2-rc.7", summary.getString("appVersion"))
+        assertEquals("32.56-vox.9.2-rc.8", summary.getString("appVersion"))
         assertEquals("HEALTHY", summary.getString("finalStatus"))
     }
 

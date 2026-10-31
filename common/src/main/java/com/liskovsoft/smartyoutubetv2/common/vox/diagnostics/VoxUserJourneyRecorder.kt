@@ -703,7 +703,7 @@ class VoxUserJourneyRecorder private constructor(private val appContext: Context
             else -> "HEALTHY"
         }
         summary.put("finalStatus", finalStatus)
-        summary.put("appVersion", "32.56-vox.9.2-rc.7")
+        summary.put("appVersion", "32.56-vox.9.2-rc.8")
         summary.put("eventCount", memoryEvents.size)
         summary.put("pinnedCount", pinnedBookmarks.size)
         return summary

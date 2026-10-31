@@ -205,13 +205,14 @@ function isKeyForbidden(rawKey) {
   return BANNED_PATTERNS.some((pattern) => lower.includes(pattern));
 }
 
-function jsonResponse(data, status = 200) {
+function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
+      ...extraHeaders,
     },
   });
 }
