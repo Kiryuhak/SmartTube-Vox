@@ -1537,6 +1537,27 @@ public class VoiceTranslateController extends BasePlayerController {
         String targetLang = votData().getTargetLanguage();
         if (targetLang == null || targetLang.isEmpty()) targetLang = "ru";
 
+        String canonicalUrl = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationReusePolicy.INSTANCE.normalizeVideoUrl(videoId);
+        List<FormatItem> subFormats = getPlayer() != null ? getPlayer().getSubtitleFormats() : null;
+        java.util.List<String> subLangs = null;
+        if (subFormats != null && !subFormats.isEmpty()) {
+            subLangs = new java.util.ArrayList<>();
+            for (FormatItem item : subFormats) {
+                if (item != null && item.getLanguage() != null && !item.getLanguage().isEmpty()) {
+                    if (!com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.track.SubtitleTrack.isAuto(item.getLanguage())) {
+                        subLangs.add(item.getLanguage());
+                    }
+                }
+            }
+        }
+        com.liskovsoft.smartyoutubetv2.common.vox.language.VoxVideoLanguagePipeline.LanguageResult langResult =
+                getLanguagePipeline().resolveLanguage(videoId, canonicalUrl, videoTitle, sourceLang, subLangs, false);
+        if (langResult.isResolved()) {
+            sourceLang = langResult.getLanguage();
+        } else if (sourceLang == null || sourceLang.isEmpty()) {
+            sourceLang = "auto";
+        }
+
         if (getContext() != null) {
             com.liskovsoft.smartyoutubetv2.common.vox.account.VoxAccountManager accountManager =
                     com.liskovsoft.smartyoutubetv2.common.vox.account.VoxAccountManager.instance(getContext());

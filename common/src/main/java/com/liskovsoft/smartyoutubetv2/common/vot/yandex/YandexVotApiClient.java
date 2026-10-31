@@ -341,8 +341,8 @@ public class YandexVotApiClient {
                     duration = DEFAULT_DURATION;
                 }
 
-                String apiSourceLang = (sourceLang == null || sourceLang.isEmpty() || "auto".equalsIgnoreCase(sourceLang))
-                        ? "" : sourceLang;
+                String apiSourceLang = (sourceLang == null || sourceLang.isEmpty())
+                        ? "auto" : sourceLang.trim().toLowerCase(java.util.Locale.US);
 
                 byte[] body = YandexVotProtobuf.encodeTranslationRequest(
                         videoUrl, firstRequest, duration,
@@ -434,8 +434,8 @@ public class YandexVotApiClient {
                 if (duration <= 0) {
                     duration = DEFAULT_DURATION;
                 }
-                String apiSourceLang = (sourceLang == null || sourceLang.isEmpty() || "auto".equalsIgnoreCase(sourceLang))
-                        ? "" : sourceLang;
+                String apiSourceLang = (sourceLang == null || sourceLang.isEmpty())
+                        ? "auto" : sourceLang.trim().toLowerCase(java.util.Locale.US);
 
                 byte[] body = YandexVotProtobuf.encodeTranslationCacheRequest(
                         videoUrl, duration, apiSourceLang, targetLang

@@ -29,10 +29,10 @@ class VoxVoiceSelectionTest {
 
     @Test
     fun testGetRequestLangForTranslation() {
-        // When lively voice is used, auto -> ru maps to en
-        assertEquals("en", VoxVoiceSelectionPolicy.getRequestLangForTranslation("auto", "ru", useLivelyVoice = true))
-        assertEquals("en", VoxVoiceSelectionPolicy.getRequestLangForTranslation("", "ru", useLivelyVoice = true))
-        assertEquals("en", VoxVoiceSelectionPolicy.getRequestLangForTranslation(null, "ru", useLivelyVoice = true))
+        // Under VOT 1.12.4 parity, auto -> ru remains auto (never forced to en)
+        assertEquals("auto", VoxVoiceSelectionPolicy.getRequestLangForTranslation("auto", "ru", useLivelyVoice = true))
+        assertEquals("auto", VoxVoiceSelectionPolicy.getRequestLangForTranslation("", "ru", useLivelyVoice = true))
+        assertEquals("auto", VoxVoiceSelectionPolicy.getRequestLangForTranslation(null, "ru", useLivelyVoice = true))
 
         // When lively voice is disabled, auto -> ru remains auto
         assertEquals("auto", VoxVoiceSelectionPolicy.getRequestLangForTranslation("auto", "ru", useLivelyVoice = false))
@@ -40,14 +40,20 @@ class VoxVoiceSelectionTest {
         // Concrete source language remains unchanged
         assertEquals("de", VoxVoiceSelectionPolicy.getRequestLangForTranslation("de", "ru", useLivelyVoice = true))
         assertEquals("en", VoxVoiceSelectionPolicy.getRequestLangForTranslation("en", "ru", useLivelyVoice = true))
+        assertEquals("es", VoxVoiceSelectionPolicy.getRequestLangForTranslation("es", "ru", useLivelyVoice = true))
     }
 
     @Test
     fun testIsLivelyVoiceAllowed_LanguagePairAndAccount() {
-        // Allowed: en -> ru, auto -> ru (mapped to en) with active account
+        // Allowed: concrete language (en, fr, es) -> ru with active account
         assertTrue(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("en", "ru", hasActiveAccount = true))
-        assertTrue(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("auto", "ru", hasActiveAccount = true))
         assertTrue(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("fr", "ru", hasActiveAccount = true))
+        assertTrue(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("es", "ru", hasActiveAccount = true))
+
+        // Disallowed: auto source language (per VOT 1.12.4 lines 48517-48520)
+        assertFalse(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("auto", "ru", hasActiveAccount = true))
+        assertFalse(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("", "ru", hasActiveAccount = true))
+        assertFalse(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed(null, "ru", hasActiveAccount = true))
 
         // Disallowed: no active account
         assertFalse(VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("en", "ru", hasActiveAccount = false))
@@ -74,5 +80,9 @@ class VoxVoiceSelectionTest {
         assertNotEquals(standardKey, liveKey)
         assertTrue(standardKey.contains("_false_"))
         assertTrue(liveKey.contains("_true_"))
+
+        // For auto source, lively is disallowed, so cache key always reflects false for lively
+        val autoKey = VoxVoiceSelectionPolicy.buildTranslationCacheKey("video456", "auto", "ru", useLivelyVoice = true)
+        assertTrue(autoKey.contains("_auto_ru_false_"))
     }
 }

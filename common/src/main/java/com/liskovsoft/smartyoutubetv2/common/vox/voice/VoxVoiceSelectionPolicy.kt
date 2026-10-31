@@ -3,15 +3,14 @@ package com.liskovsoft.smartyoutubetv2.common.vox.voice
 import java.util.Locale
 
 /**
- * Voice selection policy matching VOT userscript 1.11.17:
+ * Voice selection policy matching VOT userscript 1.12.4:
  *
- * References from reference userscript (lines 43628-43633, 44003-44010, 30485-30489):
- * 1. getRequestLangForTranslation(requestLang, responseLang):
- *    if (this.data?.useLivelyVoice && requestLang === "auto" && responseLang === "ru") return "en";
- *    return requestLang;
- * 2. isLivelyVoiceAllowed(requestLang, responseLang):
- *    if (this.getRequestLangForTranslation(requestLang, responseLang) === "auto" || responseLang !== "ru") return false;
+ * References from reference userscript 1.12.4 (lines 48517-48520, 48192-48196, 33501-33567):
+ * 1. isLivelyVoiceAllowed(requestLang, responseLang):
+ *    if (requestLang === "auto" || responseLang !== "ru") return false;
  *    return true;
+ * 2. getRequestLangForTranslation(requestLang, responseLang):
+ *    Returns the normalized request language without forcing "en" for "auto".
  * 3. isLivelyVoiceUnavailableError(msg):
  *    msg.toLowerCase().includes("обычная озвучка") || msg.toLowerCase().includes("standard voice")
  * 4. Cache key includes useLivelyVoice flag so standard and lively cached translations never collide.
@@ -20,28 +19,25 @@ object VoxVoiceSelectionPolicy {
 
     /**
      * Resolves request language for API.
-     * When Lively voice is enabled, auto -> ru defaults to en -> ru.
+     * Preserves "auto" when unresolved; never forces "en" on non-English content.
      */
     @JvmStatic
     @JvmOverloads
+    @Suppress("UNUSED_PARAMETER")
     fun getRequestLangForTranslation(
         requestLang: String?,
         responseLang: String?,
         useLivelyVoice: Boolean = true
     ): String {
-        val req = if (requestLang.isNullOrBlank()) "auto" else requestLang.lowercase(Locale.US)
-        val resp = if (responseLang.isNullOrBlank()) "ru" else responseLang.lowercase(Locale.US)
-
-        if (useLivelyVoice && req == "auto" && resp == "ru") {
-            return "en"
-        }
-        return req
+        return if (requestLang.isNullOrBlank()) "auto" else requestLang.lowercase(Locale.US)
     }
 
     /**
      * Checks if Lively Voice is supported for the given language pair.
-     * Lively Voice is only supported when source language resolves to a concrete language (not auto)
-     * and target language is Russian ("ru").
+     * Per VOT 1.12.4 (lines 48517-48520), Lively Voice is allowed only when:
+     * - User has an active OAuth account session
+     * - Target language is Russian ("ru")
+     * - Source language is concrete and NOT "auto"
      */
     @JvmStatic
     @JvmOverloads
@@ -54,8 +50,8 @@ object VoxVoiceSelectionPolicy {
         val resp = if (responseLang.isNullOrBlank()) "ru" else responseLang.lowercase(Locale.US)
         if (resp != "ru") return false
 
-        val apiReq = getRequestLangForTranslation(requestLang, resp, useLivelyVoice = true)
-        if (apiReq == "auto" || apiReq.isBlank()) return false
+        val req = if (requestLang.isNullOrBlank()) "auto" else requestLang.lowercase(Locale.US)
+        if (req == "auto" || req.isBlank()) return false
         return true
     }
 
@@ -84,6 +80,7 @@ object VoxVoiceSelectionPolicy {
     ): String {
         val resolvedFrom = getRequestLangForTranslation(fromLang, toLang, useLivelyVoice)
         val resolvedTo = if (toLang.isNullOrBlank()) "ru" else toLang.lowercase(Locale.US)
-        return "${videoId}_${resolvedFrom}_${resolvedTo}_${useLivelyVoice}_$extraTag"
+        val effectiveLively = useLivelyVoice && isLivelyVoiceAllowed(resolvedFrom, resolvedTo, true)
+        return "${videoId}_${resolvedFrom}_${resolvedTo}_${effectiveLively}_$extraTag"
     }
 }
