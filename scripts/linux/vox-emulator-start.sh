@@ -120,6 +120,9 @@ while true; do
     BOOT_VAL=$("$ADB_BIN" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null || echo "0")
     if [ "${BOOT_VAL//$'\r'/}" = "1" ]; then
         echo "[vox-emu] Emulator successfully booted and online in ${ELAPSED}s!"
+        HOST_NOW_MS=$(($(date +%s) * 1000))
+        "$ADB_BIN" -s emulator-5554 shell cmd alarm set-time "$HOST_NOW_MS" 2>/dev/null || true
+        echo "[vox-emu] Synced emulator clock to host time: $("$ADB_BIN" -s emulator-5554 shell date -u 2>/dev/null || echo 'unknown')"
         break
     fi
     sleep 2

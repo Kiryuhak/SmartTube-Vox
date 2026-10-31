@@ -2370,10 +2370,12 @@ public class VoiceTranslateController extends BasePlayerController {
                     mYandexPlaybackAdapter.refreshSource(generationId, res.getAudioUrl(), resumePos, resumeSpeed);
                 } else {
                     YandexVotLog.w(TAG, "Signed URL refresh did not produce ready audio URL, restarting normal translation");
+                    mState = STATE_OFF;
                     startYandexTranslation(false, false);
                 }
             }, err -> {
                 YandexVotLog.w(TAG, "Signed URL refresh failed: " + err.getMessage() + ", restarting normal translation");
+                mState = STATE_OFF;
                 startYandexTranslation(false, false);
             });
             return;

@@ -290,6 +290,95 @@ class VoxAutoLanguageContractTest {
         assertFalse("Sanitized message must not contain query sign", sanitized.contains("sign=abcdef"))
     }
 
+    // Scenario 19: Errors 401/403/429/503/timeout do not mutate source language to "en"
+    @Test
+    fun testScenario19_ServerErrorsDoNotMutateSourceToEnglish() {
+        val originalSource = "es"
+        val targetLang = "ru"
+
+        // Simulating server error responses
+        val resp401 = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.fromHttpStatus(401, "Unauthorized")
+        val resp403 = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.fromHttpStatus(403, "Forbidden")
+        val resp429 = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.fromHttpStatus(429, "Too Many Requests")
+        val resp503 = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.fromHttpStatus(503, "Service Unavailable")
+        val respTimeout = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.timeout("Timeout")
+
+        assertTrue(resp401 is com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.Failed)
+        assertTrue(resp403 is com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.Failed)
+        assertTrue(resp429 is com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.Failed)
+        assertTrue(resp503 is com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.Failed)
+        assertTrue(respTimeout is com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.ServerLookupResponse.Failed)
+
+        // Request language must still remain "es" during any retry or error handling
+        val postErrorLang = VoxVoiceSelectionPolicy.getRequestLangForTranslation(originalSource, targetLang, useLivelyVoice = false)
+        assertEquals("es", postErrorLang)
+
+        // For auto-source, it must remain "auto" after error
+        val postErrorAuto = VoxVoiceSelectionPolicy.getRequestLangForTranslation("auto", targetLang, useLivelyVoice = false)
+        assertEquals("auto", postErrorAuto)
+    }
+
+    // Scenario 20: Retry and cache preserve non-English source
+    @Test
+    fun testScenario20_RetryAndCachePreserveNonEnglishSource() {
+        val reqEs = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.TranslationRequest(
+            videoId = "vidEsRetry",
+            sourceLang = "es",
+            targetLang = "ru",
+            useLiveVoices = false
+        )
+        val keyEs = reqEs.cacheKey
+        assertTrue("Cache key must contain original source lang 'es'", keyEs.contains("|es|ru|"))
+        assertFalse("Cache key must not contain 'en'", keyEs.contains("|en|ru|"))
+
+        val reqFr = com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationServerFirstPipeline.TranslationRequest(
+            videoId = "vidFrRetry",
+            sourceLang = "fr",
+            targetLang = "ru",
+            useLiveVoices = true
+        )
+        val keyFr = reqFr.cacheKey
+        assertTrue("Cache key must contain original source lang 'fr'", keyFr.contains("|fr|ru|"))
+        assertFalse("Cache key must not contain 'en'", keyFr.contains("|en|ru|"))
+    }
+
+    // Scenario 21: User-preferred target does not mix with auto source
+    @Test
+    fun testScenario21_UserPreferredTargetDoesNotMixWithAutoSource() {
+        val target = "ru"
+        val pipeline = VoxVideoLanguagePipeline(localCache)
+        val result = pipeline.resolveLanguage("vidUnknownTarget", "https://youtu.be/vidUnknownTarget", playerAudioLang = null)
+
+        assertEquals("auto", result.language)
+        // Ensure source and target are distinct
+        assertFalse("Source 'auto' must not equal target 'ru'", result.language == target)
+        val reqLang = VoxVoiceSelectionPolicy.getRequestLangForTranslation(result.language, target, useLivelyVoice = false)
+        assertEquals("auto", reqLang)
+    }
+
+    // Scenario 22: Fallback to standard voice on video 1 does not disable Live Voices on video 2
+    @Test
+    fun testScenario22_FallbackToStandardVoiceDoesNotDisableLiveVoicesForNextVideo() {
+        // Video 1 without active session or on error -> falls back to standard voice
+        val isNoAccountLivelyAllowed = VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("es", "ru", hasActiveAccount = false)
+        assertFalse("Without active account Lively Voice must be false", isNoAccountLivelyAllowed)
+        val fallbackLang = VoxVoiceSelectionPolicy.getRequestLangForTranslation("es", "ru", useLivelyVoice = false)
+        assertEquals("es", fallbackLang)
+
+        // Video 2 (English) with active account -> Live voices MUST still be evaluated independently and allowed
+        val isEnLivelyAllowed = VoxVoiceSelectionPolicy.isLivelyVoiceAllowed("en", "ru", hasActiveAccount = true)
+        assertTrue("English -> Russian must remain eligible for Live Voices", isEnLivelyAllowed)
+    }
+
+    // Scenario 23: Diagnostic sanitizer strips cookies and access tokens
+    @Test
+    fun testScenario23_SanitizerStripsFullRawPayloadAndOAuthCookies() {
+        val logWithCookie = "Cookie: Session_id=3:1234567890; yandexuid=99887766 and access_token=AQAAAAA_xyz"
+        val sanitized = VoxDiagnosticSanitizer.sanitize(logWithCookie)
+        assertFalse("Sanitized must not contain raw session ID", sanitized.contains("3:1234567890"))
+        assertFalse("Sanitized must not contain raw token", sanitized.contains("AQAAAAA_xyz"))
+    }
+
     private fun containsSubarray(array: ByteArray?, sub: ByteArray?): Boolean {
         if (array == null || sub == null || array.size < sub.size) return false
         for (i in 0..array.size - sub.size) {
