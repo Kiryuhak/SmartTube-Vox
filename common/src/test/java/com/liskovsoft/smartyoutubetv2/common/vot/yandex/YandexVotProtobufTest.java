@@ -34,6 +34,58 @@ public class YandexVotProtobufTest {
     }
 
     @Test
+    public void testField18UseLiveVoicesTrueAndFalse() {
+        byte[] encodedStandard = YandexVotProtobuf.encodeTranslationRequest(
+                "https://www.youtube.com/watch?v=UF8uR6Z6KLc",
+                true,
+                904.0,
+                "en",
+                "ru",
+                "Steve Jobs",
+                false
+        );
+        byte[] encodedLive = YandexVotProtobuf.encodeTranslationRequest(
+                "https://www.youtube.com/watch?v=UF8uR6Z6KLc",
+                true,
+                904.0,
+                "en",
+                "ru",
+                "Steve Jobs",
+                true
+        );
+
+        // Tag for field 18, wire type 0 (varint): (18 << 3) | 0 = 144 -> in varint: [0x90, 0x01]
+        byte[] tag18 = new byte[]{(byte) 0x90, (byte) 0x01};
+
+        boolean foundInStandard = containsSubarray(encodedStandard, tag18);
+        boolean foundInLive = containsSubarray(encodedLive, tag18);
+
+        // Standard request: field 18 MUST BE ABSENT
+        org.junit.Assert.assertFalse("Field 18 must be absent when useLiveVoices is false", foundInStandard);
+
+        // Live Voices request: field 18 MUST BE PRESENT
+        org.junit.Assert.assertTrue("Field 18 must be present when useLiveVoices is true", foundInLive);
+
+        // Encoded Live must be exactly 3 bytes longer than Standard ([0x90, 0x01, 0x01])
+        org.junit.Assert.assertEquals(encodedStandard.length + 3, encodedLive.length);
+    }
+
+    private static boolean containsSubarray(byte[] array, byte[] sub) {
+        if (array == null || sub == null || array.length < sub.length) return false;
+        for (int i = 0; i <= array.length - sub.length; i++) {
+            boolean match = true;
+            for (int j = 0; j < sub.length; j++) {
+                if (array[i + j] != sub[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
+
+    @Test
     public void testEncodeFullTranslationRequest() {
         java.util.List<YandexVotProtobuf.TranslationHelp> helpList = new java.util.ArrayList<>();
         helpList.add(new YandexVotProtobuf.TranslationHelp("video_file_url", "https://cdn.example.com/video.mp4"));
