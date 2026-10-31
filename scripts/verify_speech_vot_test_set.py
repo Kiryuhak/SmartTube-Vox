@@ -237,12 +237,27 @@ class SpeechVotRunner:
                 "error": f"am start failed: {out}"
             }
 
-        # 4. Bounded Settling Delay with Liveness Probe
-        settle_end = time.time() + (0.1 if self.mock_scenario else 5.0)
-        while time.time() < settle_end:
-            if time.time() > self.global_deadline:
-                return self._build_result(vid, title, "GLOBAL_TIMEOUT", t_video_start)
-            time.sleep(0.1 if self.mock_scenario else 0.5)
+        # 4. Bounded Player Readiness Wait with Liveness Probe
+        player_ready = False
+        settle_deadline = min(video_deadline, time.time() + (0.2 if self.mock_scenario else 15.0))
+        while time.time() < settle_deadline:
+            alive, liveness_reason = self.check_avd_liveness()
+            if not alive:
+                log("AVD_VANISHED", f"AVD terminated while waiting for player readiness: {liveness_reason}")
+                return self._build_result(vid, title, "INTERRUPTED_AVD_VANISHED", t_video_start, error=liveness_reason)
+            if self.mock_scenario:
+                player_ready = True
+                break
+            # Check if PlaybackActivity or playback state 3 (PLAYING) is active
+            logs, code = self.adb_cmd(["logcat", "-d", "-t", "80"])
+            if code == 0 and ("Playback is: 3" in logs or "PlaybackActivity" in logs or "STATE_READY" in logs):
+                player_ready = True
+                log("PLAYER_READY", f"PlaybackActivity/Player ready detected (+{round(time.time() - t_video_start, 2)}s)")
+                break
+            time.sleep(0.5)
+
+        if not player_ready and not self.mock_scenario:
+            log("PLAYER_WAIT_TIMEOUT", "Player ready marker not detected within window; attempting broadcast anyway")
 
         # 5. Inject Session Marker and Trigger Translation via Controller Action
         self.adb_cmd(["shell", "log", "-t", "VOX_MARKER", session_marker])
@@ -398,7 +413,8 @@ def main():
         print(f" - [{r['status']}] {r['id']}: {r['title']} (time={r['elapsed_sec']}s, ready={r['telemetry_ready']}, attached={r['telemetry_attached']}){err_str}", flush=True)
 
     print(f"OVERALL_TELEMETRY: {'PASS' if all_pass else 'FAIL'}", flush=True)
-    print(f"VOT_AUDIO_E2E: MANUAL_OWNER_CHECK_REQUIRED (Automated telemetry does NOT prove human audibility)", flush=True)
+    print(f"HUMAN_AUDIO: NOT_CHECKED (Automated telemetry does NOT evaluate human audibility, naturalness, or quality)", flush=True)
+    print(f"VOT_AUDIO_E2E: MANUAL_OWNER_CHECK_REQUIRED", flush=True)
 
     return 0 if all_pass else 1
 
