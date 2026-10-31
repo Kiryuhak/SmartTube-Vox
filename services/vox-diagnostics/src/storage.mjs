@@ -443,6 +443,43 @@ export class ReportStorage {
   }
 
   /**
+   * Bounded batch fetch for report payloads by report_ids.
+   * Avoids N+1 queries while ensuring that only requested payload strings
+   * are materialized in V8 memory.
+   *
+   * @param {string[]} reportIds
+   * @returns {Promise<Map<string, string>>} Map of report_id -> payload_json string
+   */
+  async getPayloadsByIds(reportIds) {
+    if (!Array.isArray(reportIds) || reportIds.length === 0) return new Map();
+    const ids = reportIds.filter(id => typeof id === 'string' && id.trim()).slice(0, 250);
+    if (ids.length === 0) return new Map();
+
+    if (this.db) {
+      const placeholders = ids.map(() => '?').join(', ');
+      const query = `SELECT report_id, payload_json FROM reports WHERE report_id IN (${placeholders}) LIMIT ?`;
+      const stmt = this.db.prepare(query);
+      const { results } = await stmt.bind(...ids, ids.length).all();
+      const map = new Map();
+      for (const row of (results || [])) {
+        if (row && row.report_id) {
+          map.set(row.report_id, row.payload_json);
+        }
+      }
+      return map;
+    } else {
+      const map = new Map();
+      for (const id of ids) {
+        const r = this.inMemoryReports.get(id);
+        if (r) {
+          map.set(id, r.payload_json || (r.payload ? JSON.stringify(r.payload) : null));
+        }
+      }
+      return map;
+    }
+  }
+
+  /**
    * Обновляет статус и/или заметки разработчика для отчёта.
    */
   async updateReport(reportId, { status, developerNotes, reason = '', actor = 'ADMIN', patch = '', commit = '' } = {}) {
@@ -599,7 +636,7 @@ export class ReportStorage {
   /**
    * Возвращает список отчётов с фильтрацией и пагинацией.
    */
-  async listReports({ platform, appVersion, errorCategory, status, statuses, reportPurpose, search, severity, device, signature, hasNotes, hasDuplicates, attention, since, until, sort = 'newest', cursor, limit = 50, offset = 0, includePayload = false, fast = false } = {}) {
+  async listReports({ platform, appVersion, errorCategory, status, statuses, reportPurpose, search, severity, device, signature, hasNotes, hasDuplicates, attention, since, until, sort = 'newest', cursor, limit = 50, offset = 0, includePayload = false, includePayloadBytes = false, fast = false } = {}) {
     const lim = Math.min(Math.max(1, limit), 100);
     const off = Math.max(0, offset);
 
@@ -675,11 +712,12 @@ export class ReportStorage {
       }
 
       const payloadCol = includePayload ? 'payload_json, ' : '';
+      const payloadBytesCol = (!includePayload && includePayloadBytes) ? 'length(cast(payload_json as blob)) AS payload_bytes, ' : '';
       const relatedCountCol = sort === 'repeats'
         ? `(SELECT COUNT(*) FROM reports related WHERE related.error_signature = reports.error_signature AND related.report_id != reports.report_id AND reports.error_signature != '') AS related_count`
         : `0 AS related_count`;
       let query = `SELECT report_id, created_at, schema_version, app_version, platform,
-                          device_family, error_category, ${payloadCol}expires_at, status, developer_notes,
+                          device_family, error_category, ${payloadCol}${payloadBytesCol}expires_at, status, developer_notes,
                           report_purpose, error_signature, severity, subsystem, stage,
                           event_error_category, updated_at,
                           ${relatedCountCol}
@@ -695,7 +733,7 @@ export class ReportStorage {
 
       // If related count was not calculated in query, and payload is NOT included (i.e. table view),
       // compute related counts efficiently for just this page of results unless fast mode is requested
-      if (sort !== 'repeats' && !includePayload && !fast && list.length > 0) {
+      if (sort !== 'repeats' && !includePayload && !includePayloadBytes && !fast && list.length > 0) {
         const sigs = [...new Set(list.map(r => r.error_signature).filter(Boolean))];
         if (sigs.length > 0) {
           const placeholders = sigs.map(() => '?').join(',');
@@ -773,6 +811,11 @@ export class ReportStorage {
         device_family: r.device_family,
         error_category: r.error_category,
         ...(includePayload ? { payload_json: r.payload_json, payload: r.payload } : {}),
+        ...(includePayloadBytes ? {
+          payload_bytes: r.payload_json
+            ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(r.payload_json, 'utf8') : new TextEncoder().encode(r.payload_json).length)
+            : (r.payload ? (typeof Buffer !== 'undefined' ? Buffer.byteLength(JSON.stringify(r.payload), 'utf8') : 2000) : 0),
+        } : {}),
         expires_at: r.expires_at,
         status: normalizeStatus(r.status),
         developer_notes: r.developer_notes,

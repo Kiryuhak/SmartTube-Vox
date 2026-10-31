@@ -75,11 +75,15 @@ export async function buildDiagnosticsZip(storage, options = {}) {
   // 1. Bounded, keyset-consistent paginated retrieval across the database
   let pageIndex = 0;
   const MAX_PAGES = 1000; // Safe limit allowing up to 100,000 reports
+  const supportsBoundedFetch = typeof storage.getPayloadsByIds === 'function';
 
   while (hasMore && pageIndex < MAX_PAGES) {
     pageIndex++;
     const remainingToFetch = MAX_EXPORT_REPORTS - reports.length;
-    const fetchLimit = remainingToFetch > 0 ? Math.min(PAGE_SIZE, remainingToFetch) : 1;
+    // When bounded fetch is supported, request remainingToFetch + 1 metadata records
+    // to detect EOF or truncation in a single metadata query without needing a separate probe query.
+    const probeMargin = (supportsBoundedFetch && remainingToFetch > 0) ? 1 : 0;
+    const fetchLimit = remainingToFetch > 0 ? Math.min(PAGE_SIZE + probeMargin, remainingToFetch + probeMargin) : 1;
     const needPayload = remainingToFetch > 0;
 
     const listParams = {
@@ -88,7 +92,8 @@ export async function buildDiagnosticsZip(storage, options = {}) {
       offset: offset,
       cursor: currentCursor || undefined,
       until: options.until || undefined,
-      includePayload: needPayload,
+      includePayload: !supportsBoundedFetch,
+      includePayloadBytes: supportsBoundedFetch,
       search: options.search,
       platform: options.platform,
       appVersion: options.appVersion,
@@ -99,11 +104,19 @@ export async function buildDiagnosticsZip(storage, options = {}) {
     };
 
     const page = await storage.listReports(listParams);
-    const items = Array.isArray(page) ? page : (page?.reports || []);
+    let items = Array.isArray(page) ? page : (page?.reports || []);
     if (items.length === 0) {
       break;
     }
 
+    let hasExtraProbeItem = false;
+    if (supportsBoundedFetch && remainingToFetch > 0 && items.length > remainingToFetch) {
+      hasExtraProbeItem = true;
+      items = items.slice(0, remainingToFetch);
+    }
+
+    let batchEstBytes = accumulatedBytes;
+    const candidateItems = [];
     for (const raw of items) {
       const reportId = raw.report_id || raw.reportId;
       if (!reportId || seenIds.has(reportId)) {
@@ -133,8 +146,97 @@ export async function buildDiagnosticsZip(storage, options = {}) {
         continue;
       }
 
-      // Check byte budget: when format === 'json', account for true serialized wire bytes
-      // (including duplicated structuredEvents/safeRecentEvents in sanitizedJson)
+      // Estimate byte size from metadata without loading full payload string into V8 memory
+      let estBytes;
+      if (typeof raw.payload_bytes === 'number' && raw.payload_bytes >= 0) {
+        // UTF-8 wire size estimate with envelope and duplication margin
+        estBytes = options.format === 'json'
+          ? Math.ceil(raw.payload_bytes * 1.35) + 512
+          : raw.payload_bytes + 256;
+      } else if (raw.payload_json && typeof raw.payload_json === 'string') {
+        estBytes = typeof Buffer !== 'undefined'
+          ? Buffer.byteLength(raw.payload_json, 'utf8')
+          : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(raw.payload_json).length : raw.payload_json.length);
+      } else if (raw.payload && typeof raw.payload === 'object') {
+        const s = JSON.stringify(raw.payload);
+        estBytes = typeof Buffer !== 'undefined' ? Buffer.byteLength(s, 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : 2000);
+      } else {
+        estBytes = 2000;
+      }
+
+      // Check byte budget BEFORE fetching payload
+      if ((reports.length + candidateItems.length >= 1) && (batchEstBytes + estBytes > MAX_EXPORT_BYTES)) {
+        isTruncated = true;
+        const lastIncluded = candidateItems.length > 0 ? candidateItems[candidateItems.length - 1].raw : reports[reports.length - 1];
+        nextCursor = `${lastIncluded.created_at || lastIncluded.createdAt}:${lastIncluded.report_id || lastIncluded.reportId}`;
+        hasMore = false;
+        break;
+      }
+
+      // Check max reports limit
+      if (reports.length + candidateItems.length >= MAX_EXPORT_REPORTS) {
+        isTruncated = true;
+        const lastIncluded = candidateItems.length > 0 ? candidateItems[candidateItems.length - 1].raw : reports[reports.length - 1];
+        nextCursor = `${lastIncluded.created_at || lastIncluded.createdAt}:${lastIncluded.report_id || lastIncluded.reportId}`;
+        hasMore = false;
+        break;
+      }
+
+      candidateItems.push({ raw, estBytes });
+      seenIds.add(reportId);
+      batchEstBytes += estBytes;
+
+      // Oversized singleton: if reports.length === 0 and this single report exceeds budget,
+      // allow this single report to guarantee progress, and immediately truncate!
+      if (reports.length === 0 && candidateItems.length === 1 && estBytes > MAX_EXPORT_BYTES) {
+        isTruncated = true;
+        hasMore = false;
+        break;
+      }
+    }
+
+    if (hasExtraProbeItem && reports.length + candidateItems.length >= MAX_EXPORT_REPORTS) {
+      isTruncated = true;
+      hasMore = false;
+    }
+
+    if (candidateItems.length === 0) {
+      if (isTruncated || !hasMore) {
+        break;
+      }
+      const lastRaw = items[items.length - 1];
+      if (lastRaw && (lastRaw.created_at || lastRaw.createdAt) && (lastRaw.report_id || lastRaw.reportId)) {
+        currentCursor = `${lastRaw.created_at || lastRaw.createdAt}:${lastRaw.report_id || lastRaw.reportId}`;
+      }
+      offset += items.length;
+      if (items.length < fetchLimit) {
+        hasMore = false;
+      }
+      continue;
+    }
+
+    // Stage 2: Fetch payloads ONLY for the chosen candidate IDs!
+    const idsToFetch = [];
+    for (const { raw } of candidateItems) {
+      if (!raw.payload_json && !raw.payload) {
+        const id = raw.report_id || raw.reportId;
+        if (id) idsToFetch.push(id);
+      }
+    }
+
+    let payloadMap = new Map();
+    if (idsToFetch.length > 0 && typeof storage.getPayloadsByIds === 'function') {
+      payloadMap = await storage.getPayloadsByIds(idsToFetch);
+    }
+
+    for (let i = 0; i < candidateItems.length; i++) {
+      const { raw } = candidateItems[i];
+      const reportId = raw.report_id || raw.reportId;
+      if (!raw.payload_json && !raw.payload && payloadMap.has(reportId)) {
+        raw.payload_json = payloadMap.get(reportId);
+      }
+
+      // Compute exact reportBytes
       let reportBytes;
       let precomputedSanitizedJson = null;
 
@@ -154,7 +256,9 @@ export async function buildDiagnosticsZip(storage, options = {}) {
         };
         precomputedSanitizedJson = prepareReportDownloadJson(fullReportData);
         const wireStr = JSON.stringify(precomputedSanitizedJson);
-        reportBytes = typeof Buffer !== 'undefined' ? Buffer.byteLength(wireStr, 'utf8') : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(wireStr).length : wireStr.length);
+        reportBytes = typeof Buffer !== 'undefined'
+          ? Buffer.byteLength(wireStr, 'utf8')
+          : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(wireStr).length : wireStr.length);
         raw._sanitizedJson = precomputedSanitizedJson;
       } else {
         reportBytes = (raw.payload_json && typeof raw.payload_json === 'string')
@@ -170,22 +274,28 @@ export async function buildDiagnosticsZip(storage, options = {}) {
         break;
       }
 
-      // If we have already reached the maximum requested reports, and another matching report is found,
-      // the archive is strictly truncated beyond the maximum limit.
-      if (reports.length >= MAX_EXPORT_REPORTS) {
-        isTruncated = true;
-        const lastIncluded = reports[reports.length - 1];
-        nextCursor = `${lastIncluded.created_at || lastIncluded.createdAt}:${lastIncluded.report_id || lastIncluded.reportId}`;
-        hasMore = false;
-        break;
-      }
-
       seenIds.add(reportId);
       reports.push(raw);
       accumulatedBytes += reportBytes;
+
+      if (reports.length >= MAX_EXPORT_REPORTS) {
+        if (i < candidateItems.length - 1 || items.length > candidateItems.length) {
+          isTruncated = true;
+          nextCursor = `${raw.created_at || raw.createdAt}:${reportId}`;
+          hasMore = false;
+          break;
+        }
+      }
     }
 
-    if (isTruncated || !hasMore) {
+    if (isTruncated) {
+      if (!nextCursor && reports.length > 0) {
+        const lastReport = reports[reports.length - 1];
+        nextCursor = `${lastReport.created_at || lastReport.createdAt}:${lastReport.report_id || lastReport.reportId}`;
+      }
+      break;
+    }
+    if (!hasMore) {
       break;
     }
 
