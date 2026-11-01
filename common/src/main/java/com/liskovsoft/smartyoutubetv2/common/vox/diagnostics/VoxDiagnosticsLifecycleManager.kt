@@ -85,6 +85,7 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
      * - очистке кэша;
      * - падении приложения.
      */
+    @JvmOverloads
     @Synchronized
     fun onAppStartup(currentVersion: String, now: Long = System.currentTimeMillis()) {
         if (isUserOptedOut()) {
@@ -130,6 +131,7 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
      * Если 192 часа истекли — автоматически выключает периодическую автодиагностику.
      * @return true если цикл истёк или неактивен, false если цикл ещё действует.
      */
+    @JvmOverloads
     @Synchronized
     fun checkExpiration(now: Long = System.currentTimeMillis()): Boolean {
         if (!isAutoDiagnosticsActive()) {
