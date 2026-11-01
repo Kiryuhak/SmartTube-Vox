@@ -363,7 +363,7 @@ object VoxChannelGroupDialogs {
                 UiOptionItem.from(
                     context.getString(R.string.vox_channel_group_channel_order),
                     {
-                        showReorderChannelsDialog(context, group, onUpdated)
+                        showReorderChannelsDialog(context, group, onUpdated = onUpdated)
                     }
                 )
             )
@@ -386,6 +386,8 @@ object VoxChannelGroupDialogs {
     private fun showReorderChannelsDialog(
         context: Context,
         group: VoxChannelGroup,
+        selectedChannelId: String? = null,
+        isRefresh: Boolean = false,
         onUpdated: Runnable? = null
     ) {
         val dialogPresenter = AppDialogPresenter.instance(context)
@@ -397,53 +399,74 @@ object VoxChannelGroupDialogs {
             return
         }
 
-        for (membership in memberships) {
-            val title = membership.channelTitle ?: membership.channelId
+        val selectedMembership = if (selectedChannelId != null) {
+            memberships.firstOrNull { it.channelId == selectedChannelId }
+        } else null
+
+        // 1. Если канал выбран для перемещения — показываем кнопки перемещения на месте без открытия новых Activity
+        if (selectedMembership != null) {
+            val selectedTitle = selectedMembership.channelTitle ?: selectedMembership.channelId
+            val idx = memberships.indexOf(selectedMembership)
+
+            if (idx > 0) {
+                dialogPresenter.appendSingleButton(
+                    UiOptionItem.from(
+                        "▲ " + context.getString(R.string.vox_channel_group_move_up) + " («$selectedTitle»)",
+                        {
+                            manager.moveChannelUp(group.id, selectedMembership.channelId)
+                            showReorderChannelsDialog(context, group, selectedMembership.channelId, isRefresh = true, onUpdated = onUpdated)
+                        }
+                    )
+                )
+            }
+
+            if (idx < memberships.size - 1) {
+                dialogPresenter.appendSingleButton(
+                    UiOptionItem.from(
+                        "▼ " + context.getString(R.string.vox_channel_group_move_down) + " («$selectedTitle»)",
+                        {
+                            manager.moveChannelDown(group.id, selectedMembership.channelId)
+                            showReorderChannelsDialog(context, group, selectedMembership.channelId, isRefresh = true, onUpdated = onUpdated)
+                        }
+                    )
+                )
+            }
+
             dialogPresenter.appendSingleButton(
                 UiOptionItem.from(
-                    title,
+                    context.getString(R.string.msg_done),
                     {
-                        showChannelMoveOptionsDialog(context, group, membership, onUpdated)
+                        showReorderChannelsDialog(context, group, null, isRefresh = true, onUpdated = onUpdated)
                     }
                 )
             )
         }
 
-        dialogPresenter.showDialog(context.getString(R.string.vox_channel_group_channel_order))
-    }
-
-    private fun showChannelMoveOptionsDialog(
-        context: Context,
-        group: VoxChannelGroup,
-        membership: VoxChannelGroupMembership,
-        onUpdated: Runnable? = null
-    ) {
-        val dialogPresenter = AppDialogPresenter.instance(context)
-        val manager = VoxChannelGroupManager.instance(context)
-        val title = membership.channelTitle ?: membership.channelId
-
-        dialogPresenter.appendSingleButton(
-            UiOptionItem.from(
-                context.getString(R.string.vox_channel_group_move_up),
-                {
-                    manager.moveChannelUp(group.id, membership.channelId)
-                    onUpdated?.run()
-                    showReorderChannelsDialog(context, group, onUpdated)
-                }
+        // 2. Список каналов с порядковыми номерами и маркером выбора
+        for ((index, membership) in memberships.withIndex()) {
+            val title = membership.channelTitle ?: membership.channelId
+            val isCurrentSelected = membership.channelId == selectedChannelId
+            val itemTitle = "${index + 1}. $title" + (if (isCurrentSelected) " ◄" else "")
+            dialogPresenter.appendSingleButton(
+                UiOptionItem.from(
+                    itemTitle,
+                    {
+                        val nextSelection = if (isCurrentSelected) null else membership.channelId
+                        showReorderChannelsDialog(context, group, nextSelection, isRefresh = true, onUpdated = onUpdated)
+                    }
+                )
             )
-        )
+        }
 
-        dialogPresenter.appendSingleButton(
-            UiOptionItem.from(
-                context.getString(R.string.vox_channel_group_move_down),
-                {
-                    manager.moveChannelDown(group.id, membership.channelId)
-                    onUpdated?.run()
-                    showReorderChannelsDialog(context, group, onUpdated)
-                }
-            )
-        )
+        dialogPresenter.setOnFinish {
+            onUpdated?.run()
+        }
 
-        dialogPresenter.showDialog(title)
+        val dialogTitle = context.getString(R.string.vox_channel_group_channel_order)
+        if (isRefresh) {
+            dialogPresenter.refreshDialog(dialogTitle)
+        } else {
+            dialogPresenter.showDialog(dialogTitle)
+        }
     }
 }

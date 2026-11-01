@@ -66,7 +66,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
 
-public class BrowsePresenter extends BasePresenter<BrowseView> implements SectionPresenter, VideoGroupPresenter, AccountChangeListener {
+public class BrowsePresenter extends BasePresenter<BrowseView> implements SectionPresenter, VideoGroupPresenter, AccountChangeListener, VoxChannelGroupManager.OnGroupsChangedListener {
     private static final String TAG = BrowsePresenter.class.getSimpleName();
     public static final int TYPE_DOWNLOADED = 23;
     @SuppressLint("StaticFieldLeak")
@@ -141,6 +141,10 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
 
         try {
             com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxHeartbeatManager.getInstance(getContext()).notifyUserActivity();
+        } catch (Exception ignored) {}
+
+        try {
+            VoxChannelGroupManager.instance(getContext()).addListener(this);
         } catch (Exception ignored) {}
     }
 
@@ -502,7 +506,17 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             return group;
         }
 
-        Set<String> channelIds = manager.getChannelIdsInGroup(selectedGroupId);
+        List<String> orderedIds = manager.getOrderedChannelIdsInGroup(selectedGroupId);
+        if (orderedIds == null || orderedIds.isEmpty()) {
+            return new VoxFilteredMediaGroup(group, Collections.emptyList());
+        }
+
+        Set<String> channelIds = new java.util.HashSet<>(orderedIds);
+        Map<String, Integer> orderIndexMap = new HashMap<>();
+        for (int i = 0; i < orderedIds.size(); i++) {
+            orderIndexMap.put(orderedIds.get(i), i);
+        }
+
         List<MediaItem> filtered = new ArrayList<>();
         for (MediaItem item : group.getMediaItems()) {
             if (item == null) {
@@ -518,7 +532,31 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
             }
         }
 
+        // Строго сохраняем заданный пользователем порядок каналов в группе
+        Collections.sort(filtered, (a, b) -> {
+            int idxA = getChannelOrderIndex(a, orderIndexMap);
+            int idxB = getChannelOrderIndex(b, orderIndexMap);
+            return Integer.compare(idxA, idxB);
+        });
+
         return new VoxFilteredMediaGroup(group, filtered);
+    }
+
+    private int getChannelOrderIndex(MediaItem item, Map<String, Integer> orderIndexMap) {
+        if (item == null) return Integer.MAX_VALUE;
+        String id = item.getChannelId();
+        if (id != null && orderIndexMap.containsKey(id)) {
+            return orderIndexMap.get(id);
+        }
+        String title = item.getTitle();
+        if (title != null && orderIndexMap.containsKey(title)) {
+            return orderIndexMap.get(title);
+        }
+        String author = item.getAuthor();
+        if (author != null && orderIndexMap.containsKey(author)) {
+            return orderIndexMap.get(author);
+        }
+        return Integer.MAX_VALUE;
     }
 
     public void updateChannelSectionTitle() {
@@ -583,6 +621,18 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         disposeActions();
         saveSelectedItems();
         VotOnboardingHelper.dismiss();
+        try {
+            VoxChannelGroupManager.instance(getContext()).removeListener(this);
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onGroupsChanged() {
+        VoxChannelGroupManager manager = VoxChannelGroupManager.instance(getContext());
+        if (manager.getSelectedGroupId() != null) {
+            updateChannelSorting();
+            refreshCurrentSection();
+        }
     }
 
     @Override
@@ -1439,7 +1489,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         if (item.channelGroupId != null) {
             String[] channelIds = ChannelGroupServiceWrapper.instance(getContext()).findChannelIdsForGroup(item.channelGroupId);
             if (channelIds == null || channelIds.length == 0) {
-                Set<String> voxIds = VoxChannelGroupManager.instance(getContext()).getChannelIdsInGroup(item.channelGroupId);
+                List<String> voxIds = VoxChannelGroupManager.instance(getContext()).getOrderedChannelIdsInGroup(item.channelGroupId);
                 if (voxIds != null && !voxIds.isEmpty()) {
                     channelIds = voxIds.toArray(new String[0]);
                 }

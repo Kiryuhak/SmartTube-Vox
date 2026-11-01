@@ -20,11 +20,20 @@ class VoxChannelGroupStorage(private val context: Context) {
 
     @Synchronized
     fun load(): Pair<List<VoxChannelGroup>, List<VoxChannelGroupMembership>> {
-        val raw = try {
+        var raw = try {
             prefs.getProfileData(PREF_KEY)
         } catch (e: Exception) {
             Log.e(TAG, "Error getting profile data: %s", e.message)
             null
+        }
+
+        // Резервный источник: если файл профиля пуст или отсутствует (напр. Dune HD / Haier TV), читаем из SharedPreferences
+        if (raw.isNullOrBlank()) {
+            raw = try {
+                prefs.getString(PREF_KEY, null)
+            } catch (e: Exception) {
+                null
+            }
         }
 
         if (raw.isNullOrBlank()) {
@@ -87,7 +96,14 @@ class VoxChannelGroupStorage(private val context: Context) {
             }
             root.put("memberships", membersArray)
 
-            prefs.setProfileData(PREF_KEY, root.toString())
+            val jsonStr = root.toString()
+            prefs.setProfileData(PREF_KEY, jsonStr)
+            try {
+                // Двойное сохранение в SharedPreferences для исключения потери на Dune HD / Haier TV
+                prefs.putString(PREF_KEY, jsonStr)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not mirror channel groups to SharedPreferences: %s", e.message)
+            }
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to serialize channel groups: %s", e.message)

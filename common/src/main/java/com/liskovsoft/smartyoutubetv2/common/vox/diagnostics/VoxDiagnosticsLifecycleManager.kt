@@ -5,26 +5,26 @@ import android.content.SharedPreferences
 import com.liskovsoft.sharedutils.mylogger.Log
 
 /**
- * Менеджер жизненного цикла автоматической анонимной диагностики SmartTube VOX.
+ * Менеджер жизненного цикла автоматической анонимной диагностики SmartTube VOX (Prompt #114).
  *
- * Политика:
- * - Режим A (стандартный):
- *   - Запускается только при первой установке или реальном обновлении версии приложения.
- *   - Интервал периодической отправки: 6 часов.
- *   - Продолжительность: 3 календарных суток (72 часа) от cycleStartedAt.
- *   - По истечении срока автоматическая отправка отключается.
+ * Политика (один последовательный цикл 8 суток / 192 часа):
+ * - Фаза 1 (Активный мониторинг):
+ *   - От T0 (первый запуск после установки или обновления versionCode) до T0 + 72ч (первые 3 суток).
+ *   - Интервал периодической отправки: каждые 6 часов.
  *
- * - Режим B (расширенная диагностика):
- *   - Интервал периодической отправки: 12 часов.
- *   - Продолжительность: 5 суток (120 часов) от первоначального cycleStartedAt текущей версии.
- *   - По истечении срока авто-отправка отключается, а галочка расширенной диагностики снимается.
- *   - Режим B замещает стандартный график (не добавляет 5 суток поверх 3).
- *   - Первоначальный cycleStartedAt при смене режима строго сохраняется.
- *   - Если 120 часов истекли, повторный запуск невозможен до следующей версии приложения.
+ * - Фаза 2 (Контроль стабильности):
+ *   - От T0 + 72ч до T0 + 192ч (последующие 5 суток, суммарно 8 суток).
+ *   - Интервал периодической отправки: каждые 12 часов.
+ *   - Переход между Фазой 1 и Фазой 2 происходит автоматически и последовательно.
  *
- * - Приоритет согласия:
- *   - Явный отказ пользователя (opt-out) имеет абсолютный приоритет над расписанием и обновлениями.
- *   - Ручная отправка отчёта всегда остаётся доступной.
+ * - После T0 + 192ч:
+ *   - 8 суток завершены: периодическая диагностика полностью выключена до следующего реального обновления.
+ *
+ * - Важные гарантии:
+ *   - T0 строго фиксируется при первом запуске нового versionCode и сохраняется при перезапусках, смене часовых поясов и крэшах.
+ *   - Явный отказ пользователя (opt-out) имеет абсолютный приоритет и немедленно блокирует периодическую диагностику и heartbeat.
+ *   - Критические ошибки (FATAL, ANR, PLAYER_RECOVERY_FAILED) обрабатываются через отдельную срочную очередь немедленной отправки.
+ *   - Heartbeat активен раз в 30 минут только при активном сеансе пользователя.
  */
 class VoxDiagnosticsLifecycleManager private constructor(private val context: Context) {
 
@@ -48,10 +48,17 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
         const val KEY_USER_EXPLICIT_OPT_OUT = "diag_user_opt_out"
         const val KEY_LAST_SUBMISSION_TIMESTAMP = "diag_last_submission_ts"
 
-        const val STANDARD_INTERVAL_MS = 6 * 60 * 60 * 1000L           // 6 часов
-        const val EXTENDED_INTERVAL_MS = 12 * 60 * 60 * 1000L          // 12 часов
-        const val STANDARD_CYCLE_DURATION_MS = 72 * 60 * 60 * 1000L     // 3 суток (72 часа)
-        const val EXTENDED_CYCLE_DURATION_MS = 120 * 60 * 60 * 1000L    // 5 суток (120 часов)
+        // Канонические интервалы и фазы последовательного 8-дневного цикла
+        const val PHASE1_INTERVAL_MS = 6 * 60 * 60 * 1000L           // 6 часов (Фаза 1)
+        const val PHASE2_INTERVAL_MS = 12 * 60 * 60 * 1000L          // 12 часов (Фаза 2)
+        const val PHASE1_DURATION_MS = 72 * 60 * 60 * 1000L          // 72 часа (0..72ч)
+        const val TOTAL_CYCLE_DURATION_MS = 192 * 60 * 60 * 1000L    // 8 суток / 192 часа (0..192ч)
+
+        // Обратная совместимость для существующих вызовов
+        const val STANDARD_INTERVAL_MS = PHASE1_INTERVAL_MS
+        const val EXTENDED_INTERVAL_MS = PHASE2_INTERVAL_MS
+        const val STANDARD_CYCLE_DURATION_MS = PHASE1_DURATION_MS
+        const val EXTENDED_CYCLE_DURATION_MS = TOTAL_CYCLE_DURATION_MS
 
         @Volatile
         private var sInstance: VoxDiagnosticsLifecycleManager? = null
@@ -66,16 +73,16 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
 
     /**
      * Обрабатывает запуск приложения.
-     * Запускает новый цикл ТОЛЬКО при:
+     * Запускает новый цикл 8 суток ТОЛЬКО при:
      * 1. Первой установке (lastAppVersion == null).
      * 2. Реальном обновлении версии приложения (lastAppVersion != currentVersion).
      *
-     * НЕ сбрасывает цикл при:
+     * НЕ сбрасывает T0 при:
      * - обычном перезапуске;
      * - перезагрузке ОС;
-     * - падении;
-     * - очистке кеша;
-     * - повторном открытии настроек.
+     * - смене часового пояса;
+     * - очистке кэша;
+     * - падении приложения.
      */
     @Synchronized
     fun onAppStartup(currentVersion: String, now: Long = System.currentTimeMillis()) {
@@ -88,14 +95,14 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
 
         if (lastVersion == null) {
             // Первая установка приложения
-            Log.i(TAG, "First app installation detected ($currentVersion), starting new 72h standard cycle")
+            Log.i(TAG, "First app installation detected ($currentVersion), starting 8-day sequential cycle (72h @ 6h, then 120h @ 12h)")
             startNewCycle(currentVersion, now)
         } else if (lastVersion != currentVersion) {
             // Реальное обновление версии приложения
-            Log.i(TAG, "App updated from $lastVersion to $currentVersion, starting new 72h standard cycle")
+            Log.i(TAG, "App updated from $lastVersion to $currentVersion, starting fresh 8-day sequential cycle")
             startNewCycle(currentVersion, now)
         } else {
-            // Повторный запуск той же версии — не сбрасываем cycleStartedAt, проверяем истечение
+            // Повторный запуск той же версии — T0 сохраняется строго
             checkExpiration(now)
         }
     }
@@ -105,21 +112,21 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
             .putLong(KEY_CYCLE_STARTED_AT, now)
             .putString(KEY_LAST_APP_VERSION, version)
             .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, true)
-            .putBoolean(KEY_EXTENDED_MODE_ENABLED, false) // Сброс режима на стандартный для новой версии
+            .putBoolean(KEY_EXTENDED_MODE_ENABLED, false)
             .putLong(KEY_LAST_SUBMISSION_TIMESTAMP, 0L)
             .apply()
 
         VoxSafeLogger.i(
             VoxLogCategory.DIAGNOSTICS,
             VoxLogCode.AUTO_DIAG_STARTED,
-            "Запущен новый цикл автоматической диагностики (72ч, интервал 6ч)",
+            "Запущен новый 8-дневный цикл автоматической диагностики (Фаза 1: 0-72ч каждые 6ч; Фаза 2: 72-192ч каждые 12ч)",
             mapOf("version" to version, "cycleStartedAt" to now.toString())
         )
     }
 
     /**
-     * Проверяет истечение срока действия автоматической диагностики.
-     * Если срок истёк — автоматически выключает автодиагностику и снимает расширенную галочку.
+     * Проверяет истечение срока действия автоматической диагностики (192 часа / 8 суток).
+     * Если 192 часа истекли — автоматически выключает периодическую автодиагностику.
      * @return true если цикл истёк или неактивен, false если цикл ещё действует.
      */
     @Synchronized
@@ -135,11 +142,9 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
         }
 
         val elapsed = now - startedAt
-        val isExtended = isExtendedModeEnabled()
-        val maxDuration = if (isExtended) EXTENDED_CYCLE_DURATION_MS else STANDARD_CYCLE_DURATION_MS
 
-        if (elapsed >= maxDuration) {
-            Log.i(TAG, "Automatic diagnostics cycle expired (elapsed=${elapsed / 3_600_000}h >= ${maxDuration / 3_600_000}h), disabling")
+        if (elapsed >= TOTAL_CYCLE_DURATION_MS) {
+            Log.i(TAG, "Automatic diagnostics cycle expired (elapsed=${elapsed / 3_600_000}h >= 192h / 8 days), disabling periodic diagnostics")
             prefs.edit()
                 .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, false)
                 .putBoolean(KEY_EXTENDED_MODE_ENABLED, false)
@@ -148,8 +153,8 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
             VoxSafeLogger.i(
                 VoxLogCategory.DIAGNOSTICS,
                 VoxLogCode.AUTO_DIAG_STOPPED,
-                "Цикл автодиагностики завершён по истечении времени",
-                mapOf("elapsedHours" to (elapsed / 3_600_000).toString(), "mode" to if (isExtended) "EXTENDED" else "STANDARD")
+                "Цикл автодиагностики завершён (8 суток истекли)",
+                mapOf("elapsedHours" to (elapsed / 3_600_000).toString())
             )
             return true
         }
@@ -168,70 +173,63 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
     }
 
     /**
-     * Проверяет, можно ли отправить очередной периодический отчёт с учётом интервала (6ч или 12ч).
+     * Проверяет, можно ли отправить очередной периодический отчёт с учётом текущей фазы:
+     * - Фаза 1 (0..72ч): интервал 6 часов;
+     * - Фаза 2 (72..192ч): интервал 12 часов.
      */
     @Synchronized
     fun canSendPeriodic(now: Long = System.currentTimeMillis()): Boolean {
         if (!isAutoDiagnosticsPermitted(now)) return false
 
         val lastSub = getLastSubmissionTimestamp()
-        val interval = getCurrentIntervalMs()
+        val interval = getCurrentIntervalMs(now)
 
         return lastSub == 0L || (now - lastSub) >= interval
     }
 
     /**
-     * Возвращает желаемый интервал отправки для текущего режима.
+     * Возвращает текущий желаемый интервал отправки в зависимости от возраста цикла:
+     * - менее 72 часов: 6 часов;
+     * - от 72 до 192 часов: 12 часов.
      */
-    fun getCurrentIntervalMs(): Long {
-        return if (isExtendedModeEnabled()) EXTENDED_INTERVAL_MS else STANDARD_INTERVAL_MS
+    fun getCurrentIntervalMs(now: Long = System.currentTimeMillis()): Long {
+        val startedAt = getCycleStartedAt()
+        if (startedAt <= 0L) return PHASE1_INTERVAL_MS
+        val elapsed = now - startedAt
+        return if (elapsed < PHASE1_DURATION_MS) PHASE1_INTERVAL_MS else PHASE2_INTERVAL_MS
     }
 
     /**
-     * Включение или выключение режима расширенной диагностики (Mode B).
-     * - Сохраняет первоначальный cycleStartedAt (не сбрасывает срок).
-     * - Если прошло >= 120ч от начала цикла, включить нельзя (возвращает false).
-     * - Если стандартный цикл (72ч) уже завершился, но 120ч ещё не прошло,
-     *   включение разрешено и действует строго до истечения 120ч.
+     * Возвращает true, если цикл находится в Фазе 2 (контроль стабильности, 72..192ч).
+     */
+    @JvmOverloads
+    fun isExtendedModeEnabled(now: Long = System.currentTimeMillis()): Boolean {
+        val startedAt = getCycleStartedAt()
+        if (startedAt <= 0L) return false
+        val elapsed = now - startedAt
+        return elapsed in PHASE1_DURATION_MS until TOTAL_CYCLE_DURATION_MS && isAutoDiagnosticsActive()
+    }
+
+    /**
+     * Совместимость с переключателем в UI настроек (сохраняет T0).
      */
     @Synchronized
     fun setExtendedMode(enabled: Boolean, now: Long = System.currentTimeMillis()): Boolean {
         if (isUserOptedOut()) return false
-
         val startedAt = getCycleStartedAt()
         if (startedAt <= 0L) return false
 
         val elapsed = now - startedAt
-
-        if (enabled) {
-            if (elapsed >= EXTENDED_CYCLE_DURATION_MS) {
-                Log.w(TAG, "Cannot enable extended diagnostics: total duration 120h already expired for current version")
-                checkExpiration(now)
-                return false
-            }
-
-            prefs.edit()
-                .putBoolean(KEY_EXTENDED_MODE_ENABLED, true)
-                .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, true)
-                .apply()
-
-            VoxSafeLogger.i(
-                VoxLogCategory.DIAGNOSTICS,
-                VoxLogCode.AUTO_DIAG_STARTED,
-                "Включена расширенная диагностика (интервал 12ч, до 120ч от начала версии)",
-                mapOf("remainingHours" to ((EXTENDED_CYCLE_DURATION_MS - elapsed) / 3_600_000).toString())
-            )
-            return true
-        } else {
-            val autoActive = elapsed < STANDARD_CYCLE_DURATION_MS
-            prefs.edit()
-                .putBoolean(KEY_EXTENDED_MODE_ENABLED, false)
-                .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, autoActive)
-                .apply()
-
-            Log.i(TAG, "Extended diagnostics disabled by user (standard autoActive=$autoActive)")
-            return true
+        if (elapsed >= TOTAL_CYCLE_DURATION_MS) {
+            checkExpiration(now)
+            return false
         }
+
+        prefs.edit()
+            .putBoolean(KEY_EXTENDED_MODE_ENABLED, enabled)
+            .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, true)
+            .apply()
+        return true
     }
 
     /**
@@ -257,11 +255,11 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
                 .putBoolean(KEY_USER_EXPLICIT_OPT_OUT, false)
                 .apply()
 
-            // Если время цикла текущей версии ещё не вышло — возобновляем
+            // Если время 8-дневного цикла текущей версии ещё не вышло — возобновляем
             val startedAt = getCycleStartedAt()
             if (startedAt > 0L) {
                 val elapsed = now - startedAt
-                if (elapsed < STANDARD_CYCLE_DURATION_MS) {
+                if (elapsed < TOTAL_CYCLE_DURATION_MS) {
                     setAutoDiagnosticsActive(true)
                 }
             }
@@ -275,8 +273,6 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
     private fun setAutoDiagnosticsActive(active: Boolean) {
         prefs.edit().putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, active).apply()
     }
-
-    fun isExtendedModeEnabled(): Boolean = prefs.getBoolean(KEY_EXTENDED_MODE_ENABLED, false)
 
     fun getCycleStartedAt(): Long = prefs.getLong(KEY_CYCLE_STARTED_AT, 0L)
 
@@ -301,16 +297,18 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
             return "Не активна"
         }
         val elapsed = now - startedAt
-        val isExtended = isExtendedModeEnabled()
-        val limit = if (isExtended) EXTENDED_CYCLE_DURATION_MS else STANDARD_CYCLE_DURATION_MS
 
-        if (elapsed >= limit || !isAutoDiagnosticsActive()) {
-            return "Завершено (срок истёк)"
+        if (elapsed >= TOTAL_CYCLE_DURATION_MS || !isAutoDiagnosticsActive()) {
+            return "Завершено (8 суток истекли)"
         }
 
-        val remainingHours = ((limit - elapsed) / 3_600_000L).coerceAtLeast(0L)
-        val modeName = if (isExtended) "Расширенная (12ч)" else "Стандартная (6ч)"
-        return "$modeName · осталось ${remainingHours}ч"
+        val remainingTotalHours = ((TOTAL_CYCLE_DURATION_MS - elapsed) / 3_600_000L).coerceAtLeast(0L)
+        return if (elapsed < PHASE1_DURATION_MS) {
+            val phase1Remaining = ((PHASE1_DURATION_MS - elapsed) / 3_600_000L).coerceAtLeast(0L)
+            "Активный мониторинг (интервал 6ч, фаза 1: ещё ${phase1Remaining}ч, всего: ${remainingTotalHours}ч)"
+        } else {
+            "Контроль стабильности (интервал 12ч, фаза 2, осталось ${remainingTotalHours}ч)"
+        }
     }
 
     /**

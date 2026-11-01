@@ -94,9 +94,9 @@ class VoxHeartbeatManagerTest {
     @Test
     fun testHeartbeatIndependentOfDiagnosticsCycleExpiration() {
         val now = System.currentTimeMillis()
-        // Start diagnostics cycle 100 hours ago (> 72 hours standard cycle expiration)
-        lifecycleManager.onAppStartup("32.56-vox.9.2-rc.1", now - (100 * 3600 * 1000L))
-        assertTrue("Diagnostics cycle must be expired after 100 hours", !lifecycleManager.isAutoDiagnosticsPermitted(now))
+        // Start diagnostics cycle 200 hours ago (> 192 hours / 8 days full cycle expiration)
+        lifecycleManager.onAppStartup("32.56-vox.9.2-rc.1", now - (200 * 3600 * 1000L))
+        assertTrue("Diagnostics cycle must be expired after 200 hours (> 192h)", !lifecycleManager.isAutoDiagnosticsPermitted(now))
 
         // Heartbeat should still dispatch cleanly if 30 minutes elapsed and user did not opt out
         heartbeatManager.setLastHeartbeatSentMs(now - (35 * 60 * 1000L))
@@ -104,7 +104,7 @@ class VoxHeartbeatManagerTest {
 
         heartbeatManager.notifyUserActivity()
 
-        assertNotNull("Heartbeat must dispatch even after 72h/120h diagnostics cycle expires", VoxHeartbeatManager.lastSentPayloadForTesting)
+        assertNotNull("Heartbeat must dispatch even after 192h diagnostics cycle expires", VoxHeartbeatManager.lastSentPayloadForTesting)
     }
 
     @Test

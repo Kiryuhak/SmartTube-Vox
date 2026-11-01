@@ -16,6 +16,9 @@ class VoxDiagnosticsLifecycleTest {
     private lateinit var context: Context
     private lateinit var manager: VoxDiagnosticsLifecycleManager
 
+    private val hourMs = 3_600_000L
+    private val minuteMs = 60_000L
+
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
@@ -24,114 +27,137 @@ class VoxDiagnosticsLifecycleTest {
     }
 
     @Test
-    fun testFirstInstallStartsStandardCycle72h() {
-        val startTime = 1000000L
-        manager.onAppStartup("9.2.01", startTime)
+    fun testEightDaySequentialLifecycleBoundaries() {
+        val t0 = 1_000_000_000L
+        manager.onAppStartup("32.56-vox.9.2-rc.11", t0)
 
-        assertTrue("Auto diagnostics should be active after first install", manager.isAutoDiagnosticsActive())
-        assertFalse("Extended mode should be false by default", manager.isExtendedModeEnabled())
-        assertEquals(startTime, manager.getCycleStartedAt())
-        assertEquals("9.2.01", manager.getLastAppVersion())
+        // 1. At T0: Phase 1 active, 6h interval, not extended mode
+        assertTrue("Auto diagnostics should be active at T0", manager.isAutoDiagnosticsActive())
+        assertTrue("Auto diagnostics permitted at T0", manager.isAutoDiagnosticsPermitted(t0))
+        assertEquals(t0, manager.getCycleStartedAt())
+        assertEquals("32.56-vox.9.2-rc.11", manager.getLastAppVersion())
+        assertEquals(6 * hourMs, manager.getCurrentIntervalMs(t0))
+        assertFalse("Extended mode is false in Phase 1", manager.isExtendedModeEnabled(t0))
 
-        // At 1 hour, permitted
-        assertTrue(manager.isAutoDiagnosticsPermitted(startTime + 3_600_000L))
+        // Initial periodic check: lastSubmission == 0 -> allowed
+        assertTrue(manager.canSendPeriodic(t0))
+        manager.setLastSubmissionTimestamp(t0)
 
-        // Check periodic interval: initial submission permitted (lastSubmission == 0)
-        assertTrue(manager.canSendPeriodic(startTime + 1000L))
+        // 2. Boundary: T0 + 5h 59m (Phase 1, cannot send periodic yet)
+        val t5h59m = t0 + 5 * hourMs + 59 * minuteMs
+        assertTrue(manager.isAutoDiagnosticsPermitted(t5h59m))
+        assertEquals(6 * hourMs, manager.getCurrentIntervalMs(t5h59m))
+        assertFalse("Cannot send periodic before 6h interval elapsed", manager.canSendPeriodic(t5h59m))
 
-        // After submission, next send requires 6h interval
-        manager.setLastSubmissionTimestamp(startTime + 1000L)
-        assertFalse(manager.canSendPeriodic(startTime + 3_600_000L)) // only 1h passed
-        assertTrue(manager.canSendPeriodic(startTime + 6 * 3_600_000L + 2000L)) // 6h+ passed
+        // 3. Boundary: T0 + 6h (Phase 1, can send next periodic)
+        val t6h = t0 + 6 * hourMs
+        assertTrue(manager.isAutoDiagnosticsPermitted(t6h))
+        assertTrue("Can send periodic at 6h", manager.canSendPeriodic(t6h))
+        manager.setLastSubmissionTimestamp(t6h)
 
-        // At 71 hours, still permitted
-        assertTrue(manager.isAutoDiagnosticsPermitted(startTime + 71 * 3_600_000L))
+        // 4. Boundary: T0 + 71h 59m (end of Phase 1)
+        val t71h59m = t0 + 71 * hourMs + 59 * minuteMs
+        assertTrue(manager.isAutoDiagnosticsPermitted(t71h59m))
+        assertEquals(6 * hourMs, manager.getCurrentIntervalMs(t71h59m))
+        assertFalse(manager.isExtendedModeEnabled(t71h59m))
 
-        // At 72 hours, expired and disabled
-        assertFalse(manager.isAutoDiagnosticsPermitted(startTime + 72 * 3_600_000L + 1L))
-        assertFalse("Auto diagnostics must be inactive after 72h expiration", manager.isAutoDiagnosticsActive())
+        // 5. Boundary: T0 + 72h (transition to Phase 2: stability control, 12h interval)
+        val t72h = t0 + 72 * hourMs
+        assertTrue(manager.isAutoDiagnosticsPermitted(t72h))
+        assertEquals(12 * hourMs, manager.getCurrentIntervalMs(t72h))
+        assertTrue("Extended mode is true in Phase 2", manager.isExtendedModeEnabled(t72h))
+        // Since last submission was at 6h, can send at 72h
+        assertTrue(manager.canSendPeriodic(t72h))
+        manager.setLastSubmissionTimestamp(t72h)
+
+        // In Phase 2, interval is 12h: at 72h + 6h = 78h cannot send yet
+        val t78h = t72h + 6 * hourMs
+        assertFalse("In Phase 2, 6h is not enough for interval", manager.canSendPeriodic(t78h))
+
+        // 6. Boundary: T0 + 84h (72h + 12h -> second submission in Phase 2 permitted)
+        val t84h = t0 + 84 * hourMs
+        assertTrue("At 84h (12h after 72h), periodic submission permitted", manager.canSendPeriodic(t84h))
+        manager.setLastSubmissionTimestamp(t84h)
+
+        // 7. Boundary: T0 + 191h 59m (last minute of Phase 2 / 8 days)
+        val t191h59m = t0 + 191 * hourMs + 59 * minuteMs
+        assertTrue(manager.isAutoDiagnosticsPermitted(t191h59m))
+        assertEquals(12 * hourMs, manager.getCurrentIntervalMs(t191h59m))
+        assertTrue(manager.isExtendedModeEnabled(t191h59m))
+
+        // 8. Boundary: T0 + 192h (exact expiration moment)
+        val t192h = t0 + 192 * hourMs
+        assertFalse("At 192h (8 days), cycle expires and isAutoDiagnosticsPermitted must be false", manager.isAutoDiagnosticsPermitted(t192h))
+        assertFalse("isAutoDiagnosticsActive must become false after 192h", manager.isAutoDiagnosticsActive())
+        assertFalse("Extended mode is false after cycle expiration", manager.isExtendedModeEnabled(t192h))
+        assertFalse("Cannot send periodic after expiration", manager.canSendPeriodic(t192h))
+
+        // 9. Boundary: T0 + 192h + 1m
+        val t192h1m = t0 + 192 * hourMs + 1 * minuteMs
+        assertFalse("Past 192h, auto diagnostics remains disabled", manager.isAutoDiagnosticsPermitted(t192h1m))
     }
 
     @Test
     fun testAppRestartDoesNotResetCycleTimer() {
-        val startTime = 1000000L
-        manager.onAppStartup("9.2.01", startTime)
-        assertEquals(startTime, manager.getCycleStartedAt())
+        val t0 = 1_000_000_000L
+        manager.onAppStartup("32.56-vox.9.2-rc.11", t0)
+        assertEquals(t0, manager.getCycleStartedAt())
 
-        // App reboots 10 hours later
-        manager.onAppStartup("9.2.01", startTime + 10 * 3_600_000L)
-        assertEquals("cycleStartedAt must NOT be reset on same-version restart", startTime, manager.getCycleStartedAt())
+        // App reboots 48 hours later (Phase 1)
+        manager.onAppStartup("32.56-vox.9.2-rc.11", t0 + 48 * hourMs)
+        assertEquals("cycleStartedAt must NOT be reset on same-version restart", t0, manager.getCycleStartedAt())
+        assertTrue(manager.isAutoDiagnosticsPermitted(t0 + 48 * hourMs))
 
-        // Check expiration at 72 hours from original start
-        assertFalse(manager.isAutoDiagnosticsPermitted(startTime + 73 * 3_600_000L))
+        // App reboots 100 hours later (Phase 2)
+        manager.onAppStartup("32.56-vox.9.2-rc.11", t0 + 100 * hourMs)
+        assertEquals("cycleStartedAt must NOT be reset", t0, manager.getCycleStartedAt())
+        assertTrue(manager.isAutoDiagnosticsPermitted(t0 + 100 * hourMs))
+        assertEquals(12 * hourMs, manager.getCurrentIntervalMs(t0 + 100 * hourMs))
+
+        // App reboots 200 hours later (Expired)
+        manager.onAppStartup("32.56-vox.9.2-rc.11", t0 + 200 * hourMs)
+        assertFalse("Auto diagnostics must remain expired on reboot past 192h", manager.isAutoDiagnosticsPermitted(t0 + 200 * hourMs))
     }
 
     @Test
     fun testNewVersionStartsFreshCycle() {
-        val startTime = 1000000L
-        manager.onAppStartup("9.1.00", startTime)
-        assertEquals("9.1.00", manager.getLastAppVersion())
+        val t0 = 1_000_000_000L
+        manager.onAppStartup("32.56-vox.9.2-rc.10", t0)
+        assertEquals("32.56-vox.9.2-rc.10", manager.getLastAppVersion())
 
-        val updateTime = startTime + 100 * 3_600_000L // 100h later (v9.1 already expired)
+        val updateTime = t0 + 200 * hourMs // 200h later (v10 expired)
         assertFalse(manager.isAutoDiagnosticsPermitted(updateTime))
 
-        // App updated to 9.2.01
-        manager.onAppStartup("9.2.01", updateTime)
-        assertEquals("9.2.01", manager.getLastAppVersion())
+        // App updated to RC.11
+        manager.onAppStartup("32.56-vox.9.2-rc.11", updateTime)
+        assertEquals("32.56-vox.9.2-rc.11", manager.getLastAppVersion())
         assertEquals("Fresh cycle start time must be update time", updateTime, manager.getCycleStartedAt())
         assertTrue("Auto diagnostics reactivated for new app version", manager.isAutoDiagnosticsActive())
-    }
-
-    @Test
-    fun testExtendedModeDuration120hFromOriginalStart() {
-        val startTime = 1000000L
-        manager.onAppStartup("9.2.01", startTime)
-
-        // At 24h, user enables Extended Diagnostics
-        val enableTime = startTime + 24 * 3_600_000L
-        val enabled = manager.setExtendedMode(true, enableTime)
-        assertTrue("Enabling extended mode should succeed within 120h", enabled)
-        assertTrue(manager.isExtendedModeEnabled())
-        assertEquals(12 * 3_600_000L, manager.getCurrentIntervalMs())
-        assertEquals("Original cycleStartedAt must be preserved", startTime, manager.getCycleStartedAt())
-
-        // At 75h: standard (72h) would be expired, but extended (120h) is still active
-        assertTrue("Extended mode must keep auto diagnostics active at 75h", manager.isAutoDiagnosticsPermitted(startTime + 75 * 3_600_000L))
-
-        // At 120h + 1s: expired
-        val expireTime = startTime + 120 * 3_600_000L + 1000L
-        assertFalse("Extended mode must expire after 120h from version cycle start", manager.isAutoDiagnosticsPermitted(expireTime))
-        assertFalse(manager.isAutoDiagnosticsActive())
-        assertFalse("Extended toggle must be cleared after expiration", manager.isExtendedModeEnabled())
-    }
-
-    @Test
-    fun testExtendedModeCannotBeEnabledAfter120hExpired() {
-        val startTime = 1000000L
-        manager.onAppStartup("9.2.01", startTime)
-
-        // At 121h, user attempts to enable extended mode
-        val lateAttempt = startTime + 121 * 3_600_000L
-        val enabled = manager.setExtendedMode(true, lateAttempt)
-        assertFalse("Enabling extended mode after 120h total duration must fail", enabled)
-        assertFalse(manager.isExtendedModeEnabled())
-        assertFalse(manager.isAutoDiagnosticsActive())
+        assertTrue("Permitted at start of fresh cycle", manager.isAutoDiagnosticsPermitted(updateTime))
+        assertEquals(6 * hourMs, manager.getCurrentIntervalMs(updateTime))
     }
 
     @Test
     fun testUserExplicitOptOutOverridesAll() {
-        val startTime = 1000000L
-        manager.onAppStartup("9.2.01", startTime)
-        assertTrue(manager.isAutoDiagnosticsPermitted(startTime + 1000L))
+        val t0 = 1_000_000_000L
+        manager.onAppStartup("32.56-vox.9.2-rc.11", t0)
+        assertTrue(manager.isAutoDiagnosticsPermitted(t0 + 1000L))
 
         // User explicitly opts out
-        manager.setUserExplicitOptOut(true, startTime + 2000L)
+        manager.setUserExplicitOptOut(true, t0 + 2000L)
         assertTrue(manager.isUserOptedOut())
         assertFalse(manager.isAutoDiagnosticsActive())
-        assertFalse(manager.isAutoDiagnosticsPermitted(startTime + 3000L))
+        assertFalse(manager.isAutoDiagnosticsPermitted(t0 + 3000L))
+        assertFalse(manager.canSendPeriodic(t0 + 3000L))
 
-        // Next app launch of new version does NOT re-enable if user opted out
-        manager.onAppStartup("9.3.00", startTime + 10000L)
-        assertFalse("App update must not override explicit user opt-out", manager.isAutoDiagnosticsPermitted(startTime + 11000L))
+        // App update must NOT override user explicit opt-out
+        manager.onAppStartup("32.56-vox.9.2-rc.12", t0 + 10000L)
+        assertFalse("App update must not override explicit user opt-out", manager.isAutoDiagnosticsPermitted(t0 + 11000L))
+
+        // User changes mind and re-enables
+        manager.setUserExplicitOptOut(false, t0 + 12000L)
+        assertFalse(manager.isUserOptedOut())
+        assertTrue(manager.isAutoDiagnosticsActive())
+        assertTrue(manager.isAutoDiagnosticsPermitted(t0 + 13000L))
     }
 }
