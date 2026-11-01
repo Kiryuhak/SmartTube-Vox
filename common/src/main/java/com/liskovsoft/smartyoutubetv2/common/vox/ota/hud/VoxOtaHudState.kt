@@ -138,7 +138,7 @@ object VoxOtaDisplayHelper {
     }
 
     fun formatFileSize(bytes: Long): String {
-        if (bytes <= 0L) return "368 МБ"
+        if (bytes <= 0L) return "—"
         val mb = bytes / (1024.0 * 1024.0)
         return if (mb >= 1000) {
             String.format(Locale.US, "%.1f ГБ", mb / 1024.0)
@@ -160,7 +160,11 @@ object VoxOtaDisplayHelper {
 
     fun formatProgressSize(bytesRead: Long, totalBytes: Long): String {
         val readMb = bytesRead / (1024 * 1024)
-        val totalMb = if (totalBytes > 0L) totalBytes / (1024 * 1024) else 368L
-        return "$readMb МБ / $totalMb МБ"
+        return if (totalBytes > 0L) {
+            val totalMb = totalBytes / (1024 * 1024)
+            "$readMb МБ / $totalMb МБ"
+        } else {
+            "$readMb МБ"
+        }
     }
 }

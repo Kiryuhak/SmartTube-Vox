@@ -79,12 +79,14 @@ object VoxDiagnosticsPolicy {
         val journeyMode = try { VoxUserJourneyRecorder.instance(context).getMode() } catch (e: Throwable) { VoxUserJourneyMode.STANDARD }
         if (journeyMode == VoxUserJourneyMode.OFF) return false
 
+        val manager = VoxUpdateChannelManager.instance(context)
+        if (!manager.isDiagnosticsActive()) return false
+
         val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
         if (lifecycle.getCycleStartedAt() > 0L || lifecycle.isUserOptedOut()) {
             return lifecycle.canSendPeriodic(now)
         }
 
-        val manager = VoxUpdateChannelManager.instance(context)
         val lastSubmission = manager.getLastDiagnosticsSubmissionTimestamp()
 
         return if (manager.isBetaChannel()) {

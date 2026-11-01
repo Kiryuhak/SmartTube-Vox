@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.vox.diagnostics
 import android.content.Context
 import android.content.SharedPreferences
 import com.liskovsoft.sharedutils.mylogger.Log
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager
 
 /**
  * Менеджер жизненного цикла автоматической анонимной диагностики SmartTube VOX (Prompt #114).
@@ -114,7 +115,7 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
             .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, true)
             .putBoolean(KEY_EXTENDED_MODE_ENABLED, false)
             .putLong(KEY_LAST_SUBMISSION_TIMESTAMP, 0L)
-            .apply()
+            .commit()
 
         VoxSafeLogger.i(
             VoxLogCategory.DIAGNOSTICS,
@@ -243,7 +244,7 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
                 .putBoolean(KEY_USER_EXPLICIT_OPT_OUT, true)
                 .putBoolean(KEY_AUTO_DIAGNOSTICS_ACTIVE, false)
                 .putBoolean(KEY_EXTENDED_MODE_ENABLED, false)
-                .apply()
+                .commit()
 
             VoxSafeLogger.i(
                 VoxLogCategory.DIAGNOSTICS,
@@ -253,7 +254,7 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
         } else {
             prefs.edit()
                 .putBoolean(KEY_USER_EXPLICIT_OPT_OUT, false)
-                .apply()
+                .commit()
 
             // Если время 8-дневного цикла текущей версии ещё не вышло — возобновляем
             val startedAt = getCycleStartedAt()
@@ -278,11 +279,19 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
 
     fun getLastAppVersion(): String? = prefs.getString(KEY_LAST_APP_VERSION, null)
 
-    fun getLastSubmissionTimestamp(): Long = prefs.getLong(KEY_LAST_SUBMISSION_TIMESTAMP, 0L)
+    fun getLastSubmissionTimestamp(): Long {
+        val ts = prefs.getLong(KEY_LAST_SUBMISSION_TIMESTAMP, 0L)
+        if (ts > 0L) return ts
+        return try {
+            VoxUpdateChannelManager.instance(context).getLastDiagnosticsSubmissionTimestamp()
+        } catch (e: Throwable) {
+            0L
+        }
+    }
 
     @Synchronized
     fun setLastSubmissionTimestamp(timestampMs: Long) {
-        prefs.edit().putLong(KEY_LAST_SUBMISSION_TIMESTAMP, timestampMs).apply()
+        prefs.edit().putLong(KEY_LAST_SUBMISSION_TIMESTAMP, timestampMs).commit()
     }
 
     /**
@@ -315,6 +324,6 @@ class VoxDiagnosticsLifecycleManager private constructor(private val context: Co
      * Сброс состояния для unit-тестов.
      */
     fun resetForTest() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
     }
 }

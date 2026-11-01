@@ -1,6 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.common.vox.diagnostics
 
 import android.content.Context
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -9,6 +10,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class VoxDiagnosticsLifecycleTest {
@@ -23,6 +28,15 @@ class VoxDiagnosticsLifecycleTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         manager = VoxDiagnosticsLifecycleManager.instance(context)
+        manager.resetForTest()
+        val channelManager = VoxUpdateChannelManager.instance(context)
+        channelManager.setUpdateChannel(VoxUpdateChannel.TEST)
+        channelManager.setBetaDiagnosticsEnabled(true)
+        channelManager.setLastDiagnosticsSubmissionTimestamp(0L)
+    }
+
+    @After
+    fun tearDown() {
         manager.resetForTest()
     }
 
@@ -159,5 +173,21 @@ class VoxDiagnosticsLifecycleTest {
         assertFalse(manager.isUserOptedOut())
         assertTrue(manager.isAutoDiagnosticsActive())
         assertTrue(manager.isAutoDiagnosticsPermitted(t0 + 13000L))
+    }
+
+    @Test
+    fun testRuntimeWiringInitializesT0WhenNotPreviouslyStarted() {
+        assertEquals(0L, manager.getCycleStartedAt())
+
+        val latch = CountDownLatch(1)
+        val scheduler = VoxDiagnosticsScheduler.instance(context)
+        scheduler.schedulePeriodicCheck {
+            latch.countDown()
+        }
+
+        latch.await(5, TimeUnit.SECONDS)
+
+        assertTrue("T0 must be initialized by runtime scheduler when zero", manager.getCycleStartedAt() > 0L)
+        assertTrue("Auto diagnostics must become active", manager.isAutoDiagnosticsActive())
     }
 }

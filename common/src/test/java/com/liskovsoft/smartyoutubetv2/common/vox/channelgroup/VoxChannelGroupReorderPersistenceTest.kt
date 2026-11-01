@@ -118,6 +118,29 @@ class VoxChannelGroupReorderPersistenceTest {
     }
 
     @Test
+    fun testFallbackRecoveryFromSharedPreferencesWhenProfileIsCorrupted() {
+        val group = manager.createGroup("Устойчивая группа")
+        manager.addChannelToGroup(group.id, "ch_x", "X")
+        manager.addChannelToGroup(group.id, "ch_y", "Y")
+
+        // Simulate file corruption: profile data contains truncated garbage
+        AppPrefs.instance(context).setProfileData("vox_channel_groups_data_v1", "{ \"version\": 1, \"groups\": [ {\"id\": \"incomplete...")
+
+        // Storage load must not crash and must cleanly restore from clean SharedPreferences backup
+        val storage = VoxChannelGroupStorage(context)
+        val (restoredGroups, restoredMemberships) = storage.load()
+        assertNotNull(restoredGroups)
+        assertEquals(1, restoredGroups.size)
+        assertEquals("Устойчивая группа", restoredGroups[0].name)
+        assertEquals(2, restoredMemberships.size)
+
+        // Verify that profile data was automatically repaired with valid JSON
+        val repairedProfileJson = AppPrefs.instance(context).getProfileData("vox_channel_groups_data_v1")
+        assertNotNull(repairedProfileJson)
+        assertTrue(repairedProfileJson!!.contains("Устойчивая группа"))
+    }
+
+    @Test
     fun testSortingMediaItemsMatchingUserChannelOrder() {
         // Simulates the exact logic implemented in BrowsePresenter.filterChannelMediaGroup
         val group = manager.createGroup("Музыка")

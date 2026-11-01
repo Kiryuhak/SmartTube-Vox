@@ -422,6 +422,17 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                 return@execute
             }
             try {
+                val lifecycle = VoxDiagnosticsLifecycleManager.instance(context)
+                val channelMgr = VoxUpdateChannelManager.instance(context)
+                if (lifecycle.getCycleStartedAt() <= 0L && !lifecycle.isUserOptedOut() && channelMgr.isDiagnosticsActive()) {
+                    val currentVer = try {
+                        com.liskovsoft.sharedutils.helpers.AppInfoHelpers.getAppVersionName(context)?.takeIf { it.isNotBlank() }
+                    } catch (e: Throwable) {
+                        null
+                    } ?: channelMgr.getAppVersionName().takeIf { it.isNotBlank() } ?: "32.56-vox.9.2-rc.11"
+                    lifecycle.onAppStartup(currentVer)
+                }
+
                 val canSend = VoxDiagnosticsPolicy.canSendPeriodicDiagnostics(context)
                 if (!canSend) {
                     Log.d(TAG, "Periodic diagnostics skipped: policy criteria not met (consent or interval).")

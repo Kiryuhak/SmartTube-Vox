@@ -4,6 +4,7 @@ import android.content.Context
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannel
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager
 import org.robolectric.RuntimeEnvironment
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -20,10 +21,16 @@ class BetaDiagnosticsPolicyTest {
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
+        VoxDiagnosticsLifecycleManager.instance(context).resetForTest()
         channelManager = VoxUpdateChannelManager.instance(context)
         channelManager.setUpdateChannel(VoxUpdateChannel.TEST)
         channelManager.setBetaDiagnosticsEnabled(false)
         channelManager.setLastDiagnosticsSubmissionTimestamp(0L)
+    }
+
+    @After
+    fun tearDown() {
+        VoxDiagnosticsLifecycleManager.instance(context).resetForTest()
     }
 
     @Test

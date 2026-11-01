@@ -27,21 +27,44 @@ class VoxChannelGroupStorage(private val context: Context) {
             null
         }
 
-        // Резервный источник: если файл профиля пуст или отсутствует (напр. Dune HD / Haier TV), читаем из SharedPreferences
-        if (raw.isNullOrBlank()) {
-            raw = try {
+        var root: JSONObject? = null
+        if (!raw.isNullOrBlank()) {
+            try {
+                root = JSONObject(raw)
+            } catch (e: Exception) {
+                Log.w(TAG, "Corrupted profile data for channel groups, attempting fallback to SharedPreferences: %s", e.message)
+                root = null
+            }
+        }
+
+        // Резервный источник: если файл профиля пуст, отсутствует или повреждён (Dune HD / Haier TV), читаем из SharedPreferences
+        if (root == null) {
+            val backup = try {
                 prefs.getString(PREF_KEY, null)
             } catch (e: Exception) {
                 null
             }
+            if (!backup.isNullOrBlank()) {
+                try {
+                    root = JSONObject(backup)
+                    Log.i(TAG, "Successfully restored channel groups from SharedPreferences backup")
+                    // Восстанавливаем профильный файл
+                    try {
+                        prefs.setProfileData(PREF_KEY, backup)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to restore repaired profile data: %s", e.message)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse backup SharedPreferences JSON: %s", e.message)
+                }
+            }
         }
 
-        if (raw.isNullOrBlank()) {
+        if (root == null) {
             return Pair(emptyList(), emptyList())
         }
 
         return try {
-            val root = JSONObject(raw)
             val groupsList = mutableListOf<VoxChannelGroup>()
             val groupsArray = root.optJSONArray("groups")
             if (groupsArray != null) {
@@ -68,7 +91,7 @@ class VoxChannelGroupStorage(private val context: Context) {
 
             Pair(groupsList, membershipsList)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse channel groups JSON: %s", e.message)
+            Log.e(TAG, "Failed to parse channel groups objects: %s", e.message)
             VoxSafeLogger.e(
                 VoxLogCategory.CHANNEL_GROUP,
                 VoxLogCode.CHANNEL_GROUP_STORAGE_ERROR,

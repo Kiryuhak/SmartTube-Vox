@@ -195,7 +195,7 @@ object VoxOtaHudPresenter {
             phase = VoxOtaProgressPhase.DOWNLOADING,
             percent = 0,
             bytesRead = 0L,
-            totalBytes = if (asset.sizeBytes > 0L) asset.sizeBytes else 368L * 1024 * 1024,
+            totalBytes = if (asset.sizeBytes > 0L) asset.sizeBytes else 0L,
             speedBytesPerSec = 0.0,
             isMinimized = false
         )
