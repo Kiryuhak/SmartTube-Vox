@@ -64,7 +64,7 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- Top-Right Close Button -->
+        <!-- Top-Right Close Button (removed on Android TV) -->
         <ImageButton
             android:id="@+id/vox_ota_btn_close_complete"
             android:layout_width="32dp"
@@ -73,7 +73,8 @@
             android:background="@drawable/bg_vox_ota_btn_icon"
             android:src="@drawable/ic_vox_ota_close"
             android:scaleType="centerInside"
-            android:focusable="true"
+            android:focusable="false"
+            android:visibility="gone"
             android:contentDescription="Закрыть" />
     </LinearLayout>
 

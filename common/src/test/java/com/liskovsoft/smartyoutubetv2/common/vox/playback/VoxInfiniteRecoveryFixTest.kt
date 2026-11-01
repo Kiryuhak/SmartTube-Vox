@@ -206,30 +206,31 @@ class VoxInfiniteRecoveryFixTest {
     fun test4_ExhaustionOfAttemptsTerminatesLoop() {
         controller.onPlaybackStart(sessionId = 1003L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "vid_exhaust")
         controller.updateMediaTrackInfo("vp9", 2160, 58_000_000L) // 4K 58 Mbps
+        val timeout = VoxPlayerRecoveryPolicy.getStallWatchdogTimeoutMs(2160, 58_000_000L) + 100L
 
         // Attempt 1: Source refresh 1
         controller.onBufferingStarted(positionMs = 20_000L, bufferedPositionMs = 20_000L, playWhenReady = true)
-        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        shadowOf(Looper.getMainLooper()).idleFor(timeout, TimeUnit.MILLISECONDS)
         assertEquals(1, controller.getSourceRecoveryCount())
 
         // Attempt 2: Source refresh 2
         controller.onBufferingStarted(positionMs = 20_000L, bufferedPositionMs = 20_000L, playWhenReady = true)
-        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        shadowOf(Looper.getMainLooper()).idleFor(timeout, TimeUnit.MILLISECONDS)
         assertEquals(2, controller.getSourceRecoveryCount())
 
         // Attempt 3: Engine switch 1
         controller.onBufferingStarted(positionMs = 20_000L, bufferedPositionMs = 20_000L, playWhenReady = true)
-        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        shadowOf(Looper.getMainLooper()).idleFor(timeout, TimeUnit.MILLISECONDS)
         assertEquals(1, controller.getEngineSwitchCount())
 
         // Attempt 4: Quality fallback 1
         controller.onBufferingStarted(positionMs = 20_000L, bufferedPositionMs = 20_000L, playWhenReady = true)
-        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        shadowOf(Looper.getMainLooper()).idleFor(timeout, TimeUnit.MILLISECONDS)
         assertEquals(1, controller.getQualityFallbackCount())
 
         // Attempt 5: All exhausted -> FAILED terminal state
         controller.onBufferingStarted(positionMs = 20_000L, bufferedPositionMs = 20_000L, playWhenReady = true)
-        shadowOf(Looper.getMainLooper()).idleFor(4_100L, TimeUnit.MILLISECONDS)
+        shadowOf(Looper.getMainLooper()).idleFor(timeout, TimeUnit.MILLISECONDS)
 
         assertEquals(VoxPlayerRecoveryState.FAILED, controller.getState())
         assertTrue(controller.isTerminalFailed())

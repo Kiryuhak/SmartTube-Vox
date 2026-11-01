@@ -264,7 +264,8 @@ class VoxPendingSeekCoordinator {
     @Synchronized
     fun hasActivePendingSeek(): Boolean {
         val current = activeSeek ?: return false
-        if (current.state == VoxSeekState.PENDING || current.state == VoxSeekState.BUFFERING || current.state == VoxSeekState.RECOVERING) {
+        if (current.state == VoxSeekState.PENDING || current.state == VoxSeekState.CLAMPED ||
+            current.state == VoxSeekState.BUFFERING || current.state == VoxSeekState.RECOVERING) {
             val elapsed = System.currentTimeMillis() - current.requestedAtMs
             if (elapsed > SEEK_TIMEOUT_MS) {
                 current.state = VoxSeekState.FAILED
@@ -282,7 +283,8 @@ class VoxPendingSeekCoordinator {
     @Synchronized
     fun cancel(reason: String) {
         activeSeek?.let { current ->
-            if (current.state == VoxSeekState.PENDING || current.state == VoxSeekState.BUFFERING || current.state == VoxSeekState.RECOVERING) {
+            if (current.state == VoxSeekState.PENDING || current.state == VoxSeekState.CLAMPED ||
+                current.state == VoxSeekState.BUFFERING || current.state == VoxSeekState.RECOVERING) {
                 current.state = VoxSeekState.CANCELLED
                 current.outcome = VoxSeekOutcome.USER_CANCELLED
                 logDiagnostic("LIVE_DVR_SEEK_CANCELLED", current, reason)

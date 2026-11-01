@@ -90,6 +90,8 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private String mLastErrorClass = null;
     private com.liskovsoft.smartyoutubetv2.common.vox.playback.RebufferIncident mCurrentRebufferIncident = null;
     private String mCurrentOperationId = null;
+    private long mLastDispatchedSeekPosMs = -1L;
+    private long mLastDispatchedSeekTimeMs = 0L;
 
     private synchronized void finishRebufferIncident(String outcome) {
         if (mCurrentRebufferIncident == null) {
@@ -397,9 +399,15 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
 
         if (duration <= 0 || positionMs <= duration) {
-            mOfflineProbe.onSeekRequested(fromPos, positionMs);
-            mPlayer.seekTo(positionMs);
-            mOfflineProbe.onSeekCompleted(positionMs);
+            long now = System.currentTimeMillis();
+            boolean isDuplicateRapidSeek = (mLastDispatchedSeekPosMs == positionMs) && (now - mLastDispatchedSeekTimeMs < 200L);
+            if (!isDuplicateRapidSeek) {
+                mLastDispatchedSeekPosMs = positionMs;
+                mLastDispatchedSeekTimeMs = now;
+                mOfflineProbe.onSeekRequested(fromPos, positionMs);
+                mPlayer.seekTo(positionMs);
+                mOfflineProbe.onSeekCompleted(positionMs);
+            }
         }
     }
 

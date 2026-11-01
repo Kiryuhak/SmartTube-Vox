@@ -34,6 +34,7 @@ class VoxOtaHudDialog(private val activity: Activity) {
     private var metricsContainer: LinearLayout? = null
     private var speedValueView: TextView? = null
     private var sizeValueView: TextView? = null
+    private var btnCancelBottomView: Button? = null
 
     val isShowing: Boolean
         get() = dialog?.isShowing == true
@@ -175,6 +176,7 @@ class VoxOtaHudDialog(private val activity: Activity) {
         val btnCloseIcon = root.findViewById<ImageButton>(R.id.vox_ota_btn_close_icon)
         val btnMinBottom = root.findViewById<Button>(R.id.vox_ota_btn_minimize)
         val btnCancelBottom = root.findViewById<Button>(R.id.vox_ota_btn_cancel_download)
+        btnCancelBottomView = btnCancelBottom
 
         btnMinIcon?.setOnClickListener { onMinimize() }
         btnMinBottom?.setOnClickListener { onMinimize() }
@@ -212,18 +214,21 @@ class VoxOtaHudDialog(private val activity: Activity) {
                 metricsContainer?.visibility = View.VISIBLE
                 speedValueView?.text = VoxOtaDisplayHelper.formatSpeed(state.speedBytesPerSec)
                 sizeValueView?.text = VoxOtaDisplayHelper.formatProgressSize(state.bytesRead, state.totalBytes)
+                btnCancelBottomView?.visibility = View.VISIBLE
             }
             VoxOtaProgressPhase.VERIFYING -> {
                 progressIconView?.setImageResource(R.drawable.ic_vox_ota_gear)
                 progressTitleView?.text = "Проверка обновления..."
                 progressNoteView?.text = "Проверяем файл..."
                 metricsContainer?.visibility = View.GONE
+                btnCancelBottomView?.visibility = View.GONE
             }
             VoxOtaProgressPhase.PREPARING -> {
                 progressIconView?.setImageResource(R.drawable.ic_vox_ota_package)
                 progressTitleView?.text = "Подготовка к установке..."
                 progressNoteView?.text = "Распаковка файла..."
                 metricsContainer?.visibility = View.GONE
+                btnCancelBottomView?.visibility = View.GONE
             }
         }
     }
@@ -336,6 +341,7 @@ class VoxOtaHudDialog(private val activity: Activity) {
         metricsContainer = null
         speedValueView = null
         sizeValueView = null
+        btnCancelBottomView = null
     }
 
     companion object {

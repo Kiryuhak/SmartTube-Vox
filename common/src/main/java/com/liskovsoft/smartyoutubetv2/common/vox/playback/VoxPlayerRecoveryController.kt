@@ -103,6 +103,8 @@ class VoxPlayerRecoveryController internal constructor(
     private var lastObservedRenderedPositionMs: Long = 0L
     private var verificationStartPositionMs: Long = -1L
     private var verificationStartTimeMs: Long = 0L
+    private var continuousPlaybackStartTimeMs: Long = 0L
+    private var continuousPlaybackStartPositionMs: Long = -1L
 
     private val verificationRunnable = Runnable {
         checkVerificationSuccess()
@@ -167,6 +169,8 @@ class VoxPlayerRecoveryController internal constructor(
         activeRecoveryReason = null
         verificationStartPositionMs = -1L
         verificationStartTimeMs = 0L
+        continuousPlaybackStartPositionMs = -1L
+        continuousPlaybackStartTimeMs = 0L
         lastObservedProgressTimestampMs = currentTimeMs()
         lastObservedRenderedPositionMs = 0L
     }
@@ -181,9 +185,10 @@ class VoxPlayerRecoveryController internal constructor(
         lastObservedPositionMs = targetPositionMs
         lastObservedRenderedPositionMs = targetPositionMs
         lastObservedProgressTimestampMs = currentTimeMs()
+        continuousPlaybackStartPositionMs = -1L
+        continuousPlaybackStartTimeMs = 0L
         scheduler.removeCallbacksAndMessages(null)
-        if (currentState == VoxPlayerRecoveryState.BUFFERING ||
-            currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
+        if (!isTerminalFailed()) {
             currentState = VoxPlayerRecoveryState.IDLE
             verificationStartPositionMs = -1L
             verificationStartTimeMs = 0L
@@ -196,9 +201,10 @@ class VoxPlayerRecoveryController internal constructor(
         lastObservedRenderedPositionMs = positionMs
         lastObservedBufferedMs = bufferedPositionMs
         lastObservedProgressTimestampMs = currentTimeMs()
+        continuousPlaybackStartPositionMs = -1L
+        continuousPlaybackStartTimeMs = 0L
         scheduler.removeCallbacksAndMessages(null)
-        if (currentState == VoxPlayerRecoveryState.BUFFERING ||
-            currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {
+        if (!isTerminalFailed()) {
             currentState = VoxPlayerRecoveryState.IDLE
             verificationStartPositionMs = -1L
             verificationStartTimeMs = 0L
@@ -207,7 +213,7 @@ class VoxPlayerRecoveryController internal constructor(
 
     @Synchronized
     fun onPlaybackCheck(positionMs: Long, bufferedPositionMs: Long, isPlaying: Boolean, playWhenReady: Boolean) {
-        if (isLiveSession || isTerminalFailed()) {
+        if (isLiveSession || isTerminalFailed() || VoxPendingSeekCoordinator.instance().hasActivePendingSeek()) {
             return
         }
 
@@ -244,7 +250,8 @@ class VoxPlayerRecoveryController internal constructor(
         val elapsed = now - lastObservedProgressTimestampMs
         val bufferRemainingMs = bufferedPositionMs - positionMs
 
-        val isStalled = (elapsed >= VoxPlayerRecoveryPolicy.STALL_WATCHDOG_TIMEOUT_MS) &&
+        val stallTimeout = VoxPlayerRecoveryPolicy.getStallWatchdogTimeoutMs(currentHeight, currentBitrate)
+        val isStalled = (elapsed >= stallTimeout) &&
                 (!isPositionAdvancing && !isBufferAdvancing || bufferRemainingMs < 1000L ||
                         VoxPlayerRecoveryTestHooks.bufferFreeze || VoxPlayerRecoveryTestHooks.forceFrozenProgress)
 
@@ -281,6 +288,7 @@ class VoxPlayerRecoveryController internal constructor(
     }
 
     private fun scheduleStallWatchdog(gen: Long, sess: Long, playWhenReady: Boolean) {
+        val watchdogTimeout = VoxPlayerRecoveryPolicy.getStallWatchdogTimeoutMs(currentHeight, currentBitrate)
         scheduler.postDelayed({
             synchronized(this@VoxPlayerRecoveryController) {
                 if (gen != recoveryGeneration || sess != currentSessionId) {
@@ -288,7 +296,7 @@ class VoxPlayerRecoveryController internal constructor(
                 }
                 onStallWatchdogTriggered(gen, playWhenReady)
             }
-        }, VoxPlayerRecoveryPolicy.STALL_WATCHDOG_TIMEOUT_MS)
+        }, watchdogTimeout)
     }
 
     @Synchronized
@@ -347,7 +355,40 @@ class VoxPlayerRecoveryController internal constructor(
         if (currentState == VoxPlayerRecoveryState.BUFFERING) {
             currentState = VoxPlayerRecoveryState.IDLE
             scheduler.removeCallbacksAndMessages(null)
+            continuousPlaybackStartPositionMs = positionMs
+            continuousPlaybackStartTimeMs = currentTimeMs()
             return
+        }
+
+        if (currentState == VoxPlayerRecoveryState.IDLE) {
+            if (continuousPlaybackStartPositionMs < 0L || positionMs < continuousPlaybackStartPositionMs) {
+                continuousPlaybackStartPositionMs = positionMs
+                continuousPlaybackStartTimeMs = currentTimeMs()
+            } else {
+                val sustainedTime = currentTimeMs() - continuousPlaybackStartTimeMs
+                val sustainedProgress = positionMs - continuousPlaybackStartPositionMs
+                if (sustainedTime >= 5_000L && sustainedProgress >= 2_000L) {
+                    if (sourceRecoveryCount > 0 || engineSwitchCount > 0 || qualityFallbackCount > 0) {
+                        val ctx = buildTelemetryContext("RECOVERY_IDLE_STABILIZED", null, positionMs)
+                        VoxSafeLogger.info(
+                            VoxLogCategory.PLAYER,
+                            VoxLogCode.PLAYER_RECOVERY_SUCCEEDED,
+                            "Сброс счетчиков восстановления после устойчивого воспроизведения",
+                            ctx
+                        )
+                        sourceRecoveryCount = 0
+                        engineSwitchCount = 0
+                        qualityFallbackCount = 0
+                        recoverySequenceId = null
+                        activeRecoveryReason = null
+                    }
+                    continuousPlaybackStartPositionMs = positionMs
+                    continuousPlaybackStartTimeMs = currentTimeMs()
+                }
+            }
+        } else {
+            continuousPlaybackStartPositionMs = -1L
+            continuousPlaybackStartTimeMs = 0L
         }
 
         if (currentState == VoxPlayerRecoveryState.RECOVERY_VERIFYING) {

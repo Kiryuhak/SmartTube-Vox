@@ -212,25 +212,26 @@ class Prompt081PlayerRecoveryRegressionTest {
         controller.onPlaybackStart(sessionId = 102L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "vid_1440p")
         // Stream resolution 1440p (height = 1440, bitrate = 14 Mbps)
         controller.updateMediaTrackInfo("vp9", 1440, 14_000_000L)
+        val timeout = VoxPlayerRecoveryPolicy.getStallWatchdogTimeoutMs(1440, 14_000_000L) + 100L
 
         // Stall 1 -> source refresh #1
         controller.onBufferingStarted(positionMs = 30_000L, bufferedPositionMs = 30_000L, playWhenReady = true)
-        testScheduler.advanceTimeBy(4_100L)
+        testScheduler.advanceTimeBy(timeout)
         assertEquals(1, mockActionHandler.sourceRefreshCount)
 
         // Stall 2 -> source refresh #2
         controller.onBufferingStarted(positionMs = 28_000L, bufferedPositionMs = 28_000L, playWhenReady = true)
-        testScheduler.advanceTimeBy(4_100L)
+        testScheduler.advanceTimeBy(timeout)
         assertEquals(2, mockActionHandler.sourceRefreshCount)
 
         // Stall 3 -> engine switch #1
         controller.onBufferingStarted(positionMs = 26_000L, bufferedPositionMs = 26_000L, playWhenReady = true)
-        testScheduler.advanceTimeBy(4_100L)
+        testScheduler.advanceTimeBy(timeout)
         assertEquals(1, mockActionHandler.engineSwitchCount)
 
         // Stall 4 -> For 1440p, controller MUST attempt quality fallback instead of immediate terminal failure!
         controller.onBufferingStarted(positionMs = 24_000L, bufferedPositionMs = 24_000L, playWhenReady = true)
-        testScheduler.advanceTimeBy(4_100L)
+        testScheduler.advanceTimeBy(timeout)
         assertEquals("1440p stream should trigger quality fallback", 1, mockActionHandler.qualityFallbackCount)
         assertEquals(VoxPlayerRecoveryState.RECOVERING_QUALITY, controller.getState())
         assertEquals("Terminal failure should not occur when quality fallback is available", 0, mockActionHandler.recoveryFailedCount)

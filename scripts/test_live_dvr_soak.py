@@ -18,10 +18,10 @@ import sys
 import os
 import re
 
-SERIAL = "emulator-5554"
+SERIAL = os.getenv("ANDROID_SERIAL", "emulator-5554")
 PKG = "io.github.kiryuhak.smarttubevot.stable"
 VIDEO_ID = "umLWFz4izTM" # Sky News UK Live
-SOAK_MINUTES = 10
+SOAK_MINUTES = int(os.getenv("SOAK_MINUTES", "5"))
 
 def adb(cmd, timeout=20):
     full_cmd = ["adb", "-s", SERIAL] + cmd

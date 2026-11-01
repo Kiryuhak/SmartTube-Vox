@@ -16,7 +16,7 @@ import os
 import zlib
 import struct
 
-SERIAL = "emulator-5554"
+SERIAL = os.getenv("ANDROID_SERIAL", "emulator-5554")
 PKG = "io.github.kiryuhak.smarttubevot.stable"
 EVIDENCE_DIR = "/home/kiryuha/Developer/SmartTube-VOX-Private/private-qa/evidence"
 os.makedirs(EVIDENCE_DIR, exist_ok=True)

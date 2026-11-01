@@ -429,7 +429,7 @@ class VoxDiagnosticsScheduler private constructor(private val context: Context) 
                         com.liskovsoft.sharedutils.helpers.AppInfoHelpers.getAppVersionName(context)?.takeIf { it.isNotBlank() }
                     } catch (e: Throwable) {
                         null
-                    } ?: channelMgr.getAppVersionName().takeIf { it.isNotBlank() } ?: "32.56-vox.9.2-rc.12"
+                    } ?: channelMgr.getAppVersionName().takeIf { it.isNotBlank() } ?: "32.56-vox.9.2-rc.13"
                     lifecycle.onAppStartup(currentVer)
                 }
 

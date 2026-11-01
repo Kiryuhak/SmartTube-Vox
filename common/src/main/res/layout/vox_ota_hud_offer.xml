@@ -12,12 +12,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="top">
 
         <!-- Badge Icon -->
         <FrameLayout
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:layout_marginTop="3dp"
             android:background="@drawable/bg_vox_ota_icon_blue">
 
             <ImageView

@@ -822,4 +822,52 @@ class VoxPlayerRecoveryControllerTest {
         assertEquals(1, controller.getSourceRecoveryCount())
         assertEquals(2, mockActionHandler.sourceRefreshCount)
     }
+
+    // 34. 4K high-bitrate stream watchdog allows adequate buffering time (15s instead of 4s)
+    @Test
+    fun test34_FourKWatchdogAllowsAdequateBufferTime() {
+        controller.onPlaybackStart(sessionId = 700L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "4k_vod_test")
+        controller.updateMediaTrackInfo("vp9", 2160, 26_568_143L)
+
+        val timeout = VoxPlayerRecoveryPolicy.getStallWatchdogTimeoutMs(2160, 26_568_143L)
+        assertEquals(VoxPlayerRecoveryPolicy.STALL_WATCHDOG_TIMEOUT_4K_MS, timeout)
+
+        controller.onBufferingStarted(positionMs = 115_648L, bufferedPositionMs = 115_648L, playWhenReady = true)
+        assertEquals(VoxPlayerRecoveryState.BUFFERING, controller.getState())
+
+        // 6 seconds pass: normal 1080p 4s watchdog would have fired, but 4K watchdog waits 15s!
+        shadowOf(Looper.getMainLooper()).idleFor(6_000L, TimeUnit.MILLISECONDS)
+        assertEquals(0, controller.getSourceRecoveryCount())
+        assertEquals(VoxPlayerRecoveryState.BUFFERING, controller.getState())
+
+        // Buffer arrives at 10s
+        controller.onBufferProgress(bufferedPositionMs = 120_000L, playWhenReady = true)
+        shadowOf(Looper.getMainLooper()).idleFor(2_000L, TimeUnit.MILLISECONDS)
+        controller.onPlaybackProgress(115_700L, 125_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+        assertEquals(0, controller.getSourceRecoveryCount())
+    }
+
+    // 35. Sustained playback in IDLE state safely resets recovery counters
+    @Test
+    fun test35_SustainedIdlePlaybackResetsRecoveryCounters() {
+        controller.onPlaybackStart(sessionId = 800L, isLive = false, engine = PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT, videoId = "sustained_reset_test")
+        val err = java.io.IOException("Response code: 403 Forbidden")
+        controller.handlePlayerError(err, 10_000L, true)
+        assertEquals(1, controller.getSourceRecoveryCount())
+
+        // User seeks after recovery attempt
+        controller.onSeekRequested(50_000L)
+        controller.onSeekProcessed(50_000L, 55_000L)
+        assertEquals(VoxPlayerRecoveryState.IDLE, controller.getState())
+        assertEquals(1, controller.getSourceRecoveryCount())
+
+        // Continuous playback in IDLE for 6 seconds with advancing position
+        controller.onPlaybackProgress(50_500L, 60_000L)
+        shadowOf(Looper.getMainLooper()).idleFor(6_000L, TimeUnit.MILLISECONDS)
+        controller.onPlaybackProgress(54_000L, 65_000L)
+
+        // Limiter counters are safely reset after sustained normal playback!
+        assertEquals(0, controller.getSourceRecoveryCount())
+    }
 }

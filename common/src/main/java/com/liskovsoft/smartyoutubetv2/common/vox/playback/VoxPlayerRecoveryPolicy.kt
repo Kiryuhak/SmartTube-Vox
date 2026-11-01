@@ -36,10 +36,20 @@ object VoxPlayerRecoveryPolicy {
     const val MAX_ENGINE_SWITCHES = 1
     const val MAX_QUALITY_FALLBACKS = 1
     const val STALL_WATCHDOG_TIMEOUT_MS = 4_000L
+    const val STALL_WATCHDOG_TIMEOUT_4K_MS = 15_000L
     const val MEANINGFUL_BUFFER_DELTA_MS = 1_000L
     const val POSITION_RESTORE_SAFE_OFFSET_MS = 2_000L
     const val VERIFICATION_WINDOW_MS = 4_000L
     const val VERIFICATION_MIN_PROGRESS_MS = 2_000L
+
+    @JvmStatic
+    fun getStallWatchdogTimeoutMs(height: Int = 0, bitrate: Long = 0L): Long {
+        return if (height >= 1440 || bitrate >= 12_000_000L) {
+            STALL_WATCHDOG_TIMEOUT_4K_MS
+        } else {
+            STALL_WATCHDOG_TIMEOUT_MS
+        }
+    }
 
     fun isMeaningfulProgress(
         prevBufferedMs: Long,

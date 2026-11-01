@@ -103,8 +103,18 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         @Override
         public void onRecoveryFailed(long gen, String failureReason, Runnable onRetry) {
             Log.e(TAG, "Recovery: failed for generation " + gen + ", reason: " + failureReason);
-            boolean isDns = failureReason != null && failureReason.contains("DNS");
-            int messageResId = isDns ? R.string.vox_player_dns_error_message : R.string.vox_player_recovery_exhausted_message;
+            String r = failureReason != null ? failureReason.toUpperCase() : "";
+            boolean isDns = r.contains("DNS") || r.contains("UNKNOWN_HOST");
+            boolean isProvenNetwork = r.contains("CONNECT") || r.contains("HTTP") || r.contains("NETWORK") ||
+                    r.contains("SOCKET") || r.contains("TIMEOUT") || r.contains("SSL");
+            int messageResId;
+            if (isDns) {
+                messageResId = R.string.vox_player_dns_error_message;
+            } else if (isProvenNetwork) {
+                messageResId = R.string.vox_player_recovery_exhausted_message;
+            } else {
+                messageResId = R.string.vox_player_recovery_playback_exhausted_message;
+            }
             String message = getContext().getString(messageResId);
 
             if (getPlayer() != null) {

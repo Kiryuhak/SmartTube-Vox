@@ -284,6 +284,7 @@ export function structuredEvents(report = {}) {
       result: enumValue(event.result),
       errorCategory: eventErrorCategory,
       safeContext: safeContext(event.safeContext || event.context),
+      ...(event.appVersion ? { appVersion: String(event.appVersion) } : {}),
       repeatCount: Number.isInteger(event.repeatCount) ? Math.min(Math.max(event.repeatCount, 1), 100000) : 1,
       ...(Number.isFinite(event.durationMs) && event.durationMs >= 0 ? { durationMs: event.durationMs } : {}),
       ...(isSyntheticFixture ? { isSyntheticFixture: true } : {}),
@@ -485,6 +486,20 @@ export function classifyReport(report = {}) {
     ? (activeEvents.length > 0 || (primary != null && primary.lifecycle === 'TRIGGER'))
     : Boolean(errorCategory || explicit === 'HIGH' || explicit === 'CRITICAL');
 
+  // User manual report provenance: preserve link to historical error of same version without breaking stale guards
+  let referencedHistoricalEvent = null;
+  const isUserManual = report.reportPurpose === 'USER_MANUAL' || report.reportPurpose === 'USER_REPORT' || report.userFacingReport;
+  if (isUserManual && (!reportActiveIncident || activeEvents.length === 0)) {
+    const candidateHistorical = chronoEvents.filter(e =>
+      (e.isHistorical || e.lifecycle === 'HISTORICAL') &&
+      (!report.appVersion || !e.appVersion || e.appVersion === report.appVersion) &&
+      (e.level === 'ERROR' || e.severity === 'CRITICAL' || e.severity === 'HIGH' || e.event === 'PLAYER_RECOVERY_FAILED')
+    );
+    if (candidateHistorical.length > 0) {
+      referencedHistoricalEvent = candidateHistorical[candidateHistorical.length - 1];
+    }
+  }
+
   let computedSeverity = 'INFO';
   if (!reportActiveIncident && chronoEvents.length > 0) {
     computedSeverity = chronoEvents.some(e => e.recovered) ? 'LOW' : 'INFO';
@@ -499,7 +514,7 @@ export function classifyReport(report = {}) {
   }
 
   const severity = SEVERITIES.includes(explicit) ? explicit : computedSeverity;
-  const signature = buildClassificationSignature(report, { events, errorCategory, subsystem, stage, severity, primaryEvent: primary });
+  const signature = buildClassificationSignature(report, { events, errorCategory, subsystem, stage, severity, primaryEvent: primary, referencedHistoricalEvent });
   return {
     events: chronoEvents,
     errorCategory,
@@ -507,6 +522,10 @@ export function classifyReport(report = {}) {
     stage,
     severity,
     primaryEvent: primary || null,
+    referencedHistoricalEvent: referencedHistoricalEvent || null,
+    referencedHistoricalEventId: referencedHistoricalEvent ? (referencedHistoricalEvent.event || referencedHistoricalEvent.eventCode || null) : null,
+    referencedHistoricalEventTimestamp: referencedHistoricalEvent ? (referencedHistoricalEvent.timestamp || referencedHistoricalEvent.timestampUtc || null) : null,
+    referencedHistoricalEventAppVersion: referencedHistoricalEvent ? (referencedHistoricalEvent.appVersion || report.appVersion || null) : null,
     signature,
     reportActiveIncident,
     activeEventCount,
