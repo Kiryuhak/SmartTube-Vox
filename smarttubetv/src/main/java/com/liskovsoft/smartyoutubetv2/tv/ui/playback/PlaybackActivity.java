@@ -120,6 +120,33 @@ public class PlaybackActivity extends LeanbackActivity {
                             com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VoiceTranslateController.BTN_OFF);
                 }, 500L);
             }
+        } else if ("showChapterNotification".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter dialogPresenter =
+                    com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter.instance(this);
+            String title = intent.getStringExtra("title");
+            if (title == null || title.isEmpty()) {
+                title = "Следующий эпизод";
+            }
+            com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem acceptOption =
+                    com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem.from(
+                            title,
+                            option -> dialogPresenter.closeDialog()
+                    );
+            dialogPresenter.appendSingleButton(acceptOption);
+            dialogPresenter.enableTransparent(true);
+            dialogPresenter.enableOverlay(true);
+            dialogPresenter.enableExpandable(false);
+            dialogPresenter.setId(565); // CHAPTER_NOTIFICATION_Id
+            dialogPresenter.showDialog();
+        } else if ("setTestPlayerConfig".equalsIgnoreCase(action)) {
+            if (intent.hasExtra("backgroundMode")) {
+                com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.instance(this)
+                        .setBackgroundMode(intent.getIntExtra("backgroundMode", 0));
+            }
+            if (intent.hasExtra("chapterNotification")) {
+                com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData.instance(this)
+                        .setChapterNotificationEnabled(intent.getBooleanExtra("chapterNotification", false));
+            }
         }
     }
 
@@ -367,9 +394,16 @@ public class PlaybackActivity extends LeanbackActivity {
         }
 
         if (getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_SOUND &&
-                !mIsBackgroundAudioOnlyActive && !isFinishing() && !isBackPressed() &&
-                !AppDialogPresenter.instance(this).isDialogShown()) {
-            enterBackgroundAudioOnly();
+                !mIsBackgroundAudioOnlyActive && !isFinishing() && !isBackPressed()) {
+            if (AppDialogPresenter.instance(this).isDialogShown()) {
+                VoxSafeLogger.info(
+                        VoxLogCategory.BACKGROUND,
+                        VoxLogCode.BACKGROUND_PLAYBACK_ALLOWED,
+                        "onPause: AppDialog shown (chapter/episode overlay) - keeping video track enabled"
+                );
+            } else {
+                enterBackgroundAudioOnly();
+            }
         }
 
         // Run the code before the contained fragment
