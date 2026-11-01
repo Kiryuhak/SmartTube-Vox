@@ -29,6 +29,7 @@ object VoxDiagnosticsPolicy {
     const val MAX_OFFLINE_RETRY_COUNT = 5                              // Максимум 5 попыток перед удалением
     const val OFFLINE_INITIAL_BACKOFF_MS = 15 * 1000L                  // 15 секунд начальная задержка
     const val OFFLINE_MAX_BACKOFF_MS = 15 * 60 * 1000L                 // 15 минут максимальная задержка
+    const val TRIGGER_RECENCY_THRESHOLD_MS = 30 * 60 * 1000L           // 30 минут: порог свежести активного триггера инцидента
     const val MAX_BATCH_EVENTS = 50
 
     // Canonical Diagnostic Incident Statuses
@@ -321,15 +322,60 @@ object VoxDiagnosticsPolicy {
     }
 
     /**
+     * Проверяет, пригодно ли событие для роли активного триггера инцидента текущей версии.
+     * Не удаляет событие из истории, но исключает его из активной аварийной классификации.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun isTriggerEligible(
+        event: VoxLogEvent,
+        currentVersion: String? = null,
+        now: Long = System.currentTimeMillis(),
+        maxAgeMs: Long = TRIGGER_RECENCY_THRESHOLD_MS
+    ): Boolean {
+        // Историческое событие уже явно помечено
+        if (event.isHistorical) return false
+
+        // Только ERROR или WARNING могут быть триггерами сбоев
+        if (event.level != VoxLogLevel.ERROR && event.level != VoxLogLevel.WARNING) return false
+
+        // Исключаем синтетические тестовые события фикстур
+        if (isSyntheticFixtureEvent(event)) return false
+
+        // Несовпадение версии: событие произошло на другой версии ПО
+        val evVersion = event.appVersion ?: event.context?.get("appVersion") ?: event.context?.get("currentVersion")
+        if (currentVersion != null && evVersion != null && evVersion != currentVersion) {
+            return false
+        }
+
+        // Невалидный timestamp или рассинхронизация часов в будущее (>1 мин)
+        if (event.timestamp <= 0L || event.timestamp > (now + 60_000L)) {
+            return false
+        }
+
+        // Bounded recency policy: событие должно быть не старше maxAgeMs (по умолчанию 30 мин)
+        val age = now - event.timestamp
+        if (age > maxAgeMs) {
+            return false
+        }
+
+        return true
+    }
+
+    /**
      * Находит наиболее значимое неустранённое событие среди журнала (предпочитая самое свежее).
      */
     @JvmStatic
-    fun findProminentUnrecoveredEvent(events: List<VoxLogEvent>): VoxLogEvent? {
+    @JvmOverloads
+    fun findProminentUnrecoveredEvent(
+        events: List<VoxLogEvent>,
+        currentVersion: String? = null,
+        now: Long = System.currentTimeMillis(),
+        maxAgeMs: Long = TRIGGER_RECENCY_THRESHOLD_MS
+    ): VoxLogEvent? {
         val chronoEvents = toChronologicalOrder(events)
         val candidates = chronoEvents.filter {
-            !it.isHistorical &&
-                (it.level == VoxLogLevel.ERROR || it.level == VoxLogLevel.WARNING) &&
-                !isSyntheticFixtureEvent(it) &&
+            isTriggerEligible(it, currentVersion, now, maxAgeMs) &&
                 !isEventRecovered(it, chronoEvents)
         }
         return candidates.lastOrNull { it.level == VoxLogLevel.ERROR }

@@ -59,13 +59,28 @@ data class VoxDiagnosticReport(
 ) {
     fun withCanonicalClassification(): VoxDiagnosticReport {
         val effectiveTrigger = triggerEvent ?: incidentSummary?.get("triggerCode")?.toString()
-        val prominent = if (!effectiveTrigger.isNullOrBlank()) {
+        val matchingTriggerEvent = if (!effectiveTrigger.isNullOrBlank()) {
             safeRecentEvents.firstOrNull { it.code.equals(effectiveTrigger, ignoreCase = true) }
+        } else null
+
+        // Trigger is considered active only if matching event is fresh/eligible, or if no matching event was found in journal
+        val isMatchingTriggerStale = matchingTriggerEvent != null &&
+            !VoxDiagnosticsPolicy.isTriggerEligible(matchingTriggerEvent, appVersion, timestamp)
+
+        val prominent = if (!effectiveTrigger.isNullOrBlank() && !isMatchingTriggerStale) {
+            matchingTriggerEvent
         } else {
-            VoxDiagnosticsPolicy.findProminentUnrecoveredEvent(safeRecentEvents)
+            VoxDiagnosticsPolicy.findProminentUnrecoveredEvent(safeRecentEvents, appVersion, timestamp)
         }
-        val primaryCode = effectiveTrigger?.takeIf { it.isNotBlank() } ?: prominent?.code
-        val cat = prominent?.category?.name ?: VoxDiagnosticsPolicy.inferCategoryFromCode(primaryCode) ?: errorCategory
+
+        // If trigger is stale and no fresh error exists, do not classify as active unrecovered error of current release
+        val primaryCode = if (isMatchingTriggerStale && prominent == null) {
+            null
+        } else {
+            effectiveTrigger?.takeIf { it.isNotBlank() && !isMatchingTriggerStale } ?: prominent?.code
+        }
+
+        val cat = prominent?.category?.name ?: VoxDiagnosticsPolicy.inferCategoryFromCode(primaryCode) ?: (if (primaryCode == null) null else errorCategory)
         val sig = VoxDiagnosticsPolicy.buildCanonicalErrorSignature(
             errorCategory = cat,
             primaryCode = primaryCode,
@@ -201,13 +216,20 @@ data class VoxDiagnosticReport(
             val recentEvents = if (includeEvents) {
                 try {
                     val rawEvents = VoxLogStore.instance(context).getRecentEvents(MAX_REPORT_EVENTS)
+                    val nowMs = System.currentTimeMillis()
                     rawEvents.map { ev ->
-                        val evAppVer = ev.context?.get("appVersion") ?: ev.context?.get("currentVersion")
+                        val evAppVer = ev.appVersion ?: ev.context?.get("appVersion") ?: ev.context?.get("currentVersion")
                         val isFromOldVer = evAppVer != null && evAppVer != appVer
-                        if (isFromOldVer || ev.isHistorical) {
-                            ev.copy(isHistorical = true)
+                        val isStale = (nowMs - ev.timestamp) > VoxDiagnosticsPolicy.TRIGGER_RECENCY_THRESHOLD_MS ||
+                            ev.timestamp <= 0L || ev.timestamp > (nowMs + 60_000L)
+                        if (isFromOldVer || isStale || ev.isHistorical) {
+                            ev.copy(isHistorical = true, appVersion = ev.appVersion ?: evAppVer)
                         } else {
-                            ev
+                            if (ev.appVersion == null && evAppVer != null) {
+                                ev.copy(appVersion = evAppVer)
+                            } else {
+                                ev
+                            }
                         }
                     }
                 } catch (e: Exception) {

@@ -466,7 +466,8 @@ data class VoxLogEvent(
     val message: String,
     val context: Map<String, String>? = null,
     val repeatCount: Int = 1,
-    val isHistorical: Boolean = false
+    val isHistorical: Boolean = false,
+    val appVersion: String? = null
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -477,6 +478,7 @@ data class VoxLogEvent(
         json.put("message", message)
         if (repeatCount > 1) json.put("repeatCount", repeatCount)
         if (isHistorical) json.put("isHistorical", true)
+        if (!appVersion.isNullOrBlank()) json.put("appVersion", appVersion)
         if (!context.isNullOrEmpty()) {
             val ctxObj = JSONObject()
             context.forEach { (k, v) -> ctxObj.put(k, v) }
@@ -507,6 +509,13 @@ data class VoxLogEvent(
                     map
                 } else null
 
+                val appVer = if (json.has("appVersion") && !json.isNull("appVersion")) {
+                    val ver = json.optString("appVersion", "")
+                    if (ver.isNotBlank()) ver else null
+                } else {
+                    ctxMap?.get("appVersion") ?: ctxMap?.get("currentVersion")
+                }
+
                 VoxLogEvent(
                     timestamp = ts,
                     level = level,
@@ -515,7 +524,8 @@ data class VoxLogEvent(
                     message = message,
                     context = ctxMap,
                     repeatCount = json.optInt("repeatCount", 1).coerceIn(1, 100000),
-                    isHistorical = isHist
+                    isHistorical = isHist,
+                    appVersion = appVer
                 )
             } catch (e: Exception) {
                 null

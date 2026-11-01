@@ -22,16 +22,31 @@ object VoxSafeLogger {
     @Volatile
     private var logStore: VoxLogStore? = null
 
+    @Volatile
+    private var currentAppVersion: String? = null
+
     @JvmStatic
     fun init(context: Context) {
         if (logStore == null) {
             synchronized(this) {
                 if (logStore == null) {
                     logStore = VoxLogStore.instance(context)
+                    try {
+                        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                        currentAppVersion = pInfo.versionName
+                    } catch (ignored: Throwable) {}
                 }
             }
         }
     }
+
+    @JvmStatic
+    fun setAppVersion(version: String?) {
+        currentAppVersion = version
+    }
+
+    @JvmStatic
+    fun getAppVersion(): String? = currentAppVersion
 
     @JvmStatic
     @JvmOverloads
@@ -177,7 +192,8 @@ object VoxSafeLogger {
                 category = category,
                 code = sanitizedCode,
                 message = sanitizedMsg,
-                context = sanitizedContext
+                context = sanitizedContext,
+                appVersion = currentAppVersion
             )
             try {
                 logStore?.addEvent(event)

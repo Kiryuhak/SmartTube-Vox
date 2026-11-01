@@ -367,7 +367,8 @@ public class PlaybackActivity extends LeanbackActivity {
         }
 
         if (getPlayerData().getBackgroundMode() == PlayerData.BACKGROUND_MODE_SOUND &&
-                !mIsBackgroundAudioOnlyActive && !isFinishing() && !isBackPressed()) {
+                !mIsBackgroundAudioOnlyActive && !isFinishing() && !isBackPressed() &&
+                !AppDialogPresenter.instance(this).isDialogShown()) {
             enterBackgroundAudioOnly();
         }
 

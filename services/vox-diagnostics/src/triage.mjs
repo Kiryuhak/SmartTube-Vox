@@ -324,24 +324,25 @@ export function structuredEvents(report = {}) {
 export function classifyReport(report = {}) {
   const events = structuredEvents(report);
   const now = Number(report.timestamp) || Date.now();
+  const reportTs = Number(report.reportCreatedAt || report.timestamp || report.created_at) || now;
   const currentSessionId = report.playbackSessionId || report.livePlayback?.playbackSessionId || report.playbackStats?.playbackSessionId;
+  const TRIGGER_RECENCY_THRESHOLD_MS = 1800000; // 30 minutes bounded recency policy
 
   // Annotate events with lifecycle: CURRENT_SESSION, RECENT, HISTORICAL
   for (const ev of events) {
     const evSessionId = ev.safeContext?.playbackSessionId || ev.safeContext?.sessionId;
+    const evAppVersion = ev.appVersion || ev.safeContext?.appVersion || ev.safeContext?.currentVersion;
     const isOldVersion = Boolean(
-      report.appVersion && (
-        (ev.safeContext?.appVersion && ev.safeContext.appVersion !== report.appVersion) ||
-        (ev.safeContext?.currentVersion && ev.safeContext.currentVersion !== report.appVersion)
-      )
+      report.appVersion && evAppVersion && evAppVersion !== report.appVersion
     );
-    const isStaleTime = Math.abs(now - ev.timestamp) > 3600000; // > 1 hour
+    const evTs = Number(ev.timestamp || ev.eventAt || 0);
+    const isStaleTime = evTs <= 0 || (reportTs - evTs) > TRIGGER_RECENCY_THRESHOLD_MS || evTs > (reportTs + 60000);
     if (ev.isHistorical || isOldVersion || isStaleTime) {
       ev.lifecycle = 'HISTORICAL';
       ev.isHistorical = true;
     } else if (currentSessionId && evSessionId && evSessionId === currentSessionId) {
       ev.lifecycle = 'CURRENT_SESSION';
-    } else if (Math.abs(now - ev.timestamp) <= 180000) { // within last 3 minutes
+    } else if (Math.abs(reportTs - evTs) <= 180000) { // within last 3 minutes
       ev.lifecycle = 'RECENT';
     } else {
       ev.lifecycle = 'HISTORICAL';
@@ -350,8 +351,7 @@ export function classifyReport(report = {}) {
   }
 
   // Ensure chronological order (oldest -> newest) for recovery and precedence checks
-  const isNewestFirst = events.length >= 2 && events[0].timestamp > events[events.length - 1].timestamp;
-  const chronoEvents = isNewestFirst ? [...events].reverse() : events;
+  const chronoEvents = [...events].sort((a, b) => (Number(a.timestamp || a.eventAt || 0)) - (Number(b.timestamp || b.eventAt || 0)));
 
   // Recovery detection: Check if earlier errors were followed by newer success events
   for (let i = 0; i < chronoEvents.length; i++) {
@@ -431,6 +431,7 @@ export function classifyReport(report = {}) {
     } else if (trigEv) {
       primary = trigEv;
     } else {
+      const allHistorical = events.length > 0 && events.every(e => e.isHistorical || e.lifecycle === 'HISTORICAL');
       primary = {
         event: triggerCode,
         category: inferCategoryFromCode(triggerCode),
@@ -438,7 +439,8 @@ export function classifyReport(report = {}) {
         stage: inferStage(triggerCode),
         severity: severityForEvent(triggerCode, 'ERROR'),
         level: 'ERROR',
-        lifecycle: 'TRIGGER',
+        lifecycle: allHistorical ? 'HISTORICAL' : 'TRIGGER',
+        isHistorical: allHistorical,
         errorCategory: inferCategoryFromCode(triggerCode),
       };
     }
@@ -499,7 +501,7 @@ export function classifyReport(report = {}) {
   const severity = SEVERITIES.includes(explicit) ? explicit : computedSeverity;
   const signature = buildClassificationSignature(report, { events, errorCategory, subsystem, stage, severity, primaryEvent: primary });
   return {
-    events,
+    events: chronoEvents,
     errorCategory,
     subsystem,
     stage,
