@@ -150,6 +150,10 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         return sInstance;
     }
 
+    public static void unhold() {
+        sInstance = null;
+    }
+
     public int getOKButtonBehavior() {
         return mOKButtonBehavior;
     }
@@ -288,6 +292,9 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         mIsAllSpeedEnabled = enable;
         mIsSpeedPerVideoEnabled = false;
         mIsSpeedPerChannelEnabled = false;
+        if (enable && Helpers.floatEquals(mSpeed, 1.0f) && !Helpers.floatEquals(mLastSpeed, 1.0f) && mLastSpeed > 0) {
+            mSpeed = mLastSpeed;
+        }
         persistState();
     }
 
@@ -591,25 +598,21 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     }
 
     public float getSpeed(String channelId) {
-        SpeedItem speed = null;
+        if (isAllSpeedEnabled()) {
+            return mSpeed > 0 ? mSpeed : 1.0f;
+        }
 
         if (isSpeedPerChannelEnabled() && channelId != null) {
-            speed = mSpeeds.get(channelId);
-            mSpeed = 1.0f; // reset speed if the channel not found
+            SpeedItem speed = mSpeeds.get(channelId);
+            if (speed != null) {
+                return speed.speed;
+            }
         }
 
-        if (speed != null) {
-            mSpeed = speed.speed;
-        }
-
-        return mSpeed;
+        return 1.0f;
     }
 
     public void setSpeed(String channelId, float speed) {
-        if (mSpeed == speed && channelId == null) {
-            return;
-        }
-
         if (isSpeedPerChannelEnabled() && channelId != null) {
             if (Helpers.floatEquals(speed, 1.0f)) {
                 mSpeeds.remove(channelId);
@@ -618,7 +621,9 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
             }
         }
         setLastSpeed(speed);
-        mSpeed = speed;
+        if (isAllSpeedEnabled() || channelId == null) {
+            mSpeed = speed;
+        }
         persistState();
     }
 
@@ -902,8 +907,8 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
             }
         }
 
-        if (!mIsAllSpeedEnabled) {
-            mSpeed = 1.0f;
+        if (mIsAllSpeedEnabled && Helpers.floatEquals(mSpeed, 1.0f) && !Helpers.floatEquals(mLastSpeed, 1.0f) && mLastSpeed > 0) {
+            mSpeed = mLastSpeed;
         }
 
         if (mSubtitleStyleIndex >= mSubtitleStyles.size()) {
@@ -912,7 +917,8 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     }
 
     public void persistNow() {
-        Utils.post(mPersistStateInt);
+        Utils.removeCallbacks(mPersistStateInt);
+        persistStateInt();
     }
 
     private void persistState() {

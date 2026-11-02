@@ -51,6 +51,10 @@ public class VideoStateService implements ProfileChangeListener {
         return sInstance;
     }
 
+    public static void unhold() {
+        sInstance = null;
+    }
+
     public List<State> getStates() {
         return mStates;
     }

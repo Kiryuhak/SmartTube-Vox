@@ -1012,7 +1012,7 @@ public class AppDialogUtil {
                     playerData.setSpeedPerVideoEnabled(false);
                     playerData.setSpeedPerChannelEnabled(false);
                 },
-                !playerData.isAllSpeedEnabled() && !playerData.isSpeedPerVideoEnabled()));
+                !playerData.isAllSpeedEnabled() && !playerData.isSpeedPerVideoEnabled() && !playerData.isSpeedPerChannelEnabled()));
 
         options.add(UiOptionItem.from(context.getString(R.string.player_remember_speed_all),
                 optionItem -> playerData.setAllSpeedEnabled(true),

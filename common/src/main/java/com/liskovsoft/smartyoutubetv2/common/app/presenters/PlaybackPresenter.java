@@ -84,6 +84,10 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
         return sInstance;
     }
 
+    public static void unhold() {
+        sInstance = null;
+    }
+
     @Override
     public void onViewInitialized() {
         super.onViewInitialized();

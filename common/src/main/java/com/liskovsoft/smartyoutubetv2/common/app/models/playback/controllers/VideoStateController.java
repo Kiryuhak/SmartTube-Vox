@@ -18,8 +18,12 @@ import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode;
+import com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger;
+import java.util.HashMap;
+import java.util.Map;
 import javax.annotation.Nullable;
-
 public class VideoStateController extends BasePlayerController {
     private static final String TAG = VideoStateController.class.getSimpleName();
     private static final long MUSIC_VIDEO_MAX_DURATION_MS = 6 * 60 * 1000;
@@ -40,7 +44,7 @@ public class VideoStateController extends BasePlayerController {
     @Nullable
     private Boolean mIsRestoreActualLive;
     private long mSleepTimerStartMs;
-
+    private boolean mIsApplyingProgrammaticSpeed;
     @Override
     public void onInit() {
         mSleepTimerStartMs = System.currentTimeMillis();
@@ -196,13 +200,19 @@ public class VideoStateController extends BasePlayerController {
 
     @Override
     public void onMetadata(MediaItemMetadata metadata) {
+        if (metadata != null && metadata.getVideoId() != null && getVideo() != null &&
+                !metadata.getVideoId().equals(getVideo().videoId)) {
+            return;
+        }
+
         // Channel info should be loaded at this point
         if (getVideo() != null && !getVideo().isRemote) {
             restoreSubtitleFormat();
         }
 
         // Need to contain channel id
-        restoreSpeedAndPositionIfNeeded();
+        restoreSpeedIfNeeded();
+        restoreLivePositionIfNeeded();
 
         // NOTE: needed for the restore after oom crash?
         saveState(); // start watching?
@@ -248,6 +258,7 @@ public class VideoStateController extends BasePlayerController {
 
         // In this state video length is not undefined.
         restoreState();
+        restoreSpeedIfNeeded();
 
         if (getContext() != null) {
             try {
@@ -327,7 +338,8 @@ public class VideoStateController extends BasePlayerController {
     @Override
     public void onBuffering() {
         // Restore speed on LIVE end or after seek
-        restoreSpeedAndPositionIfNeeded();
+        restoreSpeedIfNeeded();
+        restoreLivePositionIfNeeded();
 
         // Live stream starts to buffer after the end
         showHideScreensaver(true);
@@ -347,7 +359,11 @@ public class VideoStateController extends BasePlayerController {
             return;
         }
 
-        getPlayerData().setSpeed(getVideo().channelId, speed);
+        if (mIsApplyingProgrammaticSpeed) {
+            return;
+        }
+
+        handleUserSpeedChange(speed);
     }
 
     @Override
@@ -371,20 +387,24 @@ public class VideoStateController extends BasePlayerController {
 
         fitVideoIntoDialog();
 
-        float lastSpeed = getPlayerData().getSpeed(getVideo().channelId);
-        if (Helpers.floatEquals(lastSpeed, 1.0f)) {
-            lastSpeed = getPlayerData().getLastSpeed();
-        }
-        State state = getStateService().getByVideoId(getVideo() != null ? getVideo().videoId : null);
-        if (state != null && getPlayerData().isSpeedPerVideoEnabled()) {
-            lastSpeed = !Helpers.floatEquals(1.0f, state.speed) ? state.speed : lastSpeed;
-            getStateService().save(new State(state.video, state.positionMs, state.durationMs, enabled ? 1.0f : lastSpeed));
+        float targetSpeed;
+        if (enabled) {
+            targetSpeed = 1.0f;
+        } else {
+            float preferredSpeed = resolveDesiredSpeed(getVideo());
+            if (Helpers.floatEquals(preferredSpeed, 1.0f)) {
+                preferredSpeed = getPlayerData().getLastSpeed();
+            }
+            if (Helpers.floatEquals(preferredSpeed, 1.0f)) {
+                preferredSpeed = getPlayerData().getSpeed();
+            }
+            targetSpeed = !Helpers.floatEquals(preferredSpeed, 1.0f) ? preferredSpeed : 1.25f;
         }
 
-        if (Helpers.floatEquals(lastSpeed, 1.0f) || getPlayerTweaksData().isSpeedButtonOldBehaviorEnabled()) {
+        if (Helpers.floatEquals(targetSpeed, 1.0f) && getPlayerTweaksData().isSpeedButtonOldBehaviorEnabled()) {
             onSpeedLongClicked(enabled);
         } else {
-            getPlayer().setSpeed(enabled ? 1.0f : lastSpeed);
+            getPlayer().setSpeed(targetSpeed);
         }
     }
 
@@ -453,9 +473,7 @@ public class VideoStateController extends BasePlayerController {
     }
 
     private void resetGlobalSpeedIfNeeded() {
-        if (!getPlayerData().isAllSpeedEnabled()) {
-            getPlayerData().setSpeed(1.0f);
-        }
+        // Policy resolver dynamically handles all four modes without destroying user preferences
     }
 
     private void resetPosition(Video video) {
@@ -585,14 +603,15 @@ public class VideoStateController extends BasePlayerController {
         long remainsMs = durationMs - positionMs;
         boolean isPositionActual = remainsMs > 1_000;
         boolean isLiveBroken = video.isLive && durationMs <= 30_000; // live without a history
+        float speedToSave = resolveDesiredSpeed(video);
         if (isPositionActual && !isLiveBroken) { // partially viewed
-            State state = new State(video, positionMs, durationMs, getPlayer().getSpeed());
+            State state = new State(video, positionMs, durationMs, speedToSave);
             getStateService().save(state);
             // Sync video. You could safely use it later to restore state.
             video.sync(state);
         } else { // fully viewed
             // Mark video as fully viewed. This could help to restore proper progress marker on the video card later.
-            getStateService().save(new State(video, durationMs, durationMs, getPlayer().getSpeed()));
+            getStateService().save(new State(video, durationMs, durationMs, speedToSave));
             video.markFullyViewed();
         }
 
@@ -688,7 +707,7 @@ public class VideoStateController extends BasePlayerController {
         }
     }
 
-    private void restoreSpeedAndPositionIfNeeded() {
+    private void restoreLivePositionIfNeeded() {
         if (getPlayer() == null || getVideo() == null) {
             return;
         }
@@ -702,24 +721,110 @@ public class VideoStateController extends BasePlayerController {
             return;
         }
 
-        boolean liveEnd = isLiveEnd();
-
-        // Position
-        if (liveEnd) {
+        if (isLiveEnd()) {
             getPlayer().setPositionMs(getPlayer().getDurationMs() - getLiveBuffer());
         }
+    }
 
-        // Speed
-        if (liveEnd || isMusicVideo()) {
-            getPlayer().setSpeed(1.0f);
-        } else {
-            State state = getStateService().getByVideoId(item.videoId);
-            float speed = getPlayerData().getSpeed(item.channelId);
-            getPlayer().setSpeed(
-                    state != null && getPlayerData().isSpeedPerVideoEnabled() ? state.speed :
-                            getPlayerData().isAllSpeedEnabled() || item.channelId != null ? speed : 1.0f
-            );
+    private void restoreSpeedIfNeeded() {
+        if (getPlayer() == null || getVideo() == null) {
+            return;
         }
+
+        Video item = getVideo();
+        float effectiveSpeed = calculateEffectiveSpeed(item);
+        float currentSpeed = getPlayer().getSpeed();
+
+        if (currentSpeed <= 0 || !Helpers.floatEquals(currentSpeed, effectiveSpeed)) {
+            applySpeed(effectiveSpeed);
+        } else {
+            getPlayer().setButtonState(R.id.action_video_speed, effectiveSpeed != 1.0f ? PlayerUI.BUTTON_ON : PlayerUI.BUTTON_OFF);
+        }
+    }
+
+    private void applySpeed(float speed) {
+        if (getPlayer() == null) {
+            return;
+        }
+
+        logSpeedEvent(VoxLogCode.SPEED_APPLIED, "RESTORE", speed);
+
+        mIsApplyingProgrammaticSpeed = true;
+        try {
+            getPlayer().setSpeed(speed);
+            getPlayer().setButtonState(R.id.action_video_speed, speed != 1.0f ? PlayerUI.BUTTON_ON : PlayerUI.BUTTON_OFF);
+        } finally {
+            mIsApplyingProgrammaticSpeed = false;
+        }
+    }
+
+    public float resolveDesiredSpeed(Video video) {
+        if (video == null) {
+            return 1.0f;
+        }
+
+        if (getPlayerData().isSpeedPerVideoEnabled()) {
+            State state = getStateService().getByVideoId(video.videoId);
+            return (state != null && state.speed > 0) ? state.speed : 1.0f;
+        }
+
+        if (getPlayerData().isSpeedPerChannelEnabled()) {
+            if (video.channelId != null) {
+                return getPlayerData().getSpeed(video.channelId);
+            }
+            return 1.0f;
+        }
+
+        if (getPlayerData().isAllSpeedEnabled()) {
+            float speed = getPlayerData().getSpeed(null);
+            return speed > 0 ? speed : 1.0f;
+        }
+
+        return 1.0f;
+    }
+
+    private float calculateEffectiveSpeed(Video video) {
+        if (video == null) {
+            return 1.0f;
+        }
+        if (isLiveEnd() || isMusicVideo() || (video.isLive && isInsideActualLive())) {
+            logSpeedEvent(VoxLogCode.SPEED_RESET_REASON, isMusicVideo() ? "MUSIC_VIDEO" : "LIVE_END", 1.0f);
+            return 1.0f;
+        }
+        return resolveDesiredSpeed(video);
+    }
+
+    private void handleUserSpeedChange(float speed) {
+        Video video = getVideo();
+        if (video == null) {
+            return;
+        }
+
+        logSpeedEvent(VoxLogCode.SPEED_USER_CHANGED, "USER", speed);
+
+        if (getPlayerData().isSpeedPerVideoEnabled()) {
+            State state = getStateService().getByVideoId(video.videoId);
+            getStateService().save(new State(video, state != null ? state.positionMs : 0, state != null ? state.durationMs : 0, speed));
+        } else if (getPlayerData().isSpeedPerChannelEnabled()) {
+            getPlayerData().setSpeed(video.channelId, speed);
+        } else if (getPlayerData().isAllSpeedEnabled()) {
+            getPlayerData().setSpeed(null, speed);
+        } else {
+            getPlayerData().setLastSpeed(speed);
+        }
+    }
+
+    private void logSpeedEvent(String code, String trigger, float speed) {
+        try {
+            Map<String, String> ctx = new HashMap<>();
+            String mode = getPlayerData().isAllSpeedEnabled() ? "ALL" :
+                    getPlayerData().isSpeedPerChannelEnabled() ? "PER_CHANNEL" :
+                    getPlayerData().isSpeedPerVideoEnabled() ? "PER_VIDEO" : "NONE";
+            ctx.put("policy", mode);
+            ctx.put("trigger", trigger);
+            ctx.put("speed", String.valueOf(speed));
+            VoxSafeLogger.d(VoxLogCategory.PLAYER, code, "Speed event: " + code, ctx);
+        } catch (Throwable ignored) {}
     }
 
     public void blockPlay(boolean block) {
@@ -795,7 +900,7 @@ public class VideoStateController extends BasePlayerController {
         }
 
         Video item = getVideo();
-        return item.belongsToMusic();
+        return item.belongsToMusic() || (item.category != null && "Music".equalsIgnoreCase(item.category));
     }
 
     //private void setPositionMs(long positionMs) {
