@@ -29,6 +29,7 @@ import java.util.Map;
 
 public class PlayerData extends DataChangeBase implements PlayerConstants, ProfileChangeListener {
     private static final String VIDEO_PLAYER_DATA = "video_player_data";
+    private static final String SPEED_LEGACY_MIGRATED = "vox_speed_legacy_migrated";
     public static final int OK_ONLY_UI = 0;
     public static final int OK_UI_AND_PAUSE = 1;
     public static final int OK_ONLY_PAUSE = 2;
@@ -289,11 +290,13 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     }
 
     public void setAllSpeedEnabled(boolean enable) {
+        boolean wasAllSpeed = mIsAllSpeedEnabled;
         mIsAllSpeedEnabled = enable;
         mIsSpeedPerVideoEnabled = false;
         mIsSpeedPerChannelEnabled = false;
-        if (enable && Helpers.floatEquals(mSpeed, 1.0f) && !Helpers.floatEquals(mLastSpeed, 1.0f) && mLastSpeed > 0) {
+        if (!wasAllSpeed && enable && !isSpeedLegacyMigrated() && Helpers.floatEquals(mSpeed, 1.0f) && !Helpers.floatEquals(mLastSpeed, 1.0f) && mLastSpeed > 0) {
             mSpeed = mLastSpeed;
+            setSpeedLegacyMigrated(true);
         }
         persistState();
     }
@@ -623,6 +626,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         setLastSpeed(speed);
         if (isAllSpeedEnabled() || channelId == null) {
             mSpeed = speed;
+            setSpeedLegacyMigrated(true);
         }
         persistState();
     }
@@ -907,12 +911,25 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
             }
         }
 
-        if (mIsAllSpeedEnabled && Helpers.floatEquals(mSpeed, 1.0f) && !Helpers.floatEquals(mLastSpeed, 1.0f) && mLastSpeed > 0) {
-            mSpeed = mLastSpeed;
+        if (mIsAllSpeedEnabled && !isSpeedLegacyMigrated()) {
+            if (Helpers.floatEquals(mSpeed, 1.0f) && !Helpers.floatEquals(mLastSpeed, 1.0f) && mLastSpeed > 0) {
+                mSpeed = mLastSpeed;
+            }
+            setSpeedLegacyMigrated(true);
         }
 
         if (mSubtitleStyleIndex >= mSubtitleStyles.size()) {
             mSubtitleStyleIndex = yellowOnSemiBgSubIdx;
+        }
+    }
+
+    private boolean isSpeedLegacyMigrated() {
+        return mPrefs != null && mPrefs.getBoolean(SPEED_LEGACY_MIGRATED, false);
+    }
+
+    private void setSpeedLegacyMigrated(boolean migrated) {
+        if (mPrefs != null) {
+            mPrefs.putBoolean(SPEED_LEGACY_MIGRATED, migrated);
         }
     }
 

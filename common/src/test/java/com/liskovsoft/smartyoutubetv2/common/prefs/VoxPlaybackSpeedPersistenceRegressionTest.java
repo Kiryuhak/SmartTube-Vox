@@ -3,6 +3,9 @@ package com.liskovsoft.smartyoutubetv2.common.prefs;
 import android.content.Context;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemMetadata;
 import com.liskovsoft.sharedutils.helpers.Helpers;
+import com.liskovsoft.sharedutils.helpers.FileHelpers;
+import com.liskovsoft.smartyoutubetv2.common.prefs.AppPrefs;
+import java.io.File;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoStateController;
@@ -131,6 +134,8 @@ public class VoxPlaybackSpeedPersistenceRegressionTest {
     @Before
     public void setUp() {
         mContext = RuntimeEnvironment.getApplication();
+        AppPrefs.instance(mContext).clear();
+        FileHelpers.delete(new File(FileHelpers.getFilesDir(mContext), "app_prefs"));
         PlayerData.unhold();
         VideoStateService.unhold();
         PlaybackPresenter.unhold();
@@ -147,6 +152,8 @@ public class VoxPlaybackSpeedPersistenceRegressionTest {
 
     @After
     public void tearDown() {
+        AppPrefs.instance(mContext).clear();
+        FileHelpers.delete(new File(FileHelpers.getFilesDir(mContext), "app_prefs"));
         PlayerData.unhold();
         VideoStateService.unhold();
         PlaybackPresenter.unhold();
@@ -725,5 +732,215 @@ public class VoxPlaybackSpeedPersistenceRegressionTest {
                 1, mFakeView.setSpeedCallCount);
         assertEquals(1.35f, mFakeView.speed, 0.001f);
         assertEquals(PlayerUI.BUTTON_ON, mFakeView.buttonState);
+    }
+
+    // =========================================================================
+    // PROMPT #139 AUDIT TESTS: B1 - B6
+    // =========================================================================
+
+    // =========================================================================
+    // B1: РЇРІРЅС‹Р№ РІС‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ 1.0x РЅРµ РїРµСЂРµРѕРїСЂРµРґРµР»СЏРµС‚СЃСЏ СЃР°РјРѕРІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµРј
+    // =========================================================================
+    @Test
+    public void testB1_ExplicitUser10InAllMode_PersistsAcrossRestartWithoutHealing() {
+        mPlayerData.setAllSpeedEnabled(true);
+        mPlayerData.setSpeed(1.35f);
+        assertEquals(1.35f, mPlayerData.getSpeed(), 0.001f);
+        mPlayerData.persistNow();
+
+        // User explicitly chooses 1.0x (normal speed)
+        mPlayerData.setSpeed(1.0f);
+        assertEquals(1.0f, mPlayerData.getSpeed(), 0.001f);
+        mPlayerData.persistNow();
+
+        // Recreate PlayerData instance simulating cold app launch
+        PlayerData.unhold();
+        PlayerData restored = PlayerData.instance(mContext);
+        assertTrue("B1: ALL mode must remain active after restart", restored.isAllSpeedEnabled());
+        assertEquals("B1: User explicit 1.0x choice must NOT be healed/overridden by mLastSpeed",
+                1.0f, restored.getSpeed(), 0.001f);
+
+        // Verify player applies 1.0x and UI button is OFF
+        Video v = new Video();
+        v.videoId = "vid_b1_after_restart";
+        v.channelId = "ch_b1";
+        mFakeView.video = v;
+        mPresenter.openVideo(v);
+        mController.onVideoLoaded(v);
+
+        assertEquals("B1: Engine speed must be 1.0x", 1.0f, mFakeView.speed, 0.001f);
+        assertEquals("B1: Button must be OFF for 1.0x", PlayerUI.BUTTON_OFF, mFakeView.buttonState);
+    }
+
+    @Test
+    public void testB1_ExplicitUser10InAllMode_PreservedAcrossModeToggling() {
+        mPlayerData.setAllSpeedEnabled(true);
+        mPlayerData.setSpeed(1.35f);
+        mPlayerData.persistNow();
+
+        // User explicitly sets 1.0x
+        mPlayerData.setSpeed(1.0f);
+        mPlayerData.persistNow();
+        assertEquals(1.0f, mPlayerData.getSpeed(), 0.001f);
+
+        // User switches from ALL to PER_CHANNEL then back to ALL
+        mPlayerData.setSpeedPerChannelEnabled(true);
+        assertTrue(mPlayerData.isSpeedPerChannelEnabled());
+
+        mPlayerData.setAllSpeedEnabled(true);
+        assertTrue(mPlayerData.isAllSpeedEnabled());
+        assertEquals("B1: Explicit 1.0x must NOT heal back to 1.35x when toggling mode back to ALL",
+                1.0f, mPlayerData.getSpeed(), 0.001f);
+    }
+
+    // =========================================================================
+    // B2: Р—Р°РїРёСЃСЊ СЃРєРѕСЂРѕСЃС‚Рё РІ СЂРµР¶РёРјРµ ALL РѕР±РЅРѕРІР»СЏРµС‚ РіР»РѕР±Р°Р»СЊРЅСѓСЋ РЅР°СЃС‚СЂРѕР№РєСѓ
+    // =========================================================================
+    @Test
+    public void testB2_AllMode_ManualSpeedChangeWithRealPlayerData_PersistsGloballyAcrossChannels() {
+        mPlayerData.setAllSpeedEnabled(true);
+        mPlayerData.setSpeed(1.35f);
+
+        Video vAlpha = new Video();
+        vAlpha.videoId = "vid_alpha";
+        vAlpha.channelId = "channel_alpha";
+        mFakeView.video = vAlpha;
+
+        mPresenter.openVideo(vAlpha);
+        mController.onVideoLoaded(vAlpha);
+        assertEquals(1.35f, mFakeView.speed, 0.001f);
+
+        // User manually changes speed to 1.75x during playback
+        mPresenter.onSpeedChanged(1.75f);
+        assertEquals("B2: Real PlayerData global speed must be updated to 1.75x in ALL mode",
+                1.75f, mPlayerData.getSpeed(), 0.001f);
+
+        // Load new video from a completely different channel
+        Video vBeta = new Video();
+        vBeta.videoId = "vid_beta";
+        vBeta.channelId = "channel_beta";
+        mFakeView.video = vBeta;
+
+        mPresenter.openVideo(vBeta);
+        mController.onVideoLoaded(vBeta);
+        assertEquals("B2: New channel must inherit the updated global speed 1.75x",
+                1.75f, mFakeView.speed, 0.001f);
+        assertEquals(PlayerUI.BUTTON_ON, mFakeView.buttonState);
+    }
+
+    // =========================================================================
+    // B3: Р‘РµР·РѕРїР°СЃРЅРѕСЃС‚СЊ РїСЂРё СЃРёРЅС…СЂРѕРЅРЅС‹С… Рё Р°СЃРёРЅС…СЂРѕРЅРЅС‹С… РІС‹Р·РѕРІР°С… onSpeedChanged
+    // =========================================================================
+    @Test
+    public void testB3_ProgrammaticSpeedApplication_DoesNotCorruptUserPolicy() {
+        mPlayerData.setAllSpeedEnabled(true);
+        mPlayerData.setSpeed(1.35f);
+
+        Video v = new Video();
+        v.videoId = "vid_b3";
+        v.channelId = "ch_b3";
+        mFakeView.video = v;
+
+        mPresenter.openVideo(v);
+        mController.onVideoLoaded(v);
+        assertEquals(1.35f, mFakeView.speed, 0.001f);
+
+        // Simulate engine recovery or buffer reset that triggers onSpeedChanged while guarded
+        mController.onBuffering();
+        assertEquals("B3: User policy must remain 1.35x after engine buffering/state changes",
+                1.35f, mPlayerData.getSpeed(), 0.001f);
+    }
+
+    // =========================================================================
+    // B4: onVideoLoaded + onMetadata СЃ Р·Р°РїРѕР·РґР°Р»С‹Рј channelId Рё Р·Р°С‰РёС‚РѕР№ РѕС‚ stale metadata
+    // =========================================================================
+    @Test
+    public void testB4_DelayedChannelId_MetadataArrivalAppliesSpeedWithoutStaleInterference() {
+        mPlayerData.setSpeedPerChannelEnabled(true);
+        mPlayerData.setSpeed("ch_target", 1.50f);
+
+        // Video loads initially with null channelId
+        Video v = new Video();
+        v.videoId = "vid_b4_target";
+        v.channelId = null;
+        mFakeView.video = v;
+
+        mPresenter.openVideo(v);
+        mController.onVideoLoaded(v);
+        // Fallback speed is 1.0x while channelId is unknown
+        assertEquals(1.0f, mFakeView.speed, 0.001f);
+
+        // Stale metadata from previous video arrives -> must be ignored!
+        MediaItemMetadata staleMeta = createMockMetadata("vid_OLD_UNRELATED", "ch_other");
+        mController.onMetadata(staleMeta);
+        assertEquals("B4: Stale metadata must not change player speed", 1.0f, mFakeView.speed, 0.001f);
+
+        // Proper metadata arrives with channelId
+        v.channelId = "ch_target";
+        MediaItemMetadata correctMeta = createMockMetadata("vid_b4_target", "ch_target");
+        mController.onMetadata(correctMeta);
+
+        assertEquals("B4: Arrival of correct metadata must restore channel speed 1.50x",
+                1.50f, mFakeView.speed, 0.001f);
+        assertEquals(PlayerUI.BUTTON_ON, mFakeView.buttonState);
+    }
+
+    // =========================================================================
+    // B5: Live DVR Seek: РѕС‚СЃРєРѕРє РЅР°Р·Р°Рґ РѕС‚ Live-edge РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ С†РµР»РµРІСѓСЋ СЃРєРѕСЂРѕСЃС‚СЊ 1.35x
+    // =========================================================================
+    @Test
+    public void testB5_LiveDvrSeek_MovingAwayFromLiveEdgeRestoresDesiredSpeed() {
+        mPlayerData.setAllSpeedEnabled(true);
+        mPlayerData.setSpeed(1.35f);
+
+        Video vLive = new Video();
+        vLive.videoId = "vid_live_dvr";
+        vLive.isLive = true;
+        mFakeView.video = vLive;
+        mFakeView.durationMs = 7200_000L;
+        mFakeView.positionMs = 7199_500L; // At live edge (within 1s)
+
+        mPresenter.openVideo(vLive);
+        mController.onVideoLoaded(vLive);
+
+        // At live edge, effective speed is clamped to 1.0x
+        assertEquals("B5: At live edge, playback is clamped to 1.0x", 1.0f, mFakeView.speed, 0.001f);
+        assertEquals("B5: PlayerData user policy must remain 1.35x", 1.35f, mPlayerData.getSpeed(), 0.001f);
+
+        // User seeks back 5 minutes into the DVR window (now far behind live edge)
+        mFakeView.positionMs = 6900_000L;
+        mController.onBuffering(); // triggers restoreSpeedIfNeeded()
+
+        assertEquals("B5: Seeking away from live edge must restore user desired speed 1.35x",
+                1.35f, mFakeView.speed, 0.001f);
+        assertEquals(PlayerUI.BUTTON_ON, mFakeView.buttonState);
+    }
+
+    // =========================================================================
+    // B6: РњРЅРѕРіРѕСЃРєРѕСЂРѕСЃС‚РЅР°СЏ РїСЂРѕРІРµСЂРєР° (1.25, 1.35, 1.50) Рё РёР·РѕР»СЏС†РёСЏ pitch
+    // =========================================================================
+    @Test
+    public void testB6_MultipleSpeedsAndPitchIsolation() {
+        mPlayerData.setAllSpeedEnabled(true);
+
+        float[] testSpeeds = new float[]{1.25f, 1.35f, 1.50f, 2.0f, 1.0f};
+        Video v = new Video();
+        v.videoId = "vid_b6";
+        v.channelId = "ch_b6";
+        mFakeView.video = v;
+
+        for (float speed : testSpeeds) {
+            mPlayerData.setSpeed(speed);
+            assertEquals(speed, mPlayerData.getSpeed(), 0.001f);
+
+            mPresenter.openVideo(v);
+            mController.onVideoLoaded(v);
+
+            assertEquals("B6: Engine speed must match " + speed, speed, mFakeView.speed, 0.001f);
+            int expectedBtn = (speed != 1.0f) ? PlayerUI.BUTTON_ON : PlayerUI.BUTTON_OFF;
+            assertEquals("B6: Button state for " + speed, expectedBtn, mFakeView.buttonState);
+            assertEquals("B6: Pitch must remain 1.0 and not get distorted by speed changes",
+                    1.0f, mPlayerData.getPitch(), 0.001f);
+        }
     }
 }
