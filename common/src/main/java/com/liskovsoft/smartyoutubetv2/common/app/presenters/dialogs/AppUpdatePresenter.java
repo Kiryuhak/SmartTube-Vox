@@ -97,6 +97,9 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
 
                     @Override
                     public void onNoUpdateAvailable(String currentVersion) {
+                        if (getContext() != null) {
+                            BrowsePresenter.instance(getContext()).unpinItem(getContext().getString(R.string.update_found));
+                        }
                         if (mIsForceCheck) {
                             LoadingManager.showLoading(getContext(), false);
                             MessageHelpers.showMessage(getContext(), R.string.update_not_found);
@@ -110,6 +113,9 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
 
                     @Override
                     public void onDownloadCompleted(File apkFile) {
+                        if (getContext() != null) {
+                            BrowsePresenter.instance(getContext()).unpinItem(getContext().getString(R.string.update_found));
+                        }
                         LoadingManager.showLoading(getContext(), false);
                         VoxOtaUpdateManager.instance(getContext()).installUpdate(apkFile);
                     }

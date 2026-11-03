@@ -449,6 +449,38 @@ class VoxOtaUpdateManager(private val context: Context) {
             var tmpFile: File? = null
             isDownloadCancelled.set(false)
             try {
+                // Client-side guard: reject same or older version before logging OTA_DOWNLOAD_STARTED or making network requests
+                val installedVersionCode = try {
+                    val pkg = context.packageName
+                    if (pkg != null) context.packageManager.getPackageInfo(pkg, 0).versionCode.toLong() else 0L
+                } catch (e: Throwable) {
+                    0L
+                }
+
+                val currentVersionName = try {
+                    val pkg = context.packageName
+                    if (pkg != null) context.packageManager.getPackageInfo(pkg, 0).versionName else null
+                } catch (e: Throwable) {
+                    null
+                }
+
+                val isStaleVersionCode = installedVersionCode > 0L && release.versionCode != null && release.versionCode > 0L && release.versionCode <= installedVersionCode
+                val isStaleVersionName = !currentVersionName.isNullOrBlank() && release.versionName.isNotBlank() &&
+                        !VoxVersionComparator.isUpdateAvailable(
+                            currentVersion = currentVersionName,
+                            targetVersion = release.versionName,
+                            installedVersionCode = installedVersionCode,
+                            targetVersionCode = release.versionCode
+                        )
+
+                if (isStaleVersionCode || isStaleVersionName) {
+                    throw VoxOtaException(
+                        VoxOtaErrorCode.VERSION_NOT_NEWER,
+                        "Candidate version (${release.versionName} / ${release.versionCode ?: 0}) is not newer than installed ($currentVersionName / $installedVersionCode)",
+                        stage = VoxOtaStage.COMPARE,
+                        isRetryable = false
+                    )
+                }
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
                     VoxLogCode.OTA_DOWNLOAD_STARTED,
@@ -878,6 +910,7 @@ class VoxOtaUpdateManager(private val context: Context) {
             VoxOtaErrorCode.RELEASE_NOT_FOUND -> VoxLogCode.OTA_RELEASE_NOT_FOUND
             VoxOtaErrorCode.INVALID_RELEASE -> VoxLogCode.OTA_INVALID_RELEASE
             VoxOtaErrorCode.CHANNEL_MISMATCH -> VoxLogCode.OTA_CHANNEL_MISMATCH
+            VoxOtaErrorCode.VERSION_NOT_NEWER -> VoxLogCode.OTA_PRE_VALIDATION_FAILED
             else -> VoxLogCode.OTA_FAILED
         }
 

@@ -1031,6 +1031,28 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         mSections.add(new BrowseSection(id, title, BrowseSection.TYPE_ERROR, resId, false, data));
     }
 
+    public void unpinItem(String title) {
+        if (title == null) {
+            return;
+        }
+
+        int sectionId = title.hashCode();
+        BrowseSection target = null;
+        for (BrowseSection section : mErrorSections) {
+            if (section.getId() == sectionId) {
+                target = section;
+                break;
+            }
+        }
+
+        if (target != null) {
+            mErrorSections.remove(target);
+            if (getView() != null) {
+                getView().removeSection(target);
+            }
+        }
+    }
+
     public void unpinItem(Video item) {
         getSidebarService().removePinnedItem(item);
         getGeneralData().removeSelectedItem(item.getId());

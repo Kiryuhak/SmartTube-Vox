@@ -218,7 +218,9 @@ object VoxOtaHudPresenter {
 
         VoxOtaUpdateManager.instance(context).downloadAndVerify(asset, release, object : VoxOtaUpdateManager.Callback {
             override fun onUpdateAvailable(r: VoxReleaseInfo, a: VoxReleaseAsset) {}
-            override fun onNoUpdateAvailable(currentVersion: String) {}
+            override fun onNoUpdateAvailable(currentVersion: String) {
+                mainHandler.post { dismissAll() }
+            }
 
             override fun onDownloadProgress(bytesRead: Long, totalBytes: Long, percent: Int) {
                 val now = System.currentTimeMillis()
