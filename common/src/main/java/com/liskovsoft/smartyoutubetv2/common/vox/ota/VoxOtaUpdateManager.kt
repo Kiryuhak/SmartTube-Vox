@@ -464,11 +464,18 @@ class VoxOtaUpdateManager(private val context: Context) {
                     null
                 }
 
+                val userChannel = try {
+                    VoxUpdateChannelManager.instance(context).getUpdateChannel()
+                } catch (e: Throwable) {
+                    VoxUpdateChannel.STABLE
+                }
+
                 val isStaleVersionCode = installedVersionCode > 0L && release.versionCode != null && release.versionCode > 0L && release.versionCode <= installedVersionCode
                 val isStaleVersionName = !currentVersionName.isNullOrBlank() && release.versionName.isNotBlank() &&
                         !VoxVersionComparator.isUpdateAvailable(
                             currentVersion = currentVersionName,
                             targetVersion = release.versionName,
+                            channel = userChannel,
                             installedVersionCode = installedVersionCode,
                             targetVersionCode = release.versionCode
                         )

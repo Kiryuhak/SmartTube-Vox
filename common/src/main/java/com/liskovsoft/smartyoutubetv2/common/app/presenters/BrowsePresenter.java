@@ -1037,20 +1037,22 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         }
 
         int sectionId = title.hashCode();
-        BrowseSection target = null;
-        for (BrowseSection section : mErrorSections) {
-            if (section.getId() == sectionId) {
-                target = section;
-                break;
+        BrowseSection target;
+        do {
+            target = null;
+            for (BrowseSection section : mErrorSections) {
+                if (section.getId() == sectionId || title.equals(section.getTitle())) {
+                    target = section;
+                    break;
+                }
             }
-        }
-
-        if (target != null) {
-            mErrorSections.remove(target);
-            if (getView() != null) {
-                getView().removeSection(target);
+            if (target != null) {
+                mErrorSections.remove(target);
+                if (getView() != null) {
+                    getView().removeSection(target);
+                }
             }
-        }
+        } while (target != null);
     }
 
     public void unpinItem(Video item) {

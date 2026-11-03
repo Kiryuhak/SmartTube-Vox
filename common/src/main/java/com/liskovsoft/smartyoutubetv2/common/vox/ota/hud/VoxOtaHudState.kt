@@ -75,10 +75,11 @@ object VoxOtaDisplayHelper {
 
     fun detectTier(versionName: String?, release: VoxReleaseInfo?): VoxOtaChannelTier {
         val lower = (versionName ?: release?.versionName ?: "").lowercase(Locale.ROOT)
+        val withoutUniversal = lower.replace("-universal", "")
         return when {
             lower.contains("dev") -> VoxOtaChannelTier.DEV
             lower.contains("beta") || lower.contains("rc") || release?.isPrerelease == true -> VoxOtaChannelTier.BETA
-            lower.contains("-vox.9.") && !lower.endsWith("-vox.9.0") && !lower.endsWith("-vox.9") -> VoxOtaChannelTier.BETA
+            withoutUniversal.contains("-vox.9.") && !withoutUniversal.endsWith("-vox.9.0") && !withoutUniversal.endsWith("-vox.9") && !withoutUniversal.endsWith("-vox.9.1") && !withoutUniversal.endsWith("-vox.9.2") -> VoxOtaChannelTier.BETA
             else -> VoxOtaChannelTier.STABLE
         }
     }
@@ -92,6 +93,8 @@ object VoxOtaDisplayHelper {
         } else if (clean.startsWith("v", ignoreCase = true)) {
             clean = clean.substring(1)
         }
+        val uniIdx = clean.indexOf("-universal", ignoreCase = true)
+        if (uniIdx >= 0) clean = clean.substring(0, uniIdx)
         val qaIdx = clean.indexOf("-otaqa")
         if (qaIdx >= 0) clean = clean.substring(0, qaIdx)
         val betaIdx = clean.indexOf("-beta")
