@@ -305,4 +305,33 @@ class VoxOtaForwardCompatibilityTest {
         val channel = VoxUpdateChannel.fromId(prefs.getString("update_channel", "stable"))
         assertEquals(VoxUpdateChannel.TEST, channel)
     }
+
+    // 23. sameBaseWithoutHigherVersionCodeBlocked (Prompt #141 Gate A)
+    @Test
+    fun testSameBaseWithoutHigherVersionCodeBlocked() {
+        // 9.2-rc.13 vs 9.2 stable with null targetVersionCode -> FAIL CLOSED
+        assertFalse(
+            "9.2-rc.13 must not offer update to 9.2 stable when target versionCode is unknown",
+            VoxVersionComparator.isUpdateAvailable("32.56-vox.9.2-rc.13", "32.56-vox.9.2", installedVersionCode = 2446032L, targetVersionCode = null)
+        )
+        // 9.2-rc.13 vs 9.2 stable with same versionCode (2446032) -> FAIL CLOSED
+        assertFalse(
+            "9.2-rc.13 must not offer update to 9.2 stable when target versionCode equals installed",
+            VoxVersionComparator.isUpdateAvailable("32.56-vox.9.2-rc.13", "32.56-vox.9.2", installedVersionCode = 2446032L, targetVersionCode = 2446032L)
+        )
+        // 9.2-rc.13 vs 9.2 stable with higher versionCode (2446033) -> ALLOWED
+        assertTrue(
+            "9.2-rc.13 must offer update to 9.2 stable when target versionCode is strictly higher",
+            VoxVersionComparator.isUpdateAvailable("32.56-vox.9.2-rc.13", "32.56-vox.9.2", installedVersionCode = 2446032L, targetVersionCode = 2446033L)
+        )
+    }
+
+    // 24. upgradeFrom91To92Allowed (Prompt #141 Gate A)
+    @Test
+    fun testUpgradeFrom91To92Allowed() {
+        assertTrue(
+            "9.1 (2446016) must offer update to 9.2 (2446032)",
+            VoxVersionComparator.isUpdateAvailable("32.56-vox.9.1", "32.56-vox.9.2", installedVersionCode = 2446016L, targetVersionCode = 2446032L)
+        )
+    }
 }

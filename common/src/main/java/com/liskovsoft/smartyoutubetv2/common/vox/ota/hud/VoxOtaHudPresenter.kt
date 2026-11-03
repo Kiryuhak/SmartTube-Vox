@@ -249,37 +249,9 @@ object VoxOtaHudPresenter {
             }
 
             override fun onDownloadCompleted(apkFile: File) {
-                // Secondary Stage: Verifying
-                val verifyingState = progressState.copy(
-                    phase = VoxOtaProgressPhase.VERIFYING,
-                    percent = 75
-                )
-                currentState = verifyingState
+                // Bytes downloaded and verified via SHA-256 and pre-install validator
                 mainHandler.post {
-                    if (verifyingState.isMinimized) {
-                        miniHudOverlay?.updateProgress(verifyingState)
-                    } else {
-                        activeDialog?.updateProgress(verifyingState)
-                    }
-
-                    // Secondary Stage: Preparing
-                    mainHandler.postDelayed({
-                        val preparingState = progressState.copy(
-                            phase = VoxOtaProgressPhase.PREPARING,
-                            percent = 90
-                        )
-                        currentState = preparingState
-                        if (preparingState.isMinimized) {
-                            miniHudOverlay?.updateProgress(preparingState)
-                        } else {
-                            activeDialog?.updateProgress(preparingState)
-                        }
-
-                        // Complete Stage
-                        mainHandler.postDelayed({
-                            showDownloadComplete(activity, release, asset, apkFile)
-                        }, 400L)
-                    }, 400L)
+                    showDownloadComplete(activity, release, asset, apkFile)
                 }
             }
 
@@ -403,42 +375,32 @@ object VoxOtaHudPresenter {
         val tier = VoxOtaDisplayHelper.detectTier(release.versionName, release)
         val displayVer = VoxOtaDisplayHelper.formatDisplayVersion(release.versionName, tier)
 
-        val step1 = VoxOtaHudState.Installing(
+        val waitingState = VoxOtaHudState.Installing(
             release = release,
             asset = asset,
             displayVersion = displayVer,
             apkFile = apkFile,
-            percent = 35,
-            step = VoxOtaInstallStep.PREPARING
+            percent = 100,
+            step = VoxOtaInstallStep.FINALIZING
         )
-        currentState = step1
+        currentState = waitingState
 
         mainHandler.post {
             val dialog = getOrCreateDialog(activity)
             dialog.showInstalling(
-                state = step1,
+                state = waitingState,
                 onClose = {
                     dismissAll()
                 }
             )
 
-            // Progressive step transitions
-            mainHandler.postDelayed({
-                val step2 = step1.copy(percent = 65, step = VoxOtaInstallStep.INSTALLING)
-                currentState = step2
-                dialog.showInstalling(step2) { dismissAll() }
-
-                mainHandler.postDelayed({
-                    val step3 = step1.copy(percent = 95, step = VoxOtaInstallStep.FINALIZING)
-                    currentState = step3
-                    dialog.showInstalling(step3) { dismissAll() }
-
-                    mainHandler.postDelayed({
-                        dismissAll()
-                        VoxOtaUpdateManager.instance(context).installUpdate(apkFile)
-                    }, 400L)
-                }, 400L)
-            }, 400L)
+            // Direct handoff to Android PackageInstaller without fake 35/65/95% timer loops
+            mainHandler.post {
+                val launched = VoxOtaUpdateManager.instance(context).installUpdate(apkFile)
+                if (launched) {
+                    dismissAll()
+                }
+            }
         }
     }
 

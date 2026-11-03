@@ -175,4 +175,33 @@ class VoxOtaTest {
             assertTrue(ex.userMessageRu.isNotBlank())
         }
     }
+
+    @Test
+    fun testDualCompatibleManifestParsing() {
+        val json = """
+        {
+          "package": {
+            "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.56-vox.9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk",
+            "downloadUrlList_x86": [
+              "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.56-vox.9.2/SmartTube_vot_32.56-vox.9.2-rc.13_x86.apk"
+            ]
+          },
+          "32.56-vox.9.2": {
+            "versionCode": 2446032,
+            "prerelease": false,
+            "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.56-vox.9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk",
+            "changelog": [
+              "Line 1",
+              "Line 2"
+            ]
+          }
+        }
+        """.trimIndent()
+
+        val parsed = VoxOtaReleaseParser.parseRelease(json, isBetaChannel = false, currentVersion = "32.56-vox.9.1", installedVersionCode = 2446016L)
+        assertEquals("32.56-vox.9.2", parsed.versionName)
+        assertEquals(2446032L, parsed.versionCode)
+        assertEquals(1, parsed.assets.size)
+        assertEquals(2, parsed.changelog.size)
+    }
 }

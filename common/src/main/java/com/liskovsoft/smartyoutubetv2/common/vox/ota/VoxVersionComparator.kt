@@ -177,6 +177,17 @@ object VoxVersionComparator {
             return false
         }
 
+        // Strict fail-closed for suspicious same-base comparison (Prompt #141):
+        // 9.2 (or 9.2-rc.13) MUST NOT offer update to 9.2 without explicit candidate.versionCode > installed.versionCode.
+        if (curr.voxMajor == target.voxMajor && curr.voxMinor == target.voxMinor) {
+            if (installedVersionCode > 0L && (targetVersionCode == null || targetVersionCode <= installedVersionCode)) {
+                return false
+            }
+            if (curr.voxMajor == 9 && curr.voxMinor == 2 && targetVersionCode == null) {
+                return false
+            }
+        }
+
         // Правило защиты от даунгрейда
         if (curr >= target) {
             return false
