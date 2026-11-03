@@ -298,7 +298,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
             mSpeed = mLastSpeed;
             setSpeedLegacyMigrated(true);
         }
-        persistState();
+        persistNow();
     }
 
     public boolean isSpeedPerVideoEnabled() {
@@ -309,7 +309,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         mIsSpeedPerVideoEnabled = enable;
         mIsAllSpeedEnabled = false;
         mIsSpeedPerChannelEnabled = false;
-        persistState();
+        persistNow();
     }
 
     public boolean isLegacyCodecsForced() {
@@ -628,7 +628,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
             mSpeed = speed;
             setSpeedLegacyMigrated(true);
         }
-        persistState();
+        persistNow();
     }
 
     public float getLastSpeed() {
@@ -651,7 +651,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         mIsSpeedPerChannelEnabled = enable;
         mIsSpeedPerVideoEnabled = false;
         mIsAllSpeedEnabled = false;
-        persistState();
+        persistNow();
     }
 
     public boolean isAudioDelayEnabled() {
@@ -923,7 +923,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         }
     }
 
-    private boolean isSpeedLegacyMigrated() {
+    public boolean isSpeedLegacyMigrated() {
         return mPrefs != null && mPrefs.getBoolean(SPEED_LEGACY_MIGRATED, false);
     }
 

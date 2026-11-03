@@ -1174,6 +1174,7 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
             mTrackFormatter.setSpeed(speed);
             setQualityInfo(mTrackFormatter.getQualityLabel());
             mEventListener.onSpeedChanged(speed);
+            Log.d("VoxSpeedE2E", "EXOPLAYER_SPEED: setSpeed=" + speed + ", actualPlaybackSpeed=" + (mPlayer != null ? mPlayer.getPlaybackParameters().speed : -1f));
         }
     }
 

@@ -56,6 +56,7 @@ public class VideoStateController extends BasePlayerController {
      */
     @Override
     public void onNewVideo(Video item) {
+        if (item == null) return;
         // Ensure that we aren't running on presenter init stage
         if (getPlayer() != null && getPlayer().containsMedia()) {
             //if (!item.equals(getVideo())) { // a video might be opened twice (when remote connection enabled). Fix for that.
@@ -824,6 +825,7 @@ public class VideoStateController extends BasePlayerController {
             ctx.put("trigger", trigger);
             ctx.put("speed", String.valueOf(speed));
             VoxSafeLogger.d(VoxLogCategory.PLAYER, code, "Speed event: " + code, ctx);
+            Log.d("VoxSpeedE2E", "SPEED_EVENT: code=" + code + ", trigger=" + trigger + ", speed=" + speed + ", actualExoSpeed=" + (getPlayer() != null ? getPlayer().getSpeed() : -1f) + ", policy=" + mode);
         } catch (Throwable ignored) {}
     }
 

@@ -147,6 +147,45 @@ public class PlaybackActivity extends LeanbackActivity {
                 com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData.instance(this)
                         .setChapterNotificationEnabled(intent.getBooleanExtra("chapterNotification", false));
             }
+        } else if (com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG && "testSpeedE2E".equalsIgnoreCase(action)) {
+            String step = intent.getStringExtra("step");
+            float speed = intent.getFloatExtra("speed", 1.0f);
+            String channelId = intent.getStringExtra("channelId");
+            String videoId = intent.getStringExtra("videoId");
+            String mode = intent.getStringExtra("mode");
+            com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData pd = com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData.instance(this);
+            com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter presenter = com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter.instance(this);
+            if ("setMode".equalsIgnoreCase(step)) {
+                if ("ALL".equalsIgnoreCase(mode)) pd.setAllSpeedEnabled(true);
+                else if ("PER_CHANNEL".equalsIgnoreCase(mode)) pd.setSpeedPerChannelEnabled(true);
+                else if ("PER_VIDEO".equalsIgnoreCase(mode)) pd.setSpeedPerVideoEnabled(true);
+                else if ("NONE".equalsIgnoreCase(mode)) {
+                    pd.setAllSpeedEnabled(false);
+                    pd.setSpeedPerChannelEnabled(false);
+                    pd.setSpeedPerVideoEnabled(false);
+                }
+            } else if ("setUserSpeed".equalsIgnoreCase(step)) {
+                if (presenter != null && presenter.getPlayer() != null) {
+                    presenter.getPlayer().setSpeed(speed);
+                }
+            } else if ("openVideoFixture".equalsIgnoreCase(step)) {
+                if (presenter != null) {
+                    com.liskovsoft.smartyoutubetv2.common.app.models.data.Video v =
+                            com.liskovsoft.smartyoutubetv2.common.app.models.data.Video.from(videoId != null ? videoId : "sample_vid_1");
+                    v.channelId = channelId;
+                    v.title = "Sample Video " + (videoId != null ? videoId : "1");
+                    presenter.onNewVideo(v);
+                    if (presenter.getPlayer() != null) {
+                        presenter.getPlayer().setVideo(v);
+                        presenter.getPlayer().openUrlList(java.util.Collections.singletonList("file:///sdcard/sample.mp4"));
+                        presenter.getPlayer().setPlayWhenReady(true);
+                    }
+                    presenter.onVideoLoaded(v);
+                }
+            }
+            float actualExo = (presenter != null && presenter.getPlayer() != null) ? presenter.getPlayer().getSpeed() : -1f;
+            long posMs = (presenter != null && presenter.getPlayer() != null) ? presenter.getPlayer().getPositionMs() : -1;
+            com.liskovsoft.sharedutils.mylogger.Log.d("VoxSpeedE2E", "TEST_SPEED_RESULT: step=" + step + ", mode=" + mode + ", targetSpeed=" + speed + ", actualExoSpeed=" + actualExo + ", posMs=" + posMs + ", pdSpeed=" + pd.getSpeed(channelId) + ", migrated=" + pd.isSpeedLegacyMigrated());
         }
     }
 

@@ -1023,7 +1023,7 @@ public class AppDialogUtil {
                 playerData.isSpeedPerVideoEnabled()));
 
         options.add(UiOptionItem.from(context.getString(R.string.player_speed_per_channel),
-                option -> playerData.setSpeedPerChannelEnabled(option.isSelected()),
+                optionItem -> playerData.setSpeedPerChannelEnabled(true),
                 playerData.isSpeedPerChannelEnabled()));
 
         String title = context.getString(R.string.player_remember_speed);
