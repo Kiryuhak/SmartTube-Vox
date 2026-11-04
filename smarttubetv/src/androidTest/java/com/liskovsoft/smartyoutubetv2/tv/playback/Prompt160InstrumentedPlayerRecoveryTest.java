@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.tv.playback;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
@@ -763,5 +764,237 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
         assertEquals("Observed response code must be 429", 429, responseCodeObserved.get());
 
         logTrace("I06_PASS", "AVD_L2_HTTP429_PERMANENT_PASS: Terminal onPlayerError captured with code 429");
+    }
+
+    /**
+     * I07: Gate B — Single-run Same-PID L3a Memory & Codec Lifecycle QA (3 Controlled Cycles).
+     * PROMPT №163-R10.
+     *
+     * Executes three consecutive L3a playback cycles within ONE single instrumentation-run and ONE single PID:
+     * Cycle k in {1, 2, 3}:
+     *   1. Baseline Idle checkpoint (System.gc(), measure Dalvik/Native/PSS, verify PID).
+     *   2. Launch PlaybackActivity internally in same process.
+     *   3. Play synthetic 45s MP4 fixture (file:// in app-private filesDir) until position advances >= 4000 ms.
+     *   4. Stop playback and cleanly finish PlaybackActivity (cancelFinishTheApp + finish).
+     *   5. Wait +60s idle window, invoke System.gc(), measure post-idle Dalvik/Native/PSS.
+     *   6. Assert PID remained strictly unchanged throughout all phases and all 3 cycles.
+     */
+    @Test
+    public void testI07_SamePid_3MemoryCycles() throws Exception {
+        final int initialPid = Process.myPid();
+        final int initialUid = Process.myUid();
+        logTrace("I07_START", "Starting Gate B: Same-PID 3-Cycle Memory/Codec QA in initialPid=" + initialPid + ", initialUid=" + initialUid);
+
+        // 1. Prepare app-private fixture in targetContext.getFilesDir()
+        File targetDir = mContext.getFilesDir();
+        File appPrivateFixture = new File(targetDir, "sample_long.mp4");
+        if (!appPrivateFixture.exists() || appPrivateFixture.length() != 329142) {
+            try {
+                Context testCtx = InstrumentationRegistry.getInstrumentation().getContext();
+                try (java.io.InputStream is = testCtx.getAssets().open("sample_long.mp4");
+                     java.io.OutputStream os = new java.io.FileOutputStream(appPrivateFixture)) {
+                    byte[] buf = new byte[8192];
+                    int r;
+                    while ((r = is.read(buf)) != -1) {
+                        os.write(buf, 0, r);
+                    }
+                    os.flush();
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Asset copy failed, checking fallback: " + t.getMessage());
+            }
+            if (!appPrivateFixture.exists() || appPrivateFixture.length() != 329142) {
+                File tmpFallback = new File("/data/local/tmp/sample_long.mp4");
+                if (tmpFallback.exists()) {
+                    try (java.io.InputStream is = new java.io.FileInputStream(tmpFallback);
+                         java.io.OutputStream os = new java.io.FileOutputStream(appPrivateFixture)) {
+                        byte[] buf = new byte[8192];
+                        int r;
+                        while ((r = is.read(buf)) != -1) {
+                            os.write(buf, 0, r);
+                        }
+                        os.flush();
+                    } catch (Throwable t) {
+                        Log.w(TAG, "Fallback copy failed: " + t.getMessage());
+                    }
+                }
+            }
+        }
+        assertTrue("App private fixture must exist and match 329142 bytes",
+                appPrivateFixture.exists() && appPrivateFixture.length() == 329142);
+
+        final android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+
+        final long[] positionDeltasMs = new long[3];
+        final long[] idlePssKb = new long[3];
+        final long[] idleDalvikAllocKb = new long[3];
+        final long[] idleNativeAllocKb = new long[3];
+        final int[] pidCheckpoints = new int[3];
+
+        for (int cycle = 0; cycle < 3; cycle++) {
+            final int cycleNum = cycle + 1;
+            logTrace("I07_CYCLE_START", "=== Starting Cycle " + cycleNum + "/3 under PID=" + Process.myPid() + " ===");
+            assertEquals("PID must remain identical at cycle start", initialPid, Process.myPid());
+
+            // Phase 1: Baseline Idle
+            System.gc();
+            SystemClock.sleep(1500);
+            System.gc();
+            Debug.MemoryInfo baseMem = new Debug.MemoryInfo();
+            Debug.getMemoryInfo(baseMem);
+            long basePss = baseMem.getTotalPss();
+            long baseDalvik = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024;
+            long baseNative = Debug.getNativeHeapAllocatedSize() / 1024;
+            logTrace("I07_BASELINE", "Cycle " + cycleNum + " BASELINE: PID=" + Process.myPid()
+                    + ", PSS=" + basePss + " kB, DalvikAlloc=" + baseDalvik + " kB, NativeAlloc=" + baseNative + " kB");
+
+            // Phase 2: Launch PlaybackActivity in same process
+            android.app.Instrumentation.ActivityMonitor monitor =
+                    instrumentation.addMonitor(PlaybackActivity.class.getName(), null, false);
+
+            Intent intent = new Intent(mContext, PlaybackActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.putExtra("action", "testSpeedE2E");
+            intent.putExtra("step", "idle");
+            intent.putExtra("videoId", "sample_vid_samepid_c" + cycleNum);
+
+            PlaybackActivity playbackActivity = null;
+            try {
+                mContext.startActivity(intent);
+                android.app.Activity rawActivity = monitor.waitForActivityWithTimeout(8000);
+                assertNotNull("PlaybackActivity must launch within timeout in cycle " + cycleNum, rawActivity);
+                assertTrue("Launched activity must be PlaybackActivity", rawActivity instanceof PlaybackActivity);
+                playbackActivity = (PlaybackActivity) rawActivity;
+
+                assertEquals("PID must remain identical after PlaybackActivity launch", initialPid, Process.myPid());
+                logTrace("I07_ACTIVITY_LAUNCHED", "Cycle " + cycleNum + " PlaybackActivity launched in PID=" + Process.myPid());
+
+                final PlaybackActivity act = playbackActivity;
+                final AtomicReference<PlaybackPresenter> presenterRef = new AtomicReference<>();
+                final AtomicLong durationRef = new AtomicLong(-1);
+                final AtomicLong startPosRef = new AtomicLong(-1);
+                final AtomicLong endPosRef = new AtomicLong(-1);
+                final AtomicBoolean isPlayingRef = new AtomicBoolean(false);
+
+                // Wait for PlaybackFragment to reach onResume
+                SystemClock.sleep(1500);
+
+                instrumentation.runOnMainSync(() -> {
+                    PlaybackPresenter presenter = PlaybackPresenter.instance(act);
+                    presenterRef.set(presenter);
+                    if (presenter != null && presenter.getPlayer() != null) {
+                        com.liskovsoft.smartyoutubetv2.common.app.models.data.Video v =
+                                com.liskovsoft.smartyoutubetv2.common.app.models.data.Video.from("sample_vid_samepid_c" + cycleNum);
+                        v.title = "Synthetic 45s Color Bars";
+                        presenter.onNewVideo(v);
+                        presenter.getPlayer().setVideo(v);
+                        presenter.getPlayer().openUrlList(Collections.singletonList("file://" + appPrivateFixture.getAbsolutePath()));
+                        presenter.getPlayer().setPlayWhenReady(true);
+                        presenter.onVideoLoaded(v);
+                        logTrace("I07_PLAY_DISPATCHED", "Cycle " + cycleNum + " openUrlList dispatched to PlaybackPresenter.getPlayer()");
+                    } else {
+                        logTrace("I07_DISPATCH_FAIL", "presenter or getPlayer() is null in cycle " + cycleNum);
+                    }
+                });
+
+                // Phase 3: Observe sustained playback position advance >= 4000 ms (bounded well before 45s EOF)
+                long pollStartTime = SystemClock.elapsedRealtime();
+                while (SystemClock.elapsedRealtime() - pollStartTime < 15000) {
+                    SystemClock.sleep(500);
+                    instrumentation.runOnMainSync(() -> {
+                        PlaybackPresenter presenter = presenterRef.get();
+                        if (presenter != null && presenter.getPlayer() != null) {
+                            long dur = presenter.getPlayer().getDurationMs();
+                            long pos = presenter.getPlayer().getPositionMs();
+                            boolean playing = presenter.isPlaying();
+                            if (dur > 0 && durationRef.get() <= 0) durationRef.set(dur);
+                            if (pos > 0 && startPosRef.get() <= 0) startPosRef.set(pos);
+                            if (pos > 0) endPosRef.set(pos);
+                            if (playing) isPlayingRef.set(true);
+                        }
+                    });
+                    if (startPosRef.get() > 0 && endPosRef.get() - startPosRef.get() >= 4000) {
+                        break;
+                    }
+                }
+
+                long advancedMs = (startPosRef.get() > 0 && endPosRef.get() >= startPosRef.get())
+                        ? (endPosRef.get() - startPosRef.get()) : 0;
+                positionDeltasMs[cycle] = advancedMs;
+
+                Debug.MemoryInfo playMem = new Debug.MemoryInfo();
+                Debug.getMemoryInfo(playMem);
+                logTrace("I07_PLAYING", "Cycle " + cycleNum + " PLAYING: PID=" + Process.myPid()
+                        + ", advancedMs=" + advancedMs + ", durationMs=" + durationRef.get()
+                        + ", isPlaying=" + isPlayingRef.get() + ", PSS=" + playMem.getTotalPss() + " kB");
+
+                assertTrue("Playback must advance >= 4000 ms in cycle " + cycleNum + " (measured " + advancedMs + " ms)",
+                        advancedMs >= 4000);
+                assertEquals("PID must remain identical during playback", initialPid, Process.myPid());
+
+            } finally {
+                // Phase 4: Cleanly teardown PlaybackActivity
+                if (playbackActivity != null) {
+                    final PlaybackActivity actToFinish = playbackActivity;
+                    instrumentation.runOnMainSync(() -> {
+                        try {
+                            com.liskovsoft.smartyoutubetv2.common.utils.Utils.cancelFinishTheApp(actToFinish);
+                            actToFinish.finish();
+                            com.liskovsoft.smartyoutubetv2.common.utils.Utils.cancelFinishTheApp(actToFinish);
+                        } catch (Exception ignored) {}
+                    });
+                }
+                instrumentation.removeMonitor(monitor);
+            }
+
+            // Verify process survived finish()
+            SystemClock.sleep(2000);
+            assertEquals("PID must remain identical after PlaybackActivity finish in cycle " + cycleNum,
+                    initialPid, Process.myPid());
+
+            Debug.MemoryInfo postCloseMem = new Debug.MemoryInfo();
+            Debug.getMemoryInfo(postCloseMem);
+            logTrace("I07_POST_CLOSE", "Cycle " + cycleNum + " POST_CLOSE: PID=" + Process.myPid()
+                    + ", PSS=" + postCloseMem.getTotalPss() + " kB");
+
+            // Phase 5: Idle window (60s)
+            logTrace("I07_IDLE_WAIT", "Cycle " + cycleNum + " waiting 60s idle window for resource teardown...");
+            for (int tick = 1; tick <= 12; tick++) {
+                SystemClock.sleep(5000);
+                logTrace("I07_IDLE_TICK", "Cycle " + cycleNum + " idle tick " + (tick * 5) + "/60s: PID=" + Process.myPid());
+            }
+
+            // Post-idle GC measurement intervention
+            System.gc();
+            SystemClock.sleep(1500);
+            System.gc();
+
+            Debug.MemoryInfo idleMem = new Debug.MemoryInfo();
+            Debug.getMemoryInfo(idleMem);
+            idlePssKb[cycle] = idleMem.getTotalPss();
+            idleDalvikAllocKb[cycle] = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024;
+            idleNativeAllocKb[cycle] = Debug.getNativeHeapAllocatedSize() / 1024;
+            pidCheckpoints[cycle] = Process.myPid();
+
+            logTrace("I07_CYCLE_COMPLETE", "Cycle " + cycleNum + " IDLE_CHECKPOINT: PID=" + pidCheckpoints[cycle]
+                    + ", PSS=" + idlePssKb[cycle] + " kB, DalvikAlloc=" + idleDalvikAllocKb[cycle] + " kB"
+                    + ", NativeAlloc=" + idleNativeAllocKb[cycle] + " kB, advancedMs=" + positionDeltasMs[cycle]);
+            assertEquals("PID must remain identical after 60s idle in cycle " + cycleNum, initialPid, pidCheckpoints[cycle]);
+        }
+
+        // Final Assertions across all 3 cycles
+        assertEquals("Cycle 1 PID must match initial", initialPid, pidCheckpoints[0]);
+        assertEquals("Cycle 2 PID must match initial", initialPid, pidCheckpoints[1]);
+        assertEquals("Cycle 3 PID must match initial", initialPid, pidCheckpoints[2]);
+
+        assertTrue("Cycle 1 position delta must be >= 4000 ms", positionDeltasMs[0] >= 4000);
+        assertTrue("Cycle 2 position delta must be >= 4000 ms", positionDeltasMs[1] >= 4000);
+        assertTrue("Cycle 3 position delta must be >= 4000 ms", positionDeltasMs[2] >= 4000);
+
+        logTrace("I07_PASS", "SAME_PID_3_CYCLES_PASS: All 3 cycles completed under single PID=" + initialPid
+                + ", PSS=[" + idlePssKb[0] + ", " + idlePssKb[1] + ", " + idlePssKb[2] + "] kB"
+                + ", Dalvik=[" + idleDalvikAllocKb[0] + ", " + idleDalvikAllocKb[1] + ", " + idleDalvikAllocKb[2] + "] kB"
+                + ", Native=[" + idleNativeAllocKb[0] + ", " + idleNativeAllocKb[1] + ", " + idleNativeAllocKb[2] + "] kB"
+                + ", Advance=[" + positionDeltasMs[0] + ", " + positionDeltasMs[1] + ", " + positionDeltasMs[2] + "] ms");
     }
 }
