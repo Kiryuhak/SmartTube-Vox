@@ -1020,14 +1020,14 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         }
 
         BrowseSection newSection = new BrowseSection(title.hashCode(), title, BrowseSection.TYPE_ERROR, resId, false, data);
-        Helpers.removeIf(mErrorSections, section -> section.getId() == newSection.getId());
+        Helpers.removeIf(mErrorSections, section -> title.equals(section.getTitle()) || (section.getTitle() == null && section.getId() == newSection.getId()));
         mErrorSections.add(newSection);
         getView().addSection(0, newSection);
     }
 
     private void appendToSections(String title, int resId, ErrorFragmentData data) {
         int id = title.hashCode();
-        Helpers.removeIf(mSections, section -> section.getId() == id);
+        Helpers.removeIf(mSections, section -> title.equals(section.getTitle()) || (section.getTitle() == null && section.getId() == id));
         mSections.add(new BrowseSection(id, title, BrowseSection.TYPE_ERROR, resId, false, data));
     }
 
@@ -1041,7 +1041,7 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         do {
             target = null;
             for (BrowseSection section : mErrorSections) {
-                if (section.getId() == sectionId || title.equals(section.getTitle())) {
+                if (title.equals(section.getTitle()) || (section.getTitle() == null && section.getId() == sectionId)) {
                     target = section;
                     break;
                 }
