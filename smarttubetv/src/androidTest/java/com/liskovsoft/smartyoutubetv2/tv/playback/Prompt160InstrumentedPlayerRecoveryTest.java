@@ -997,4 +997,195 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                 + ", Native=[" + idleNativeAllocKb[0] + ", " + idleNativeAllocKb[1] + ", " + idleNativeAllocKb[2] + "] kB"
                 + ", Advance=[" + positionDeltasMs[0] + ", " + positionDeltasMs[1] + ", " + positionDeltasMs[2] + "] ms");
     }
+
+    /**
+     * I08: Transient HTTP 503 Service Unavailable Fault Propagation and Recovery (AVD L2).
+     * PROMPT №163-R12.
+     * Request 1 returns HTTP 503 Service Unavailable -> ExoPlayer observes load error with InvalidResponseCodeException: 503.
+     * Request 2 returns HTTP 200/206 OK -> ExoPlayer recovers to STATE_READY, position advances >= 4,000 ms.
+     * Marked: AVD_L2_HTTP503_TRANSIENT_PASS.
+     */
+    @Test
+    public void testI08_RealExoPlayer_Transient503Recovery() throws Exception {
+        String testUrl = FIXTURE_HOST + "/i503_transient/sample.mp4";
+        logTrace("I08_START", "Starting transient 503 test against " + testUrl);
+
+        CountDownLatch errorObservedLatch = new CountDownLatch(1);
+        CountDownLatch recoveredReadyLatch = new CountDownLatch(1);
+        AtomicInteger responseCodeObserved = new AtomicInteger(0);
+        AtomicReference<String> errorTypeObserved = new AtomicReference<>("");
+        AtomicLong maxPositionMs = new AtomicLong(0);
+        AtomicLong initialPositionMs = new AtomicLong(-1);
+        AtomicLong durationMs = new AtomicLong(0);
+
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
+            mPlayer.setRepeatMode(Player.REPEAT_MODE_OFF);
+
+            mPlayer.addListener(new Player.EventListener() {
+                @Override
+                public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
+                    long pos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    logTrace("I08_STATE", "playbackState=" + playbackState + ", playWhenReady=" + playWhenReady + ", posMs=" + pos + ", durMs=" + dur);
+                    if (playbackState == Player.STATE_READY) {
+                        recoveredReadyLatch.countDown();
+                    }
+                }
+
+                @Override
+                public void onPlayerError(ExoPlaybackException error) {
+                    logTrace("I08_ON_PLAYER_ERROR", "Captured Player error: type=" + error.type + ", message=" + error.getMessage());
+                    if (error.type == ExoPlaybackException.TYPE_SOURCE) {
+                        IOException cause = error.getSourceException();
+                        if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
+                            int code = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+                            responseCodeObserved.set(code);
+                            errorTypeObserved.set("onPlayerError: " + cause.getClass().getSimpleName());
+                            logTrace("I08_HTTP_CODE", "Player error HTTP response code: " + code);
+                        }
+                    }
+                    errorObservedLatch.countDown();
+                }
+            });
+
+            mPlayer.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onLoadError(EventTime eventTime, LoadEventInfo loadEventInfo,
+                                        MediaLoadData mediaLoadData, IOException error, boolean wasCanceled) {
+                    logTrace("I08_ANALYTICS_LOAD_ERROR", "Captured Analytics onLoadError: " + error.getMessage() + ", wasCanceled=" + wasCanceled);
+                    if (error instanceof HttpDataSource.InvalidResponseCodeException) {
+                        int code = ((HttpDataSource.InvalidResponseCodeException) error).responseCode;
+                        responseCodeObserved.set(code);
+                        errorTypeObserved.set("AnalyticsListener: " + error.getClass().getSimpleName());
+                        logTrace("I08_HTTP_CODE", "Observed HTTP response code in AnalyticsListener: " + code);
+                    }
+                    errorObservedLatch.countDown();
+                }
+            });
+
+            MediaSource mediaSource = new ProgressiveMediaSource.Factory(mDataSourceFactory)
+                    .createMediaSource(Uri.parse(testUrl));
+
+            mediaSource.addEventListener(mainHandler, new DefaultMediaSourceEventListener() {
+                @Override
+                public void onLoadError(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                        LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData,
+                                        IOException error, boolean wasCanceled) {
+                    logTrace("I08_ON_LOAD_ERROR", "Captured MediaSource load error: " + error.getMessage() + ", wasCanceled=" + wasCanceled);
+                    if (error instanceof HttpDataSource.InvalidResponseCodeException) {
+                        int code = ((HttpDataSource.InvalidResponseCodeException) error).responseCode;
+                        responseCodeObserved.set(code);
+                        errorTypeObserved.set("MediaSourceEventListener: " + error.getClass().getSimpleName());
+                        logTrace("I08_HTTP_CODE", "Observed HTTP response code in MediaSourceEventListener: " + code);
+                    }
+                    errorObservedLatch.countDown();
+                }
+            });
+
+            mPlayer.prepare(mediaSource);
+            mPlayer.setPlayWhenReady(true);
+        });
+
+        // 1. Wait for HTTP 503 error observation
+        boolean errorObserved = errorObservedLatch.await(8, TimeUnit.SECONDS);
+        assertTrue("ExoPlayer must observe HTTP 503 error from fixture", errorObserved);
+        assertEquals("Observed HTTP response code must be 503", 503, responseCodeObserved.get());
+        logTrace("I08_ERROR_CONFIRMED", "Confirmed HTTP 503 caught: " + errorTypeObserved.get());
+
+        // 2. Wait for recovery to STATE_READY (loader auto-retry)
+        boolean reachedReady = recoveredReadyLatch.await(10, TimeUnit.SECONDS);
+        if (!reachedReady) {
+            logTrace("I08_MANUAL_RETRY", "Terminal error reached; executing manual re-prepare to verify recovery");
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                MediaSource retrySource = new ProgressiveMediaSource.Factory(mDataSourceFactory)
+                        .createMediaSource(Uri.parse(testUrl));
+                mPlayer.prepare(retrySource, false, false);
+                mPlayer.setPlayWhenReady(true);
+            });
+            reachedReady = recoveredReadyLatch.await(10, TimeUnit.SECONDS);
+        }
+        assertTrue("ExoPlayer must recover to STATE_READY after transient 503", reachedReady);
+        logTrace("I08_RECOVERED_READY", "Confirmed STATE_READY reached after transient 503");
+
+        // 3. Observe playback position advance for 6.0 seconds (expecting >= 4000 ms advance)
+        long startTime = SystemClock.elapsedRealtime();
+        while (SystemClock.elapsedRealtime() - startTime < 6000) {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                if (mPlayer != null) {
+                    long currentPos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    if (initialPositionMs.get() < 0) {
+                        initialPositionMs.set(currentPos);
+                    }
+                    if (currentPos > maxPositionMs.get()) {
+                        maxPositionMs.set(currentPos);
+                    }
+                    logTrace("I08_POLL", "Playback tick: pos=" + currentPos + ", dur=" + dur + ", isPlaying=" + mPlayer.isPlaying());
+                }
+            });
+            Thread.sleep(500);
+        }
+
+        long advanceMs = maxPositionMs.get() - Math.max(0, initialPositionMs.get());
+        logTrace("I08_ADVANCE", "Measured position advance after 503 recovery: " + advanceMs + " ms, durationMs=" + durationMs.get());
+
+        assertTrue("Playback position must advance >= 4000 ms after recovery (measured " + advanceMs + " ms)", advanceMs >= 4000);
+        logTrace("I08_PASS", "AVD_L2_HTTP503_TRANSIENT_PASS: 503 observed, recovered to READY, advanceMs=" + advanceMs);
+    }
+
+    /**
+     * I09: Permanent HTTP 503 Service Unavailable Fault Propagation and Terminal Error (AVD L2).
+     * PROMPT №163-R12.
+     * All requests return HTTP 503 Service Unavailable -> ExoPlayer enters terminal error state.
+     * Verifies terminal onPlayerError with response code 503.
+     * Marked: AVD_L2_HTTP503_PERMANENT_PASS.
+     */
+    @Test
+    public void testI09_RealExoPlayer_Permanent503TerminalError() throws Exception {
+        String testUrl = FIXTURE_HOST + "/i503_permanent/sample.mp4";
+        logTrace("I09_START", "Starting permanent 503 test against " + testUrl);
+
+        CountDownLatch errorLatch = new CountDownLatch(1);
+        AtomicReference<ExoPlaybackException> terminalError = new AtomicReference<>(null);
+        AtomicInteger responseCodeObserved = new AtomicInteger(0);
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
+
+            mPlayer.addListener(new Player.EventListener() {
+                @Override
+                public void onPlayerError(ExoPlaybackException error) {
+                    logTrace("I09_ON_ERROR", "Captured terminal error: type=" + error.type + ", message=" + error.getMessage());
+                    terminalError.set(error);
+                    if (error.type == ExoPlaybackException.TYPE_SOURCE) {
+                        IOException cause = error.getSourceException();
+                        if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
+                            int code = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+                            responseCodeObserved.set(code);
+                        }
+                    }
+                    errorLatch.countDown();
+                }
+            });
+
+            MediaSource mediaSource = new ProgressiveMediaSource.Factory(mDataSourceFactory)
+                    .createMediaSource(Uri.parse(testUrl));
+            mPlayer.prepare(mediaSource);
+            mPlayer.setPlayWhenReady(true);
+        });
+
+        // Wait for terminal player error after loader retries are exhausted (up to 15 seconds)
+        boolean errorReached = errorLatch.await(15, TimeUnit.SECONDS);
+        assertTrue("ExoPlayer must transition to terminal error on permanent HTTP 503", errorReached);
+        assertNotNull("Terminal error must not be null", terminalError.get());
+        assertEquals("Terminal error must be TYPE_SOURCE", ExoPlaybackException.TYPE_SOURCE, terminalError.get().type);
+        assertEquals("Observed response code must be 503", 503, responseCodeObserved.get());
+
+        logTrace("I09_PASS", "AVD_L2_HTTP503_PERMANENT_PASS: Terminal onPlayerError captured with code 503");
+    }
 }
