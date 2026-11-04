@@ -397,11 +397,68 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
      */
     @Test
     public void testI04_AppRecoverySeam_Investigation() {
-        logTrace("I04_START", "Starting Gate C: L3a (Local Playback Path) and L3b (Recovery Seam Audit)");
+        logTrace("I04_START", "Starting Gate D: L3a (App-Private Fixture Playback) and L3b (Recovery Seam Audit)");
 
-        // --- L3a: Attempt internal launch of PlaybackActivity with local fixture ---
-        File localFixture = new File("/sdcard/sample.mp4");
-        logTrace("I04_L3A_CHECK", "Local fixture /sdcard/sample.mp4 exists=" + localFixture.exists() + ", length=" + localFixture.length());
+        // --- L3a: Prepare app-private fixture in targetContext.getFilesDir() ---
+        File targetDir = mContext.getFilesDir();
+        File appPrivateFixture = new File(targetDir, "sample_long.mp4");
+        if (!appPrivateFixture.exists() || appPrivateFixture.length() != 1204336) {
+            try {
+                Context testCtx = InstrumentationRegistry.getInstrumentation().getContext();
+                try (java.io.InputStream is = testCtx.getAssets().open("sample_long.mp4");
+                     java.io.OutputStream os = new java.io.FileOutputStream(appPrivateFixture)) {
+                    byte[] buf = new byte[8192];
+                    int r;
+                    while ((r = is.read(buf)) != -1) {
+                        os.write(buf, 0, r);
+                    }
+                    os.flush();
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Asset copy failed, checking fallback: " + t.getMessage());
+            }
+            if (!appPrivateFixture.exists() || appPrivateFixture.length() != 1204336) {
+                File tmpFallback = new File("/data/local/tmp/sample_long.mp4");
+                if (tmpFallback.exists()) {
+                    try (java.io.InputStream is = new java.io.FileInputStream(tmpFallback);
+                         java.io.OutputStream os = new java.io.FileOutputStream(appPrivateFixture)) {
+                        byte[] buf = new byte[8192];
+                        int r;
+                        while ((r = is.read(buf)) != -1) {
+                            os.write(buf, 0, r);
+                        }
+                        os.flush();
+                    } catch (Throwable t) {
+                        Log.w(TAG, "Fallback copy failed: " + t.getMessage());
+                    }
+                }
+            }
+        }
+
+        String fixtureSha256 = "";
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            try (java.io.InputStream fis = new java.io.FileInputStream(appPrivateFixture)) {
+                byte[] b = new byte[8192];
+                int n;
+                while ((n = fis.read(b)) != -1) {
+                    md.update(b, 0, n);
+                }
+            }
+            byte[] digest = md.digest();
+            StringBuilder sb = new StringBuilder();
+            for (byte by : digest) {
+                sb.append(String.format("%02x", by));
+            }
+            fixtureSha256 = sb.toString();
+        } catch (Throwable t) {
+            Log.w(TAG, "SHA256 calculation failed", t);
+        }
+
+        logTrace("I04_L3A_FIXTURE_PREPARED", "App private fixture: path=" + appPrivateFixture.getAbsolutePath()
+                + ", exists=" + appPrivateFixture.exists()
+                + ", length=" + appPrivateFixture.length()
+                + ", sha256=" + fixtureSha256);
 
         android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         android.app.Instrumentation.ActivityMonitor monitor =
@@ -439,21 +496,21 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                     if (presenter != null && presenter.getPlayer() != null) {
                         com.liskovsoft.smartyoutubetv2.common.app.models.data.Video v =
                                 com.liskovsoft.smartyoutubetv2.common.app.models.data.Video.from("sample_vid_1");
-                        v.title = "Sample Video 1";
+                        v.title = "Sample Long Video";
                         presenter.onNewVideo(v);
                         presenter.getPlayer().setVideo(v);
-                        presenter.getPlayer().openUrlList(Collections.singletonList("file:///sdcard/sample.mp4"));
+                        presenter.getPlayer().openUrlList(Collections.singletonList("file://" + appPrivateFixture.getAbsolutePath()));
                         presenter.getPlayer().setPlayWhenReady(true);
                         presenter.onVideoLoaded(v);
-                        logTrace("I04_L3A_COMMAND", "openUrlList file:///sdcard/sample.mp4 dispatched to PlaybackPresenter.getPlayer()");
+                        logTrace("I04_L3A_COMMAND", "openUrlList file://" + appPrivateFixture.getAbsolutePath() + " dispatched to PlaybackPresenter.getPlayer()");
                     } else {
                         logTrace("I04_L3A_COMMAND_FAIL", "presenter or getPlayer() is null");
                     }
                 });
 
-                // Poll player state over up to 10 seconds to observe sustained playback advance >= 4000 ms
+                // Poll player state over up to 15 seconds to observe sustained playback advance >= 4000 ms
                 long pollStartTime = SystemClock.elapsedRealtime();
-                while (SystemClock.elapsedRealtime() - pollStartTime < 10000) {
+                while (SystemClock.elapsedRealtime() - pollStartTime < 15000) {
                     SystemClock.sleep(500);
                     instrumentation.runOnMainSync(() -> {
                         PlaybackPresenter presenter = presenterRef.get();
@@ -496,7 +553,9 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                 final PlaybackActivity actToFinish = playbackActivity;
                 instrumentation.runOnMainSync(() -> {
                     try {
+                        com.liskovsoft.smartyoutubetv2.common.utils.Utils.cancelFinishTheApp(actToFinish);
                         actToFinish.finish();
+                        com.liskovsoft.smartyoutubetv2.common.utils.Utils.cancelFinishTheApp(actToFinish);
                     } catch (Exception ignored) {}
                 });
             }
