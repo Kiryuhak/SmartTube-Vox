@@ -11,6 +11,8 @@ import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.BrowsePresenter
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils
+import com.liskovsoft.smartyoutubetv2.common.R
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaErrorCode
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgressEstimator
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager
@@ -219,7 +221,13 @@ object VoxOtaHudPresenter {
         VoxOtaUpdateManager.instance(context).downloadAndVerify(asset, release, object : VoxOtaUpdateManager.Callback {
             override fun onUpdateAvailable(r: VoxReleaseInfo, a: VoxReleaseAsset) {}
             override fun onNoUpdateAvailable(currentVersion: String) {
-                mainHandler.post { dismissAll() }
+                mainHandler.post {
+                    dismissAll()
+                    try {
+                        BrowsePresenter.instance(context)?.unpinItem(context.getString(R.string.update_found))
+                    } catch (_: Throwable) {}
+                    MessageHelpers.showMessage(context, "У вас уже установлена актуальная версия")
+                }
             }
 
             override fun onDownloadProgress(bytesRead: Long, totalBytes: Long, percent: Int) {
@@ -260,6 +268,11 @@ object VoxOtaHudPresenter {
             override fun onError(error: VoxOtaException) {
                 mainHandler.post {
                     dismissAll()
+                    if (error.code == VoxOtaErrorCode.VERSION_NOT_NEWER || error.code == VoxOtaErrorCode.NO_UPDATE) {
+                        try {
+                            BrowsePresenter.instance(context)?.unpinItem(context.getString(R.string.update_found))
+                        } catch (_: Throwable) {}
+                    }
                     MessageHelpers.showMessage(context, error.userMessageRu)
                 }
             }

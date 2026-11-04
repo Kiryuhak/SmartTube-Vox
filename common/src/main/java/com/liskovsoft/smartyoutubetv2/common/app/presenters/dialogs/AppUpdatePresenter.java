@@ -122,6 +122,11 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
 
                     @Override
                     public void onError(VoxOtaException error) {
+                        if (getContext() != null && (error.getCode() == VoxOtaErrorCode.NO_UPDATE ||
+                                error.getCode() == VoxOtaErrorCode.VERSION_NOT_NEWER ||
+                                error.getCode() == VoxOtaErrorCode.RELEASE_NOT_FOUND)) {
+                            BrowsePresenter.instance(getContext()).unpinItem(getContext().getString(R.string.update_found));
+                        }
                         if (mIsForceCheck) {
                             LoadingManager.showLoading(getContext(), false);
                             if (error.getCode() == VoxOtaErrorCode.NO_UPDATE ||
