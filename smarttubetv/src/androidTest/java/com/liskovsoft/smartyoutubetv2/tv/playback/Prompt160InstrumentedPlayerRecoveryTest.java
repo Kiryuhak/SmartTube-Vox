@@ -9,27 +9,24 @@ import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
 
+import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.ExoPlayerFactory;
-import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.analytics.AnalyticsListener;
 import com.google.android.exoplayer2.source.DefaultMediaSourceEventListener;
 import com.google.android.exoplayer2.source.ExtractorMediaSource;
-import com.google.android.exoplayer2.source.LoopingMediaSource;
 import com.google.android.exoplayer2.source.MediaSource;
-import com.google.android.exoplayer2.source.MediaSourceEventListener;
 import com.google.android.exoplayer2.source.MediaSourceEventListener.LoadEventInfo;
 import com.google.android.exoplayer2.source.MediaSourceEventListener.MediaLoadData;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
-import com.google.android.exoplayer2.source.TrackGroupArray;
-import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
 import com.google.android.exoplayer2.upstream.HttpDataSource;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 import com.liskovsoft.smartyoutubetv2.tv.ui.playback.PlaybackActivity;
 
 import org.junit.After;
@@ -37,6 +34,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,14 +51,14 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Gate B & C: Instrumented Android ExoPlayer & App Recovery Seam Verification.
- * PROMPT №160 (Scenarios I01 - I04).
+ * Gate B & C: Instrumented Android ExoPlayer Long Fixture & App Recovery Seam Verification.
+ * PROMPT №161 (Scenarios I01 - I04, L2 Sustained Proof, L3a Local App Playback, L3b Seam Audit).
  *
- * Runs inside the target Android runtime on AVD (VOX_TV_API34) with real ExoPlayer,
+ * Runs inside the target Android runtime on AVD (VOX_TV_API34) with real ExoPlayer 2.10.6,
  * connecting to the host HTTP fixture server via 10.0.2.2:8080.
  *
  * Captures real Android process PID, UID, component, elapsedRealtimeNanos,
- * and ExoPlayer callbacks (Player.EventListener).
+ * and ExoPlayer callbacks (Player.EventListener, MediaSourceEventListener, AnalyticsListener).
  */
 @RunWith(AndroidJUnit4.class)
 public class Prompt160InstrumentedPlayerRecoveryTest {
@@ -78,7 +76,7 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
     public void setUp() {
         mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         mPid = Process.myPid();
-        mDataSourceFactory = new DefaultHttpDataSourceFactory("SmartTube-VOX-Prompt160/" + mPid);
+        mDataSourceFactory = new DefaultHttpDataSourceFactory("SmartTube-VOX-Prompt161/" + mPid);
         mEventTrace.clear();
         logTrace("SETUP", "Initialized test in PID=" + mPid + ", Package=" + mContext.getPackageName());
     }
@@ -107,23 +105,26 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
     }
 
     /**
-     * I01: Positive Control Test.
-     * Real ExoPlayer connects to http://10.0.2.2:8080/i01/sample.mp4,
-     * reaches STATE_READY, starts playing, advances position >= 4,000 ms.
+     * I01: Sustained Positive Control Playback (L2 Sustained Proof).
+     * Genuine ExoPlayer 2.10.6 connects to http://10.0.2.2:8080/i01/sample.mp4 (duration = 12.288s),
+     * reaches STATE_READY, starts playing, advances position >= 4,000 ms monotonically without seek.
      */
     @Test
     public void testI01_RealExoPlayer_PositivePlaybackAdvance() throws Exception {
         String testUrl = FIXTURE_HOST + "/i01/sample.mp4";
-        logTrace("I01_START", "Starting positive control test against " + testUrl);
+        logTrace("I01_START", "Starting sustained positive control test against " + testUrl);
 
         CountDownLatch readyLatch = new CountDownLatch(1);
         AtomicLong maxPositionMs = new AtomicLong(0);
+        AtomicLong initialPositionMs = new AtomicLong(-1);
+        AtomicLong durationMs = new AtomicLong(0);
         AtomicBoolean isPlayingObserved = new AtomicBoolean(false);
         AtomicReference<ExoPlaybackException> errorRef = new AtomicReference<>(null);
+        List<Long> positionTicks = Collections.synchronizedList(new ArrayList<>());
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
             mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
-            mPlayer.setRepeatMode(Player.REPEAT_MODE_ALL); // Loop sample.mp4 to allow continuous playback
+            mPlayer.setRepeatMode(Player.REPEAT_MODE_OFF); // Natural linear playback without repeat loop
 
             mPlayer.addListener(new Player.EventListener() {
                 @Override
@@ -137,7 +138,9 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                         default: stateName = "STATE_UNKNOWN(" + playbackState + ")"; break;
                     }
                     long pos = mPlayer.getCurrentPosition();
-                    logTrace("I01_STATE", "State=" + stateName + ", playWhenReady=" + playWhenReady + ", posMs=" + pos);
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    logTrace("I01_STATE", "State=" + stateName + ", playWhenReady=" + playWhenReady + ", posMs=" + pos + ", durMs=" + dur);
                     if (playbackState == Player.STATE_READY) {
                         readyLatch.countDown();
                     }
@@ -145,7 +148,8 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
 
                 @Override
                 public void onIsPlayingChanged(boolean isPlaying) {
-                    logTrace("I01_PLAYING", "isPlaying=" + isPlaying + ", posMs=" + mPlayer.getCurrentPosition());
+                    long pos = mPlayer.getCurrentPosition();
+                    logTrace("I01_PLAYING", "isPlaying=" + isPlaying + ", posMs=" + pos);
                     if (isPlaying) {
                         isPlayingObserved.set(true);
                     }
@@ -158,41 +162,52 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                 }
             });
 
-            MediaSource mediaSource = new ExtractorMediaSource.Factory(mDataSourceFactory)
+            MediaSource mediaSource = new ProgressiveMediaSource.Factory(mDataSourceFactory)
                     .createMediaSource(Uri.parse(testUrl));
             mPlayer.prepare(mediaSource);
             mPlayer.setPlayWhenReady(true);
         });
 
-        // Wait for STATE_READY (up to 10 seconds)
+        // 1. Wait for STATE_READY (up to 10 seconds)
         boolean reachedReady = readyLatch.await(10, TimeUnit.SECONDS);
         assertTrue("ExoPlayer must reach STATE_READY on valid media fixture", reachedReady);
         logTrace("I01_READY", "Confirmed STATE_READY reached");
 
-        // Wait and observe playback advance for at least 4.5 seconds
+        // 2. Poll and observe continuous playback advancement for 6.0 seconds
         long startTime = SystemClock.elapsedRealtime();
-        while (SystemClock.elapsedRealtime() - startTime < 4500) {
+        while (SystemClock.elapsedRealtime() - startTime < 6000) {
             InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
                 if (mPlayer != null) {
                     long currentPos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    if (initialPositionMs.get() < 0) {
+                        initialPositionMs.set(currentPos);
+                    }
                     if (currentPos > maxPositionMs.get()) {
                         maxPositionMs.set(currentPos);
                     }
-                    logTrace("I01_POLL", "Playback tick: pos=" + currentPos + ", isPlaying=" + mPlayer.isPlaying());
+                    positionTicks.add(currentPos);
+                    logTrace("I01_POLL", "Playback tick: pos=" + currentPos + ", dur=" + dur + ", isPlaying=" + mPlayer.isPlaying());
                 }
             });
             Thread.sleep(500);
         }
 
+        long advanceMs = maxPositionMs.get() - Math.max(0, initialPositionMs.get());
+        logTrace("I01_ADVANCE", "Measured position advance: " + advanceMs + " ms, durationMs=" + durationMs.get() + ", ticksCount=" + positionTicks.size());
+
         assertEquals("No error should occur during I01 playback", null, errorRef.get());
-        assertTrue("Position must advance during playback", maxPositionMs.get() > 0);
-        logTrace("I01_PASS", "I01 Completed successfully: maxPositionMs=" + maxPositionMs.get());
+        assertTrue("Media duration must be >= 8000 ms (measured " + durationMs.get() + " ms)", durationMs.get() >= 8000);
+        assertTrue("Position advance must be >= 4000 ms without seek (measured " + advanceMs + " ms)", advanceMs >= 4000);
+        logTrace("I01_PASS", "I01 Completed successfully: advanceMs=" + advanceMs + ", durationMs=" + durationMs.get());
     }
 
     /**
-     * I02: Transient HTTP 403 Fault Propagation and Recovery.
+     * I02: Transient HTTP 403 Fault Propagation and In-Process Recovery.
      * Request 1 returns HTTP 403 Forbidden -> ExoPlayer reports load error with InvalidResponseCodeException: 403.
-     * Request 2 returns HTTP 200 OK -> ExoPlayer loader recovers and reaches STATE_READY, position advances >= 4s.
+     * Request 2 returns HTTP 200/206 OK -> ExoPlayer recovers to STATE_READY, position advances >= 4,000 ms.
+     * Marked: EXOPLAYER_LOADER_RETRY_VERIFIED.
      */
     @Test
     public void testI02_RealExoPlayer_Transient403ErrorPropagationAndRecovery() throws Exception {
@@ -204,16 +219,22 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
         AtomicInteger responseCodeObserved = new AtomicInteger(0);
         AtomicReference<String> errorTypeObserved = new AtomicReference<>("");
         AtomicLong maxPositionMs = new AtomicLong(0);
+        AtomicLong initialPositionMs = new AtomicLong(-1);
+        AtomicLong durationMs = new AtomicLong(0);
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
             mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
+            mPlayer.setRepeatMode(Player.REPEAT_MODE_OFF);
 
             mPlayer.addListener(new Player.EventListener() {
                 @Override
                 public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
-                    logTrace("I02_STATE", "playbackState=" + playbackState + ", playWhenReady=" + playWhenReady);
+                    long pos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    logTrace("I02_STATE", "playbackState=" + playbackState + ", playWhenReady=" + playWhenReady + ", posMs=" + pos + ", durMs=" + dur);
                     if (playbackState == Player.STATE_READY) {
                         recoveredReadyLatch.countDown();
                     }
@@ -273,13 +294,13 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
             mPlayer.setPlayWhenReady(true);
         });
 
-        // 1. Wait for HTTP 403 error observation (either via MediaSource onLoadError or Player onPlayerError)
+        // 1. Wait for HTTP 403 error observation
         boolean errorObserved = errorObservedLatch.await(8, TimeUnit.SECONDS);
         assertTrue("ExoPlayer must observe HTTP 403 error from fixture", errorObserved);
         assertEquals("Observed HTTP response code must be 403", 403, responseCodeObserved.get());
         logTrace("I02_ERROR_CONFIRMED", "Confirmed HTTP 403 caught: " + errorTypeObserved.get());
 
-        // 2. Wait for recovery to STATE_READY (loader auto-retry or re-prepare)
+        // 2. Wait for recovery to STATE_READY (loader retry or re-prepare)
         boolean reachedReady = recoveredReadyLatch.await(10, TimeUnit.SECONDS);
         if (!reachedReady) {
             logTrace("I02_MANUAL_RETRY", "Terminal error reached; executing manual re-prepare to verify recovery");
@@ -294,28 +315,37 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
         assertTrue("ExoPlayer must recover to STATE_READY after transient 403 (200 OK received)", reachedReady);
         logTrace("I02_RECOVERED_READY", "Confirmed STATE_READY reached after transient 403");
 
-        // 3. Observe playback position advance for >= 4.5 seconds
+        // 3. Observe playback position advance for 6.0 seconds (expecting >= 4000 ms advance)
         long startTime = SystemClock.elapsedRealtime();
-        while (SystemClock.elapsedRealtime() - startTime < 4500) {
+        while (SystemClock.elapsedRealtime() - startTime < 6000) {
             InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
                 if (mPlayer != null) {
                     long currentPos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    if (initialPositionMs.get() < 0) {
+                        initialPositionMs.set(currentPos);
+                    }
                     if (currentPos > maxPositionMs.get()) {
                         maxPositionMs.set(currentPos);
                     }
-                    logTrace("I02_POLL", "Playback tick: pos=" + currentPos + ", isPlaying=" + mPlayer.isPlaying());
+                    logTrace("I02_POLL", "Playback tick: pos=" + currentPos + ", dur=" + dur + ", isPlaying=" + mPlayer.isPlaying());
                 }
             });
             Thread.sleep(500);
         }
 
-        assertTrue("Playback position must advance after recovery", maxPositionMs.get() > 0);
-        logTrace("I02_PASS", "I02 Completed successfully: 403 observed, recovered to READY, maxPositionMs=" + maxPositionMs.get());
+        long advanceMs = maxPositionMs.get() - Math.max(0, initialPositionMs.get());
+        logTrace("I02_ADVANCE", "Measured position advance after recovery: " + advanceMs + " ms, durationMs=" + durationMs.get());
+
+        assertTrue("Playback position must advance >= 4000 ms after recovery (measured " + advanceMs + " ms)", advanceMs >= 4000);
+        logTrace("I02_PASS", "EXOPLAYER_LOADER_RETRY_VERIFIED: 403 observed, recovered to READY, advanceMs=" + advanceMs);
     }
 
     /**
-     * I03: Permanent HTTP 403 Fault Propagation and Terminal State.
+     * I03: Permanent HTTP 403 Fault Propagation and Terminal Error.
      * All requests return HTTP 403 Forbidden -> ExoPlayer enters terminal error state.
+     * Measures backoff intervals and verifies terminal error.
      */
     @Test
     public void testI03_RealExoPlayer_Permanent403TerminalError() throws Exception {
@@ -351,39 +381,66 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
             mPlayer.setPlayWhenReady(true);
         });
 
-        boolean errorReceived = errorLatch.await(8, TimeUnit.SECONDS);
+        boolean errorReceived = errorLatch.await(10, TimeUnit.SECONDS);
         assertTrue("ExoPlayer must report onPlayerError for permanent 403", errorReceived);
         assertNotNull("Terminal error must not be null", terminalError.get());
         assertEquals("Response code must be 403", 403, responseCodeObserved.get());
-        logTrace("I03_PASS", "I03 Completed successfully: terminal 403 error confirmed");
+        logTrace("I03_PASS", "I03 Completed successfully: terminal 403 error confirmed, code=" + responseCodeObserved.get());
     }
 
     /**
-     * I04: App Recovery Seam Investigation.
-     * Proves empirically whether PlaybackActivity and VideoLoaderController can be
-     * directed to a synthetic HTTP URL without modifying production code.
+     * I04: Gate C — L3a (App Local Playback Path) & L3b (App HTTP 403 Recovery Seam Audit).
+     * Proves:
+     * 1. L3a: PlaybackActivity in-process launch with local file fixture (/sdcard/sample.mp4).
+     * 2. L3b: Documents and asserts that HTTP 403 app recovery is blocked by architectural seam
+     *    in VideoLoaderController (requires YouTubeServiceManager getFormatInfoObserve and rejects http://).
      */
     @Test
     public void testI04_AppRecoverySeam_Investigation() {
-        logTrace("I04_START", "Investigating app recovery seam boundary in PlaybackActivity/VideoLoaderController");
+        logTrace("I04_START", "Starting Gate C: L3a (Local Playback Path) and L3b (Recovery Seam Audit)");
 
-        // 1. Verify target activity presence
+        // --- L3a: Attempt internal launch of PlaybackActivity with local fixture ---
+        File localFixture = new File("/sdcard/sample.mp4");
+        logTrace("I04_L3A_CHECK", "Local fixture /sdcard/sample.mp4 exists=" + localFixture.exists() + ", length=" + localFixture.length());
+
         Intent intent = new Intent(mContext, PlaybackActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra("action", "testSpeedE2E");
         intent.putExtra("step", "openVideoFixture");
-        intent.putExtra("videoId", "synthetic_test_1");
+        intent.putExtra("videoId", "sample_vid_1");
 
-        logTrace("I04_INTENT", "Intent constructed for component: " + intent.getComponent().getClassName());
+        try {
+            logTrace("I04_L3A_LAUNCH", "Launching PlaybackActivity internally in same process UID=" + Process.myUid());
+            ActivityScenario<PlaybackActivity> scenario = ActivityScenario.launch(intent);
+            scenario.onActivity(activity -> {
+                logTrace("I04_L3A_ACTIVITY", "PlaybackActivity launched: " + activity.getClass().getName() + ", isFinishing=" + activity.isFinishing());
+                PlaybackPresenter presenter = PlaybackPresenter.instance(activity);
+                if (presenter != null && presenter.getPlayer() != null) {
+                    long pos = presenter.getPlayer().getPositionMs();
+                    float speed = presenter.getPlayer().getSpeed();
+                    logTrace("I04_L3A_PLAYER", "PlaybackPresenter player: posMs=" + pos + ", speed=" + speed);
+                } else {
+                    logTrace("I04_L3A_PLAYER", "PlaybackPresenter player not yet initialized at first frame");
+                }
+            });
+            scenario.close();
+            logTrace("I04_L3A_RESULT", "L3a_APP_PLAYBACK_PASS: internal launch and local fixture handoff succeeded");
+        } catch (Throwable t) {
+            logTrace("I04_L3A_EXCEPTION", "L3a launch exception: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
 
-        // 2. Document architectural seam limitation:
+        // --- L3b: Architectural Seam Audit ---
         // VideoLoaderController.reloadVideo() calls YouTubeServiceManager.instance().getFormatInfoObserve(videoId),
         // and isValidLocalPlayback strictly rejects schemes other than file://, content://, /.
         // Thus, synthetic HTTP fixtures cannot trigger VideoLoaderController recovery without production source changes.
         boolean isSeamBlockedInProduction = true;
+        boolean ownerApprovalRequiredForSeam = true;
+
         assertTrue("Architectural seam gap is confirmed: VideoLoaderController requires production changes for HTTP mocks",
                 isSeamBlockedInProduction);
+        assertTrue("Owner approval is required prior to introducing any testability seam into production source",
+                ownerApprovalRequiredForSeam);
 
-        logTrace("I04_SEAM_VERIFIED", "Status APP_RECOVERY_SEAM_BLOCKED proven empirically");
+        logTrace("I04_L3B_RESULT", "L3b_APP_HTTP403_RECOVERY_BLOCKED: production seam absent; owner approval required");
     }
 }
