@@ -403,30 +403,103 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
         File localFixture = new File("/sdcard/sample.mp4");
         logTrace("I04_L3A_CHECK", "Local fixture /sdcard/sample.mp4 exists=" + localFixture.exists() + ", length=" + localFixture.length());
 
+        android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        android.app.Instrumentation.ActivityMonitor monitor =
+                instrumentation.addMonitor(PlaybackActivity.class.getName(), null, false);
+
         Intent intent = new Intent(mContext, PlaybackActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra("action", "testSpeedE2E");
-        intent.putExtra("step", "openVideoFixture");
+        intent.putExtra("step", "idle");
         intent.putExtra("videoId", "sample_vid_1");
 
+        PlaybackActivity playbackActivity = null;
         try {
-            logTrace("I04_L3A_LAUNCH", "Launching PlaybackActivity internally in same process UID=" + Process.myUid());
-            ActivityScenario<PlaybackActivity> scenario = ActivityScenario.launch(intent);
-            scenario.onActivity(activity -> {
-                logTrace("I04_L3A_ACTIVITY", "PlaybackActivity launched: " + activity.getClass().getName() + ", isFinishing=" + activity.isFinishing());
-                PlaybackPresenter presenter = PlaybackPresenter.instance(activity);
-                if (presenter != null && presenter.getPlayer() != null) {
-                    long pos = presenter.getPlayer().getPositionMs();
-                    float speed = presenter.getPlayer().getSpeed();
-                    logTrace("I04_L3A_PLAYER", "PlaybackPresenter player: posMs=" + pos + ", speed=" + speed);
-                } else {
-                    logTrace("I04_L3A_PLAYER", "PlaybackPresenter player not yet initialized at first frame");
+            logTrace("I04_L3A_LAUNCH", "Launching PlaybackActivity internally via Instrumentation in same process UID=" + Process.myUid());
+            mContext.startActivity(intent);
+
+            android.app.Activity rawActivity = monitor.waitForActivityWithTimeout(8000);
+            if (rawActivity instanceof PlaybackActivity) {
+                playbackActivity = (PlaybackActivity) rawActivity;
+                logTrace("I04_L3A_ACTIVITY", "PlaybackActivity launched: " + playbackActivity.getClass().getName() + ", isFinishing=" + playbackActivity.isFinishing());
+
+                final PlaybackActivity act = playbackActivity;
+                final AtomicReference<PlaybackPresenter> presenterRef = new AtomicReference<>();
+                final AtomicLong durationRef = new AtomicLong(-1);
+                final AtomicLong startPosRef = new AtomicLong(-1);
+                final AtomicLong endPosRef = new AtomicLong(-1);
+                final AtomicBoolean isPlayingRef = new AtomicBoolean(false);
+
+                // Wait for PlaybackFragment to reach onResume and initialize mPlayer
+                SystemClock.sleep(1500);
+
+                instrumentation.runOnMainSync(() -> {
+                    PlaybackPresenter presenter = PlaybackPresenter.instance(act);
+                    presenterRef.set(presenter);
+                    if (presenter != null && presenter.getPlayer() != null) {
+                        com.liskovsoft.smartyoutubetv2.common.app.models.data.Video v =
+                                com.liskovsoft.smartyoutubetv2.common.app.models.data.Video.from("sample_vid_1");
+                        v.title = "Sample Video 1";
+                        presenter.onNewVideo(v);
+                        presenter.getPlayer().setVideo(v);
+                        presenter.getPlayer().openUrlList(Collections.singletonList("file:///sdcard/sample.mp4"));
+                        presenter.getPlayer().setPlayWhenReady(true);
+                        presenter.onVideoLoaded(v);
+                        logTrace("I04_L3A_COMMAND", "openUrlList file:///sdcard/sample.mp4 dispatched to PlaybackPresenter.getPlayer()");
+                    } else {
+                        logTrace("I04_L3A_COMMAND_FAIL", "presenter or getPlayer() is null");
+                    }
+                });
+
+                // Poll player state over up to 10 seconds to observe sustained playback advance >= 4000 ms
+                long pollStartTime = SystemClock.elapsedRealtime();
+                while (SystemClock.elapsedRealtime() - pollStartTime < 10000) {
+                    SystemClock.sleep(500);
+                    instrumentation.runOnMainSync(() -> {
+                        PlaybackPresenter presenter = presenterRef.get();
+                        if (presenter != null && presenter.getPlayer() != null) {
+                            long dur = presenter.getPlayer().getDurationMs();
+                            long pos = presenter.getPlayer().getPositionMs();
+                            boolean playing = presenter.isPlaying();
+                            if (dur > 0 && durationRef.get() <= 0) durationRef.set(dur);
+                            if (pos > 0 && startPosRef.get() <= 0) startPosRef.set(pos);
+                            if (pos > 0) endPosRef.set(pos);
+                            if (playing) isPlayingRef.set(true);
+                        }
+                    });
+                    if (startPosRef.get() > 0 && endPosRef.get() - startPosRef.get() >= 4000) {
+                        break;
+                    }
                 }
-            });
-            scenario.close();
-            logTrace("I04_L3A_RESULT", "L3a_APP_PLAYBACK_PASS: internal launch and local fixture handoff succeeded");
+
+                long advancedMs = (startPosRef.get() > 0 && endPosRef.get() >= startPosRef.get())
+                        ? (endPosRef.get() - startPosRef.get()) : 0;
+                logTrace("I04_L3A_STATE", "Measured: durationMs=" + durationRef.get()
+                        + ", startPos=" + startPosRef.get()
+                        + ", endPos=" + endPosRef.get()
+                        + ", advancedMs=" + advancedMs
+                        + ", isPlaying=" + isPlayingRef.get());
+
+                if (isPlayingRef.get() && durationRef.get() >= 8000 && advancedMs >= 4000) {
+                    logTrace("I04_L3A_PASS", "L3a_APP_PLAYBACK_PASS: app-owned ExoPlayer playback verified, duration=" + durationRef.get() + ", advanced=" + advancedMs);
+                } else {
+                    logTrace("I04_L3A_NOT_VERIFIED", "L3a_NOT_VERIFIED: isPlaying=" + isPlayingRef.get() + ", duration=" + durationRef.get() + ", advanced=" + advancedMs);
+                }
+            } else {
+                logTrace("I04_L3A_TIMEOUT", "PlaybackActivity did not launch within timeout");
+            }
         } catch (Throwable t) {
             logTrace("I04_L3A_EXCEPTION", "L3a launch exception: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            Log.e(TAG, "L3a launch error", t);
+        } finally {
+            if (playbackActivity != null) {
+                final PlaybackActivity actToFinish = playbackActivity;
+                instrumentation.runOnMainSync(() -> {
+                    try {
+                        actToFinish.finish();
+                    } catch (Exception ignored) {}
+                });
+            }
         }
 
         // --- L3b: Architectural Seam Audit ---
