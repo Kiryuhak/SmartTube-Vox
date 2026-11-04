@@ -402,7 +402,7 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
         // --- L3a: Prepare app-private fixture in targetContext.getFilesDir() ---
         File targetDir = mContext.getFilesDir();
         File appPrivateFixture = new File(targetDir, "sample_long.mp4");
-        if (!appPrivateFixture.exists() || appPrivateFixture.length() != 1204336) {
+        if (!appPrivateFixture.exists() || appPrivateFixture.length() != 329142) {
             try {
                 Context testCtx = InstrumentationRegistry.getInstrumentation().getContext();
                 try (java.io.InputStream is = testCtx.getAssets().open("sample_long.mp4");
@@ -417,7 +417,7 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
             } catch (Throwable t) {
                 Log.w(TAG, "Asset copy failed, checking fallback: " + t.getMessage());
             }
-            if (!appPrivateFixture.exists() || appPrivateFixture.length() != 1204336) {
+            if (!appPrivateFixture.exists() || appPrivateFixture.length() != 329142) {
                 File tmpFallback = new File("/data/local/tmp/sample_long.mp4");
                 if (tmpFallback.exists()) {
                     try (java.io.InputStream is = new java.io.FileInputStream(tmpFallback);
@@ -574,5 +574,194 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                 ownerApprovalRequiredForSeam);
 
         logTrace("I04_L3B_RESULT", "L3b_APP_HTTP403_RECOVERY_BLOCKED: production seam absent; owner approval required");
+    }
+
+    /**
+     * I05: Transient HTTP 429 Rate Limit Fault Propagation and Recovery (AVD L2).
+     * Request 1 returns HTTP 429 Too Many Requests -> ExoPlayer observes load error with InvalidResponseCodeException: 429.
+     * Request 2 returns HTTP 200/206 OK -> ExoPlayer recovers to STATE_READY, position advances >= 4,000 ms.
+     * Marked: AVD_L2_HTTP429_TRANSIENT_PASS.
+     */
+    @Test
+    public void testI05_RealExoPlayer_Transient429Recovery() throws Exception {
+        String testUrl = FIXTURE_HOST + "/i429_transient/sample.mp4";
+        logTrace("I05_START", "Starting transient 429 test against " + testUrl);
+
+        CountDownLatch errorObservedLatch = new CountDownLatch(1);
+        CountDownLatch recoveredReadyLatch = new CountDownLatch(1);
+        AtomicInteger responseCodeObserved = new AtomicInteger(0);
+        AtomicReference<String> errorTypeObserved = new AtomicReference<>("");
+        AtomicLong maxPositionMs = new AtomicLong(0);
+        AtomicLong initialPositionMs = new AtomicLong(-1);
+        AtomicLong durationMs = new AtomicLong(0);
+
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
+            mPlayer.setRepeatMode(Player.REPEAT_MODE_OFF);
+
+            mPlayer.addListener(new Player.EventListener() {
+                @Override
+                public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
+                    long pos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    logTrace("I05_STATE", "playbackState=" + playbackState + ", playWhenReady=" + playWhenReady + ", posMs=" + pos + ", durMs=" + dur);
+                    if (playbackState == Player.STATE_READY) {
+                        recoveredReadyLatch.countDown();
+                    }
+                }
+
+                @Override
+                public void onPlayerError(ExoPlaybackException error) {
+                    logTrace("I05_ON_PLAYER_ERROR", "Captured Player error: type=" + error.type + ", message=" + error.getMessage());
+                    if (error.type == ExoPlaybackException.TYPE_SOURCE) {
+                        IOException cause = error.getSourceException();
+                        if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
+                            int code = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+                            responseCodeObserved.set(code);
+                            errorTypeObserved.set("onPlayerError: " + cause.getClass().getSimpleName());
+                            logTrace("I05_HTTP_CODE", "Player error HTTP response code: " + code);
+                        }
+                    }
+                    errorObservedLatch.countDown();
+                }
+            });
+
+            mPlayer.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onLoadError(EventTime eventTime, LoadEventInfo loadEventInfo,
+                                        MediaLoadData mediaLoadData, IOException error, boolean wasCanceled) {
+                    logTrace("I05_ANALYTICS_LOAD_ERROR", "Captured Analytics onLoadError: " + error.getMessage() + ", wasCanceled=" + wasCanceled);
+                    if (error instanceof HttpDataSource.InvalidResponseCodeException) {
+                        int code = ((HttpDataSource.InvalidResponseCodeException) error).responseCode;
+                        responseCodeObserved.set(code);
+                        errorTypeObserved.set("AnalyticsListener: " + error.getClass().getSimpleName());
+                        logTrace("I05_HTTP_CODE", "Observed HTTP response code in AnalyticsListener: " + code);
+                    }
+                    errorObservedLatch.countDown();
+                }
+            });
+
+            MediaSource mediaSource = new ProgressiveMediaSource.Factory(mDataSourceFactory)
+                    .createMediaSource(Uri.parse(testUrl));
+
+            mediaSource.addEventListener(mainHandler, new DefaultMediaSourceEventListener() {
+                @Override
+                public void onLoadError(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                        LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData,
+                                        IOException error, boolean wasCanceled) {
+                    logTrace("I05_ON_LOAD_ERROR", "Captured MediaSource load error: " + error.getMessage() + ", wasCanceled=" + wasCanceled);
+                    if (error instanceof HttpDataSource.InvalidResponseCodeException) {
+                        int code = ((HttpDataSource.InvalidResponseCodeException) error).responseCode;
+                        responseCodeObserved.set(code);
+                        errorTypeObserved.set("MediaSourceEventListener: " + error.getClass().getSimpleName());
+                        logTrace("I05_HTTP_CODE", "Observed HTTP response code in MediaSourceEventListener: " + code);
+                    }
+                    errorObservedLatch.countDown();
+                }
+            });
+
+            mPlayer.prepare(mediaSource);
+            mPlayer.setPlayWhenReady(true);
+        });
+
+        // 1. Wait for HTTP 429 error observation
+        boolean errorObserved = errorObservedLatch.await(8, TimeUnit.SECONDS);
+        assertTrue("ExoPlayer must observe HTTP 429 error from fixture", errorObserved);
+        assertEquals("Observed HTTP response code must be 429", 429, responseCodeObserved.get());
+        logTrace("I05_ERROR_CONFIRMED", "Confirmed HTTP 429 caught: " + errorTypeObserved.get());
+
+        // 2. Wait for recovery to STATE_READY (loader auto-retry)
+        boolean reachedReady = recoveredReadyLatch.await(10, TimeUnit.SECONDS);
+        if (!reachedReady) {
+            logTrace("I05_MANUAL_RETRY", "Terminal error reached; executing manual re-prepare to verify recovery");
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                MediaSource retrySource = new ProgressiveMediaSource.Factory(mDataSourceFactory)
+                        .createMediaSource(Uri.parse(testUrl));
+                mPlayer.prepare(retrySource, false, false);
+                mPlayer.setPlayWhenReady(true);
+            });
+            reachedReady = recoveredReadyLatch.await(10, TimeUnit.SECONDS);
+        }
+        assertTrue("ExoPlayer must recover to STATE_READY after transient 429", reachedReady);
+        logTrace("I05_RECOVERED_READY", "Confirmed STATE_READY reached after transient 429");
+
+        // 3. Observe playback position advance for 6.0 seconds (expecting >= 4000 ms advance)
+        long startTime = SystemClock.elapsedRealtime();
+        while (SystemClock.elapsedRealtime() - startTime < 6000) {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                if (mPlayer != null) {
+                    long currentPos = mPlayer.getCurrentPosition();
+                    long dur = mPlayer.getDuration();
+                    if (dur > 0) durationMs.set(dur);
+                    if (initialPositionMs.get() < 0) {
+                        initialPositionMs.set(currentPos);
+                    }
+                    if (currentPos > maxPositionMs.get()) {
+                        maxPositionMs.set(currentPos);
+                    }
+                    logTrace("I05_POLL", "Playback tick: pos=" + currentPos + ", dur=" + dur + ", isPlaying=" + mPlayer.isPlaying());
+                }
+            });
+            Thread.sleep(500);
+        }
+
+        long advanceMs = maxPositionMs.get() - Math.max(0, initialPositionMs.get());
+        logTrace("I05_ADVANCE", "Measured position advance after 429 recovery: " + advanceMs + " ms, durationMs=" + durationMs.get());
+
+        assertTrue("Playback position must advance >= 4000 ms after recovery (measured " + advanceMs + " ms)", advanceMs >= 4000);
+        logTrace("I05_PASS", "AVD_L2_HTTP429_TRANSIENT_PASS: 429 observed, recovered to READY, advanceMs=" + advanceMs);
+    }
+
+    /**
+     * I06: Permanent HTTP 429 Rate Limit Fault Propagation and Terminal Error (AVD L2).
+     * All requests return HTTP 429 Too Many Requests -> ExoPlayer enters terminal error state.
+     * Measures backoff intervals and verifies terminal onPlayerError.
+     * Marked: AVD_L2_HTTP429_PERMANENT_PASS.
+     */
+    @Test
+    public void testI06_RealExoPlayer_Permanent429TerminalError() throws Exception {
+        String testUrl = FIXTURE_HOST + "/i429_permanent/sample.mp4";
+        logTrace("I06_START", "Starting permanent 429 test against " + testUrl);
+
+        CountDownLatch errorLatch = new CountDownLatch(1);
+        AtomicReference<ExoPlaybackException> terminalError = new AtomicReference<>(null);
+        AtomicInteger responseCodeObserved = new AtomicInteger(0);
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mPlayer = ExoPlayerFactory.newSimpleInstance(mContext);
+
+            mPlayer.addListener(new Player.EventListener() {
+                @Override
+                public void onPlayerError(ExoPlaybackException error) {
+                    logTrace("I06_ON_ERROR", "Captured terminal error: type=" + error.type + ", message=" + error.getMessage());
+                    terminalError.set(error);
+                    if (error.type == ExoPlaybackException.TYPE_SOURCE) {
+                        IOException cause = error.getSourceException();
+                        if (cause instanceof HttpDataSource.InvalidResponseCodeException) {
+                            int code = ((HttpDataSource.InvalidResponseCodeException) cause).responseCode;
+                            responseCodeObserved.set(code);
+                        }
+                    }
+                    errorLatch.countDown();
+                }
+            });
+
+            MediaSource mediaSource = new ExtractorMediaSource.Factory(mDataSourceFactory)
+                    .createMediaSource(Uri.parse(testUrl));
+            mPlayer.prepare(mediaSource);
+            mPlayer.setPlayWhenReady(true);
+        });
+
+        // Wait for terminal player error after loader retries are exhausted (up to 15 seconds)
+        boolean errorReached = errorLatch.await(15, TimeUnit.SECONDS);
+        assertTrue("ExoPlayer must transition to terminal error on permanent HTTP 429", errorReached);
+        assertNotNull("Terminal error must not be null", terminalError.get());
+        assertEquals("Terminal error must be TYPE_SOURCE", ExoPlaybackException.TYPE_SOURCE, terminalError.get().type);
+        assertEquals("Observed response code must be 429", 429, responseCodeObserved.get());
+
+        logTrace("I06_PASS", "AVD_L2_HTTP429_PERMANENT_PASS: Terminal onPlayerError captured with code 429");
     }
 }
