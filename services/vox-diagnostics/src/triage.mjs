@@ -115,9 +115,25 @@ const SAFE_CONTEXT_KEYS = new Set([
   'finalizeElapsedMs', 'diskReadMs', 'diskWriteMs', 'downloadId', 'sessionId', 'mode',
   'maxHeapMb', 'totalHeapMb', 'freeHeapMb', 'usedHeapMb', 'availMemMb', 'totalMemMb',
   'lowMemory', 'thresholdMb', 'bufferedDurationMs', 'activePlayers', 'recreationCount', 'causeClass',
-  'responseCode',
+  'responseCode', 'statusConflict', 'responseCodeConflict',
 ]);
 const SAFE_ENUM = /^[A-Za-z0-9][A-Za-z0-9_+.-]{0,63}$/;
+
+function parseHttpCode(val) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') {
+    if (Number.isInteger(val) && val >= 100 && val <= 599) return val;
+    return null;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^[1-5][0-9]{2}$/.test(trimmed)) {
+      const parsed = Number(trimmed);
+      if (Number.isInteger(parsed) && parsed >= 100 && parsed <= 599) return parsed;
+    }
+  }
+  return null;
+}
 
 export function safeContext(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -127,6 +143,30 @@ export function safeContext(raw) {
     if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) result[key] = value;
     else if (typeof value === 'string' && SAFE_ENUM.test(value)) result[key] = value;
   }
+
+  // 163-R18: Normalize incoming httpStatus into canonical responseCode (HTTP 100-599)
+  const validResp = parseHttpCode(raw.responseCode);
+  const validHttp = parseHttpCode(raw.httpStatus);
+
+  if (validResp !== null && validHttp !== null) {
+    if (validResp !== validHttp) {
+      result.statusConflict = 'CONFLICT';
+      result.responseCodeConflict = 'CONFLICT';
+    }
+    if (result.responseCode === undefined) {
+      result.responseCode = validResp;
+    }
+  } else if (validResp !== null) {
+    if (result.responseCode === undefined) {
+      result.responseCode = validResp;
+    }
+  } else if (validHttp !== null) {
+    result.responseCode = validHttp;
+  } else if (raw.responseCode !== undefined) {
+    delete result.responseCode;
+  }
+
+  delete result.httpStatus;
   return result;
 }
 

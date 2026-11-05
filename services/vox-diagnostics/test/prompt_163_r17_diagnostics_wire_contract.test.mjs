@@ -59,8 +59,8 @@ test('Prompt 163-R17 Gate C.1: Actual Client Wire Payload Ingestion & HTTP Statu
   assert.equal(ev.safeContext.state, undefined, 'state is stripped by SAFE_CONTEXT_KEYS');
   assert.equal(ev.safeContext.fallbackCount, undefined, 'fallbackCount is stripped by SAFE_CONTEXT_KEYS');
 
-  // Invariant 5: No mapper transforms httpStatus -> responseCode
-  assert.equal(ev.safeContext.responseCode, undefined, 'responseCode is NOT populated by any mapper');
+  // Invariant 5: Wire contract normalization (R17 recorded loss as undefined; R18 Option A normalizes to 503)
+  assert.equal(ev.safeContext.responseCode, 503, 'responseCode is normalized to 503');
 
   // Invariant 6: Triage severity is LOW, audio quality strictly uncomputed
   assert.equal(ev.event, 'TRANSLATION_FALLBACK_ATTEMPT');
