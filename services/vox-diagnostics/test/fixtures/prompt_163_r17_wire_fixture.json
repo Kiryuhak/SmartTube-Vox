@@ -1,0 +1,42 @@
+{
+  "schema": "vox-diagnostic-report-v3",
+  "reportPurpose": "TEST",
+  "appVersion": "32.56-vox.9.2",
+  "safeRecentEvents": [{
+    "appVersion": "32.56-vox.9.2",
+    "code": "TRANSLATION_FALLBACK_ATTEMPT",
+    "level": "WARNING",
+    "context": {
+      "isReused": "false",
+      "requestElapsedMs": "100",
+      "reuseSource": "NONE",
+      "primaryFailure": "HTTP 503 for /video-translation/translate",
+      "translationPostprocessMs": "0",
+      "lookupElapsedMs": "0",
+      "providerWaitElapsedMs": "0",
+      "fallbackCount": "1",
+      "totalTranslationStartupMs": "0",
+      "fallbackAttempted": "true",
+      "processingElapsedMs": "0",
+      "primaryFailureReason": "HTTP 503 for /video-translation/translate",
+      "audioAttachElapsedMs": "0",
+      "httpStatus": "503",
+      "httpClass": "5xx_SERVER_ERROR",
+      "state": "WAITING_PROVIDER",
+      "attachLatencyMs": "0"
+    },
+    "category": "TRANSLATION",
+    "message": "Bounded fallback from NEW backend to OLD backend",
+    "timestamp": 1730768000100
+  }],
+  "reportId": "VOX-SYNTHETIC-R17-001",
+  "sdkInt": 34,
+  "osName": "Android",
+  "appVersionCode": 2446032,
+  "platform": "Android TV",
+  "manufacturer": "TCL",
+  "osVersion": "14 (API 34)",
+  "deviceTier": "STANDARD",
+  "model": "Smart TV Pro",
+  "timestamp": 1730768000150
+}
