@@ -886,6 +886,8 @@ public class Prompt160InstrumentedPlayerRecoveryTest {
                         com.liskovsoft.smartyoutubetv2.common.app.models.data.Video v =
                                 com.liskovsoft.smartyoutubetv2.common.app.models.data.Video.from("sample_vid_samepid_c" + cycleNum);
                         v.title = "Synthetic 45s Color Bars";
+                        v.isLocal = true;
+                        v.mediaUrl = "file://" + appPrivateFixture.getAbsolutePath();
                         presenter.onNewVideo(v);
                         presenter.getPlayer().setVideo(v);
                         presenter.getPlayer().openUrlList(Collections.singletonList("file://" + appPrivateFixture.getAbsolutePath()));
