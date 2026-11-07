@@ -176,31 +176,36 @@ class VersionSelectionTest {
 
     @Test
     fun testEngineFirstComparisonAndProgression() {
-        // Prompt 163-R39 REV2 required machine test cases:
-        // 1. 32.71-vox.1 > 32.56-vox.9.2 (PASS: newer engine is higher)
-        assertTrue(VoxVersionComparator.compare("32.71-vox.1", "32.56-vox.9.2") > 0)
-        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.9.2", "32.71-vox.1"))
+        // Prompt 163-R42 assertions:
+        // 1. 32.71-vox.1 > 32.56-vox.10 > 32.56-vox.9.2 (PASS: newer engine 32.71 > 32.56)
+        assertTrue(VoxVersionComparator.compare("32.71-vox.1", "32.56-vox.10") > 0)
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.10", "32.71-vox.1"))
+        assertTrue(VoxVersionComparator.compare("32.56-vox.10", "32.56-vox.9.2") > 0)
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.56-vox.9.2", "32.56-vox.10"))
 
-        // 2. 33.25-vox.1 > 32.71-vox.10 (PASS: next engine 33.25 is higher than 32.71)
-        assertTrue(VoxVersionComparator.compare("33.25-vox.1", "32.71-vox.10") > 0)
-        assertTrue(VoxVersionComparator.isUpdateAvailable("32.71-vox.10", "33.25-vox.1"))
-
-        // 3. 32.71-vox.2 > 32.71-vox.1 (PASS: same engine, vox patch 2 > 1)
+        // 2. Progression: 32.71-vox.2 > 32.71-vox.1
         assertTrue(VoxVersionComparator.compare("32.71-vox.2", "32.71-vox.1") > 0)
         assertTrue(VoxVersionComparator.isUpdateAvailable("32.71-vox.1", "32.71-vox.2"))
 
-        // 4. 32.71-vox.1 < 32.71-vox.10 (BLOCK: same engine, patch 1 < 10)
-        assertTrue(VoxVersionComparator.compare("32.71-vox.1", "32.71-vox.10") < 0)
-        assertFalse(VoxVersionComparator.isUpdateAvailable("32.71-vox.10", "32.71-vox.1"))
+        // 3. Next engines: 33.25-vox.1 > 32.71-vox.2, 35.0-vox.1 > 33.25-vox.1
+        assertTrue(VoxVersionComparator.compare("33.25-vox.1", "32.71-vox.2") > 0)
+        assertTrue(VoxVersionComparator.isUpdateAvailable("32.71-vox.2", "33.25-vox.1"))
+        assertTrue(VoxVersionComparator.compare("35.0-vox.1", "33.25-vox.1") > 0)
+        assertTrue(VoxVersionComparator.isUpdateAvailable("33.25-vox.1", "35.0-vox.1"))
+
+        // 4. Inverses must be false
+        assertFalse(VoxVersionComparator.isUpdateAvailable("32.71-vox.1", "32.56-vox.10"))
+        assertFalse(VoxVersionComparator.isUpdateAvailable("32.71-vox.2", "32.71-vox.1"))
+        assertFalse(VoxVersionComparator.isUpdateAvailable("33.25-vox.1", "32.71-vox.2"))
 
         // 5. VersionCode monotonicity invariant: candidate.versionCode > installedVersionCode
         assertFalse(VoxVersionComparator.isUpdateAvailable(
-            "32.56-vox.9.2", "32.71-vox.1",
-            installedVersionCode = 2446050L, targetVersionCode = 2446032L
+            "32.56-vox.10", "32.71-vox.1",
+            installedVersionCode = 2461001L, targetVersionCode = 2446050L
         ))
         assertTrue(VoxVersionComparator.isUpdateAvailable(
-            "32.56-vox.9.2", "32.71-vox.1",
-            installedVersionCode = 2446032L, targetVersionCode = 2446050L
+            "32.56-vox.10", "32.71-vox.1",
+            installedVersionCode = 2446050L, targetVersionCode = 2461001L
         ))
     }
 

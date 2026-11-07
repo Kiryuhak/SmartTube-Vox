@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Тег для сборки релиза (например: v32.71-vox.10 или v32.45-vot.1)'
+        description: 'Тег для сборки релиза (например: v32.71-vox.1 или v32.56-vox.10)'
         required: false
       repair_existing_release:
         description: 'Дозагрузить только отсутствующие assets в существующий Release без перезаписи'
@@ -44,7 +44,7 @@ jobs:
 
           # Tag format validation: vX.Y-vot.Z or vX.Y-vox.Z
           if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+)-(vox|vot)\.([0-9]+)$ ]]; then
-            echo "::error::Неверный формат тега: $TAG. Ожидается: v<версия>-vox.<номер> или v<версия>-vot.<номер>, например v32.71-vox.10"
+            echo "::error::Неверный формат тега: $TAG. Ожидается: v<версия>-vox.<номер> или v<версия>-vot.<номер>, например v32.71-vox.1"
             exit 1
           fi
 

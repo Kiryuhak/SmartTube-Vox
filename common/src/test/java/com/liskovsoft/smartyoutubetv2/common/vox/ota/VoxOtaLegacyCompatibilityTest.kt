@@ -238,72 +238,82 @@ class VoxOtaLegacyCompatibilityTest {
             assertFalse("Client $installed MUST reject 32.71-vox.1 on Beta under vox92 comparator", updateVox92Beta)
         }
 
-        // 2. Мост 32.71-vox.10 — принимается ВСЕМИ пятью клиентами на ОБОИХ каналах (Stable и Beta)!
+        // 2. Мост 32.56-vox.10 (Stage L) — принимается ВСЕМИ пятью клиентами на ОБОИХ каналах (Stable и Beta)!
         for (installed in installedTags) {
-            val cmpVox8 = legacyCompareVox8(installed, "32.71-vox.10")
-            assertTrue("Client $installed MUST accept 32.71-vox.10 as upgrade under vox8 comparator", cmpVox8 > 0)
+            val cmpVox8 = legacyCompareVox8(installed, "32.56-vox.10")
+            assertTrue("Client $installed MUST accept 32.56-vox.10 as upgrade under vox8 comparator", cmpVox8 > 0)
 
-            val updateVox92Stable = legacyIsUpdateAvailableVox92(installed, "32.71-vox.10", isBeta = false)
-            assertTrue("Client $installed MUST accept 32.71-vox.10 on Stable under vox92 comparator", updateVox92Stable)
+            val updateVox92Stable = legacyIsUpdateAvailableVox92(installed, "32.56-vox.10", isBeta = false)
+            assertTrue("Client $installed MUST accept 32.56-vox.10 on Stable under vox92 comparator", updateVox92Stable)
 
-            val updateVox92Beta = legacyIsUpdateAvailableVox92(installed, "32.71-vox.10", isBeta = true)
-            assertTrue("Client $installed MUST accept 32.71-vox.10 on Beta under vox92 comparator", updateVox92Beta)
+            val updateVox92Beta = legacyIsUpdateAvailableVox92(installed, "32.56-vox.10", isBeta = true)
+            assertTrue("Client $installed MUST accept 32.56-vox.10 on Beta under vox92 comparator", updateVox92Beta)
         }
     }
 
     @Test
     fun testDualFeedParsingAndNPlus2Rotation() {
-        // Тест схемы smarttube_vox_v2.json
+        // Тест схемы smarttube_vox_v2.json для Stage N (32.71-vox.1)
         val v2Json = """
         {
           "schemaVersion": 2,
-          "version": "32.71-vox.10",
-          "versionCode": 2446050,
+          "version": "32.71-vox.1",
+          "versionCode": 2461001,
           "minSdk": 21,
           "targetSdk": 34,
           "changelog": [
-            "SmartTube VOX 9.3 Bridge Release",
+            "SmartTube VOX 9.3 Release (Stage N)",
             "SmartTube 32.71s engine upgrade",
             "VOT 1.12.6 integration"
           ],
           "assets": [
             {
-              "name": "SmartTube_vot_32.71-vox.10_arm64-v8a.apk",
-              "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SmartTube_vot_32.71-vox.10_arm64-v8a.apk",
+              "name": "SmartTube_vot_32.71-vox.1_arm64-v8a.apk",
+              "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.1/SmartTube_vot_32.71-vox.1_arm64-v8a.apk",
               "size": 25000000,
               "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
             },
             {
-              "name": "SmartTube_vot_32.71-vox.10_armeabi-v7a.apk",
-              "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SmartTube_vot_32.71-vox.10_armeabi-v7a.apk",
+              "name": "SmartTube_vot_32.71-vox.1_armeabi-v7a.apk",
+              "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.1/SmartTube_vot_32.71-vox.1_armeabi-v7a.apk",
               "size": 23000000,
               "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
             },
             {
-              "name": "SmartTube_vot_32.71-vox.10_universal.apk",
-              "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SmartTube_vot_32.71-vox.10_universal.apk",
+              "name": "SmartTube_vot_32.71-vox.1_universal.apk",
+              "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.1/SmartTube_vot_32.71-vox.1_universal.apk",
               "size": 42000000,
               "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
             }
           ],
-          "sha256SumsUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SHA256SUMS.txt"
+          "sha256SumsUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.1/SHA256SUMS.txt"
         }
         """.trimIndent()
 
         val parsedV2 = VoxOtaReleaseParser.parseRelease(v2Json, channel = VoxUpdateChannel.STABLE)
         assertNotNull(parsedV2)
-        assertEquals("32.71-vox.10", parsedV2.versionName)
-        assertEquals(2446050L, parsedV2.versionCode)
+        assertEquals("32.71-vox.1", parsedV2.versionName)
+        assertEquals(2461001L, parsedV2.versionCode)
         assertEquals(3, parsedV2.assets.size)
         assertEquals("1111111111111111111111111111111111111111111111111111111111111111", parsedV2.assets[0].sha256)
-        assertEquals("https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SHA256SUMS.txt", parsedV2.sha256SumsUrl)
+        assertEquals("https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.1/SHA256SUMS.txt", parsedV2.sha256SumsUrl)
+
+        // Переход Stage L (32.56-vox.10) -> Stage N (32.71-vox.1) через modern engine-first comparator
+        val canUpgradeBridgeToStageN = VoxVersionComparator.isUpdateAvailable(
+            currentVersion = "32.56-vox.10",
+            targetVersion = "32.71-vox.1",
+            channel = VoxUpdateChannel.STABLE,
+            installedVersionCode = 2446050L,
+            targetVersionCode = 2461001L
+        )
+        assertTrue("Bridge client 32.56-vox.10 must upgrade to 32.71-vox.1 via engine-first", canUpgradeBridgeToStageN)
 
         // N+1 ротация: выход будущего 33.25-vox.1 в modern feed
         val futureModernJson = """
         {
           "schemaVersion": 2,
           "version": "33.25-vox.1",
-          "versionCode": 2446100,
+          "versionCode": 2485001,
           "changelog": ["Upstream 33.25 update"],
           "assets": [
             {
@@ -315,27 +325,27 @@ class VoxOtaLegacyCompatibilityTest {
         }
         """.trimIndent()
 
-        // 1. Клиент на Bridge (32.71-vox.10) обновляется до 33.25-vox.1 благодаря engine-first
+        // 1. Клиент на 32.71-vox.1 обновляется до 33.25-vox.1 благодаря engine-first
         val modernParsed = VoxOtaReleaseParser.parseRelease(futureModernJson, channel = VoxUpdateChannel.STABLE)
         val canUpdateModern = VoxVersionComparator.isUpdateAvailable(
-            currentVersion = "32.71-vox.10",
+            currentVersion = "32.71-vox.1",
             targetVersion = modernParsed.versionName,
             channel = VoxUpdateChannel.STABLE,
-            installedVersionCode = 2446050L,
+            installedVersionCode = 2461001L,
             targetVersionCode = modernParsed.versionCode ?: 0L
         )
-        assertTrue("Bridge client 32.71-vox.10 must upgrade to 33.25-vox.1 via engine-first", canUpdateModern)
+        assertTrue("Stage N client 32.71-vox.1 must upgrade to 33.25-vox.1 via engine-first", canUpdateModern)
 
-        // 2. В то же время старый клиент VOX 8 запрашивает pinned smarttube_vox.json (который указывает на v32.71-vox.10)
+        // 2. В то же время старый клиент VOX 8 запрашивает pinned smarttube_vox.json (который указывает на v32.56-vox.10)
         val legacyShimJson = """
         {
-          "version": "32.71-vox.10",
+          "version": "32.56-vox.10",
           "versionCode": 2446050,
-          "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SmartTube_vot_32.71-vox.10_universal.apk"
+          "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.56-vox.10/SmartTube_vot_32.56-vox.10_universal.apk"
         }
         """.trimIndent()
         val legacyParsed = VoxOtaReleaseParser.parseRelease(legacyShimJson, channel = VoxUpdateChannel.STABLE)
-        assertEquals("32.71-vox.10", legacyParsed.versionName)
+        assertEquals("32.56-vox.10", legacyParsed.versionName)
         val canLegacyUpgrade = legacyIsUpdateAvailableVox92("32.56-vox.8", legacyParsed.versionName, isBeta = false)
         assertTrue("Old client retains valid upgrade to bridge even after future releases", canLegacyUpgrade)
     }

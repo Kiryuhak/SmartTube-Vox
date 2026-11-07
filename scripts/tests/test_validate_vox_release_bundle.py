@@ -31,7 +31,7 @@ def create_dummy_file(path: Path, content: bytes = b"dummy apk content") -> str:
     path.write_bytes(content)
     return hashlib.sha256(content).hexdigest().lower()
 
-def setup_valid_bundle(bundle_dir: Path, version: str = "32.71-vox.10", version_code: int = 2446050):
+def setup_valid_bundle(bundle_dir: Path, version: str = "32.71-vox.1", version_code: int = 2461001):
     bundle_dir.mkdir(parents=True, exist_ok=True)
     
     # 3 canonical APKs
@@ -47,11 +47,11 @@ def setup_valid_bundle(bundle_dir: Path, version: str = "32.71-vox.10", version_
     sums_text = f"{sha_arm64}  {arm64.name}\n{sha_armv7}  {armv7.name}\n{sha_univ}  {univ.name}\n"
     (bundle_dir / "SHA256SUMS.txt").write_text(sums_text, encoding="utf-8")
     
-    # smarttube_vox.json (legacy pinned bridge compatibility shim)
+    # smarttube_vox.json (legacy pinned bridge compatibility shim: Stage L 32.56-vox.10)
     legacy = {
-        "version": "32.71-vox.10",
+        "version": "32.56-vox.10",
         "versionCode": 2446050,
-        "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.71-vox.10/SmartTube_vot_32.71-vox.10_universal.apk"
+        "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.56-vox.10/SmartTube_vot_32.56-vox.10_universal.apk"
     }
     (bundle_dir / "smarttube_vox.json").write_text(json.dumps(legacy, indent=2), encoding="utf-8")
     
@@ -129,7 +129,7 @@ def main():
 
     # 4. Present standalone x86 APK
     def add_x86(d):
-        (d / "SmartTube_vot_32.71-vox.10_x86.apk").write_bytes(b"x86")
+        (d / "SmartTube_vot_32.71-vox.1_x86.apk").write_bytes(b"x86")
     assert_case("Forbidden standalone x86 APK presence fails validation", False, add_x86)
 
     # 5. SHA256 mismatch
