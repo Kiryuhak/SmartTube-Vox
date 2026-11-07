@@ -44,7 +44,9 @@ import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.MimeTypes;
 
+import com.google.android.exoplayer2.source.sabr.parser.exceptions.SabrPropagationError;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -564,9 +566,19 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     }
 
     private static boolean isEndpointConnectionFailure(Chunk chunk, Exception error) {
-        return chunk.bytesLoaded() == 0
-                && error instanceof IOException
-                && !(error instanceof InvalidResponseCodeException);
+        if (!(error instanceof IOException) || error instanceof InvalidResponseCodeException) {
+            return false;
+        }
+        return chunk.bytesLoaded() == 0 || hasCause(error, SocketTimeoutException.class);
+    }
+
+    private static boolean hasCause(Throwable error, Class<? extends Throwable> type) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (type.isInstance(cause)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ArrayList<Representation> getRepresentations() {

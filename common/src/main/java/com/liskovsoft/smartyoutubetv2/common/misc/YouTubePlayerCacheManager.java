@@ -73,7 +73,7 @@ public final class YouTubePlayerCacheManager {
                 data.setAppInfo(null);
                 data.setFailedAppInfo(null);
                 data.setPlayerExtractorCache(null);
-                data.setPlayerExtractorData(null, null, null);
+                data.setTclPlayerExtractorCache(null);
                 data.persistNow();
             }
         } catch (Throwable t) {

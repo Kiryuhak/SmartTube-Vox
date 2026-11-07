@@ -27,8 +27,8 @@ android {
         applicationId "app.smarttube"
         minSdkVersion project.properties.minSdkVersion
         targetSdkVersion project.properties.targetSdkVersion
-        versionCode 2446
-        versionName "32.56"
+        versionCode 2461
+        versionName "32.71"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
         buildConfigField "int", "OTA_QA_GENERATION", "0"
@@ -295,4 +295,6 @@ dependencies {
 
     // ByeByeDPI fix
     implementation 'org.conscrypt:conscrypt-android:' + conscryptVersion
+
+    implementation 'androidx.work:work-runtime:' + workVersion
 }

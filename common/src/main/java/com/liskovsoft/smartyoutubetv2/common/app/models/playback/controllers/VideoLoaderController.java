@@ -486,7 +486,7 @@ public class VideoLoaderController extends BasePlayerController {
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_SELECTED, "Selecting SABR transport (DASH unavailable or fallback)");
                 mIsSabrPlaying = true;
                 player.openSabr(formatInfo);
-            } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats()) {
+            } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats() && !preferSabrLive(formatInfo)) {
                 Log.d(TAG, "Loading regular video in dash format (fallback from SABR)...");
                 mIsSabrPlaying = false;
 
@@ -747,6 +747,10 @@ public class VideoLoaderController extends BasePlayerController {
         }
 
         return true;
+    }
+
+    private boolean preferSabrLive(MediaItemFormatInfo formatInfo) {
+        return getMediaServiceData().isSabrLiveEnabled() && formatInfo.isLive() && formatInfo.containsSabrFormats();
     }
 
     private boolean acceptDashLive(MediaItemFormatInfo formatInfo) {

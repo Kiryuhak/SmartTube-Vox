@@ -2,6 +2,8 @@ package com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers;
 
 import android.annotation.SuppressLint;
 
+import com.google.android.exoplayer2.source.sabr.parser.exceptions.SabrBackoffError;
+import com.google.android.exoplayer2.source.sabr.parser.exceptions.SabrReloadPlayerError;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
@@ -42,7 +44,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
     private final NetworkEngineRecoveryPolicy mNetworkRecoveryPolicy = new NetworkEngineRecoveryPolicy();
     private final PlayerCacheRecoveryPolicy mPlayerCacheRecoveryPolicy = new PlayerCacheRecoveryPolicy();
+    private static final int MAX_SABR_ERROR_FIX_ATTEMPTS = 3;
     private VideoLoaderController mVideoLoaderController;
+    private String mSabrErrorFixVideoId;
+    private int mSabrErrorFixAttempts;
     private int mOomRecoveryAttempts = 0;
     private int mLiveBufferingRecoveryCount = 0;
     private VoxPlayerRecoveryController mRecoveryController;
@@ -420,6 +425,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     }
 
     private void applyEngineErrorAction(int type, int rendererIndex, Throwable error) {
+        if (applySabrReloadAction(error) || applySabrBackoffAction(error)) {
+            return;
+        }
         boolean restartEngine = true;
         boolean showMessage = true;
         String errorContent = error != null ? error.getMessage() : null;
@@ -580,6 +588,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             }
             restartEngine = false;
         } else if (type == PlayerEventListener.ERROR_TYPE_UNEXPECTED) {
+            if (error instanceof NullPointerException) {
+                disableSubtitles();
+            }
             // IllegalStateException: Buffer too small (5242880 < 7208383)
             if (Helpers.startsWithAny(errorContent, "Buffer too small", "Invalid to call at Released state; only valid in executing state")) {
                 // NOTE: The bug. Avoid calling reloadVideo() after lowering the quality.
@@ -734,6 +745,51 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
 
     private boolean isSubtitlesEnabled() {
         return getPlayer() != null && !FormatItem.SUBTITLE_NONE.equals(getPlayer().getSubtitleFormat());
+    }
+
+    private boolean applySabrReloadAction(Throwable error) {
+        SabrReloadPlayerError reloadError = null;
+        Video video = getVideo();
+        Throwable cause = error.getCause();
+        if (cause instanceof SabrReloadPlayerError) {
+            reloadError = (SabrReloadPlayerError) cause;
+        }
+        if (reloadError == null || video == null) {
+            return false;
+        }
+        if (!Helpers.equals(video.videoId, mSabrErrorFixVideoId)) {
+            mSabrErrorFixVideoId = video.videoId;
+            mSabrErrorFixAttempts = 0;
+        }
+        if (++mSabrErrorFixAttempts > MAX_SABR_ERROR_FIX_ATTEMPTS) {
+            return false;
+        }
+        MessageHelpers.showLongMessage(getContext(), "%s. Attempt: %s", reloadError.getMessage(), mSabrErrorFixAttempts);
+        YouTubeServiceManager.instance().reloadPlayerResponse(video.videoId, reloadError.reloadPlaybackToken);
+        mVideoLoaderController.reloadVideo();
+        return true;
+    }
+
+    private boolean applySabrBackoffAction(Throwable error) {
+        SabrBackoffError backoffError = null;
+        Video video = getVideo();
+        Throwable cause = error.getCause();
+        if (cause instanceof SabrBackoffError) {
+            backoffError = (SabrBackoffError) cause;
+        }
+        if (backoffError == null || video == null) {
+            return false;
+        }
+        if (!Helpers.equals(video.videoId, mSabrErrorFixVideoId)) {
+            mSabrErrorFixVideoId = video.videoId;
+            mSabrErrorFixAttempts = 0;
+        }
+        if (++mSabrErrorFixAttempts > MAX_SABR_ERROR_FIX_ATTEMPTS) {
+            return false;
+        }
+        MessageHelpers.showLongMessage(getContext(), "%s. Attempt: %s", backoffError.getMessage(), mSabrErrorFixAttempts);
+        mVideoLoaderController.reloadVideo();
+        return true;
     }
 
     private void disableSubtitles() {

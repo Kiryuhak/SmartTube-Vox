@@ -131,6 +131,7 @@ public class SmartTubeYandexVotAudioSourceBridgeTest {
         @Override public String getVideoId() { return videoId; }
         @Override public String getChannelId() { return "channel_1"; }
         @Override public boolean isLive() { return false; }
+        @Override public boolean isLiveDvrEnabled() { return false; }
         @Override public boolean isLiveContent() { return false; }
         @Override public boolean containsMedia() { return true; }
         @Override public boolean containsSabrFormats() { return false; }

@@ -21,7 +21,10 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.smartyoutubetv2.common.BuildConfig;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+import com.google.android.exoplayer2.source.sabr.SabrMediaSource;
+import com.google.android.exoplayer2.source.sabr.manifest.SabrManifest;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.listener.PlayerEventListener;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.LiveStateProvider;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.ExoMediaSourceFactory;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.errors.TrackErrorFixer;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.VolumeBooster;
@@ -61,8 +64,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ExoPlayerController implements Player.EventListener, VideoListener {
+public class ExoPlayerController implements Player.EventListener, VideoListener, LiveStateProvider {
     private static final String TAG = ExoPlayerController.class.getSimpleName();
+    /** How far from the live edge (in segments) the playback is considered to be on the edge */
+    private static final int SABR_LIVE_EDGE_TOLERANCE_SEGMENTS = 4;
     private final Context mContext;
     private final ExoMediaSourceFactory mMediaSourceFactory;
     private final TrackSelectorManager mTrackSelectorManager;
@@ -75,6 +80,12 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
     private WeakReference<Video> mVideo;
     private final PlayerEventListener mEventListener;
     private SimpleExoPlayer mPlayer;
+    /** Not null only for sabr live streams */
+    private SabrManifest mSabrLiveManifest;
+    /** Sabr live stream without DVR: rewind is forbidden, the playback must always stay on the live edge */
+    private boolean mSabrLiveSeekBlocked;
+    /** Sabr live stream is waiting for the live start position (see {@link #seekToSabrLiveStart()}) */
+    private boolean mSabrLiveStartPending;
     private PlayerView mPlayerView;
     private VolumeBooster mVolumeBooster;
     private boolean mIsEnded;
@@ -252,6 +263,18 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         } else {
             MediaTrack.setAvcOverVp9Preferred(playerTweaksData.isAvcOverVp9Preferred());
         }
+    }
+
+    private void seekToSabrLiveStart() {
+        if (mSabrLiveManifest == null || mPlayer == null) {
+            return;
+        }
+        long startPositionMs = mSabrLiveSeekBlocked ? getLiveDurationMs() : mSabrLiveManifest.getLiveStartPositionMs();
+        if (startPositionMs == -1) {
+            return;
+        }
+        mSabrLiveStartPending = false;
+        mPlayer.seekTo(startPositionMs);
     }
 
     private void applyShield720pFix() {
@@ -452,6 +475,29 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         }
 
         return mPlayer.getPlayWhenReady();
+    }
+
+    public boolean isLive() {
+        return mSabrLiveManifest != null;
+    }
+
+    @Override
+    public boolean isSeekBlocked() {
+        return mSabrLiveSeekBlocked;
+    }
+
+    @Override
+    public long getLiveDurationMs() {
+        long liveEdgeMs = mSabrLiveManifest != null ? mSabrLiveManifest.getLiveEdgeMs() : -1;
+        if (mSabrLiveManifest != null && !getVideo().isFullLive()) {
+            return liveEdgeMs;
+        }
+        return liveEdgeMs != -1 ? liveEdgeMs : (getVideo() != null ? getVideo().getLiveDurationMs() : -1);
+    }
+
+    @Override
+    public long getLiveStartMs() {
+        return mSabrLiveManifest != null ? Math.max(mSabrLiveManifest.getLiveWindowStartMs(), 0) : 0;
     }
 
     public boolean isPlaying() {
@@ -913,6 +959,10 @@ public class ExoPlayerController implements Player.EventListener, VideoListener 
         boolean isPausePressed = Player.STATE_READY == playbackState && !playWhenReady;
         boolean isPlaybackEnded = Player.STATE_ENDED == playbackState && playWhenReady;
         boolean isBuffering = Player.STATE_BUFFERING == playbackState && playWhenReady;
+
+        if (Player.STATE_READY == playbackState && mSabrLiveStartPending) {
+            seekToSabrLiveStart();
+        }
 
         // Fix chapters (seek and play) after playback ends
         if (isPlaybackEnded && mIsEnded) {

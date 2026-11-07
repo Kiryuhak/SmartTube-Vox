@@ -11,7 +11,10 @@ android {
 
     compileSdkVersion project.properties.compileSdkVersion
     buildToolsVersion project.properties.buildToolsVersion
-    testOptions.unitTests.includeAndroidResources = true
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.returnDefaultValues = true
+    }
 
     defaultConfig {
         minSdkVersion project.properties.minSdkVersion

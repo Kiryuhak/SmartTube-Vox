@@ -3,17 +3,13 @@ package com.liskovsoft.smartyoutubetv2.common.vox.voice
 import java.util.Locale
 
 /**
- * Voice selection policy matching VOT userscript 1.12.4:
+ * Voice selection policy matching VOT userscript 1.12.5 / 1.12.6:
  *
- * References from reference userscript 1.12.4 (lines 48517-48520, 48192-48196, 33501-33567):
- * 1. isLivelyVoiceAllowed(requestLang, responseLang):
- *    if (requestLang === "auto" || responseLang !== "ru") return false;
- *    return true;
- * 2. getRequestLangForTranslation(requestLang, responseLang):
- *    Returns the normalized request language without forcing "en" for "auto".
- * 3. isLivelyVoiceUnavailableError(msg):
- *    msg.toLowerCase().includes("обычная озвучка") || msg.toLowerCase().includes("standard voice")
- * 4. Cache key includes useLivelyVoice flag so standard and lively cached translations never collide.
+ * Upstream Reference:
+ * - VOT 1.12.4: YouTube audio-track selection, WebABR fallbacks, cancellation protection.
+ * - VOT 1.12.5: "auto" source language preserves "Live Voice" selection (previously forced standard).
+ *   Russian source audio is bypassed to prevent redundant/unwanted translation.
+ * - VOT 1.12.6: dependency bump (@vot.js libraries 3.2.2) and bilibili improvements (N/A to Android TV YouTube).
  */
 object VoxVoiceSelectionPolicy {
 
@@ -23,7 +19,6 @@ object VoxVoiceSelectionPolicy {
      */
     @JvmStatic
     @JvmOverloads
-    @Suppress("UNUSED_PARAMETER")
     fun getRequestLangForTranslation(
         requestLang: String?,
         responseLang: String?,
@@ -34,10 +29,11 @@ object VoxVoiceSelectionPolicy {
 
     /**
      * Checks if Lively Voice is supported for the given language pair.
-     * Per VOT 1.12.4 (lines 48517-48520), Lively Voice is allowed only when:
+     * Per VOT 1.12.5:
      * - User has an active OAuth account session
      * - Target language is Russian ("ru")
-     * - Source language is concrete and NOT "auto"
+     * - Source language preserves Live Voice even when "auto"
+     * - Source language is NOT Russian ("ru")
      */
     @JvmStatic
     @JvmOverloads
@@ -51,7 +47,7 @@ object VoxVoiceSelectionPolicy {
         if (resp != "ru") return false
 
         val req = if (requestLang.isNullOrBlank()) "auto" else requestLang.lowercase(Locale.US)
-        if (req == "auto" || req.isBlank()) return false
+        if (req.isBlank() || req == "ru") return false
         return true
     }
 

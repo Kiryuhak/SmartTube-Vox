@@ -149,6 +149,18 @@ public class VoiceTranslateController extends BasePlayerController {
             new com.liskovsoft.smartyoutubetv2.common.vox.translation.VoxTranslationStateMachine();
 
     private static volatile boolean sUseNewYandexBackend = true;
+    @androidx.annotation.VisibleForTesting
+    static volatile boolean sAllowTranslationForLocalVideoTestOnly = false;
+
+    @androidx.annotation.VisibleForTesting
+    public static void setAllowTranslationForLocalVideoTestOnly(boolean allow) {
+        sAllowTranslationForLocalVideoTestOnly = allow;
+    }
+
+    @androidx.annotation.VisibleForTesting
+    public static boolean isAllowTranslationForLocalVideoTestOnly() {
+        return sAllowTranslationForLocalVideoTestOnly;
+    }
     private static volatile VoiceTranslateController sInstance;
 
     public static boolean isNewYandexBackendEnabled() {
@@ -938,7 +950,7 @@ public class VoiceTranslateController extends BasePlayerController {
         if (buttonId != ACTION_VOICE_TRANSLATE) {
             return;
         }
-        if (getPlayer() != null && getPlayer().getVideo() != null && (getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated())) {
+        if (getPlayer() != null && getPlayer().getVideo() != null && (getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) && !sAllowTranslationForLocalVideoTestOnly) {
             return;
         }
         if (mState == STATE_READY) {
@@ -1183,7 +1195,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void tryApplyAutoTranslate(boolean fromTrackChange) {
-        if (getPlayer() == null || getPlayer().getVideo() == null || getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) {
+        if (getPlayer() == null || getPlayer().getVideo() == null || ((getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) && !sAllowTranslationForLocalVideoTestOnly)) {
             return;
         }
         String videoId = getPlayer().getVideo().videoId;
@@ -1301,7 +1313,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void tryApplyAutoSubtitles(Video item) {
-        if (item == null || item.isLocal || item.isDownloadedTranslated()) {
+        if (item == null || ((item.isLocal || item.isDownloadedTranslated()) && !sAllowTranslationForLocalVideoTestOnly)) {
             return;
         }
         if (!votData().isAutoSubtitlesEnabled()) {
@@ -1405,7 +1417,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private void startYandexTranslation(boolean resetRetryCount, boolean subsequent) {
         if (getPlayer() != null && getPlayer().getVideo() != null) {
             Video video = getPlayer().getVideo();
-            if (video.isLocal && video.isDownloadedTranslated()) {
+            if (video.isLocal && video.isDownloadedTranslated() && !sAllowTranslationForLocalVideoTestOnly) {
                 Log.d(TAG, "Local video already contains offline translated audio, skipping network translation");
                 return;
             }
@@ -1427,7 +1439,7 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
-        if (getPlayer().getVideo().isLocal && getPlayer().getVideo().isDownloadedTranslated()) {
+        if (getPlayer().getVideo().isLocal && getPlayer().getVideo().isDownloadedTranslated() && !sAllowTranslationForLocalVideoTestOnly) {
             Log.d(TAG, "Local video already contains offline translated audio, skipping network translation");
             return;
         }

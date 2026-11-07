@@ -118,6 +118,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
     private boolean mIsDontResizeVideoToFitDialogEnabled;
     private boolean mIsSuggestionsHorizontallyScrolled;
     private boolean mIsQueueRespectsPlaybackMode;
+    private boolean mIsLiveEdgeEnabled;
     private final Runnable mPersistDataInt = this::persistDataInt;
 
     private PlayerTweaksData(Context context) {
@@ -456,6 +457,15 @@ public class PlayerTweaksData implements ProfileChangeListener {
 
     public void setAudioTimeStretchingEnabled(boolean enable) {
         mIsAudioTimeStretchingEnabled = enable;
+        persistData();
+    }
+
+    public boolean isLiveEdgeEnabled() {
+        return mIsLiveEdgeEnabled;
+    }
+
+    public void setLiveEdgeEnabled(boolean enable) {
+        mIsLiveEdgeEnabled = enable;
         persistData();
     }
 
@@ -829,6 +839,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
         mIsAudioTimeStretchingEnabled = Helpers.parseBoolean(split, 59, true);
         mIsQueueRespectsPlaybackMode = Helpers.parseBoolean(split, 60, false);
         mVideoTransportPreference = Helpers.parseInt(split, 61, VIDEO_TRANSPORT_AUTO);
+        mIsLiveEdgeEnabled = Helpers.parseBoolean(split, 62, false);
 
         updateDefaultValues();
     }
@@ -856,7 +867,7 @@ public class PlayerTweaksData implements ProfileChangeListener {
                 mIsUnsafeAudioFormatsEnabled, null, mIsLoopShortsEnabled, mIsQuickSkipShortsEnabled, mIsRememberPositionOfLiveVideosEnabled,
                 mIsOculusQuestFixEnabled, null, mIsExtraLongSpeedListEnabled, mIsQuickSkipVideosEnabled, mIsNetworkErrorFixingDisabled, mIsCommentsPlacedLeft,
                 null, mIsAudioFocusEnabled, mIsDontResizeVideoToFitDialogEnabled, mIsSuggestionsHorizontallyScrolled,
-                mIsQuickSkipShortsAltEnabled, mIsQuickSkipVideosAltEnabled, mIsAudioTimeStretchingEnabled, mIsQueueRespectsPlaybackMode, mVideoTransportPreference
+                mIsQuickSkipShortsAltEnabled, mIsQuickSkipVideosAltEnabled, mIsAudioTimeStretchingEnabled, mIsQueueRespectsPlaybackMode, mVideoTransportPreference, mIsLiveEdgeEnabled
                 ));
     }
 
