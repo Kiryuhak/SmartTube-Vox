@@ -4,10 +4,11 @@ on:
   push:
     tags:
       - 'v*-vot.*'
+      - 'v*-vox.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Тег для сборки релиза (например: v32.45-vot.1)'
+        description: 'Тег для сборки релиза (например: v32.71-vox.10 или v32.45-vot.1)'
         required: false
       repair_existing_release:
         description: 'Дозагрузить только отсутствующие assets в существующий Release без перезаписи'
@@ -41,16 +42,17 @@ jobs:
           fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
-          # Tag format validation: vX.Y-vot.Z
-          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+)-vot\.([0-9]+)$ ]]; then
-            echo "::error::Неверный формат тега: $TAG. Ожидается: v<версия>-vot.<номер>, например v32.45-vot.1"
+          # Tag format validation: vX.Y-vot.Z or vX.Y-vox.Z
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+)-(vox|vot)\.([0-9]+)$ ]]; then
+            echo "::error::Неверный формат тега: $TAG. Ожидается: v<версия>-vox.<номер> или v<версия>-vot.<номер>, например v32.71-vox.10"
             exit 1
           fi
 
           TAG_BASE_VER="${BASH_REMATCH[1]}"
-          VOT_PATCH="${BASH_REMATCH[2]}"
-          VERSION_NAME="${TAG_BASE_VER}-vot.${VOT_PATCH}"
-          VOT_SUFFIX="-vot.${VOT_PATCH}"
+          TAG_PREFIX="${BASH_REMATCH[2]}"
+          VOT_PATCH="${BASH_REMATCH[3]}"
+          VERSION_NAME="${TAG_BASE_VER}-${TAG_PREFIX}.${VOT_PATCH}"
+          VOT_SUFFIX="-${TAG_PREFIX}.${VOT_PATCH}"
 
           # Защитная проверка 1: votPatch строго в диапазоне 1..999
           if [ "$VOT_PATCH" -lt 1 ] || [ "$VOT_PATCH" -gt 999 ]; then
@@ -173,7 +175,7 @@ jobs:
           if not isinstance(releases, list):
               releases = []
 
-          vot_pattern = re.compile(r'^v([0-9]+\.[0-9]+)-vot\.([0-9]+)$')
+          vot_pattern = re.compile(r'^v([0-9]+\.[0-9]+)-(?:vot|vox)\.([0-9]+)')
 
           # Фильтруем только релизы SmartTube VOX, исключая текущий тег и черновики
           valid_prev_releases = [
@@ -345,45 +347,37 @@ jobs:
           fi
           echo "Цифровая подпись успешно верифицирована."
 
-          # Подготовка основных ассетов для release и updater (только SmartTube VOX)
-          cp "$UNIVERSAL_APK" smarttube_vox.apk
-          echo "Создан основной ассет для release: smarttube_vox.apk"
+          # Подготовка канонических ассетов релиза (строго 3 APK: arm64-v8a, armeabi-v7a, universal)
+          CANONICAL_UNIVERSAL="SmartTube_vot_${VERSION_NAME}_universal.apk"
+          CANONICAL_ARM64="SmartTube_vot_${VERSION_NAME}_arm64-v8a.apk"
+          CANONICAL_ARMEABI="SmartTube_vot_${VERSION_NAME}_armeabi-v7a.apk"
+
+          cp "$UNIVERSAL_APK" "$CANONICAL_UNIVERSAL"
+          echo "Создан канонический ассет: $CANONICAL_UNIVERSAL"
 
           ARM64_APK=$(find "$OUTPUT_DIR" -name "*arm64-v8a*.apk" | head -n 1)
           if [ -n "$ARM64_APK" ] && [ -f "$ARM64_APK" ]; then
-            cp "$ARM64_APK" smarttube_vox-arm64-v8a.apk
-            echo "Создан ассет: smarttube_vox-arm64-v8a.apk"
+            cp "$ARM64_APK" "$CANONICAL_ARM64"
+            echo "Создан канонический ассет: $CANONICAL_ARM64"
           fi
 
           ARMEABI_APK=$(find "$OUTPUT_DIR" -name "*armeabi-v7a*.apk" | head -n 1)
           if [ -n "$ARMEABI_APK" ] && [ -f "$ARMEABI_APK" ]; then
-            cp "$ARMEABI_APK" smarttube_vox-armeabi-v7a.apk
-            echo "Создан ассет: smarttube_vox-armeabi-v7a.apk"
+            cp "$ARMEABI_APK" "$CANONICAL_ARMEABI"
+            echo "Создан канонический ассет: $CANONICAL_ARMEABI"
           fi
 
           for required_apk in \
-            smarttube_vox.apk \
-            smarttube_vox-arm64-v8a.apk \
-            smarttube_vox-armeabi-v7a.apk; do
+            "$CANONICAL_UNIVERSAL" \
+            "$CANONICAL_ARM64" \
+            "$CANONICAL_ARMEABI"; do
             if [ ! -f "$required_apk" ]; then
               echo "::error::Обязательный release asset не найден: $required_apk"
               exit 1
             fi
           done
 
-      - name: Generate and verify SHA256SUMS
-        run: |
-          APK_ASSETS=(
-            smarttube_vox.apk
-            smarttube_vox-arm64-v8a.apk
-            smarttube_vox-armeabi-v7a.apk
-          )
-
-          sha256sum "${APK_ASSETS[@]}" > SHA256SUMS.txt
-          test -s SHA256SUMS.txt
-          sha256sum --check SHA256SUMS.txt
-
-      - name: Extract Release Notes and Generate Update JSON
+      - name: Extract Release Notes, Generate Dual-Feed Manifests and SHA256SUMS
         env:
           VERSION_NAME: ${{ steps.tag_info.outputs.VERSION_NAME }}
           EXPECTED_CODE: ${{ steps.tag_info.outputs.EXPECTED_CODE }}
@@ -391,26 +385,13 @@ jobs:
         run: |
           python3 .github/scripts/prepare_vox_release.py
 
-          # Валидация сформированного JSON
-          jq . smarttube_vox.json
+          # Валидация JSON синтаксиса
+          jq . smarttube_vox.json >/dev/null
+          jq . smarttube_vox_v2.json >/dev/null
 
-          # Проверка корректности downloadUrl
-          DL_VOX=$(jq -r '.package.downloadUrl' smarttube_vox.json)
-          if [[ ! "$DL_VOX" =~ /smarttube_vox\.apk$ ]]; then
-            echo "::error::downloadUrl в smarttube_vox.json ($DL_VOX) не указывает на smarttube_vox.apk!"
-            exit 1
-          fi
-
-          EXPECTED_URL="https://github.com/$REPO/releases/latest/download/smarttube_vox.apk"
-          jq -e \
-            --arg version "$VERSION_NAME" \
-            --argjson version_code "$EXPECTED_CODE" \
-            --arg download_url "$EXPECTED_URL" \
-            '.package.downloadUrl == $download_url and
-             .[$version].versionCode == $version_code and
-             (.[$version].changelog | type == "array") and
-             (.[$version].changelog_ru | type == "array")' \
-            smarttube_vox.json >/dev/null
+      - name: Validate Release Bundle (Gate 4 Strict Validator)
+        run: |
+          python3 scripts/validate_vox_release_bundle.py .
 
       - name: Publish or safely repair GitHub Release
         env:
@@ -423,10 +404,11 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           RELEASE_ASSETS=(
-            smarttube_vox.apk
-            smarttube_vox-arm64-v8a.apk
-            smarttube_vox-armeabi-v7a.apk
+            "SmartTube_vot_${VERSION_NAME}_arm64-v8a.apk"
+            "SmartTube_vot_${VERSION_NAME}_armeabi-v7a.apk"
+            "SmartTube_vot_${VERSION_NAME}_universal.apk"
             smarttube_vox.json
+            smarttube_vox_v2.json
             SHA256SUMS.txt
           )
 

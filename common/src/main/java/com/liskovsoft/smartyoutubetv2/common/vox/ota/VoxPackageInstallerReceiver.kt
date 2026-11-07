@@ -32,13 +32,23 @@ class VoxPackageInstallerReceiver : BroadcastReceiver() {
                 val confirmIntent = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
                 if (confirmIntent != null) {
                     confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(confirmIntent)
-                    VoxSafeLogger.info(
-                        VoxLogCategory.OTA,
-                        VoxLogCode.OTA_INSTALL_REQUESTED,
-                        "Отображено системное окно подтверждения установки Android",
-                        mapOf("status" to "PENDING_USER_ACTION")
-                    )
+                    try {
+                        context.startActivity(confirmIntent)
+                        VoxSafeLogger.info(
+                            VoxLogCategory.OTA,
+                            VoxLogCode.OTA_INSTALL_REQUESTED,
+                            "Отображено системное окно подтверждения установки Android",
+                            mapOf("status" to "PENDING_USER_ACTION")
+                        )
+                    } catch (e: Throwable) {
+                        VoxSafeLogger.error(
+                            VoxLogCategory.OTA,
+                            VoxLogCode.OTA_INSTALL_FAILED,
+                            "Ошибка запуска системного окна подтверждения установки: ${e.message}",
+                            mapOf("error" to (e.message ?: e.javaClass.simpleName)),
+                            e
+                        )
+                    }
                 } else {
                     VoxSafeLogger.error(
                         VoxLogCategory.OTA,
