@@ -13,6 +13,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils
 import com.liskovsoft.smartyoutubetv2.common.R
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaErrorCode
+import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaInstaller
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaException
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaProgressEstimator
 import com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxOtaUpdateManager
@@ -409,14 +410,46 @@ object VoxOtaHudPresenter {
                 }
             )
 
-            // Direct handoff to Android PackageInstaller without fake 35/65/95% timer loops
+            // Direct handoff to Android PackageInstaller with permission handling and no fake timers
             mainHandler.post {
-                val launched = VoxOtaUpdateManager.instance(context).installUpdate(apkFile)
-                if (launched) {
-                    dismissAll()
+                val installResult = VoxOtaInstaller.installPackage(activity, apkFile)
+                when (installResult) {
+                    is VoxOtaInstaller.InstallResult.Launched -> {
+                        mainHandler.postDelayed({
+                            dismissAll()
+                        }, 600L)
+                    }
+                    is VoxOtaInstaller.InstallResult.PermissionRequired -> {
+                        dismissAll()
+                        showPermissionNeeded(
+                            activity = activity,
+                            onOpenSettings = {
+                                try {
+                                    activity.startActivity(VoxOtaInstaller.createManageUnknownSourcesIntent(activity))
+                                } catch (e: Throwable) {
+                                    MessageHelpers.showMessage(activity, "Не удалось открыть настройки безопасности")
+                                }
+                            },
+                            onCancel = {}
+                        )
+                    }
+                    is VoxOtaInstaller.InstallResult.Failed -> {
+                        dismissAll()
+                        MessageHelpers.showMessage(activity, installResult.message)
+                    }
                 }
             }
         }
+    }
+
+    private fun showPermissionNeeded(activity: Activity, onOpenSettings: () -> Unit, onCancel: () -> Unit) {
+        androidx.appcompat.app.AlertDialog.Builder(activity, R.style.AppDialog)
+            .setTitle("Требуется разрешение")
+            .setMessage("Для установки обновления необходимо разрешить установку неизвестных приложений в системных настройках.")
+            .setPositiveButton("Настройки") { _, _ -> onOpenSettings() }
+            .setNegativeButton("Отмена") { _, _ -> onCancel() }
+            .setOnCancelListener { onCancel() }
+            .show()
     }
 
     // ==========================================

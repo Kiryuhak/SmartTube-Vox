@@ -219,7 +219,11 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
         mSettingsPresenter.appendSingleButton(
                 UiOptionItem.from(getContext().getString(R.string.install_update), optionItem -> {
                     GeneralData.instance(getContext()).setChangelog(changelog);
-                    mUpdateChecker.installUpdate();
+                    try {
+                        mUpdateChecker.installUpdate();
+                    } catch (Throwable t) {
+                        AppUpdatePresenter.instance(getContext()).start(true);
+                    }
                 }, false));
         mSettingsPresenter.appendStringsCategory(getContext().getString(R.string.update_changelog), createChangelogOptions(changelog));
         mSettingsPresenter.showDialog(String.format("%s %s", getContext().getString(R.string.app_name), versionName), AppUpdatePresenter::unhold);
@@ -241,7 +245,11 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
             public void onAction(Context context) {
                 Context target = context != null ? context : getContext();
                 GeneralData.instance(target).setChangelog(changelog);
-                mUpdateChecker.installUpdate();
+                try {
+                        mUpdateChecker.installUpdate();
+                    } catch (Throwable t) {
+                        AppUpdatePresenter.instance(target).start(true);
+                    }
             }
 
             @Override

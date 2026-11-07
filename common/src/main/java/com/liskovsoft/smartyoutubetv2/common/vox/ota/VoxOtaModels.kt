@@ -120,6 +120,7 @@ enum class VoxOtaErrorCode(val userMessageRu: String) {
     UPDATE_CHECK_FAILED("Не удалось проверить наличие обновлений"),
     RELEASE_PARSE_FAILED("Не удалось обработать данные обновления"),
     VERSION_PARSE_FAILED("Не удалось определить версию приложения"),
+    FILE_PROVIDER_ERROR("Не удалось сформировать безопасную ссылку FileProvider для установки"),
     UNKNOWN("Не удалось обновить приложение");
 
     companion object {

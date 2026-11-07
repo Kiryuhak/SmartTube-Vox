@@ -34,6 +34,9 @@
     <!-- More info: https://stackoverflow.com/questions/63364476/requestlegacyexternalstorage-is-not-working-in-android-11-api-30 -->
     <application android:requestLegacyExternalStorage="true">
         <receiver
+            android:name="com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxPackageInstallerReceiver"
+            android:exported="false" />
+        <receiver
             android:name="com.liskovsoft.smartyoutubetv2.common.misc.RemoteControlReceiver"
             android:enabled="true"
             android:exported="true">
