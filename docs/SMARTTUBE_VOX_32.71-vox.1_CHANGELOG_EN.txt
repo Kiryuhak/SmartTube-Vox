@@ -1,0 +1,5 @@
+- Base engine upgraded to SmartTube 32.71 and VOT 1.12.6 integration
+- Canonical 3-APK distribution: arm64-v8a, armeabi-v7a, and universal
+- Modern OTA V2 update feed with pre-download SHA-256 integrity verification
+- Reliable PackageInstaller Session API flow for TV OS system update prompts
+- Preserved encrypted Yandex VOT authorization session and natural voice preferences
