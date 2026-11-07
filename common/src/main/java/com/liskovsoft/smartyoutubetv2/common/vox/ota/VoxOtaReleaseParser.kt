@@ -314,13 +314,18 @@ object VoxOtaReleaseParser {
                 val name = a.getString("name")
                 val url = a.getString("downloadUrl")
                 val size = a.optLong("size", 0L)
-                assets.add(VoxReleaseAsset(name, url, size))
+                val sha = a.optString("sha256", "").takeIf { it.isNotBlank() }
+                assets.add(VoxReleaseAsset(name, url, size, sha256 = sha))
                 if (name.equals("SHA256SUMS.txt", ignoreCase = true)) {
                     sha256SumsUrl = url
                 }
             }
         } else if (obj.has("downloadUrl")) {
             assets.add(VoxReleaseAsset("SmartTube_vot_universal.apk", obj.getString("downloadUrl")))
+        }
+
+        if (sha256SumsUrl == null && obj.has("sha256SumsUrl")) {
+            sha256SumsUrl = obj.optString("sha256SumsUrl", null)
         }
 
         return VoxReleaseInfo(

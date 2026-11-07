@@ -126,6 +126,15 @@ class VoxOtaUpdateManager(private val context: Context) {
         }
     }
 
+    init {
+        try {
+            val installedVc = context.packageManager.getPackageInfo(context.packageName, 0).versionCode.toLong()
+            if (installedVc > 0L) {
+                VoxReleaseAssetSelector.commitPendingVariantIfUpgraded(context, installedVc)
+            }
+        } catch (_: Throwable) {}
+    }
+
     private val executor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val isInFlight = AtomicBoolean(false)
@@ -382,7 +391,9 @@ class VoxOtaUpdateManager(private val context: Context) {
                 }
 
                 val primaryAbi = try { DeviceHelpers.getPrimaryAbi() } catch (e: Exception) { null }
-                val selectedAsset = VoxReleaseAssetSelector.selectAsset(release.assets, primaryAbi)
+                val preferredVariant = VoxReleaseAssetSelector.getConfirmedVariant(context)
+                    ?: VoxReleaseAssetSelector.detectInstalledVariant(context)
+                val selectedAsset = VoxReleaseAssetSelector.selectAsset(release.assets, preferredVariant, primaryAbi)
                     ?: throw VoxOtaException(
                         VoxOtaErrorCode.UNIVERSAL_ASSET_NOT_FOUND,
                         "Universal APK asset not found in release: ${release.tagName}",
@@ -449,6 +460,45 @@ class VoxOtaUpdateManager(private val context: Context) {
             var tmpFile: File? = null
             isDownloadCancelled.set(false)
             try {
+                // Client-side guard: reject same or older version before logging OTA_DOWNLOAD_STARTED or making network requests
+                val installedVersionCode = try {
+                    val pkg = context.packageName
+                    if (pkg != null) context.packageManager.getPackageInfo(pkg, 0).versionCode.toLong() else 0L
+                } catch (e: Throwable) {
+                    0L
+                }
+
+                val currentVersionName = try {
+                    val pkg = context.packageName
+                    if (pkg != null) context.packageManager.getPackageInfo(pkg, 0).versionName else null
+                } catch (e: Throwable) {
+                    null
+                }
+
+                val userChannel = try {
+                    VoxUpdateChannelManager.instance(context).getUpdateChannel()
+                } catch (e: Throwable) {
+                    VoxUpdateChannel.STABLE
+                }
+
+                val isStaleVersionCode = installedVersionCode > 0L && release.versionCode != null && release.versionCode > 0L && release.versionCode <= installedVersionCode
+                val isStaleVersionName = !currentVersionName.isNullOrBlank() && release.versionName.isNotBlank() &&
+                        !VoxVersionComparator.isUpdateAvailable(
+                            currentVersion = currentVersionName,
+                            targetVersion = release.versionName,
+                            channel = userChannel,
+                            installedVersionCode = installedVersionCode,
+                            targetVersionCode = release.versionCode
+                        )
+
+                if (isStaleVersionCode || isStaleVersionName) {
+                    throw VoxOtaException(
+                        VoxOtaErrorCode.VERSION_NOT_NEWER,
+                        "Candidate version (${release.versionName} / ${release.versionCode ?: 0}) is not newer than installed ($currentVersionName / $installedVersionCode)",
+                        stage = VoxOtaStage.COMPARE,
+                        isRetryable = false
+                    )
+                }
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
                     VoxLogCode.OTA_DOWNLOAD_STARTED,
@@ -480,15 +530,17 @@ class VoxOtaUpdateManager(private val context: Context) {
                 val elapsedMs = System.currentTimeMillis() - startTime
 
                 // Проверка контрольной суммы SHA-256 (если доступна в манифесте релиза)
-                val sumsUrl = release.sha256SumsUrl ?: VoxReleaseAssetSelector.findSha256SumsAsset(release.assets)?.downloadUrl
-                var expectedSha256: String? = null
-                if (!sumsUrl.isNullOrBlank()) {
-                    try {
-                        val sumsContent = downloadString(sumsUrl)
-                        val sumsMap = VoxOtaSecurityVerifier.parseSha256Sums(sumsContent)
-                        expectedSha256 = sumsMap[asset.name]
-                    } catch (sumErr: Throwable) {
-                        Log.w(TAG, "SHA256SUMS check skipped due to error: ${sumErr.message}")
+                var expectedSha256: String? = asset.sha256
+                if (expectedSha256.isNullOrBlank()) {
+                    val sumsUrl = release.sha256SumsUrl ?: VoxReleaseAssetSelector.findSha256SumsAsset(release.assets)?.downloadUrl
+                    if (!sumsUrl.isNullOrBlank()) {
+                        try {
+                            val sumsContent = downloadString(sumsUrl)
+                            val sumsMap = VoxOtaSecurityVerifier.parseSha256Sums(sumsContent)
+                            expectedSha256 = sumsMap[asset.name]
+                        } catch (sumErr: Throwable) {
+                            Log.w(TAG, "SHA256SUMS check skipped due to error: ${sumErr.message}")
+                        }
                     }
                 }
 
@@ -508,11 +560,18 @@ class VoxOtaUpdateManager(private val context: Context) {
                     tmpFile.delete()
                 }
 
+                val variant = when {
+                    asset.name.contains("arm64-v8a", ignoreCase = true) -> VoxReleaseAssetSelector.Variant.ARM64_V8A
+                    asset.name.contains("armeabi-v7a", ignoreCase = true) -> VoxReleaseAssetSelector.Variant.ARMEABI_V7A
+                    else -> VoxReleaseAssetSelector.Variant.UNIVERSAL
+                }
+                VoxReleaseAssetSelector.setPendingVariant(context, variant, release.versionCode ?: 0L)
+
                 VoxSafeLogger.info(
                     VoxLogCategory.OTA,
                     VoxLogCode.OTA_DOWNLOAD_COMPLETED,
                     "Скачивание и предварительная валидация обновления завершены",
-                    mapOf("assetName" to asset.name, "elapsedMs" to elapsedMs.toString(), "sizeBytes" to destinationFile.length().toString())
+                    mapOf("assetName" to asset.name, "elapsedMs" to elapsedMs.toString(), "sizeBytes" to destinationFile.length().toString(), "pendingVariant" to variant.id)
                 )
 
                 mainHandler.post { callback.onDownloadCompleted(destinationFile) }
@@ -536,36 +595,12 @@ class VoxOtaUpdateManager(private val context: Context) {
      * Запускает установку скачанного APK обновления.
      */
     fun installUpdate(apkFile: File): Boolean {
-        return try {
-            val validation = VoxOtaPreInstallValidator.validate(context, apkFile)
-            if (!validation.isValid) {
-                VoxSafeLogger.error(
-                    VoxLogCategory.OTA,
-                    VoxLogCode.OTA_PRE_VALIDATION_FAILED,
-                    "Отклонён запуск установщика: предварительная валидация не пройдена (${validation.message})",
-                    validation.details
-                )
-                return false
-            }
+        val result = VoxOtaInstaller.installPackage(context, apkFile)
+        return result is VoxOtaInstaller.InstallResult.Launched
+    }
 
-            VoxSafeLogger.info(
-                VoxLogCategory.OTA,
-                VoxLogCode.OTA_INSTALL_REQUESTED,
-                "Запрос установки обновления приложения",
-                mapOf("fileName" to apkFile.name, "fileSize" to apkFile.length().toString())
-            )
-            val res = VoxOtaInstaller.installPackage(context, apkFile)
-            res is VoxOtaInstaller.InstallResult.Launched
-        } catch (e: Exception) {
-            VoxSafeLogger.error(
-                VoxLogCategory.OTA,
-                VoxLogCode.OTA_FAILED,
-                "Ошибка запуска установщика обновления",
-                mapOf("error" to (e.message ?: e.javaClass.simpleName)),
-                e
-            )
-            false
-        }
+    fun installUpdateWithResult(apkFile: File): VoxOtaInstaller.InstallResult {
+        return VoxOtaInstaller.installPackage(context, apkFile)
     }
 
     fun checkForUpdates(
@@ -878,6 +913,7 @@ class VoxOtaUpdateManager(private val context: Context) {
             VoxOtaErrorCode.RELEASE_NOT_FOUND -> VoxLogCode.OTA_RELEASE_NOT_FOUND
             VoxOtaErrorCode.INVALID_RELEASE -> VoxLogCode.OTA_INVALID_RELEASE
             VoxOtaErrorCode.CHANNEL_MISMATCH -> VoxLogCode.OTA_CHANNEL_MISMATCH
+            VoxOtaErrorCode.VERSION_NOT_NEWER -> VoxLogCode.OTA_PRE_VALIDATION_FAILED
             else -> VoxLogCode.OTA_FAILED
         }
 

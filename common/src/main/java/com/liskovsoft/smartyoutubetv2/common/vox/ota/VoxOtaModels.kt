@@ -198,7 +198,8 @@ class VoxOtaException(
 data class VoxReleaseAsset(
     val name: String,
     val downloadUrl: String,
-    val sizeBytes: Long = 0L
+    val sizeBytes: Long = 0L,
+    val sha256: String? = null
 )
 
 /**
