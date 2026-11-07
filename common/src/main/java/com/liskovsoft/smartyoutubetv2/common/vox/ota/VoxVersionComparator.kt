@@ -31,9 +31,10 @@ object VoxVersionComparator {
         val major: Int,
         val minor: Int,
         val voxMajor: Int,
-        val voxMinor: Int,
+        val voxMinor: Int = 0,
         val stage: VoxReleaseStage = VoxReleaseStage.STABLE,
-        val stageNumber: Int = 0
+        val stageNumber: Int = 0,
+        val patch: Int = 0
     ) : Comparable<ParsedVersion> {
 
         val isDev: Boolean
@@ -52,18 +53,24 @@ object VoxVersionComparator {
             get() = stage == VoxReleaseStage.STABLE && (voxMajor < 9 || voxMinor == 0)
 
         override fun compareTo(other: ParsedVersion): Int {
-            if (this.voxMajor != other.voxMajor) {
-                return this.voxMajor.compareTo(other.voxMajor)
-            }
-            if (this.voxMinor != other.voxMinor) {
-                return this.voxMinor.compareTo(other.voxMinor)
-            }
+            // 1. Upstream SmartTube engine version (major, minor, patch)
             if (this.major != other.major) {
                 return this.major.compareTo(other.major)
             }
             if (this.minor != other.minor) {
                 return this.minor.compareTo(other.minor)
             }
+            if (this.patch != other.patch) {
+                return this.patch.compareTo(other.patch)
+            }
+            // 2. VOX release / patch inside the same upstream base
+            if (this.voxMajor != other.voxMajor) {
+                return this.voxMajor.compareTo(other.voxMajor)
+            }
+            if (this.voxMinor != other.voxMinor) {
+                return this.voxMinor.compareTo(other.voxMinor)
+            }
+            // 3. Stage progression (DEV < ALPHA < BETA < QA < RC < STABLE)
             if (this.stage != other.stage) {
                 return this.stage.level.compareTo(other.stage.level)
             }
@@ -105,39 +112,40 @@ object VoxVersionComparator {
         if (versionStr.isNullOrBlank()) return null
         val clean = versionStr.trim().removePrefix("v").removePrefix("V")
 
-        // Регулярное выражение для полных версий: 32.56-vox.8.2-beta.1, 32.56-vox.7, 32.56-vox.8-dev или 32.56-vox.8-rc1
-        val fullPattern = Regex("(\\d+)\\.(\\d+)-(?:vox|vot)\\.(\\d+)(?:\\.(\\d+))?(?:-([a-zA-Z0-9.]+))?", RegexOption.IGNORE_CASE)
-        val fullMatch = fullPattern.find(clean)
+        // Регулярное выражение для полных версий: 32.56-vox.8.2-beta.1, 32.71-vox.1, 32.71-vox.10, 33.25-vox.1, 32.71.1-vox.1
+        val fullPattern = Regex("""^(\d+)\.(\d+)(?:\.(\d+))?-(?:vox|vot)\.(\d+)(?:\.(\d+))?(?:-([a-zA-Z0-9.]+))?$""", RegexOption.IGNORE_CASE)
+        val fullMatch = fullPattern.matchEntire(clean)
         if (fullMatch != null) {
             val major = fullMatch.groupValues[1].toIntOrNull() ?: 0
             val minor = fullMatch.groupValues[2].toIntOrNull() ?: 0
-            val voxMajor = fullMatch.groupValues[3].toIntOrNull() ?: 0
-            val voxMinor = fullMatch.groupValues[4].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
-            val rawTag = fullMatch.groupValues[5].takeIf { it.isNotEmpty() }
+            val patch = fullMatch.groupValues[3].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
+            val voxMajor = fullMatch.groupValues[4].toIntOrNull() ?: 0
+            val voxMinor = fullMatch.groupValues[5].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
+            val rawTag = fullMatch.groupValues[6].takeIf { it.isNotEmpty() }
             val (stage, stageNum) = parseStageTag(rawTag)
-            return ParsedVersion(major, minor, voxMajor, voxMinor, stage, stageNum)
+            return ParsedVersion(major, minor, voxMajor, voxMinor, stage, stageNum, patch)
         }
 
         // Регулярное выражение для vox/vot без базовой версии: vox.8.2-beta.1, vox.7, vox.8-dev или vox.8-rc1
-        val voxPattern = Regex("(?:vox|vot)\\.(\\d+)(?:\\.(\\d+))?(?:-([a-zA-Z0-9.]+))?", RegexOption.IGNORE_CASE)
-        val voxMatch = voxPattern.find(clean)
+        val voxPattern = Regex("""^(?:vox|vot)\.(\d+)(?:\.(\d+))?(?:-([a-zA-Z0-9.]+))?$""", RegexOption.IGNORE_CASE)
+        val voxMatch = voxPattern.matchEntire(clean)
         if (voxMatch != null) {
             val voxMajor = voxMatch.groupValues[1].toIntOrNull() ?: 0
             val voxMinor = voxMatch.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
             val rawTag = voxMatch.groupValues[3].takeIf { it.isNotEmpty() }
             val (stage, stageNum) = parseStageTag(rawTag)
-            return ParsedVersion(32, 56, voxMajor, voxMinor, stage, stageNum)
+            return ParsedVersion(32, 56, voxMajor, voxMinor, stage, stageNum, 0)
         }
 
         // Простой формат: 8.2-beta.1 или 7 или 6.1 или 8-dev или 8-rc1
-        val simplePattern = Regex("(\\d+)(?:\\.(\\d+))?(?:-([a-zA-Z0-9.]+))?", RegexOption.IGNORE_CASE)
-        val simpleMatch = simplePattern.find(clean)
+        val simplePattern = Regex("""^(\d+)(?:\.(\d+))?(?:-([a-zA-Z0-9.]+))?$""", RegexOption.IGNORE_CASE)
+        val simpleMatch = simplePattern.matchEntire(clean)
         if (simpleMatch != null) {
             val voxMajor = simpleMatch.groupValues[1].toIntOrNull() ?: 0
             val voxMinor = simpleMatch.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
             val rawTag = simpleMatch.groupValues[3].takeIf { it.isNotEmpty() }
             val (stage, stageNum) = parseStageTag(rawTag)
-            return ParsedVersion(32, 56, voxMajor, voxMinor, stage, stageNum)
+            return ParsedVersion(32, 56, voxMajor, voxMinor, stage, stageNum, 0)
         }
 
         return null
@@ -175,6 +183,17 @@ object VoxVersionComparator {
         // Инвариант монотонности versionCode: candidate.versionCode > installedVersionCode
         if (installedVersionCode > 0L && targetVersionCode != null && targetVersionCode <= installedVersionCode) {
             return false
+        }
+
+        // Strict fail-closed for suspicious same-base comparison (Prompt #141):
+        // 9.2 (or 9.2-rc.13) MUST NOT offer update to 9.2 without explicit candidate.versionCode > installed.versionCode.
+        if (curr.voxMajor == target.voxMajor && curr.voxMinor == target.voxMinor) {
+            if (installedVersionCode > 0L && (targetVersionCode == null || targetVersionCode <= installedVersionCode)) {
+                return false
+            }
+            if (curr.voxMajor == 9 && curr.voxMinor == 2 && targetVersionCode == null) {
+                return false
+            }
         }
 
         // Правило защиты от даунгрейда

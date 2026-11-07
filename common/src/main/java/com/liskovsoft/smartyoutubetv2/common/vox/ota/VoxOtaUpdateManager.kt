@@ -554,8 +554,8 @@ class VoxOtaUpdateManager(private val context: Context) {
                 "Запрос установки обновления приложения",
                 mapOf("fileName" to apkFile.name, "fileSize" to apkFile.length().toString())
             )
-            Helpers.installPackage(context, apkFile.absolutePath)
-            true
+            val res = VoxOtaInstaller.installPackage(context, apkFile)
+            res is VoxOtaInstaller.InstallResult.Launched
         } catch (e: Exception) {
             VoxSafeLogger.error(
                 VoxLogCategory.OTA,
