@@ -50,7 +50,9 @@ public class AboutSettingsPresenter extends BasePresenter<Void> {
 
         appendUpdateCheckButton(settingsPresenter);
 
-        appendUpdateChannelSelector(settingsPresenter);
+        if (VoxUpdateChannelManager.instance(getContext()).isQaChannel()) {
+            appendUpdateChannelSelector(settingsPresenter);
+        }
 
         appendAutoUpdateSwitch(settingsPresenter);
 

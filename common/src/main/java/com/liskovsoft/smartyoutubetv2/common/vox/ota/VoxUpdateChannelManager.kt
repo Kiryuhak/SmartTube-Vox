@@ -17,6 +17,25 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    init {
+        migrateLegacyChannelPrefsIfNeeded()
+    }
+
+    private fun migrateLegacyChannelPrefsIfNeeded() {
+        val pkg = context.packageName ?: ""
+        if (pkg.contains("otaqa") || pkg.contains("qa")) {
+            return
+        }
+        val saved = prefs.getString(KEY_UPDATE_CHANNEL, null)
+        if (saved == "test" || saved == "beta") {
+            prefs.edit().apply {
+                putString(KEY_UPDATE_CHANNEL, VoxUpdateChannel.STABLE.id)
+                putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+                apply()
+            }
+        }
+    }
+
     companion object {
         private const val PREFS_NAME = "vox_update_channel_prefs"
         private const val KEY_UPDATE_CHANNEL = "update_channel"
