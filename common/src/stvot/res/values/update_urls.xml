@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="update_urls">
-        <item>https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.json</item>
+        <item>https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox_v2.json</item>
     </string-array>
 </resources>

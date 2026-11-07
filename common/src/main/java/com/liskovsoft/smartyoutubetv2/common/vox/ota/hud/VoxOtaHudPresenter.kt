@@ -429,8 +429,12 @@ object VoxOtaHudPresenter {
                                 } catch (e: Throwable) {
                                     MessageHelpers.showMessage(activity, "Не удалось открыть настройки безопасности")
                                 }
+                                // Preserve downloaded APK state so on return from Settings, user can tap Install immediately
+                                showDownloadComplete(activity, release, asset, apkFile)
                             },
-                            onCancel = {}
+                            onCancel = {
+                                showDownloadComplete(activity, release, asset, apkFile)
+                            }
                         )
                     }
                     is VoxOtaInstaller.InstallResult.Failed -> {

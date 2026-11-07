@@ -530,15 +530,17 @@ class VoxOtaUpdateManager(private val context: Context) {
                 val elapsedMs = System.currentTimeMillis() - startTime
 
                 // Проверка контрольной суммы SHA-256 (если доступна в манифесте релиза)
-                val sumsUrl = release.sha256SumsUrl ?: VoxReleaseAssetSelector.findSha256SumsAsset(release.assets)?.downloadUrl
-                var expectedSha256: String? = null
-                if (!sumsUrl.isNullOrBlank()) {
-                    try {
-                        val sumsContent = downloadString(sumsUrl)
-                        val sumsMap = VoxOtaSecurityVerifier.parseSha256Sums(sumsContent)
-                        expectedSha256 = sumsMap[asset.name]
-                    } catch (sumErr: Throwable) {
-                        Log.w(TAG, "SHA256SUMS check skipped due to error: ${sumErr.message}")
+                var expectedSha256: String? = asset.sha256
+                if (expectedSha256.isNullOrBlank()) {
+                    val sumsUrl = release.sha256SumsUrl ?: VoxReleaseAssetSelector.findSha256SumsAsset(release.assets)?.downloadUrl
+                    if (!sumsUrl.isNullOrBlank()) {
+                        try {
+                            val sumsContent = downloadString(sumsUrl)
+                            val sumsMap = VoxOtaSecurityVerifier.parseSha256Sums(sumsContent)
+                            expectedSha256 = sumsMap[asset.name]
+                        } catch (sumErr: Throwable) {
+                            Log.w(TAG, "SHA256SUMS check skipped due to error: ${sumErr.message}")
+                        }
                     }
                 }
 
