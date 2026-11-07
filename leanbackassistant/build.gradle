@@ -40,7 +40,7 @@ android {
             matchingFallbacks = ['ststable']
         }
         stqa {
-            matchingFallbacks = ['ststable']
+            matchingFallbacks = ['stvot', 'ststable']
         }
         ststable {}
         stfdroid {}

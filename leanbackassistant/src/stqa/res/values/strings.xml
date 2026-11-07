@@ -1,0 +1,5 @@
+<resources>
+    <string name="search_label">SmartTube VOX 9.3 QA</string>
+    <string name="settings_description">SmartTube VOX 9.3 QA Videos</string>
+    <string translatable="false" name="search_authority">io.github.kiryuhak.smarttubevot.qa</string>
+</resources>
