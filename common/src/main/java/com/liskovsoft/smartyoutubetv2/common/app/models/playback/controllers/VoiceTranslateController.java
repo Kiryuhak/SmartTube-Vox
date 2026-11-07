@@ -6,6 +6,7 @@ import android.os.SystemClock;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.helpers.MessageHelpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv2.common.BuildConfig;
 import com.liskovsoft.smartyoutubetv2.common.R;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemMetadata;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
@@ -154,12 +155,16 @@ public class VoiceTranslateController extends BasePlayerController {
 
     @androidx.annotation.VisibleForTesting
     public static void setAllowTranslationForLocalVideoTestOnly(boolean allow) {
+        if (!BuildConfig.DEBUG && allow) {
+            Log.e(TAG, "Test seam cannot be enabled in non-debug builds!");
+            return;
+        }
         sAllowTranslationForLocalVideoTestOnly = allow;
     }
 
     @androidx.annotation.VisibleForTesting
     public static boolean isAllowTranslationForLocalVideoTestOnly() {
-        return sAllowTranslationForLocalVideoTestOnly;
+        return BuildConfig.DEBUG && sAllowTranslationForLocalVideoTestOnly;
     }
     private static volatile VoiceTranslateController sInstance;
 
@@ -950,7 +955,7 @@ public class VoiceTranslateController extends BasePlayerController {
         if (buttonId != ACTION_VOICE_TRANSLATE) {
             return;
         }
-        if (getPlayer() != null && getPlayer().getVideo() != null && (getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) && !sAllowTranslationForLocalVideoTestOnly) {
+        if (getPlayer() != null && getPlayer().getVideo() != null && (getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) && !isAllowTranslationForLocalVideoTestOnly()) {
             return;
         }
         if (mState == STATE_READY) {
@@ -1195,7 +1200,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void tryApplyAutoTranslate(boolean fromTrackChange) {
-        if (getPlayer() == null || getPlayer().getVideo() == null || ((getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) && !sAllowTranslationForLocalVideoTestOnly)) {
+        if (getPlayer() == null || getPlayer().getVideo() == null || ((getPlayer().getVideo().isLocal || getPlayer().getVideo().isDownloadedTranslated()) && !isAllowTranslationForLocalVideoTestOnly())) {
             return;
         }
         String videoId = getPlayer().getVideo().videoId;
@@ -1313,7 +1318,7 @@ public class VoiceTranslateController extends BasePlayerController {
     }
 
     private void tryApplyAutoSubtitles(Video item) {
-        if (item == null || ((item.isLocal || item.isDownloadedTranslated()) && !sAllowTranslationForLocalVideoTestOnly)) {
+        if (item == null || ((item.isLocal || item.isDownloadedTranslated()) && !isAllowTranslationForLocalVideoTestOnly())) {
             return;
         }
         if (!votData().isAutoSubtitlesEnabled()) {
@@ -1417,7 +1422,7 @@ public class VoiceTranslateController extends BasePlayerController {
     private void startYandexTranslation(boolean resetRetryCount, boolean subsequent) {
         if (getPlayer() != null && getPlayer().getVideo() != null) {
             Video video = getPlayer().getVideo();
-            if (video.isLocal && video.isDownloadedTranslated() && !sAllowTranslationForLocalVideoTestOnly) {
+            if (video.isLocal && video.isDownloadedTranslated() && !isAllowTranslationForLocalVideoTestOnly()) {
                 Log.d(TAG, "Local video already contains offline translated audio, skipping network translation");
                 return;
             }
@@ -1439,7 +1444,7 @@ public class VoiceTranslateController extends BasePlayerController {
             return;
         }
 
-        if (getPlayer().getVideo().isLocal && getPlayer().getVideo().isDownloadedTranslated() && !sAllowTranslationForLocalVideoTestOnly) {
+        if (getPlayer().getVideo().isLocal && getPlayer().getVideo().isDownloadedTranslated() && !isAllowTranslationForLocalVideoTestOnly()) {
             Log.d(TAG, "Local video already contains offline translated audio, skipping network translation");
             return;
         }

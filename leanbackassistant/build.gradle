@@ -39,6 +39,9 @@ android {
         stvot {
             matchingFallbacks = ['ststable']
         }
+        stqa {
+            matchingFallbacks = ['ststable']
+        }
         ststable {}
         stfdroid {}
     }
