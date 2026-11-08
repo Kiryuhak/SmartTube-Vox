@@ -166,6 +166,8 @@ public class SplashPresenter extends BasePresenter<SplashView> {
             // 1) Auth token storage init
             // 2) Media service language setup (I assume that context has proper language)
             GlobalPreferences.instance(getContext());
+            // Prompt 163-R51: Eager migration of legacy update channel prefs before any OTA check
+            com.liskovsoft.smartyoutubetv2.common.vox.ota.VoxUpdateChannelManager.instance(getContext()).migrateLegacyChannelPrefsIfNeeded();
         }
     }
 

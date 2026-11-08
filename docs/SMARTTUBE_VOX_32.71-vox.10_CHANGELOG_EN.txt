@@ -1,0 +1,6 @@
+- Base engine upgraded to SmartTube 32.71 and VOT 1.12.6 integration
+- Canonical 3-APK distribution: arm64-v8a, armeabi-v7a, and universal
+- Direct OTA V2 update feed to 32.71-vox.10 with pre-download SHA-256 integrity verification
+- Full-format version display in Leanback OTA HUD without truncation ("SmartTube VOX 32.71-vox.10")
+- Reliable PackageInstaller Session API flow for TV OS system update prompts
+- Preserved encrypted Yandex VOT authorization session and natural voice preferences

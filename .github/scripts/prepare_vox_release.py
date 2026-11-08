@@ -94,23 +94,28 @@ for apk_name in canonical_apks:
 # Write SHA256SUMS.txt
 (OUTPUT / "SHA256SUMS.txt").write_text("\n".join(sha_lines) + "\n", encoding="utf-8")
 
-# 2. Legacy compatibility feed: smarttube_vox.json (pinned immutable bridge URL)
-# For older clients (VOX 8..9.2), points to pinned legacy bridge universal APK (Stage L: v32.56-vox.10)
-pinned_bridge_tag = os.environ.get("PINNED_BRIDGE_TAG", "v32.56-vox.10")
-pinned_bridge_apk = f"SmartTube_vot_32.56-vox.10_universal.apk"
-pinned_bridge_url = f"https://github.com/{REPO}/releases/download/{pinned_bridge_tag}/{pinned_bridge_apk}"
+# 2. Legacy compatibility feed: smarttube_vox.json (direct upgrade to canonical universal APK)
+pinned_direct_tag = os.environ.get("PINNED_DIRECT_TAG", f"v{VERSION}")
+pinned_direct_apk = f"SmartTube_vot_{VERSION}_universal.apk"
+pinned_direct_url = f"https://github.com/{REPO}/releases/download/{pinned_direct_tag}/{pinned_direct_apk}"
 
 legacy_manifest = {
-    "version": "32.56-vox.10",
-    "versionCode": 2446050,
-    "downloadUrl": pinned_bridge_url,
+    "version": VERSION,
+    "versionCode": CODE,
+    "downloadUrl": pinned_direct_url,
     "package": {
-        "downloadUrl": pinned_bridge_url,
-        "downloadUrlList": [pinned_bridge_url]
+        "downloadUrl": pinned_direct_url,
+        "downloadUrlList": [pinned_direct_url]
     },
-    "32.56-vox.10": {
-        "versionCode": 2446050,
-        "downloadUrl": pinned_bridge_url,
+    VERSION: {
+        "versionCode": CODE,
+        "downloadUrl": pinned_direct_url,
+        "changelog": en_items,
+        "changelog_ru": ru_items
+    },
+    f"{VERSION}-universal": {
+        "versionCode": CODE,
+        "downloadUrl": pinned_direct_url,
         "changelog": en_items,
         "changelog_ru": ru_items
     }

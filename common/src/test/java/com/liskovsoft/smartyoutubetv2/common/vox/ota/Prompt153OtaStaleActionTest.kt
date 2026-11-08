@@ -407,7 +407,7 @@ class Prompt153OtaStaleActionTest {
         )
 
         val clean = VoxOtaDisplayHelper.extractCleanVoxVersion(rawVersion)
-        assertEquals("Clean version must strip '-universal' prefix", "9.2", clean)
+        assertEquals("Clean version must strip '-universal' prefix", "32.56-vox.9.2", clean)
 
         val tier = VoxOtaDisplayHelper.detectTier(rawVersion, releaseInfo)
         assertEquals("32.56-vox.9.2-universal without isPrerelease must be classified as STABLE",
@@ -415,20 +415,20 @@ class Prompt153OtaStaleActionTest {
 
         val display = VoxOtaDisplayHelper.formatDisplayVersion(rawVersion, tier)
         assertEquals("Display version must be clean without 'universal' or false 'Beta'",
-            "SmartTube Vox - 9.2", display)
+            "SmartTube VOX 32.56-vox.9.2", display)
 
         // Проверяем, что настоящая Beta остаётся Beta
         val betaRaw = "32.56-vox.9.3-beta.1"
         val betaRelease = releaseInfo.copy(versionName = betaRaw, isPrerelease = true)
         val betaTier = VoxOtaDisplayHelper.detectTier(betaRaw, betaRelease)
         assertEquals(VoxOtaChannelTier.BETA, betaTier)
-        assertEquals("SmartTube Vox - 9.3 Beta", VoxOtaDisplayHelper.formatDisplayVersion(betaRaw, betaTier))
+        assertEquals("SmartTube VOX 32.56-vox.9.3-beta.1", VoxOtaDisplayHelper.formatDisplayVersion(betaRaw, betaTier))
 
         // Проверяем, что Dev остаётся Dev
         val devRaw = "32.56-vox.9.3-dev"
         val devRelease = releaseInfo.copy(versionName = devRaw, isPrerelease = true)
         val devTier = VoxOtaDisplayHelper.detectTier(devRaw, devRelease)
         assertEquals(VoxOtaChannelTier.DEV, devTier)
-        assertEquals("SmartTube Vox - 9.3 Dev", VoxOtaDisplayHelper.formatDisplayVersion(devRaw, devTier))
+        assertEquals("SmartTube VOX 32.56-vox.9.3-dev", VoxOtaDisplayHelper.formatDisplayVersion(devRaw, devTier))
     }
 }

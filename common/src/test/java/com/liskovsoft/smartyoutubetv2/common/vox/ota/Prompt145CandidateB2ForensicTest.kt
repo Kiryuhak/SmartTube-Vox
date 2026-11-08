@@ -17,9 +17,32 @@ import java.security.MessageDigest
 @RunWith(RobolectricTestRunner::class)
 class Prompt145CandidateB2ForensicTest {
 
-    private val candidate144File = File("C:/Dev/SmartTube-VOX-Private/private-qa/candidate-144.json")
-    private val published143File = File("C:/Dev/SmartTube-VOX-Private/private-qa/smarttube_vox-PUBLISHED-143.json")
-    private val publishedUniversalApk = File("C:/Dev/VOX-Restore-Reports/input/published-apks/9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk")
+    companion object {
+        private fun resolveFile(vararg paths: String): File {
+            for (p in paths) {
+                val f = File(p)
+                if (f.exists()) return f
+            }
+            return File(paths.first())
+        }
+
+        private val candidate144File = resolveFile(
+            "../../SmartTube-VOX-Private/private-qa/candidate-144.json",
+            "${System.getProperty("user.home")}/Dev/SmartTube-VOX-Private/private-qa/candidate-144.json",
+            "C:/Dev/SmartTube-VOX-Private/private-qa/candidate-144.json"
+        )
+        private val published143File = resolveFile(
+            "../../SmartTube-VOX-Private/private-qa/smarttube_vox-PUBLISHED-143.json",
+            "${System.getProperty("user.home")}/Dev/SmartTube-VOX-Private/private-qa/smarttube_vox-PUBLISHED-143.json",
+            "C:/Dev/SmartTube-VOX-Private/private-qa/smarttube_vox-PUBLISHED-143.json"
+        )
+        private val publishedUniversalApk = resolveFile(
+            "../scratch/r38_forensic/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk",
+            "${System.getProperty("user.home")}/Dev/_vox_93_r36/scratch/r38_forensic/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk",
+            "${System.getProperty("user.home")}/Dev/SmartTube/smarttubetv/build/outputs/apk/stvot/debug/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk",
+            "C:/Dev/VOX-Restore-Reports/input/published-apks/9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk"
+        )
+    }
 
     private val expectedUniversalSha256 = "e31ba5fe1bb8e2f49345edcb31384411d85779d798c414040fe7fecd77263e23"
     private val expectedUniversalSize = 66383180L

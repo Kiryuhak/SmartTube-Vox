@@ -124,14 +124,16 @@ public class AppUpdatePresenter extends BasePresenter<Void> implements AppUpdate
                     public void onError(VoxOtaException error) {
                         if (getContext() != null && (error.getCode() == VoxOtaErrorCode.NO_UPDATE ||
                                 error.getCode() == VoxOtaErrorCode.VERSION_NOT_NEWER ||
-                                error.getCode() == VoxOtaErrorCode.RELEASE_NOT_FOUND)) {
+                                error.getCode() == VoxOtaErrorCode.RELEASE_NOT_FOUND ||
+                                error.getCode() == VoxOtaErrorCode.CHANNEL_MISMATCH)) {
                             BrowsePresenter.instance(getContext()).unpinItem(getContext().getString(R.string.update_found));
                         }
                         if (mIsForceCheck) {
                             LoadingManager.showLoading(getContext(), false);
                             if (error.getCode() == VoxOtaErrorCode.NO_UPDATE ||
                                     error.getCode() == VoxOtaErrorCode.VERSION_NOT_NEWER ||
-                                    error.getCode() == VoxOtaErrorCode.RELEASE_NOT_FOUND) {
+                                    error.getCode() == VoxOtaErrorCode.RELEASE_NOT_FOUND ||
+                                    error.getCode() == VoxOtaErrorCode.CHANNEL_MISMATCH) {
                                 MessageHelpers.showMessage(getContext(), R.string.update_not_found);
                             } else {
                                 MessageHelpers.showMessage(getContext(), error.getUserMessageRu());

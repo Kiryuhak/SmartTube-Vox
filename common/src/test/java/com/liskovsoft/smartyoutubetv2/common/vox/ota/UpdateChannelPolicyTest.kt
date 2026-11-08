@@ -29,29 +29,30 @@ class UpdateChannelPolicyTest {
     }
 
     @Test
-    fun testSwitchToTestChannel() {
+    fun testProductionChannelEnforcesStable() {
+        // Under Prompt 163-R51, production flavor blocks switching to TEST/BETA
         channelManager.setUpdateChannel(VoxUpdateChannel.TEST)
-        assertEquals(VoxUpdateChannel.TEST, channelManager.getUpdateChannel())
-        assertTrue(channelManager.isBetaChannel())
+        assertEquals(VoxUpdateChannel.STABLE, channelManager.getUpdateChannel())
+        assertFalse(channelManager.isBetaChannel())
     }
 
     @Test
     fun testSwitchFromTestToStableResetsBetaConsent() {
-        channelManager.setUpdateChannel(VoxUpdateChannel.TEST)
         channelManager.setBetaDiagnosticsEnabled(true)
-        assertTrue(channelManager.isBetaDiagnosticsEnabled())
+        // Production enforces false for beta diagnostics
+        assertFalse(channelManager.isBetaDiagnosticsEnabled())
 
-        // Переключение обратно на стабильный канал должно сбросить согласие на бета-диагностику
         channelManager.setUpdateChannel(VoxUpdateChannel.STABLE)
         assertFalse(channelManager.isBetaDiagnosticsEnabled())
         assertEquals(VoxUpdateChannel.STABLE, channelManager.getUpdateChannel())
     }
 
     @Test
-    fun testSwitchToQaChannel() {
+    fun testProductionBlocksQaChannel() {
+        // Under Prompt 163-R51, production flavor blocks switching to QA
         channelManager.setUpdateChannel(VoxUpdateChannel.QA)
-        assertEquals(VoxUpdateChannel.QA, channelManager.getUpdateChannel())
-        assertTrue(channelManager.isQaChannel())
+        assertEquals(VoxUpdateChannel.STABLE, channelManager.getUpdateChannel())
+        assertFalse(channelManager.isQaChannel())
         assertFalse(channelManager.isBetaChannel())
     }
 

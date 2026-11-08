@@ -84,39 +84,39 @@ object VoxOtaDisplayHelper {
         }
     }
 
-    fun extractCleanVoxVersion(raw: String?): String {
-        if (raw.isNullOrBlank()) return "9.1"
+    fun cleanVersionName(raw: String?): String {
+        if (raw.isNullOrBlank()) return "32.71-vox.10"
         var clean = raw.trim()
-        val voxIdx = clean.indexOf("-vox.")
-        if (voxIdx >= 0) {
-            clean = clean.substring(voxIdx + 5)
-        } else if (clean.startsWith("v", ignoreCase = true)) {
+        if (clean.startsWith("v", ignoreCase = true) && clean.length > 1 && clean[1].isDigit()) {
             clean = clean.substring(1)
         }
         val uniIdx = clean.indexOf("-universal", ignoreCase = true)
         if (uniIdx >= 0) clean = clean.substring(0, uniIdx)
-        val qaIdx = clean.indexOf("-otaqa")
+        val arm64Idx = clean.indexOf("-arm64-v8a", ignoreCase = true)
+        if (arm64Idx >= 0) clean = clean.substring(0, arm64Idx)
+        val arm32Idx = clean.indexOf("-armeabi-v7a", ignoreCase = true)
+        if (arm32Idx >= 0) clean = clean.substring(0, arm32Idx)
+        val qaIdx = clean.indexOf("-otaqa", ignoreCase = true)
         if (qaIdx >= 0) clean = clean.substring(0, qaIdx)
-        val betaIdx = clean.indexOf("-beta")
-        if (betaIdx >= 0) clean = clean.substring(0, betaIdx)
-        val devIdx = clean.indexOf("-dev")
-        if (devIdx >= 0) clean = clean.substring(0, devIdx)
-        val rcIdx = clean.indexOf("-rc")
-        if (rcIdx >= 0) clean = clean.substring(0, rcIdx)
-        return clean.ifBlank { "9.1" }
+        return clean.ifBlank { "32.71-vox.10" }
+    }
+
+    fun extractCleanVoxVersion(raw: String?): String {
+        return cleanVersionName(raw)
     }
 
     fun formatDisplayVersion(versionName: String?, tier: VoxOtaChannelTier): String {
-        val clean = extractCleanVoxVersion(versionName)
+        val clean = cleanVersionName(versionName)
+        val baseDisplay = if (clean.startsWith("SmartTube VOX", ignoreCase = true)) clean else "SmartTube VOX $clean"
         return when (tier) {
-            VoxOtaChannelTier.STABLE -> "SmartTube Vox - $clean"
-            VoxOtaChannelTier.BETA -> "SmartTube Vox - $clean Beta"
-            VoxOtaChannelTier.DEV -> "SmartTube Vox - $clean Dev"
+            VoxOtaChannelTier.STABLE -> baseDisplay
+            VoxOtaChannelTier.BETA -> if (baseDisplay.contains("Beta", ignoreCase = true) || baseDisplay.contains("rc", ignoreCase = true)) baseDisplay else "$baseDisplay Beta"
+            VoxOtaChannelTier.DEV -> if (baseDisplay.contains("Dev", ignoreCase = true)) baseDisplay else "$baseDisplay Dev"
         }
     }
 
     fun formatCurrentVersion(currentRaw: String?): String {
-        val clean = extractCleanVoxVersion(currentRaw)
+        val clean = cleanVersionName(currentRaw)
         return "Текущая версия: $clean"
     }
 

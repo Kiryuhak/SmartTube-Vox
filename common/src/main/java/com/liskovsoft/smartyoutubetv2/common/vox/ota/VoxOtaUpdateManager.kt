@@ -190,6 +190,10 @@ class VoxOtaUpdateManager(private val context: Context) {
         wasRateLimited = rateLimited
     }
 
+    fun handleErrorForTesting(error: Throwable, currentVersion: String, channel: String, elapsedMs: Long, callback: Callback) {
+        handleError(error, currentVersion, channel, elapsedMs, callback)
+    }
+
     private fun markCheckSucceeded(currentVersion: String, channelName: String) {
         lastSuccessfulCheckTimeMs = System.currentTimeMillis()
         if (wasRateLimited) {
@@ -294,8 +298,10 @@ class VoxOtaUpdateManager(private val context: Context) {
                 val release = try {
                     fetchReleaseInfo(manifestUrls, channel, currentVersion)
                 } catch (e: VoxOtaException) {
-                    if (e.code == VoxOtaErrorCode.RELEASE_NOT_FOUND || e.code == VoxOtaErrorCode.NO_UPDATE) {
-                        // 404, отсутствие релиза или отсутствие подходящих обновлений = NO_UPDATE
+                    if (e.code == VoxOtaErrorCode.RELEASE_NOT_FOUND ||
+                        e.code == VoxOtaErrorCode.NO_UPDATE ||
+                        e.code == VoxOtaErrorCode.CHANNEL_MISMATCH) {
+                        // 404, отсутствие релиза, mismatch канала или отсутствие подходящих обновлений = NO_UPDATE
                         val elapsed = System.currentTimeMillis() - startTimeMs
                         VoxSafeLogger.info(
                             VoxLogCategory.OTA,
@@ -948,10 +954,11 @@ class VoxOtaUpdateManager(private val context: Context) {
             wasRateLimited = true
         }
 
-        // RELEASE_NOT_FOUND трактуется как отсутствие обновлений без пугания пользователя
+        // RELEASE_NOT_FOUND, NO_UPDATE, VERSION_NOT_NEWER, CHANNEL_MISMATCH трактуются как отсутствие обновлений без пугания пользователя
         if (otaError.code == VoxOtaErrorCode.RELEASE_NOT_FOUND ||
             otaError.code == VoxOtaErrorCode.NO_UPDATE ||
-            otaError.code == VoxOtaErrorCode.VERSION_NOT_NEWER) {
+            otaError.code == VoxOtaErrorCode.VERSION_NOT_NEWER ||
+            otaError.code == VoxOtaErrorCode.CHANNEL_MISMATCH) {
             mainHandler.post { callback.onNoUpdateAvailable(currentVersion) }
         } else {
             mainHandler.post { callback.onError(otaError) }

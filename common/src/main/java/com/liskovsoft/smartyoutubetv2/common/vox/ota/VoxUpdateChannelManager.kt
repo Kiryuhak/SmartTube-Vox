@@ -21,18 +21,31 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
         migrateLegacyChannelPrefsIfNeeded()
     }
 
-    private fun migrateLegacyChannelPrefsIfNeeded() {
+    /**
+     * Проверяет, запущено ли приложение в тестовом QA пакете.
+     */
+    fun isQaPackage(): Boolean {
         val pkg = context.packageName ?: ""
-        if (pkg.contains("otaqa") || pkg.contains("qa")) {
+        return pkg.contains("otaqa", ignoreCase = true) ||
+               pkg.contains("qa", ignoreCase = true) ||
+               getBuildChannel() == VoxBuildChannel.QA
+    }
+
+    /**
+     * Мигрирует сохранённые настройки каналов обновлений (Prompt 163-R51).
+     * В публичной сборке принудительно устанавливает STABLE и сбрасывает beta_diagnostics_enabled в false.
+     */
+    fun migrateLegacyChannelPrefsIfNeeded() {
+        if (isQaPackage()) {
             return
         }
         val saved = prefs.getString(KEY_UPDATE_CHANNEL, null)
-        if (saved == "test" || saved == "beta") {
-            prefs.edit().apply {
-                putString(KEY_UPDATE_CHANNEL, VoxUpdateChannel.STABLE.id)
-                putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
-                apply()
-            }
+        val betaDiag = prefs.getBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+        if (saved != VoxUpdateChannel.STABLE.id || betaDiag) {
+            prefs.edit()
+                .putString(KEY_UPDATE_CHANNEL, VoxUpdateChannel.STABLE.id)
+                .putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+                .commit()
         }
     }
 
@@ -56,7 +69,14 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
         }
 
         @JvmStatic
+        fun resetForTesting() {
+            sInstance = null
+        }
+
+        @JvmStatic
         fun isAutoDiagnosticsAllowedByDefault(versionName: String): Boolean {
+            val parsed = VoxVersionComparator.parseVersion(versionName)
+            if (parsed != null && parsed.isCanonicalStable) return false
             return VoxBuildChannel.fromVersion(versionName).isPreRelease
         }
     }
@@ -65,6 +85,7 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
      * Проверяет, разрешена ли автодиагностика по умолчанию для текущей сборки приложения.
      */
     fun isAutoDiagnosticsAllowedByDefault(): Boolean {
+        if (!isQaPackage()) return false
         return getBuildChannel().isPreRelease
     }
 
@@ -75,7 +96,7 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
         return try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
         } catch (e: Exception) {
-            "32.56-vox.9.1"
+            "32.71-vox.10"
         }
     }
 
@@ -88,28 +109,39 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
 
     /**
      * Возвращает текущий выбранный канал обновлений.
+     * В публичной сборке всегда возвращает STABLE и восстанавливает сохранённые prefs.
      */
     fun getUpdateChannel(): VoxUpdateChannel {
+        if (isQaPackage()) {
+            val channelId = prefs.getString(KEY_UPDATE_CHANNEL, null)
+            return if (channelId != null) VoxUpdateChannel.fromId(channelId) else VoxUpdateChannel.QA
+        }
+
+        // Production invariant: strictly STABLE
+        // Self-heal guard: ensure storage is strictly stable and beta diagnostics disabled
         val channelId = prefs.getString(KEY_UPDATE_CHANNEL, null)
-        if (channelId != null) {
-            return VoxUpdateChannel.fromId(channelId)
+        val betaDiag = prefs.getBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+        if (channelId != VoxUpdateChannel.STABLE.id || betaDiag) {
+            prefs.edit()
+                .putString(KEY_UPDATE_CHANNEL, VoxUpdateChannel.STABLE.id)
+                .putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+                .commit()
         }
-        val pkg = context.packageName ?: ""
-        if (pkg.contains("otaqa") || pkg.contains("qa")) {
-            return VoxUpdateChannel.QA
-        }
-        val buildChannel = getBuildChannel()
-        if (buildChannel == VoxBuildChannel.QA) {
-            return VoxUpdateChannel.QA
-        }
-        return if (buildChannel.isPreRelease) VoxUpdateChannel.BETA else VoxUpdateChannel.STABLE
+        return VoxUpdateChannel.STABLE
     }
 
     /**
      * Устанавливает канал обновлений.
-     * При переходе с BETA на STABLE согласие на бета-диагностику автоматически аннулируется.
+     * В публичной сборке любые попытки установить Beta/Test/QA блокируются и принудительно сохраняется STABLE.
      */
     fun setUpdateChannel(channel: VoxUpdateChannel) {
+        if (!isQaPackage()) {
+            prefs.edit()
+                .putString(KEY_UPDATE_CHANNEL, VoxUpdateChannel.STABLE.id)
+                .putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false)
+                .commit()
+            return
+        }
         val previous = getUpdateChannel()
         prefs.edit().apply {
             putString(KEY_UPDATE_CHANNEL, channel.id)
@@ -129,28 +161,36 @@ class VoxUpdateChannelManager private constructor(private val context: Context) 
 
     /**
      * Проверяет, активен ли тестовый/бета канал.
+     * В публичной сборке всегда false.
      */
     fun isBetaChannel(): Boolean {
+        if (!isQaPackage()) return false
         val ch = getUpdateChannel()
         return ch == VoxUpdateChannel.BETA || ch == VoxUpdateChannel.TEST
     }
 
     /**
      * Проверяет, активен ли изолированный канал стенда QA.
+     * В публичной сборке всегда false.
      */
     fun isQaChannel(): Boolean {
-        return getUpdateChannel() == VoxUpdateChannel.QA
+        return isQaPackage() && getUpdateChannel() == VoxUpdateChannel.QA
     }
 
     /**
-     * Согласие на автоматическую диагностику тестовых версий (Beta/Dev/Alpha/RC по умолчанию включено).
+     * Согласие на автоматическую диагностику тестовых версий (в публичной сборке всегда false).
      */
     fun isBetaDiagnosticsEnabled(): Boolean {
+        if (!isQaPackage()) return false
         val defaultEnabled = getBuildChannel().isPreRelease
         return prefs.getBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, defaultEnabled)
     }
 
     fun setBetaDiagnosticsEnabled(enabled: Boolean) {
+        if (!isQaPackage()) {
+            prefs.edit().putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, false).apply()
+            return
+        }
         prefs.edit().putBoolean(KEY_BETA_DIAGNOSTICS_ENABLED, enabled).apply()
     }
 
