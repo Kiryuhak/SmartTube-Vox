@@ -328,6 +328,80 @@ public class ScreensaverManagerTest {
         assertFalse(isDimOverlayVisible(activity));
     }
 
+    @Test
+    public void manualDimmingStateTransitionsAndDefaultBlackoutBehavior() {
+        ActivityController<HostActivity> controller = Robolectric.buildActivity(HostActivity.class);
+        HostActivity activity = controller.setup().get();
+        configurePrefs(activity);
+        ScreensaverManager manager = new ScreensaverManager(activity);
+        drainImmediateTasks();
+
+        // 1. Initial State: not dimmed
+        manager.disable();
+        drainImmediateTasks();
+        assertFalse("Initial state: dim overlay must be GONE", isDimOverlayVisible(activity));
+        assertFalse("Initial state: isScreenOff must be false", manager.isScreenOff());
+
+        // 2. Partial Dimming (e.g. 70%): First click (OFF -> ON)
+        PlayerTweaksData tweaksData = PlayerTweaksData.instance(activity);
+        tweaksData.setScreenOffDimmingPercents(70);
+        tweaksData.setScreenOffTimeoutSec(0);
+        tweaksData.setScreenOffTimeoutEnabled(false);
+
+        // Emulate PlayerUIController onButtonClicked (initial click: buttonState == BUTTON_OFF)
+        // prepareScreenOff()
+        manager.setBlocked(false);
+        manager.disable();
+        // applyScreenOff(BUTTON_OFF)
+        manager.doScreenOff();
+        manager.setBlocked(true); // isPartialDimming == true
+        drainImmediateTasks();
+
+        assertTrue("Partial dimming ON: overlay must be VISIBLE", isDimOverlayVisible(activity));
+        assertFalse("Partial dimming: isScreenOff must be false when percents < 100", manager.isScreenOff());
+
+        // 3. Partial Dimming: Second click (ON -> OFF)
+        // prepareScreenOff()
+        manager.setBlocked(false);
+        manager.disable();
+        // applyScreenOff(BUTTON_ON): buttonState == BUTTON_OFF is false, doScreenOff is not called
+        drainImmediateTasks();
+
+        assertFalse("Partial dimming OFF: overlay must be GONE after second click", isDimOverlayVisible(activity));
+
+        // Advance time: verify no spontaneous re-dimming occurs
+        advance(DIM_TIMEOUT_MS + SCREEN_OFF_TIMEOUT_MS + 2_000L);
+        assertFalse("Spontaneous re-dimming must not occur after explicit OFF", isDimOverlayVisible(activity));
+
+        // 4. Default 100% Dimming Blackout Behavior (Root cause analysis of 4PDA #244)
+        tweaksData.setScreenOffDimmingPercents(100);
+
+        // First click with 100% dimming
+        manager.setBlocked(false);
+        manager.disable();
+        manager.doScreenOff();
+        manager.setBlocked(false); // isPartialDimming is false for 100%
+        drainImmediateTasks();
+
+        assertTrue("100% dimming: overlay must be VISIBLE", isDimOverlayVisible(activity));
+        assertTrue("100% dimming: isScreenOff must be TRUE for 100% blackout", manager.isScreenOff());
+
+        // User tries pressing remote control DPAD keys -> MotherActivity calls disableChecked()
+        manager.disableChecked();
+        drainImmediateTasks();
+
+        // Upstream design invariant: disableChecked() ignores keys when mMode == MODE_SCREEN_OFF
+        assertTrue("100% dimming: remote keys ignored by disableChecked() leaving overlay VISIBLE", isDimOverlayVisible(activity));
+        assertTrue("100% dimming: screen stays OFF despite disableChecked()", manager.isScreenOff());
+
+        // Explicit reset via prepareScreenOff / disable cleans up
+        manager.setBlocked(false);
+        manager.disable();
+        drainImmediateTasks();
+        assertFalse("Explicit disable must clear 100% dim overlay", isDimOverlayVisible(activity));
+        assertFalse(manager.isScreenOff());
+    }
+
     private static void configurePrefs(Activity activity) {
         GeneralData generalData = GeneralData.instance(activity);
         generalData.setScreensaverTimeoutMs((int) DIM_TIMEOUT_MS);
