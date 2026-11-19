@@ -251,6 +251,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             getMainController().onPlayEnd();
         } else if (isOfflineVideo() && isSubtitlesEnabled()) {
             // Long loading subtitles cause hangs
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
+            }
             disableSubtitles();
             mVideoLoaderController.reloadVideo();
         } else if (!mBufferingDetector.isPlayable()) {

@@ -5,6 +5,8 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.ErrorFixerController
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoLoaderController
+import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -333,5 +335,42 @@ class Prompt164DashSabrFallbackTest {
 
         // Verify cooldown was activated
         assertTrue("Cooldown must be activated when engine switch is requested for active SABR", getField(videoLoader, "mSabrCooldownActive") as Boolean)
+    }
+
+    @Test
+    fun testErrorFixerController_OnLongBuffering_SubtitleHang_SetsCooldownIfSabrWasPlaying() {
+        val vod = Video()
+        vod.isLive = false
+        vod.isLiveEnd = false
+
+        val dummySubtitle = FormatItem.fromLanguage("en")
+
+        val playerProxy = java.lang.reflect.Proxy.newProxyInstance(
+            PlaybackView::class.java.classLoader,
+            arrayOf(PlaybackView::class.java)
+        ) { _, method, _ ->
+            when (method.name) {
+                "getSubtitleFormat" -> dummySubtitle
+                "getPositionMs" -> 5000L
+                "getDurationMs" -> 100000L
+                else -> null
+            }
+        } as PlaybackView
+
+        val errorFixer = object : ErrorFixerController() {
+            override fun getPlayer(): PlaybackView? = playerProxy
+            override fun getVideo(): Video? = vod
+        }
+        setField(errorFixer, "mContext", context)
+        setField(errorFixer, "mVideoLoaderController", videoLoader)
+
+        // Simulate SABR was active
+        setField(videoLoader, "mIsSabrPlaying", true)
+        assertFalse(getField(videoLoader, "mSabrCooldownActive") as Boolean)
+
+        errorFixer.onLongBuffering()
+
+        // Verify cooldown was activated when subtitle hang recovery was triggered for SABR
+        assertTrue("Cooldown must be activated when subtitle hang triggers video reload on SABR", getField(videoLoader, "mSabrCooldownActive") as Boolean)
     }
 }
