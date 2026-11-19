@@ -472,7 +472,7 @@ public class VideoLoaderController extends BasePlayerController {
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_ELIGIBLE, "SABR VOD format eligible");
             }
             int transportPref = getPlayerTweaksData().getVideoTransportPreference();
-            boolean autoFallbackToSabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO && mForceSabrFallback);
+            boolean autoFallbackToSabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO && mForceSabrFallback && formatInfo.containsDashFormats());
             boolean shouldPlaySabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_SABR || autoFallbackToSabr)
                     && sabrEligible && !mSabrCooldownActive;
 
@@ -487,7 +487,7 @@ public class VideoLoaderController extends BasePlayerController {
                 Log.d(TAG, "Loading regular video in dash format...");
                 mIsSabrPlaying = false;
 
-                if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
+                if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_DASH) {
                     mIsDashPlaying = false;
                     player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
                 } else {
@@ -504,7 +504,7 @@ public class VideoLoaderController extends BasePlayerController {
                 Log.d(TAG, "Loading regular video in dash format (fallback from SABR)...");
                 mIsSabrPlaying = false;
 
-                if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
+                if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_DASH) {
                     mIsDashPlaying = false;
                     player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
                 } else {
