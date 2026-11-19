@@ -201,6 +201,17 @@ class Prompt164DashSabrFallbackTest {
     }
 
     @Test
+    fun testCanFallbackToSabr_WhenContextNull_ReturnsFalse() {
+        setField(videoLoader, "mContext", null)
+        val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
+        setField(videoLoader, "mFormatInfo", formatInfo)
+        setField(videoLoader, "mIsSabrPlaying", false)
+        setField(videoLoader, "mSabrCooldownActive", false)
+
+        assertFalse("Null context must safely reject fallback without assuming AUTO", videoLoader.canFallbackToSabr())
+    }
+
+    @Test
     fun testCanFallbackToSabr_WhenFormatInfoNullWithContext_ReturnsFalseWithoutThrowing() {
         setField(videoLoader, "mFormatInfo", null)
         setField(videoLoader, "mIsSabrPlaying", false)

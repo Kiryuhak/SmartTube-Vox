@@ -466,7 +466,8 @@ public class VideoLoaderController extends BasePlayerController {
             //    scheduleNextVideoTimer(5_000);
             //}
         } else {
-            boolean sabrEligible = acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats() && !formatInfo.isLive();
+            boolean isLiveOrDvr = formatInfo.isLive() || formatInfo.isLiveContent() || (getVideo() != null && getVideo().isLive) || isPlayerLiveOrDynamic();
+            boolean sabrEligible = acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats() && !isLiveOrDvr;
             if (sabrEligible) {
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_ELIGIBLE, "SABR VOD format eligible");
             }
@@ -485,11 +486,12 @@ public class VideoLoaderController extends BasePlayerController {
             } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_SABR && !autoFallbackToSabr) {
                 Log.d(TAG, "Loading regular video in dash format...");
                 mIsSabrPlaying = false;
-                mIsDashPlaying = true;
 
                 if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
+                    mIsDashPlaying = false;
                     player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
                 } else {
+                    mIsDashPlaying = true;
                     player.openDash(formatInfo);
                 }
             } else if (sabrEligible && !mSabrCooldownActive && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_DASH) {
@@ -498,14 +500,15 @@ public class VideoLoaderController extends BasePlayerController {
                 mIsSabrPlaying = true;
                 mIsDashPlaying = false;
                 player.openSabr(formatInfo);
-            } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats()) {
+            } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_SABR) {
                 Log.d(TAG, "Loading regular video in dash format (fallback from SABR)...");
                 mIsSabrPlaying = false;
-                mIsDashPlaying = true;
 
                 if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
+                    mIsDashPlaying = false;
                     player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
                 } else {
+                    mIsDashPlaying = true;
                     player.openDash(formatInfo);
                 }
             } else if (acceptDashLive(formatInfo)) {
@@ -634,10 +637,10 @@ public class VideoLoaderController extends BasePlayerController {
             return false;
         }
 
-        boolean hasContext = getContext() != null;
-        int transportPref = (hasContext && getPlayerTweaksData() != null)
-                ? getPlayerTweaksData().getVideoTransportPreference()
-                : PlayerTweaksData.VIDEO_TRANSPORT_AUTO;
+        if (getContext() == null || getPlayerTweaksData() == null) {
+            return false;
+        }
+        int transportPref = getPlayerTweaksData().getVideoTransportPreference();
         if (transportPref != PlayerTweaksData.VIDEO_TRANSPORT_AUTO) {
             return false;
         }
@@ -658,7 +661,7 @@ public class VideoLoaderController extends BasePlayerController {
             return false;
         }
 
-        return !hasContext || acceptAdaptiveFormats(mFormatInfo);
+        return acceptAdaptiveFormats(mFormatInfo);
     }
 
     public void activateSabrFallback() {
