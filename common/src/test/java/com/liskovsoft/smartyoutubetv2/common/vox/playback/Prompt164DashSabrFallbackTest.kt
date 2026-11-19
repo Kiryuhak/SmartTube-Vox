@@ -5,7 +5,6 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.ErrorFixerController
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoLoaderController
-import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryController
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,6 +26,7 @@ class Prompt164DashSabrFallbackTest {
         context = RuntimeEnvironment.getApplication()
         videoLoader = VideoLoaderController()
         setField(videoLoader, "mContext", context)
+        setField(videoLoader, "mIsDashPlaying", true)
         // Reset tweaks preference to AUTO by default
         PlayerTweaksData.instance(context).videoTransportPreference = PlayerTweaksData.VIDEO_TRANSPORT_AUTO
     }
@@ -96,6 +96,18 @@ class Prompt164DashSabrFallbackTest {
         setField(videoLoader, "mSabrCooldownActive", false)
 
         assertTrue(videoLoader.canFallbackToSabr())
+    }
+
+    @Test
+    fun testCanFallbackToSabr_WhenDashNotPlaying_ReturnsFalse() {
+        // If DASH is not the active transport (e.g. HLS or URL stream), fallback must be rejected
+        val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
+        setField(videoLoader, "mFormatInfo", formatInfo)
+        setField(videoLoader, "mIsDashPlaying", false)
+        setField(videoLoader, "mIsSabrPlaying", false)
+        setField(videoLoader, "mSabrCooldownActive", false)
+
+        assertFalse("Inactive DASH playback must reject DASH->SABR fallback", videoLoader.canFallbackToSabr())
     }
 
     @Test
@@ -170,6 +182,7 @@ class Prompt164DashSabrFallbackTest {
             }
         }
         setField(testLoader, "mContext", context)
+        setField(testLoader, "mIsDashPlaying", true)
         setField(testLoader, "mFormatInfo", formatInfo)
         setField(testLoader, "mIsSabrPlaying", false)
         setField(testLoader, "mSabrCooldownActive", false)
@@ -243,6 +256,7 @@ class Prompt164DashSabrFallbackTest {
 
         val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
         setField(videoLoader, "mFormatInfo", formatInfo)
+        setField(videoLoader, "mIsDashPlaying", true)
         setField(videoLoader, "mIsSabrPlaying", false)
         assertTrue("Cooldown must be reset on new video, making fallback eligible again", videoLoader.canFallbackToSabr())
     }
@@ -290,5 +304,23 @@ class Prompt164DashSabrFallbackTest {
 
         // Verify cooldown was activated to prevent SABR ping-pong
         assertTrue("Cooldown must be activated when SABR stream refresh is requested", getField(videoLoader, "mSabrCooldownActive") as Boolean)
+    }
+
+    @Test
+    fun testErrorFixerController_OnEngineSwitchRequested_SetsCooldownIfSabrWasPlaying() {
+        val errorFixer = ErrorFixerController()
+        setField(errorFixer, "mContext", context)
+        setField(errorFixer, "mVideoLoaderController", videoLoader)
+
+        // Simulate SABR was active
+        setField(videoLoader, "mIsSabrPlaying", true)
+        assertFalse(getField(videoLoader, "mSabrCooldownActive") as Boolean)
+
+        // Trigger onEngineSwitchRequested via recovery handler reflection
+        val handler = getField(errorFixer, "mRecoveryActionHandler") as VoxPlayerRecoveryController.PlayerRecoveryActionHandler
+        handler.onEngineSwitchRequested(1, 1000L, true, 1L)
+
+        // Verify cooldown was activated
+        assertTrue("Cooldown must be activated when engine switch is requested for active SABR", getField(videoLoader, "mSabrCooldownActive") as Boolean)
     }
 }

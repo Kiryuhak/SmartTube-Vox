@@ -97,6 +97,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         @Override
         public void onEngineSwitchRequested(int nextEngine, long targetPositionMs, boolean playWhenReady, long gen) {
             Log.w(TAG, "Recovery: switching engine to " + nextEngine + " at targetPosMs=" + targetPositionMs);
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
+            }
             getPlayerTweaksData().setRuntimeFallbackEngine(nextEngine);
             YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
             Video video = getVideo();
@@ -106,6 +109,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             if (getPlayer() != null) {
                 getPlayer().setPositionMs(targetPositionMs);
                 getPlayer().setPlayWhenReady(playWhenReady);
+            }
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
             }
             if (mVideoLoaderController != null) {
                 mVideoLoaderController.restartEngine();
@@ -866,6 +872,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             Video video = getVideo();
             if (video != null && targetPositionMs >= 0) {
                 video.pendingPosMs = targetPositionMs;
+            }
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
             }
             if (mVideoLoaderController != null) {
                 mVideoLoaderController.restartEngine();

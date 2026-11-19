@@ -50,6 +50,7 @@ public class VideoLoaderController extends BasePlayerController {
     private boolean mSabrCooldownActive = false;
     private boolean mForceSabrFallback = false;
     private boolean mIsSabrPlaying = false;
+    private boolean mIsDashPlaying = false;
     private int mEmptyFormatRetryCount = 0;
     private String mLastVideoId;
     private Disposable mFormatInfoAction;
@@ -112,6 +113,7 @@ public class VideoLoaderController extends BasePlayerController {
             mEmptyFormatRetryCount = 0;
         }
         mIsSabrPlaying = false;
+        mIsDashPlaying = false;
         if (VoxShortsAutoNextController.getINSTANCE().isShort(item)) {
             VoxShortsAutoNextController.getINSTANCE().onNewShort(item);
         }
@@ -394,6 +396,7 @@ public class VideoLoaderController extends BasePlayerController {
                         "Offline playback opened"
                 );
                 mIsSabrPlaying = false;
+        mIsDashPlaying = false;
                 getPlayer().openUrlList(java.util.Collections.singletonList(mediaUrl));
                 getPlayer().setTitle(video.getTitle());
                 getPlayer().showProgressBar(false);
@@ -477,10 +480,12 @@ public class VideoLoaderController extends BasePlayerController {
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_SELECTED,
                         autoFallbackToSabr ? "Selecting SABR transport (automatic DASH stall fallback)" : "Selecting SABR transport (user preference)");
                 mIsSabrPlaying = true;
+                mIsDashPlaying = false;
                 player.openSabr(formatInfo);
             } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_SABR && !autoFallbackToSabr) {
                 Log.d(TAG, "Loading regular video in dash format...");
                 mIsSabrPlaying = false;
+                mIsDashPlaying = true;
 
                 if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
                     player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
@@ -491,10 +496,12 @@ public class VideoLoaderController extends BasePlayerController {
                 Log.d(TAG, "Loading video in sabr format (fallback from DASH)...");
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_SELECTED, "Selecting SABR transport (DASH unavailable or fallback)");
                 mIsSabrPlaying = true;
+                mIsDashPlaying = false;
                 player.openSabr(formatInfo);
             } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats()) {
                 Log.d(TAG, "Loading regular video in dash format (fallback from SABR)...");
                 mIsSabrPlaying = false;
+                mIsDashPlaying = true;
 
                 if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
                     player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
@@ -504,17 +511,21 @@ public class VideoLoaderController extends BasePlayerController {
             } else if (acceptDashLive(formatInfo)) {
                 Log.d(TAG, "Loading live video (current or past live stream) in dash format...");
                 mIsSabrPlaying = false;
+        mIsDashPlaying = false;
                 player.openDashUrl(formatInfo.getDashManifestUrl());
             } else if (formatInfo.isLive() && formatInfo.containsHlsUrl()) {
                 Log.d(TAG, "Loading live video (current or past live stream) in hls format...");
                 mIsSabrPlaying = false;
+        mIsDashPlaying = false;
                 player.openHlsUrl(formatInfo.getHlsManifestUrl());
             } else if (formatInfo.containsUrlFormats()) {
                 Log.d(TAG, "Loading url list video. This is always LQ...");
                 mIsSabrPlaying = false;
+        mIsDashPlaying = false;
                 player.openUrlList(formatInfo.createUrlList());
             } else {
                 mIsSabrPlaying = false;
+        mIsDashPlaying = false;
                 Log.d(TAG, "Empty or unsupported format info received.");
                 if (formatInfo.isLive() || formatInfo.isLiveContent() || (getVideo() != null && getVideo().isLive)) {
                     Log.d(TAG, "Seems future live translation. Scheduling 30s reload.");
@@ -631,11 +642,14 @@ public class VideoLoaderController extends BasePlayerController {
             return false;
         }
 
-        if (mIsSabrPlaying || mSabrCooldownActive) {
+        if (!mIsDashPlaying || mIsSabrPlaying || mSabrCooldownActive) {
             return false;
         }
 
-        boolean isLive = mFormatInfo.isLive() || mFormatInfo.isLiveContent() || (getVideo() != null && getVideo().isLive);
+        boolean isLive = mFormatInfo.isLive()
+                || mFormatInfo.isLiveContent()
+                || (getVideo() != null && getVideo().isLive)
+                || isPlayerLiveOrDynamic();
         if (isLive) {
             return false;
         }
@@ -654,6 +668,17 @@ public class VideoLoaderController extends BasePlayerController {
 
     public boolean isSabrFallbackActive() {
         return mForceSabrFallback;
+    }
+
+    public boolean isDashPlaying() {
+        return mIsDashPlaying;
+    }
+
+    private boolean isPlayerLiveOrDynamic() {
+        if (getPlayer() instanceof com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController) {
+            return ((com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController) getPlayer()).isLiveOrDynamic();
+        }
+        return false;
     }
 
     public MediaItemFormatInfo getFormatInfo() {
