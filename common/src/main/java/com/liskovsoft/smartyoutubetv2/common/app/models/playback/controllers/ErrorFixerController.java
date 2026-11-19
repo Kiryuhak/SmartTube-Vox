@@ -51,6 +51,30 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         @Override
         public void onSourceRefreshRequested(long targetPositionMs, boolean playWhenReady, long gen) {
             Log.w(TAG, "Recovery: refreshing source at targetPosMs=" + targetPositionMs);
+            if (mVideoLoaderController != null && mVideoLoaderController.canFallbackToSabr()) {
+                Log.w(TAG, "Recovery: DASH transport stalled at startup. Executing DASH -> SABR fallback.");
+                Map<String, String> ctx = new HashMap<>();
+                ctx.put("posMs", String.valueOf(targetPositionMs));
+                ctx.put("gen", String.valueOf(gen));
+                VoxSafeLogger.warn(
+                    VoxLogCategory.PLAYER,
+                    VoxLogCode.SABR_FALLBACK,
+                    "DASH transport stall, fallback to SABR with preserved position",
+                    ctx
+                );
+                mVideoLoaderController.activateSabrFallback();
+                Video video = getVideo();
+                if (video != null && targetPositionMs >= 0) {
+                    video.pendingPosMs = targetPositionMs;
+                }
+                if (getPlayer() != null) {
+                    getPlayer().setPositionMs(targetPositionMs);
+                    getPlayer().setPlayWhenReady(playWhenReady);
+                }
+                mVideoLoaderController.reloadVideo();
+                return;
+            }
+
             YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
             YouTubeServiceManager.instance().switchNextClientNow();
             Video video = getVideo();
@@ -241,7 +265,11 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                         com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.NETWORK_ERROR,
                         "Stalled client detected: switching next client"
                 );
-                YouTubeServiceManager.instance().switchNextClientNow();
+                if (mVideoLoaderController != null && mVideoLoaderController.canFallbackToSabr()) {
+                    mVideoLoaderController.activateSabrFallback();
+                } else {
+                    YouTubeServiceManager.instance().switchNextClientNow();
+                }
                 mVideoLoaderController.reloadVideo();
             }
         } else {
