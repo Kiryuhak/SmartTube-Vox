@@ -468,17 +468,17 @@ public class VideoLoaderController extends BasePlayerController {
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_ELIGIBLE, "SABR VOD format eligible");
             }
             int transportPref = getPlayerTweaksData().getVideoTransportPreference();
-            boolean shouldPlaySabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_SABR
-                    || (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO && mForceSabrFallback))
+            boolean autoFallbackToSabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO && mForceSabrFallback);
+            boolean shouldPlaySabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_SABR || autoFallbackToSabr)
                     && sabrEligible && !mSabrCooldownActive;
 
             if (shouldPlaySabr) {
-                Log.d(TAG, "Loading video in sabr format (" + (mForceSabrFallback ? "automatic DASH fallback" : "user preference") + ")...");
+                Log.d(TAG, "Loading video in sabr format (" + (autoFallbackToSabr ? "automatic DASH fallback" : "user preference") + ")...");
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_SELECTED,
-                        mForceSabrFallback ? "Selecting SABR transport (automatic DASH stall fallback)" : "Selecting SABR transport (user preference)");
+                        autoFallbackToSabr ? "Selecting SABR transport (automatic DASH stall fallback)" : "Selecting SABR transport (user preference)");
                 mIsSabrPlaying = true;
                 player.openSabr(formatInfo);
-            } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_SABR && !mForceSabrFallback) {
+            } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats() && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_SABR && !autoFallbackToSabr) {
                 Log.d(TAG, "Loading regular video in dash format...");
                 mIsSabrPlaying = false;
 
@@ -487,7 +487,7 @@ public class VideoLoaderController extends BasePlayerController {
                 } else {
                     player.openDash(formatInfo);
                 }
-            } else if (sabrEligible && !mSabrCooldownActive) {
+            } else if (sabrEligible && !mSabrCooldownActive && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_DASH) {
                 Log.d(TAG, "Loading video in sabr format (fallback from DASH)...");
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_SELECTED, "Selecting SABR transport (DASH unavailable or fallback)");
                 mIsSabrPlaying = true;
@@ -619,14 +619,19 @@ public class VideoLoaderController extends BasePlayerController {
     }
 
     public boolean canFallbackToSabr() {
-        int transportPref = (getContext() != null && getPlayerTweaksData() != null)
+        boolean hasContext = getContext() != null;
+        int transportPref = (hasContext && getPlayerTweaksData() != null)
                 ? getPlayerTweaksData().getVideoTransportPreference()
                 : PlayerTweaksData.VIDEO_TRANSPORT_AUTO;
+        boolean adaptiveAccepted = !hasContext || acceptAdaptiveFormats(mFormatInfo);
+
         return transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO
                 && !mIsSabrPlaying
                 && !mSabrCooldownActive
                 && mFormatInfo != null
                 && !mFormatInfo.isUnplayable()
+                && adaptiveAccepted
+                && mFormatInfo.containsDashFormats()
                 && mFormatInfo.containsSabrFormats()
                 && !mFormatInfo.isLive();
     }

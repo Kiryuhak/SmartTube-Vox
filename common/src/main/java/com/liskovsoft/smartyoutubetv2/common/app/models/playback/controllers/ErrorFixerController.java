@@ -268,6 +268,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 if (mVideoLoaderController != null && mVideoLoaderController.canFallbackToSabr()) {
                     mVideoLoaderController.activateSabrFallback();
                 } else {
+                    if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                        mVideoLoaderController.activateSabrCooldown();
+                    }
                     YouTubeServiceManager.instance().switchNextClientNow();
                 }
                 mVideoLoaderController.reloadVideo();
