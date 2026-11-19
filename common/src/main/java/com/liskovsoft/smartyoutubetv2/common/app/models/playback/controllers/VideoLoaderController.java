@@ -619,21 +619,32 @@ public class VideoLoaderController extends BasePlayerController {
     }
 
     public boolean canFallbackToSabr() {
+        if (mFormatInfo == null || mFormatInfo.isUnplayable()) {
+            return false;
+        }
+
         boolean hasContext = getContext() != null;
         int transportPref = (hasContext && getPlayerTweaksData() != null)
                 ? getPlayerTweaksData().getVideoTransportPreference()
                 : PlayerTweaksData.VIDEO_TRANSPORT_AUTO;
-        boolean adaptiveAccepted = !hasContext || acceptAdaptiveFormats(mFormatInfo);
+        if (transportPref != PlayerTweaksData.VIDEO_TRANSPORT_AUTO) {
+            return false;
+        }
 
-        return transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO
-                && !mIsSabrPlaying
-                && !mSabrCooldownActive
-                && mFormatInfo != null
-                && !mFormatInfo.isUnplayable()
-                && adaptiveAccepted
-                && mFormatInfo.containsDashFormats()
-                && mFormatInfo.containsSabrFormats()
-                && !mFormatInfo.isLive();
+        if (mIsSabrPlaying || mSabrCooldownActive) {
+            return false;
+        }
+
+        boolean isLive = mFormatInfo.isLive() || mFormatInfo.isLiveContent() || (getVideo() != null && getVideo().isLive);
+        if (isLive) {
+            return false;
+        }
+
+        if (!mFormatInfo.containsDashFormats() || !mFormatInfo.containsSabrFormats()) {
+            return false;
+        }
+
+        return !hasContext || acceptAdaptiveFormats(mFormatInfo);
     }
 
     public void activateSabrFallback() {

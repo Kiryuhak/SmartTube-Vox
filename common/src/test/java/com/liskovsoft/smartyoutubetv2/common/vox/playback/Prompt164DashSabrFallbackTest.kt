@@ -3,7 +3,9 @@ package com.liskovsoft.smartyoutubetv2.common.vox.playback
 import android.content.Context
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.ErrorFixerController
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoLoaderController
+import com.liskovsoft.smartyoutubetv2.common.vox.playback.VoxPlayerRecoveryController
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -24,6 +26,7 @@ class Prompt164DashSabrFallbackTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         videoLoader = VideoLoaderController()
+        setField(videoLoader, "mContext", context)
         // Reset tweaks preference to AUTO by default
         PlayerTweaksData.instance(context).videoTransportPreference = PlayerTweaksData.VIDEO_TRANSPORT_AUTO
     }
@@ -43,20 +46,38 @@ class Prompt164DashSabrFallbackTest {
         throw NoSuchFieldException(fieldName)
     }
 
+    private fun getField(obj: Any, fieldName: String): Any? {
+        var clazz: Class<*>? = obj.javaClass
+        while (clazz != null) {
+            try {
+                val field: Field = clazz.getDeclaredField(fieldName)
+                field.isAccessible = true
+                return field.get(obj)
+            } catch (e: NoSuchFieldException) {
+                clazz = clazz.superclass
+            }
+        }
+        throw NoSuchFieldException(fieldName)
+    }
+
     private fun createMockFormatInfo(
         containsSabr: Boolean,
         isLive: Boolean,
         isUnplayable: Boolean = false,
-        containsDash: Boolean = true
+        containsDash: Boolean = true,
+        isLiveContent: Boolean = false
     ): MediaItemFormatInfo {
         val invocationHandler = java.lang.reflect.InvocationHandler { _, method, _ ->
             when (method.name) {
                 "containsSabrFormats" -> containsSabr
                 "containsDashFormats" -> containsDash
                 "isLive" -> isLive
-                "isLiveContent" -> isLive
+                "isLiveContent" -> isLiveContent
                 "isUnplayable" -> isUnplayable
                 "isPlayable" -> !isUnplayable
+                "containsUrlFormats" -> false
+                "containsHlsUrl" -> false
+                "getStartTimeMs" -> 0L
                 else -> null
             }
         }
@@ -109,7 +130,6 @@ class Prompt164DashSabrFallbackTest {
 
     @Test
     fun testCanFallbackToSabr_WhenNoDashFormats_ReturnsFalse() {
-        // If the stream is not DASH (e.g. pure HLS or URL list), DASH -> SABR fallback does not apply
         val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = false)
         setField(videoLoader, "mFormatInfo", formatInfo)
         setField(videoLoader, "mIsSabrPlaying", false)
@@ -129,6 +149,35 @@ class Prompt164DashSabrFallbackTest {
     }
 
     @Test
+    fun testCanFallbackToSabr_WhenLiveContent_ReturnsFalse() {
+        val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true, isLiveContent = true)
+        setField(videoLoader, "mFormatInfo", formatInfo)
+        setField(videoLoader, "mIsSabrPlaying", false)
+        setField(videoLoader, "mSabrCooldownActive", false)
+
+        assertFalse("isLiveContent must be excluded from SABR fallback", videoLoader.canFallbackToSabr())
+    }
+
+    @Test
+    fun testCanFallbackToSabr_WhenVideoObjectIsLive_ReturnsFalse() {
+        val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
+        val liveVideo = Video()
+        liveVideo.isLive = true
+
+        val testLoader = object : VideoLoaderController() {
+            override fun getVideo(): Video {
+                return liveVideo
+            }
+        }
+        setField(testLoader, "mContext", context)
+        setField(testLoader, "mFormatInfo", formatInfo)
+        setField(testLoader, "mIsSabrPlaying", false)
+        setField(testLoader, "mSabrCooldownActive", false)
+
+        assertFalse("Live video object must be excluded from SABR fallback", testLoader.canFallbackToSabr())
+    }
+
+    @Test
     fun testCanFallbackToSabr_WhenVideoUnplayable_ReturnsFalse() {
         val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = true, containsDash = true)
         setField(videoLoader, "mFormatInfo", formatInfo)
@@ -139,18 +188,17 @@ class Prompt164DashSabrFallbackTest {
     }
 
     @Test
-    fun testCanFallbackToSabr_WhenFormatInfoNull_ReturnsFalse() {
+    fun testCanFallbackToSabr_WhenFormatInfoNullWithContext_ReturnsFalseWithoutThrowing() {
         setField(videoLoader, "mFormatInfo", null)
         setField(videoLoader, "mIsSabrPlaying", false)
         setField(videoLoader, "mSabrCooldownActive", false)
 
-        assertFalse(videoLoader.canFallbackToSabr())
+        assertFalse("Null format info with attached context must safely return false without NPE", videoLoader.canFallbackToSabr())
     }
 
     @Test
     fun testCanFallbackToSabr_WhenExplicitDashPreference_ReturnsFalse() {
         PlayerTweaksData.instance(context).videoTransportPreference = PlayerTweaksData.VIDEO_TRANSPORT_DASH
-        setField(videoLoader, "mContext", context)
 
         val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
         setField(videoLoader, "mFormatInfo", formatInfo)
@@ -163,7 +211,6 @@ class Prompt164DashSabrFallbackTest {
     @Test
     fun testCanFallbackToSabr_WhenExplicitSabrPreference_ReturnsFalse() {
         PlayerTweaksData.instance(context).videoTransportPreference = PlayerTweaksData.VIDEO_TRANSPORT_SABR
-        setField(videoLoader, "mContext", context)
 
         val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
         setField(videoLoader, "mFormatInfo", formatInfo)
@@ -194,7 +241,6 @@ class Prompt164DashSabrFallbackTest {
 
         assertFalse("Fallback flag must be reset on new video", videoLoader.isSabrFallbackActive)
 
-        // Also verify cooldown was reset by checking canFallbackToSabr on the new video
         val formatInfo = createMockFormatInfo(containsSabr = true, isLive = false, isUnplayable = false, containsDash = true)
         setField(videoLoader, "mFormatInfo", formatInfo)
         setField(videoLoader, "mIsSabrPlaying", false)
@@ -226,5 +272,23 @@ class Prompt164DashSabrFallbackTest {
         videoLoader.activateSabrCooldown()
 
         assertFalse("Cooldown must strictly block fallback to SABR", videoLoader.canFallbackToSabr())
+    }
+
+    @Test
+    fun testErrorFixerController_OnSourceRefreshRequested_SetsCooldownIfSabrWasPlaying() {
+        val errorFixer = ErrorFixerController()
+        setField(errorFixer, "mContext", context)
+        setField(errorFixer, "mVideoLoaderController", videoLoader)
+
+        // Simulate SABR was active
+        setField(videoLoader, "mIsSabrPlaying", true)
+        assertFalse(getField(videoLoader, "mSabrCooldownActive") as Boolean)
+
+        // Trigger onSourceRefreshRequested via recovery handler reflection
+        val handler = getField(errorFixer, "mRecoveryActionHandler") as VoxPlayerRecoveryController.PlayerRecoveryActionHandler
+        handler.onSourceRefreshRequested(1000L, true, 1L)
+
+        // Verify cooldown was activated to prevent SABR ping-pong
+        assertTrue("Cooldown must be activated when SABR stream refresh is requested", getField(videoLoader, "mSabrCooldownActive") as Boolean)
     }
 }

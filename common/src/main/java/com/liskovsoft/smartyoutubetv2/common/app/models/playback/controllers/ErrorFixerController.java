@@ -75,6 +75,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 return;
             }
 
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
+            }
+
             YouTubePlayerCacheManager.invalidatePlayerCache(getContext());
             YouTubeServiceManager.instance().switchNextClientNow();
             Video video = getVideo();
@@ -244,6 +248,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             disableSubtitles();
             mVideoLoaderController.reloadVideo();
         } else if (!mBufferingDetector.isPlayable()) {
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
+            }
             if (getPlayerTweaksData().getPlayerDataSource() != PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP
                 && getPlayerTweaksData().getPreferredDnsType() != PlayerTweaksData.DNS_TYPE_SYSTEM
                 && !getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
@@ -276,11 +283,9 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 mVideoLoaderController.reloadVideo();
             }
         } else {
-            // NOTE: The bug. Avoid calling reloadVideo() after lowering the quality.
-            // This will change current format to 'Disabled'. Do restartEngine() instead.
-            //lowerVideoQuality();
-            //mVideoLoaderController.restartEngine();
-
+            if (mVideoLoaderController != null && mVideoLoaderController.isSabrPlaying()) {
+                mVideoLoaderController.activateSabrCooldown();
+            }
             // SABR may hang if the server issues a high backoffTime
             mVideoLoaderController.restartEngine();
         }
