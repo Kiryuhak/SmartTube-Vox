@@ -467,12 +467,12 @@ public class VideoLoaderController extends BasePlayerController {
             //}
         } else {
             boolean isLiveOrDvr = formatInfo.isLive() || formatInfo.isLiveContent() || (getVideo() != null && getVideo().isLive) || isPlayerLiveOrDynamic();
-            boolean sabrEligible = acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats() && !isLiveOrDvr;
+            boolean sabrEligible = acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats() && formatInfo.containsDashFormats() && !isLiveOrDvr;
             if (sabrEligible) {
                 VoxSafeLogger.info(VoxLogCategory.PLAYER, VoxLogCode.SABR_ELIGIBLE, "SABR VOD format eligible");
             }
             int transportPref = getPlayerTweaksData().getVideoTransportPreference();
-            boolean autoFallbackToSabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO && mForceSabrFallback && formatInfo.containsDashFormats());
+            boolean autoFallbackToSabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_AUTO && mForceSabrFallback);
             boolean shouldPlaySabr = (transportPref == PlayerTweaksData.VIDEO_TRANSPORT_SABR || autoFallbackToSabr)
                     && sabrEligible && !mSabrCooldownActive;
 
