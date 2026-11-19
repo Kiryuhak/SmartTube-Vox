@@ -511,7 +511,7 @@ public class VideoLoaderController extends BasePlayerController {
                     mIsDashPlaying = true;
                     player.openDash(formatInfo);
                 }
-            } else if (acceptDashLive(formatInfo)) {
+            } else if (acceptDashLive(formatInfo) && transportPref != PlayerTweaksData.VIDEO_TRANSPORT_SABR) {
                 Log.d(TAG, "Loading live video (current or past live stream) in dash format...");
                 mIsSabrPlaying = false;
         mIsDashPlaying = false;
