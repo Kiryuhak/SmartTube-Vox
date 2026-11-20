@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.vox.ota
 import android.content.Context
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -45,19 +46,23 @@ class VoxOtaSecurityVerifierTest {
         // Поиск официального подписанного релизного APK в локальном репозитории
         val releaseDir = File("../smarttubetv/build/outputs/apk/stvot/release")
         val releaseApks = if (releaseDir.exists()) {
-            releaseDir.listFiles { _, name -> name.endsWith(".apk") && !name.contains("-unaligned") }
+            releaseDir.listFiles { _, name -> name.endsWith(".apk") && !name.contains("-unaligned") && !name.contains("unsigned") }
                 ?.sortedByDescending { it.length() }?.toList() ?: emptyList()
         } else emptyList()
 
         val candidates = listOf(
+            File("C:/Dev/SmartTube-VOX-Private/private-qa/evidence/163-tcl-real-ota-2026-11-10/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk"),
+            File("C:/Dev/_vox_g5s51_candidate/staging/vox11-g5s51/SmartTube_vot_32.71-vox.11_2461012_universal_SIGNED.apk"),
+            File("C:/Dev/_vox_owner_private/SmartTube_vot_32.71-vox.11_universal_SIGNED.apk"),
             File("../smarttubetv/build/outputs/apk/stvot/release/SmartTube_vot_32.56-vox.9.2-rc.1_universal.apk"),
             File("../smarttubetv/build/outputs/apk/stvot/release/SmartTube_vot_32.56-vox.9.1_universal.apk"),
             File("../build/release-candidate/vox-9.1/SmartTube_vot_32.56-vox.9.1_armeabi-v7a.apk"),
             File("../build/release-candidate/vox-9.1/SmartTube_vot_32.56-vox.9.1_universal.apk")
         ) + releaseApks
-        val apk = candidates.map { it.canonicalFile }.firstOrNull { it.exists() }
-        org.junit.Assume.assumeTrue("Official release APK not found for security verification testing", apk != null)
-        officialReleaseApk = apk!!
+        val apk = candidates.map { it.canonicalFile }.firstOrNull { it.exists() && VoxOtaSecurityVerifier.verifyJarArchiveIntegrityAndCertificates(it).isNotEmpty() }
+        assertNotNull("Official release APK not found for security verification testing", apk)
+        assertTrue("Official release APK must exist", apk!!.exists())
+        officialReleaseApk = apk
     }
 
     /**

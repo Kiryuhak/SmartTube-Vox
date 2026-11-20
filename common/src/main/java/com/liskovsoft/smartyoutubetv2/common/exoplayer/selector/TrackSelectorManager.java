@@ -423,7 +423,20 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         // enable renderer
         mRenderers[rendererIndex].isDisabled = false;
 
-        MediaTrack matchedTrack = findBestMatch(track);
+        MediaTrack matchedTrack = null;
+        if (track.groupIndex >= 0 && track.trackIndex >= 0
+                && track.groupIndex < mRenderers[rendererIndex].mediaTracks.length
+                && mRenderers[rendererIndex].mediaTracks[track.groupIndex] != null
+                && track.trackIndex < mRenderers[rendererIndex].mediaTracks[track.groupIndex].length) {
+            MediaTrack direct = mRenderers[rendererIndex].mediaTracks[track.groupIndex][track.trackIndex];
+            if (direct != null && (track.format == null || direct.format == null || Helpers.equals(direct.format.id, track.format.id))) {
+                matchedTrack = direct;
+            }
+        }
+
+        if (matchedTrack == null) {
+            matchedTrack = findBestMatch(track);
+        }
         
         setSelection(matchedTrack.rendererIndex, matchedTrack.groupIndex, matchedTrack.trackIndex);
 
@@ -662,7 +675,7 @@ public class TrackSelectorManager implements TrackSelectorCallback {
      * Trying to filter languages preferred by the user
      */
     private MediaTrack[][] filterByLanguage(MediaTrack[][] trackGroupList, MediaTrack originTrack) {
-        if (!(originTrack instanceof AudioTrack) || trackGroupList.length <= 2) { // non-translated list has max 2 groups
+        if (!(originTrack instanceof AudioTrack)) {
             return trackGroupList;
         }
 

@@ -47,6 +47,12 @@ public class YandexVotTestReceiver extends BroadcastReceiver {
         String action = intent.getStringExtra("action");
         if (action == null || action.isEmpty() || "backendStatus".equalsIgnoreCase(action)) {
             handleBackendStatus();
+        } else if ("enableAutoTranslate".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.prefs.VotData.instance(context).setAutoTranslateEnabled(true);
+            Log.i(TAG, "VOT auto-translate ENABLED via test broadcast");
+        } else if ("disableAutoTranslate".equalsIgnoreCase(action)) {
+            com.liskovsoft.smartyoutubetv2.common.prefs.VotData.instance(context).setAutoTranslateEnabled(false);
+            Log.i(TAG, "VOT auto-translate DISABLED via test broadcast");
         } else if ("enableNewBackend".equalsIgnoreCase(action) || "useDefaultBackend".equalsIgnoreCase(action)) {
             VoiceTranslateController.setNewYandexBackendEnabled(true);
             Log.i(TAG, "New Yandex VOT backend ENABLED for user flow (default candidate)");

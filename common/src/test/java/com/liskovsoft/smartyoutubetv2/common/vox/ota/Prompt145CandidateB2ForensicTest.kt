@@ -19,7 +19,11 @@ class Prompt145CandidateB2ForensicTest {
 
     private val candidate144File = File("C:/Dev/SmartTube-VOX-Private/private-qa/candidate-144.json")
     private val published143File = File("C:/Dev/SmartTube-VOX-Private/private-qa/smarttube_vox-PUBLISHED-143.json")
-    private val publishedUniversalApk = File("C:/Dev/VOX-Restore-Reports/input/published-apks/9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk")
+    private val publishedUniversalApk = listOf(
+        File("C:/Dev/SmartTube-VOX-Private/private-qa/evidence/163-tcl-real-ota-2026-11-10/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk"),
+        File("C:/Dev/_restore_staging/release-artifacts/legacy-forensic-r38/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk"),
+        File("C:/Dev/VOX-Restore-Reports/input/published-apks/9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk")
+    ).firstOrNull { it.exists() } ?: File("C:/Dev/SmartTube-VOX-Private/private-qa/evidence/163-tcl-real-ota-2026-11-10/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk")
 
     private val expectedUniversalSha256 = "e31ba5fe1bb8e2f49345edcb31384411d85779d798c414040fe7fecd77263e23"
     private val expectedUniversalSize = 66383180L

@@ -3,6 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.track;
 import com.google.android.exoplayer2.Format;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.TrackSelectorUtil;
+import com.liskovsoft.smartyoutubetv2.common.vot.VotAudioTrackHelper;
 
 public class AudioTrack extends MediaTrack {
     public AudioTrack(int rendererIndex) {
@@ -38,10 +39,15 @@ public class AudioTrack extends MediaTrack {
         int bitrate1 = format.bitrate;
         int bitrate2 = track2.format.bitrate;
 
-        // Compare by language isn't robust since language set may not contain target language
         String language1 = format.language;
         String language2 = track2.format.language;
-        boolean sameLanguage = sameLanguage(language1, language2);
+        if (language1 != null && language2 != null) {
+            boolean ru1 = VotAudioTrackHelper.isRussianLang(language1);
+            boolean ru2 = VotAudioTrackHelper.isRussianLang(language2);
+            if (ru1 != ru2 || !sameLanguage(language1, language2)) {
+                return -1;
+            }
+        }
 
         if (Helpers.equals(id1, id2)) {
             result = 0;
@@ -78,7 +84,15 @@ public class AudioTrack extends MediaTrack {
     }
 
     private boolean sameLanguage(String language1, String language2) {
-        return Helpers.equals(language1, language2) || (language1 == null || language2 == null);
+        if (language1 == null || language2 == null) {
+            return true;
+        }
+        if (Helpers.equals(language1, language2)) {
+            return true;
+        }
+        String l1 = language1.split("[-_ ]")[0].toLowerCase();
+        String l2 = language2.split("[-_ ]")[0].toLowerCase();
+        return l1.equals(l2);
     }
 
     private static boolean drcEquals(Format format1, Format format2) {

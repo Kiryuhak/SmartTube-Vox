@@ -368,27 +368,8 @@ public class YandexVotApiClient {
                 }
 
                 String respLang = response.language != null ? response.language.trim().toLowerCase() : null;
-                String effectiveTarget = (targetLang != null && !targetLang.isEmpty()) ? targetLang.trim().toLowerCase() : "ru";
                 if (respLang != null && !respLang.isEmpty()) {
-                    String baseResp = respLang.split("[-_]")[0];
-                    String baseTarget = effectiveTarget.split("[-_]")[0];
-                    if (!baseResp.equals(baseTarget)) {
-                        YandexVotLog.w(TAG, "VOT language mismatch: requested " + effectiveTarget + " but response indicates " + respLang);
-                        java.util.Map<String, String> langCtx = new java.util.HashMap<>();
-                        langCtx.put("requestedTargetLang", effectiveTarget);
-                        langCtx.put("responseLang", respLang);
-                        com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxSafeLogger.w(
-                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCategory.TRANSLATION,
-                                com.liskovsoft.smartyoutubetv2.common.vox.diagnostics.VoxLogCode.TRANSLATION_LANGUAGE_MISMATCH,
-                                "Target language mismatch rejected",
-                                langCtx
-                        );
-                        return new TranslationResult(
-                                STATUS_FAILED, null, -1, response.translationId,
-                                "Translation target language mismatch: requested " + effectiveTarget + " but received " + respLang,
-                                "language_mismatch", false, respLang
-                        );
-                    }
+                    YandexVotLog.d(TAG, "VOT response detected source language: " + respLang);
                 }
 
                 TranslationResult result = new TranslationResult(

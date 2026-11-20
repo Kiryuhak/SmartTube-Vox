@@ -325,9 +325,6 @@ public final class VotAudioTrackHelper {
         if (isRussianOriginal(current)) {
             return false;
         }
-        if (isYoutubeRussianAutoDub(current)) {
-            return hasNonRussianOriginalCandidate(formats);
-        }
         if (isExplicitNonRussian(current)) {
             return true;
         }
@@ -483,36 +480,30 @@ public final class VotAudioTrackHelper {
         if (trackA != null && trackB != null
                 && trackA.groupIndex != -1 && trackB.groupIndex != -1
                 && trackA.trackIndex != -1 && trackB.trackIndex != -1) {
-            if (trackA.groupIndex != trackB.groupIndex || trackA.trackIndex != trackB.trackIndex) {
-                return false;
-            }
+            return trackA.groupIndex == trackB.groupIndex && trackA.trackIndex == trackB.trackIndex;
         }
 
         // Compare language metadata via TrackInfo
         TrackInfo infoA = from(a);
         TrackInfo infoB = from(b);
-        String langA = infoA.langCode != null ? infoA.langCode : (a.getLanguage() != null ? a.getLanguage().trim().toLowerCase(Locale.US) : null);
-        String langB = infoB.langCode != null ? infoB.langCode : (b.getLanguage() != null ? b.getLanguage().trim().toLowerCase(Locale.US) : null);
-
-        if (langA != null && langB != null && !langA.equalsIgnoreCase(langB)) {
-            return false;
-        }
-
-        if (infoA.rawLabel != null && infoB.rawLabel != null && !infoA.rawLabel.equalsIgnoreCase(infoB.rawLabel)) {
-            if (infoA.acont != null || infoB.acont != null) {
-                if (!Helpers.equals(infoA.acont, infoB.acont)) {
-                    return false;
-                }
-            }
-            if (langA != null || langB != null) {
-                if (!Helpers.equals(langA, langB)) {
-                    return false;
-                }
-            }
-        }
 
         if (isRussianLang(infoA.langCode) != isRussianLang(infoB.langCode)) {
             return false;
+        }
+
+        String langA = infoA.langCode != null ? infoA.langCode : (a.getLanguage() != null ? a.getLanguage().trim().toLowerCase(Locale.US) : null);
+        String langB = infoB.langCode != null ? infoB.langCode : (b.getLanguage() != null ? b.getLanguage().trim().toLowerCase(Locale.US) : null);
+
+        if (langA != null && langB != null) {
+            if (!isSameLanguage(langA, langB)) {
+                return false;
+            }
+        }
+
+        if (infoA.acont != null && infoB.acont != null) {
+            if (!Helpers.equals(infoA.acont, infoB.acont)) {
+                return false;
+            }
         }
 
         String formatIdA = a.getFormatId();
@@ -523,10 +514,6 @@ public final class VotAudioTrackHelper {
             }
         } else if (a.getId() != 0 && b.getId() != 0 && a.getId() != b.getId()) {
             return false;
-        }
-
-        if (a instanceof ExoFormatItem && b instanceof ExoFormatItem) {
-            return a.equals(b);
         }
 
         return true;
@@ -550,21 +537,27 @@ public final class VotAudioTrackHelper {
             return false;
         }
 
-        // If the current track is explicitly marked as the original track and not dubbed, it's native Russian!
-        if ("original".equals(current.acont) || "descriptive".equals(current.acont)) {
-            return false;
+        // If the track is explicitly auto-dubbed or dubbed, it's definitely a dub!
+        if (isDubbed(current) || isYoutubeAutoDub(current)) {
+            return true;
         }
 
         // Check if there is a verified non-Russian original track available
         FormatItem originalNonRu = findBestOriginalForYandex(formats);
         if (originalNonRu != null) {
             TrackInfo origInfo = from(originalNonRu);
-            if (origInfo.langCode != null && !isRussianLang(origInfo.langCode) && isOriginalTrack(origInfo)) {
-                return true;
+            if (origInfo.langCode != null && !isRussianLang(origInfo.langCode)) {
+                // If another track is marked original or is an explicit foreign original,
+                // then the Russian track is a localized dub even if YouTube tagged it as default/original.
+                if (isOriginalTrack(origInfo) || isEnglishLang(origInfo.langCode)) {
+                    return true;
+                }
             }
-            if (isDubbed(current) && origInfo.langCode != null && !isRussianLang(origInfo.langCode)) {
-                return true;
-            }
+        }
+
+        // If the current track is explicitly marked as the original track and no foreign original was found, it's native Russian!
+        if ("original".equals(current.acont) || "descriptive".equals(current.acont)) {
+            return false;
         }
 
         return false;
