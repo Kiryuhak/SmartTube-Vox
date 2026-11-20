@@ -75,6 +75,9 @@ public class PlaybackActivity extends LeanbackActivity {
     };
 
     private void registerTestReceiver() {
+        if (!com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG) {
+            return;
+        }
         try {
             androidx.core.content.ContextCompat.registerReceiver(
                     this,
@@ -95,6 +98,9 @@ public class PlaybackActivity extends LeanbackActivity {
     }
 
     private void handlePlaybackTestIntent(android.content.Intent intent) {
+        if (!com.liskovsoft.smartyoutubetv2.tv.BuildConfig.DEBUG) {
+            return;
+        }
         if (intent == null) return;
         String action = intent.getStringExtra("action");
         if (action == null) {

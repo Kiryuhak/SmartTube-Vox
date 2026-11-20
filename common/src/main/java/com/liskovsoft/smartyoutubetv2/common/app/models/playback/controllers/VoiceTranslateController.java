@@ -3150,11 +3150,11 @@ public class VoiceTranslateController extends BasePlayerController {
     private float getUserVolume() {
         if (getPlayerData() != null) {
             float userVol = getPlayerData().getPlayerVolume();
-            if (userVol > 0.01f) {
+            if (userVol >= 0f) {
                 return userVol;
             }
         }
-        return mSavedMainVolume > 0.01f ? mSavedMainVolume : 1.0f;
+        return mSavedMainVolume >= 0f ? mSavedMainVolume : 1.0f;
     }
 
     private void duckMainAudio() {
@@ -3168,7 +3168,7 @@ public class VoiceTranslateController extends BasePlayerController {
         float targetDuckedVol = votData().getOriginalVolumeMultiplier();
         if (Math.abs(currentVol - targetDuckedVol) > 0.02f) {
             mSavedMainVolume = currentVol;
-        } else if (mSavedMainVolume <= 0.01f) {
+        } else if (mSavedMainVolume < 0f) {
             mSavedMainVolume = getUserVolume();
         }
         getPlayer().setVolume(targetDuckedVol);
@@ -3178,7 +3178,7 @@ public class VoiceTranslateController extends BasePlayerController {
 
     private void restoreMainVolume() {
         if (getPlayer() != null && mIsAudioDucked) {
-            float targetRestoreVol = mSavedMainVolume > 0.01f ? mSavedMainVolume : getUserVolume();
+            float targetRestoreVol = mSavedMainVolume >= 0f ? mSavedMainVolume : getUserVolume();
             getPlayer().setVolume(targetRestoreVol);
             mIsAudioDucked = false;
             Log.i(TAG, "VOT main audio restored to user volume=" + targetRestoreVol);
