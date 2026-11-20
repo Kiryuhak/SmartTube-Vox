@@ -1,61 +1,118 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/latest/download/smarttube_vox.apk"
-  },
-  "32.56-vox.7": {
-    "versionCode": 2446008,
-    "changelog": [
-      "Added Auto Device Tuning with hardware profile scanning and risk warning dialog.",
-      "Added full-featured Downloaded Videos library with offline playback and seek support.",
-      "Added end-to-end verified video download with Yandex neural voice-over translation.",
-      "Added privacy-first diagnostics report and local error journal with report ID.",
-      "Added refined compact TV-friendly video quality badges on home and subscription feeds.",
-      "Added native marquee scrolling for long sidebar titles on active focus.",
-      "Added foundation for Samsung Tizen TV (Preview WGT build and capability model).",
-      "Improved playback speed synchronization (1.0x-2.0x) for translated audio.",
-      "Improved reliability and persistence of Yandex ID device authorization."
+    "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+    "downloadUrlList": [
+      "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk"
     ],
-    "changelog_ru": [
-      "Автоматическая настройка совместимости устройства с анализом декодеров и предупреждением о рисках.",
-      "Полноценный раздел «Скачанные видео» с офлайн-воспроизведением и поддержкой перемотки.",
-      "Сквозное скачивание видео с наложенной дорожкой нейросетевого перевода Яндекса.",
-      "Безопасная диагностика совместимости и журнал ошибок с персональным кодом отчёта.",
-      "Аккуратные капсульные бейджи качества видео в лентах «Главная», «Подписки» и «Поиск».",
-      "Плавная бегущая строка (Marquee) для длинных названий пунктов меню при фокусе.",
-      "Архитектурный фундамент и сборка WGT для Samsung Tizen TV (Preview).",
-      "Синхронизация закадрового перевода со скоростями воспроизведения от 1.0x до 2.0x.",
-      "Надёжное сохранение авторизации Яндекс ID между перезапусками."
+    "downloadUrlList_armeabi-v7a": [
+      "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk"
+    ],
+    "downloadUrlList_arm64-v8a": [
+      "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk"
+    ],
+    "downloadUrlList_x86": [
+      "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk"
     ]
   },
-  "32.56-vot.6": {
-    "versionCode": 2446006,
+  "32.71-vox.11": {
+    "versionCode": 2461014,
+    "prerelease": false,
+    "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+    "sha256": "890c7f94567c584e43a97a3a4ddb2657a4f8721dbe8fdae433bdf18e1b24aa74",
+    "size": 67832239,
     "changelog": [
-      "Added VOX download manager for browsing and managing downloaded videos.",
-      "Added support for downloading videos with VP9 and original Opus audio on compatible devices.",
-      "Added convenient management of saved videos: open, resume, repeat, cancel, and delete.",
-      "Improved download compatibility with YouTube changes and transient network errors.",
-      "Improved selection of suitable quality and format during download.",
-      "Improved recovery of downloads after app restart.",
-      "Improved external video launch over local network via DIAL interface.",
-      "Improved DIAL server duplicate request handling and video start from timestamp.",
-      "Fixed retry and recovery errors during transient network failures.",
-      "Fixed potential issues with VP9 and Opus processing in local MKVs.",
-      "Fixed listener leaks and duplicate download progress dialogs.",
-      "Fixed DIAL server state errors and invalid request processing."
+      "Updated media player core to SmartTube 32.71",
+      "Pinned and stabilized Voice Over Tube engine (VOT 1.12.6)",
+      "Fixed playback startup errors on modern YouTube streams with automated DASH/SABR fallback",
+      "Eliminated audio pitch and speed distortion when watching translated videos at 1.25x-2.0x speeds",
+      "Prioritized Yandex VOT voiceover over YouTube built-in audio tracks",
+      "Improved live stream buffer rewinding and live edge synchronization",
+      "Preserved application data, preferences, and Google/Yandex accounts on in-app update",
+      "Sanitized diagnostic telemetry 2.0 with short error codes (VOX-XXXX)"
     ],
     "changelog_ru": [
-      "Менеджер загрузок VOX для просмотра и управления скачанными видео.",
-      "Поддержка скачивания видео с VP9 и оригинального звука в Opus на совместимых устройствах.",
-      "Более удобное управление сохранёнными видео: открытие, продолжение, повтор, отмена и удаление.",
-      "Совместимость скачивания с изменениями YouTube и временными сетевыми ошибками.",
-      "Выбор подходящего качества и формата при скачивании.",
-      "Восстановление загрузок после перезапуска приложения.",
-      "Работа внешнего запуска видео по локальной сети.",
-      "Обработка повторных команд DIAL и запуска видео с временной позиции.",
-      "Ошибки повторных запросов и восстановления загрузок при временных сбоях сети.",
-      "Возможные проблемы с обработкой VP9 и Opus в локальных MKV.",
-      "Утечки слушателей и повторное открытие окна прогресса загрузки.",
-      "Ошибки состояний DIAL-сервера и обработки некорректных запросов."
+      "Обновление кодовой базы плеера до SmartTube 32.71",
+      "Фиксация и стабилизация движка закадрового голосового перевода VOT 1.12.6",
+      "Устранение ошибок запуска видеопотоков YouTube с автоматическим переключением DASH/SABR",
+      "Стабилизация звука и устранение искажений тональности при ускорении видео 1.25x-2.0x с переводом",
+      "Приоритет голосового перевода Яндекс VOT над встроенным русским дубляжом YouTube",
+      "Повышенная надёжность Live и DVR трансляций: плавная перемотка и возврат к прямому эфиру",
+      "Сохранение данных, истории просмотров и аккаунтов Google и Яндекс при штатном обновлении",
+      "Обновлённая панель технической диагностики с обезличенными отчётами и кодами VOX-XXXX"
+    ],
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SHA256SUMS.txt",
+        "size": 172
+      },
+      {
+        "name": "SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+        "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+        "size": 67832239,
+        "sha256": "890c7f94567c584e43a97a3a4ddb2657a4f8721dbe8fdae433bdf18e1b24aa74"
+      }
+    ]
+  },
+  "32.71-vox.11-universal": {
+    "versionCode": 2461014,
+    "prerelease": false,
+    "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+    "sha256": "890c7f94567c584e43a97a3a4ddb2657a4f8721dbe8fdae433bdf18e1b24aa74",
+    "size": 67832239,
+    "changelog": [
+      "Updated media player core to SmartTube 32.71",
+      "Pinned and stabilized Voice Over Tube engine (VOT 1.12.6)",
+      "Fixed playback startup errors on modern YouTube streams with automated DASH/SABR fallback",
+      "Eliminated audio pitch and speed distortion when watching translated videos at 1.25x-2.0x speeds",
+      "Prioritized Yandex VOT voiceover over YouTube built-in audio tracks",
+      "Improved live stream buffer rewinding and live edge synchronization",
+      "Preserved application data, preferences, and Google/Yandex accounts on in-app update",
+      "Sanitized diagnostic telemetry 2.0 with short error codes (VOX-XXXX)"
+    ],
+    "changelog_ru": [
+      "Обновление кодовой базы плеера до SmartTube 32.71",
+      "Фиксация и стабилизация движка закадрового голосового перевода VOT 1.12.6",
+      "Устранение ошибок запуска видеопотоков YouTube с автоматическим переключением DASH/SABR",
+      "Стабилизация звука и устранение искажений тональности при ускорении видео 1.25x-2.0x с переводом",
+      "Приоритет голосового перевода Яндекс VOT над встроенным русским дубляжом YouTube",
+      "Повышенная надёжность Live и DVR трансляций: плавная перемотка и возврат к прямому эфиру",
+      "Сохранение данных, истории просмотров и аккаунтов Google и Яндекс при штатном обновлении",
+      "Обновлённая панель технической диагностики с обезличенными отчётами и кодами VOX-XXXX"
+    ],
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SHA256SUMS.txt",
+        "size": 172
+      },
+      {
+        "name": "SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+        "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/32.71-vox.11/SmartTube_vot_32.71-vox.11_2461014_universal_SIGNED.apk",
+        "size": 67832239,
+        "sha256": "890c7f94567c584e43a97a3a4ddb2657a4f8721dbe8fdae433bdf18e1b24aa74"
+      }
+    ]
+  },
+  "32.56-vox.9.2-universal": {
+    "versionCode": 2446032,
+    "prerelease": false,
+    "downloadUrl": "https://github.com/Kiryuhak/SmartTube-Vox/releases/download/v32.56-vox.9.2/SmartTube_vot_32.56-vox.9.2-rc.13_universal.apk",
+    "sha256": "e31ba5fe1bb8e2f49345edcb31384411d85779d798c414040fe7fecd77263e23",
+    "size": 66383180,
+    "changelog": [
+      "Optimized player recovery when rapidly seeking with remote control in 4K60 VP9",
+      "Completed 45-minute continuous stress test in 4K@60fps VP9 on TCL Smart TV Pro",
+      "Verified stable live stream with 24h+ buffer on France 24 Live",
+      "Confirmed deep rewinds (-1, -5, -10, -20 minutes) in Live DVR",
+      "Preserved encrypted auth session and natural voice settings for Yandex VOT"
+    ],
+    "changelog_ru": [
+      "Оптимизирован механизм восстановления плеера при сериях быстрых перемоток пультом в 4K60 VP9",
+      "Успешно пройден 45-минутный непрерывный стресс-тест в 4K@60fps VP9 на телевизоре TCL Smart TV Pro",
+      "Подтверждена стабильная работа прямого эфира с буфером свыше 24 часов на канале France 24 Live",
+      "Аппаратно подтверждены глубокие перемотки на -1, -5, -10 и -20 минут в Live DVR",
+      "Сохранение шифрованной сессии авторизации и настроек естественных «Живых голосов» Яндекс VOT"
     ]
   }
 }
